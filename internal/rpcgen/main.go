@@ -16,6 +16,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"errors"
 	"flag"
 	"fmt"
@@ -28,7 +29,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -81,7 +82,7 @@ func (m method) signature() string {
 	for k := range m.imports {
 		keys = append(keys, k+"="+m.imports[k])
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	return fmt.Sprintf("(%v %s, *%s) %v", m.argPtr, m.arg, m.reply, keys)
 }
 
@@ -124,7 +125,7 @@ func parseArgs(args []string) (config, error) {
 
 func parseSpecs(s string) ([]spec, error) {
 	var specs []spec
-	for _, part := range strings.Split(s, ",") {
+	for part := range strings.SplitSeq(s, ",") {
 		typ, fn, ok := strings.Cut(strings.TrimSpace(part), "=")
 		if !ok || typ == "" || fn == "" {
 			return nil, fmt.Errorf("bad -type entry %q, want Type=funcName", part)
@@ -203,7 +204,9 @@ func generate(cfg config) ([]byte, error) {
 		if len(g) == 0 {
 			continue
 		}
-		sort.Slice(g, func(i, j int) bool { return unaliased(g[i]) < unaliased(g[j]) })
+		slices.SortFunc(g, func(a, b string) int {
+			return cmp.Compare(unaliased(a), unaliased(b))
+		})
 		for _, line := range g {
 			b.WriteString("\t" + line + "\n")
 		}
@@ -216,7 +219,7 @@ func generate(cfg config) ([]byte, error) {
 		for n := range methods[sp.typ] {
 			names = append(names, n)
 		}
-		sort.Strings(names)
+		slices.Sort(names)
 		fmt.Fprintf(&b, "\n// %s registers each net/rpc method of *%s as a reflection-free handler.\n", sp.fn, sp.typ)
 		fmt.Fprintf(&b, "func %s(rpcSrv *rpc.Server, rpcName string, rpcRcvr *%s) error {\n", sp.fn, sp.typ)
 		for _, n := range names {
@@ -261,7 +264,7 @@ func sameMethods(typ string, perTarget []map[string]map[string]method) error {
 			}
 		}
 		if len(diffs) > 0 {
-			sort.Strings(diffs)
+			slices.Sort(diffs)
 			return fmt.Errorf("methods of *%s differ between targets:\n\t%s", typ, strings.Join(diffs, "\n\t"))
 		}
 	}
@@ -559,7 +562,7 @@ func moduleRoot() (string, string, error) {
 	for {
 		data, err := os.ReadFile(filepath.Join(dir, "go.mod")) //nolint:gosec
 		if err == nil {
-			for _, line := range strings.Split(string(data), "\n") {
+			for line := range strings.SplitSeq(string(data), "\n") {
 				if rest, ok := strings.CutPrefix(strings.TrimSpace(line), "module "); ok {
 					modRoot, modPath = dir, strings.Trim(strings.TrimSpace(rest), `"`)
 					return modRoot, modPath, nil

@@ -327,6 +327,10 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 			if e.Error != "" {
 				st, stStyle = truncStr(e.Error, 20), tcell.StyleDefault.Foreground(color.Red)
 			}
+			switch e.State {
+			case "reconnecting", "restarting", "detached":
+				st, stStyle = e.State, tcell.StyleDefault.Foreground(color.Yellow)
+			}
 			up := "-"
 			if e.Uptime > 0 {
 				up = (time.Duration(e.Uptime) * time.Second).Truncate(time.Second).String()
@@ -1327,9 +1331,9 @@ func markup(s string) string {
 
 func wrapText(s string, w int) []string {
 	var out []string
-	for _, para := range strings.Split(s, "\n") {
+	for para := range strings.SplitSeq(s, "\n") {
 		line := ""
-		for _, word := range strings.Fields(para) {
+		for word := range strings.FieldsSeq(para) {
 			if line != "" && len(line)+1+len(word) > w {
 				out = append(out, line)
 				line = ""

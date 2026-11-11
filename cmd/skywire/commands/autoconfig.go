@@ -34,7 +34,9 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"os"
 	"os/exec"
@@ -179,6 +181,7 @@ func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
 
 	// Visor public/private + autoconnect
 	addString("REWARDSKYADDR", "rewardaddr", autoconfigVals.RewardAddr)
+	addString("ALERTEMAIL", "alert-email", autoconfigVals.AlertEmail)
 	addBool("VISORISPUBLIC", "public", "no-public", autoconfigVals.Public, autoconfigVals.NoPublic)
 	addSoloBool("DISPLAYNODEIP", "publicip", autoconfigVals.PublicIP)
 	addSoloBool("DISABLEPUBLICAUTOCONN", "disable-public-autoconn", autoconfigVals.DisablePubAuto)
@@ -426,7 +429,7 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 		cmdutil.Exit(1)
 	}
 
-	if _, err := os.Stat(resolved.configPath); os.IsNotExist(err) {
+	if _, err := os.Stat(resolved.configPath); errors.Is(err, fs.ErrNotExist) {
 		mode := "PKGENV"
 		if resolved.usrEnv {
 			mode = "USRENV"
@@ -766,7 +769,7 @@ func buildGenArgs(r resolvedConfig, hvArg string, edits []skyenvEdit) (args, pri
 		// was only ever enabled by this same implicit default (no
 		// ISHYPERVISOR=true in the env file) would silently lose its UI
 		// on the next autoconfig run.
-		if _, err := os.Stat(r.configPath); os.IsNotExist(err) {
+		if _, err := os.Stat(r.configPath); errors.Is(err, fs.ErrNotExist) {
 			args = append(args, "-i")
 			printableArgs = append(printableArgs, "-i")
 		} else if conf, err := visorconfig.ReadFile(r.configPath); err == nil && conf.Hypervisor != nil && conf.Hypervisor.Enable {
@@ -846,7 +849,7 @@ func chownInstall(username string) error {
 	// Walk root is the package install path (e.g. /opt/skywire) under
 	// our control; symlink-TOCTOU isn't a realistic threat for an
 	// install-time chown of paths the package itself just laid down.
-	return filepath.Walk(root, func(path string, _ os.FileInfo, walkErr error) error {
+	return filepath.WalkDir(root, func(path string, _ fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}

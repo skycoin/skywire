@@ -42,7 +42,7 @@ func BenchmarkBWKeygen_Old(b *testing.B) {
 	var sink int
 	for n := 0; n < b.N; n++ {
 		for i := range ids {
-			for d := 0; d < benchDays; d++ {
+			for d := range benchDays {
 				date := now.AddDate(0, 0, -d).Format("2006-01-02")
 				key := fmt.Sprintf("%s:bw:daily:%s:%s", serviceName, ids[i].String(), date)
 				sink += len(key)
@@ -61,7 +61,7 @@ func BenchmarkBWKeygen_New(b *testing.B) {
 	var sink int
 	for n := 0; n < b.N; n++ {
 		dateStrs := make([]string, benchDays)
-		for d := 0; d < benchDays; d++ {
+		for d := range benchDays {
 			dateStrs[d] = now.AddDate(0, 0, -d).Format("2006-01-02")
 		}
 		idStrs := make([]string, len(ids))
@@ -70,7 +70,7 @@ func BenchmarkBWKeygen_New(b *testing.B) {
 		}
 		for i := range ids {
 			idStr := idStrs[i]
-			for d := 0; d < benchDays; d++ {
+			for d := range benchDays {
 				key := serviceName + ":bw:daily:" + idStr + ":" + dateStrs[d]
 				sink += len(key)
 			}
@@ -86,7 +86,7 @@ func BenchmarkBWParse_Old(b *testing.B) {
 	b.ResetTimer()
 	var sink uint64
 	for n := 0; n < b.N; n++ {
-		for i := 0; i < benchEntries; i++ {
+		for range benchEntries {
 			for _, v := range vals {
 				var x uint64
 				_, _ = fmt.Sscanf(v, "%d", &x) //nolint:errcheck // bench measures the old parse path cost
@@ -104,7 +104,7 @@ func BenchmarkBWParse_New(b *testing.B) {
 	b.ResetTimer()
 	var sink uint64
 	for n := 0; n < b.N; n++ {
-		for i := 0; i < benchEntries; i++ {
+		for range benchEntries {
 			for _, v := range vals {
 				sink += parseBWUint(v)
 			}

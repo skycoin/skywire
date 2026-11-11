@@ -6,9 +6,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -50,6 +52,8 @@ func init() {
 	RootCmd.AddCommand(appCmd)
 	appCmd.AddCommand(
 		lsAppsCmd,
+		catalogAppCmd,
+		flagsAppCmd,
 		startAppCmd,
 		stopAppCmd,
 		restartAppCmd,
@@ -666,11 +670,90 @@ func ensureDir(path *string) error {
 	if *path, err = filepath.Abs(*path); err != nil {
 		return fmt.Errorf("failed to expand path: %s", err)
 	}
-	if _, err := os.Stat(*path); !os.IsNotExist(err) {
+	if _, err := os.Stat(*path); !errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
 	if err := os.MkdirAll(*path, 0750); err != nil {
 		return fmt.Errorf("failed to create dir: %s", err)
 	}
 	return nil
+}
+
+var catalogAppCmd = &cobra.Command{
+	Use:   "catalog",
+	Short: "List every app the visor can run",
+	Long:  "\n  List every app the visor can run, with the instances it has configured",
+	Run: func(cmd *cobra.Command, _ []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			cmdutil.Exit(1)
+		}
+		entries, err := rpcClient.AppCatalog()
+		internal.Catch(cmd.Flags(), err)
+		internal.PrintOutput(cmd.Flags(), entries, formatAppCatalog(entries))
+	},
+}
+
+// formatAppCatalog renders one row per app, listing each configured
+// instance as name:status, or "-" when none is configured.
+func formatAppCatalog(entries []visorapi.CatalogEntry) string {
+	var b bytes.Buffer
+	w := tabwriter.NewWriter(&b, 0, 0, 3, ' ', 0)
+	fmt.Fprintln(w, "app\tkind\tinstances\tdescription") //nolint:errcheck
+	for _, e := range entries {
+		inst := "-"
+		if len(e.Instances) > 0 {
+			parts := make([]string, 0, len(e.Instances))
+			for _, i := range e.Instances {
+				parts = append(parts, i.Name+":"+i.Status)
+			}
+			inst = strings.Join(parts, ",")
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.Name, e.Kind, inst, e.Description) //nolint:errcheck
+	}
+	w.Flush() //nolint:errcheck,gosec
+	return b.String()
+}
+
+var flagsAppCmd = &cobra.Command{
+	Use:   "flags <name>",
+	Short: "List the flags an app accepts",
+	Long:  "\n  List the flags an app accepts, with their defaults and the values its args set.\n  Change them with 'skywire cli visor app args'.",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			cmdutil.Exit(1)
+		}
+		flags, err := rpcClient.AppFlags(args[0])
+		internal.Catch(cmd.Flags(), err)
+		internal.PrintOutput(cmd.Flags(), flags, formatAppFlags(flags))
+	},
+}
+
+// formatAppFlags renders one row per flag. A value the args set is marked
+// with *, and "-" stands for an empty default or value.
+func formatAppFlags(f visorapi.AppFlags) string {
+	var b bytes.Buffer
+	w := tabwriter.NewWriter(&b, 0, 0, 3, ' ', 0)
+	fmt.Fprintln(w, "flag\ttype\tdefault\tvalue\tusage") //nolint:errcheck
+	dash := func(s string) string {
+		if s == "" {
+			return "-"
+		}
+		return s
+	}
+	for _, fl := range f.Flags {
+		name := "--" + fl.Name
+		if fl.Shorthand != "" {
+			name = "-" + fl.Shorthand + ", " + name
+		}
+		val := "-"
+		if fl.Set {
+			val = dash(fl.Value) + " *"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", name, fl.Type, dash(fl.Default), val, fl.Usage) //nolint:errcheck
+	}
+	w.Flush() //nolint:errcheck,gosec
+	return b.String()
 }

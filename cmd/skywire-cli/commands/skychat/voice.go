@@ -10,6 +10,7 @@ import (
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 func init() {
@@ -73,8 +74,34 @@ var voiceListCmd = &cobra.Command{
 		}
 		out := "no active calls\n"
 		if len(ids) > 0 {
-			out = "active calls:\n  " + strings.Join(ids, "\n  ") + "\n"
+			out = "active calls:\n"
+			for _, id := range ids {
+				out += "  " + id + voiceDeviceNote(rpcClient, id) + "\n"
+			}
 		}
 		internal.PrintOutput(cmd.Flags(), ids, out)
 	},
+}
+
+// voiceDeviceNote names the devices a call is missing on this visor, or "".
+// A visor too old to answer gets no note.
+func voiceDeviceNote(c visorapi.API, callID string) string {
+	d, err := c.VoiceCallDevices(callID)
+	if err != nil || (d.Mic && d.Speaker) {
+		return ""
+	}
+	var missing []string
+	if !d.Mic {
+		missing = append(missing, "no microphone, the peer hears silence")
+		if d.MicErr != "" {
+			missing[len(missing)-1] += " (" + d.MicErr + ")"
+		}
+	}
+	if !d.Speaker {
+		missing = append(missing, "no speaker, the peer is not heard")
+		if d.SpeakerErr != "" {
+			missing[len(missing)-1] += " (" + d.SpeakerErr + ")"
+		}
+	}
+	return "  [" + strings.Join(missing, "; ") + "]"
 }

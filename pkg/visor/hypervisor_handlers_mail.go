@@ -2,6 +2,7 @@
 package visor
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -23,6 +24,7 @@ import (
 func (hv *Hypervisor) mailRoutes(r *httputil.Router) {
 	r.Get("/visors/{pk}/mail", hv.getMailStatus())
 	r.Post("/visors/{pk}/mail/send", hv.postMailSend())
+	r.Post("/visors/{pk}/mail/retry", hv.postMailRetry())
 	r.Put("/visors/{pk}/mail/whitelist", hv.putMailWhitelist())
 	r.Put("/visors/{pk}/mail/settings", hv.putMailSettings())
 	r.Get("/visors/{pk}/mail/{folder}", hv.getMailList())
@@ -148,6 +150,29 @@ func (hv *Hypervisor) postMailSend() http.HandlerFunc {
 			return
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, res)
+	})
+}
+
+// postMailRetry makes an Outbox message due now. With no body or an
+// empty id it does that for the whole Outbox.
+func (hv *Hypervisor) postMailRetry() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var body struct {
+			ID string `json:"id"`
+		}
+		if err := httputil.ReadJSON(r, &body); err != nil && err != io.EOF {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, fmt.Errorf("malformed retry: %w", err))
+			return
+		}
+		if err := ctx.API.MailRetry(body.ID); err != nil {
+			status := http.StatusInternalServerError
+			if errors.Is(err, skymail.ErrNotFound) {
+				status = http.StatusNotFound
+			}
+			httputil.WriteJSON(w, r, status, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, true)
 	})
 }
 

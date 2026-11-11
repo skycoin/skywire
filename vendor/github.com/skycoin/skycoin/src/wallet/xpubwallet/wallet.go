@@ -7,10 +7,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/0magnet/logrus"
 
 	"github.com/skycoin/skycoin/src/cipher"
 	"github.com/skycoin/skycoin/src/cipher/bip32"
+	"github.com/skycoin/skycoin/src/cipher/bip44"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/skycoin/skycoin/src/util/mathutil"
 	"github.com/skycoin/skycoin/src/wallet"
@@ -54,16 +55,29 @@ func NewWallet(filename, label, xPub string, options ...wallet.Option) (*Wallet,
 		return nil, wallet.NewError(err)
 	}
 
+	meta := wallet.Meta{
+		wallet.MetaFilename:  filename,
+		wallet.MetaLabel:     label,
+		wallet.MetaType:      WalletType,
+		wallet.MetaVersion:   wallet.Version,
+		wallet.MetaCoin:      string(wallet.CoinTypeSkycoin),
+		wallet.MetaXPub:      xPub,
+		wallet.MetaTimestamp: strconv.FormatInt(time.Now().Unix(), 10),
+	}
+
+	// A bip44 account key gives its receive addresses on the external chain,
+	// m/44'/coin'/account'/0/i. The chain is recorded so a reload derives the same keys.
+	if key.Depth == bip44.AccountDepth {
+		meta[wallet.MetaXPubChain] = strconv.FormatUint(uint64(bip44.ExternalChainIndex), 10)
+	}
+
+	key, err = addressKey(key, meta)
+	if err != nil {
+		return nil, wallet.NewError(err)
+	}
+
 	wlt := &Wallet{
-		Meta: wallet.Meta{
-			wallet.MetaFilename:  filename,
-			wallet.MetaLabel:     label,
-			wallet.MetaType:      WalletType,
-			wallet.MetaVersion:   wallet.Version,
-			wallet.MetaCoin:      string(wallet.CoinTypeSkycoin),
-			wallet.MetaXPub:      xPub,
-			wallet.MetaTimestamp: strconv.FormatInt(time.Now().Unix(), 10),
-		},
+		Meta:    meta,
 		decoder: defaultWalletDecoder,
 		xpub:    key,
 	}
@@ -280,7 +294,8 @@ func (w *Wallet) GetEntries(_ ...wallet.Option) (wallet.Entries, error) {
 func (w *Wallet) Erase() {
 }
 
-// ScanAddresses scans ahead N addresses, truncating up to the highest address with any transaction history.
+// ScanAddresses scans past the last address for addresses with transactions,
+// until scanN in a row have none, the BIP44 address gap limit.
 func (w *Wallet) ScanAddresses(scanN uint64, tf wallet.TransactionsFinder) ([]cipher.Addresser, error) {
 	if scanN == 0 {
 		return nil, nil
@@ -290,35 +305,22 @@ func (w *Wallet) ScanAddresses(scanN uint64, tf wallet.TransactionsFinder) ([]ci
 
 	nExistingAddrs := uint64(len(w2.entries))
 
-	// Generate the addresses to scan
-	addrs, err := w2.GenerateAddresses(wallet.OptionGenerateN(scanN))
+	generate := func(n uint64) ([]cipher.Addresser, error) {
+		return w2.GenerateAddresses(wallet.OptionGenerateN(n))
+	}
+	addrs, err := wallet.ScanGap(scanN, generate, tf)
 	if err != nil {
 		return nil, err
-	}
-
-	// Find if these addresses had any activity
-	active, err := tf.AddressesActivity(addrs)
-	if err != nil {
-		return nil, err
-	}
-
-	// Check activity from the last one until we find the address that has activity
-	var keepNum uint64
-	for i := len(active) - 1; i >= 0; i-- {
-		if active[i] {
-			keepNum = uint64(i + 1) //nolint:gosec
-			break
-		}
 	}
 
 	w2.reset()
-	if _, err := w2.GenerateAddresses(wallet.OptionGenerateN(nExistingAddrs + keepNum)); err != nil {
+	if _, err := w2.GenerateAddresses(wallet.OptionGenerateN(nExistingAddrs + uint64(len(addrs)))); err != nil {
 		return nil, err
 	}
 
 	*w = *w2
 
-	return addrs[:keepNum], nil
+	return addrs, nil
 }
 
 // GetAddresses returns all addresses of the wallet
@@ -373,6 +375,46 @@ func parseXPub(xp string) (*bip32.PublicKey, error) {
 	}
 
 	return xPub, nil
+}
+
+// addressKey returns the key whose direct children are the wallet's addresses.
+// Wallets without the xpubChain meta field derive from the xpub itself, as they always have.
+func addressKey(xpub *bip32.PublicKey, m wallet.Meta) (*bip32.PublicKey, error) {
+	chainStr, ok := m[wallet.MetaXPubChain]
+	if !ok {
+		return xpub, nil
+	}
+
+	chain, err := strconv.ParseUint(chainStr, 10, 32)
+	if err != nil || uint32(chain) != bip44.ExternalChainIndex {
+		return nil, fmt.Errorf("invalid %s value %q", wallet.MetaXPubChain, chainStr)
+	}
+
+	if xpub.Depth != bip44.AccountDepth {
+		return nil, fmt.Errorf("%s is set but the xpub is not a bip44 account key (depth %d)", wallet.MetaXPubChain, xpub.Depth)
+	}
+
+	return xpub.NewPublicChildKey(uint32(chain))
+}
+
+// checkEntries confirms the stored entries were derived from key, so a wallet
+// never mixes addresses from two chains.
+func checkEntries(key *bip32.PublicKey, entries wallet.Entries) error {
+	if len(entries) == 0 {
+		return nil
+	}
+
+	e := entries[0]
+	child, err := key.NewPublicChildKey(e.ChildNumber)
+	if err != nil {
+		return fmt.Errorf("derive entry %d: %v", e.ChildNumber, err)
+	}
+
+	if cipher.MustNewPubKey(child.Key) != e.Public {
+		return errors.New("stored entries were not derived from the wallet's xpub chain")
+	}
+
+	return nil
 }
 
 // GetEntryAt returns the entry at a given index in the entries array

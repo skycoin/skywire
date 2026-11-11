@@ -2,7 +2,6 @@
 // These tests require a running Docker environment with all skywire services.
 //
 //go:build !no_ci
-// +build !no_ci
 
 package integration_test
 
@@ -777,7 +776,7 @@ func (env *TestEnv) TestVisorAddTp(t *testing.T, tp Transport) *TestEnv {
 			for _, visor := range []string{tp.FromVisorHostName, tp.ToVisorHostName} {
 				logs, logErr := env.ReadLog(visor)
 				if logErr == nil {
-					for _, line := range strings.Split(logs, "\n") {
+					for line := range strings.SplitSeq(logs, "\n") {
 						lower := strings.ToLower(line)
 						if strings.Contains(lower, "sudph") || strings.Contains(lower, "udp") ||
 							strings.Contains(lower, "bind") || strings.Contains(lower, "address_resolver") ||
@@ -790,7 +789,7 @@ func (env *TestEnv) TestVisorAddTp(t *testing.T, tp Transport) *TestEnv {
 			// address-resolver runs inside visor-s
 			arLogs, arErr := env.ReadLog("visor-s")
 			if arErr == nil {
-				for _, line := range strings.Split(arLogs, "\n") {
+				for line := range strings.SplitSeq(arLogs, "\n") {
 					lower := strings.ToLower(line)
 					if strings.Contains(lower, "udp") || strings.Contains(lower, "listen") ||
 						strings.Contains(lower, "fatal") || strings.Contains(lower, "error") {
@@ -885,7 +884,7 @@ func (env *TestEnv) GatherVisorPKs(visors []string) *TestEnv {
 		var pk string
 		var err error
 		// Retry to handle transient Docker DNS failures ("server misbehaving")
-		for attempt := 0; attempt < 3; attempt++ {
+		for attempt := range 3 {
 			pk, err = env.VisorPK(visor)
 			if err == nil {
 				break
@@ -910,7 +909,7 @@ func (env *TestEnv) Exec(cmd string) (string, error) {
 	return env.ExecInContainerByID(cmd, env.testRunnerID)
 }
 
-func (env *TestEnv) ExecJSON(cmd string, output interface{}) error {
+func (env *TestEnv) ExecJSON(cmd string, output any) error {
 	// Log the exact command being run
 	env.logger.Infof("[EXEC] %s", cmd)
 
@@ -1586,7 +1585,7 @@ func (env *TestEnv) SendSkyMessage(senderNode, recipientNode, message string) (r
 	// on terminal failure, so CI logs still capture the state but
 	// the normal retry budget stays bounded.
 	const maxRetries = 2
-	for i := 0; i < maxRetries; i++ {
+	for i := range maxRetries {
 		// Use a distinct name for the request so the `:=` here doesn't
 		// shadow the outer named-return `err` — pre-fix, the inner
 		// `req, err :=` short-declared a local err that shadowed the
@@ -1954,7 +1953,7 @@ func (env *TestEnv) DumpRouteFinderState(srcVisor, dstVisor string) {
 }
 
 // ExecJSONWithTimeout executes a command with a timeout and parses JSON output
-func (env *TestEnv) ExecJSONWithTimeout(cmd string, output interface{}, timeout time.Duration) error {
+func (env *TestEnv) ExecJSONWithTimeout(cmd string, output any, timeout time.Duration) error {
 	env.logger.Infof("[EXEC WITH TIMEOUT %v] %s", timeout, cmd)
 
 	if env.testRunnerID == "" {

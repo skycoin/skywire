@@ -72,7 +72,6 @@ func TestNewMockGetAvailableServers(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			clientServer := disc.NewMock(0)
 			expectedEntries := make([]*disc.Entry, 0)
@@ -144,7 +143,6 @@ func TestNewMockEntriesEndpoint(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			clientServer := disc.NewMock(0)
 
@@ -247,7 +245,6 @@ func TestNewMockSetEntriesEndpoint(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			clientServer := disc.NewMock(0)
 			var entry disc.Entry
@@ -317,7 +314,6 @@ func TestNewMockUpdateEntriesEndpoint(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			clientServer := disc.NewMock(0)
 			err := clientServer.PostEntry(context.TODO(), &baseEntry)

@@ -19,6 +19,7 @@ import { OperationError } from 'src/app/utils/operation-error';
 import { FilterProperties, FilterFieldTypes } from 'src/app/utils/filters';
 import { SortingColumn, SortingModes, DataSorter } from 'src/app/utils/lists/data-sorter';
 import { DataFilterer } from 'src/app/utils/lists/data-filterer';
+import { appStatusDot, appStatusTone, portLabel } from 'src/app/utils/app-status';
 
 /**
  * Shows the list of applications of a node. It shows official or user apps, not both at the
@@ -342,30 +343,23 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
     return null;
   }
 
+  /** The port column text. */
+  portLabel(port: number): string {
+    return portLabel(port);
+  }
+
   /**
    * Gets the class for the app status dot.
    */
   getStateClass(app: Application): string {
-    if (app.status === 1) {
-      return 'dot-green';
-    } else if (app.status === 3) {
-      return 'dot-yellow';
-    }
-
-    return 'dot-red';
+    return appStatusDot(app.status);
   }
 
   /**
    * Gets the class for the app status text in small screens.
    */
    getSmallScreenStateClass(app: Application): string {
-    if (app.status === 1) {
-      return 'green-clear-text';
-    } else if (app.status === 3) {
-      return 'yellow-clear-text';
-    }
-
-    return 'red-clear-text';
+    return { running: 'green-clear-text', failed: 'red-clear-text', starting: 'yellow-clear-text', stopped: 'grey-text' }[appStatusTone(app.status)];
   }
 
   /**

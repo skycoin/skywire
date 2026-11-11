@@ -8,11 +8,12 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strconv"
 	"time"
 
@@ -49,8 +50,8 @@ func main() {
 	c.SetReadLimit(256 << 20)                        // profiles of a busy tab run tens of MB
 	defer c.Close(websocket.StatusNormalClosure, "") //nolint:errcheck // best-effort CDP goodbye
 
-	send := func(id int, method string, params map[string]interface{}) {
-		b, _ := json.Marshal(map[string]interface{}{"id": id, "method": method, "params": params}) //nolint:errcheck // static envelope cannot fail to marshal
+	send := func(id int, method string, params map[string]any) {
+		b, _ := json.Marshal(map[string]any{"id": id, "method": method, "params": params}) //nolint:errcheck // static envelope cannot fail to marshal
 		if err := c.Write(ctx, websocket.MessageText, b); err != nil {
 			fmt.Fprintln(os.Stderr, "write:", err)
 			os.Exit(1)
@@ -77,7 +78,7 @@ func main() {
 	send(1, "Profiler.enable", nil)
 	waitID(1)
 	// 1ms sampling: fine enough to catch a hot loop, cheap enough not to be one.
-	send(2, "Profiler.setSamplingInterval", map[string]interface{}{"interval": 1000})
+	send(2, "Profiler.setSamplingInterval", map[string]any{"interval": 1000})
 	waitID(2)
 	send(3, "Profiler.start", nil)
 	waitID(3)
@@ -97,7 +98,9 @@ func main() {
 		os.Exit(1)
 	}
 	nodes := prof.Profile.Nodes
-	sort.Slice(nodes, func(i, j int) bool { return nodes[i].HitCount > nodes[j].HitCount })
+	slices.SortFunc(nodes, func(a, b node) int {
+		return cmp.Compare(b.HitCount, a.HitCount)
+	})
 	// V8 meta-nodes ((idle), (program), (garbage collector), (root)) are not
 	// script execution — counting them as "busy" turns an idle tab into a
 	// false spin alarm, so utilization is computed from real frames only.

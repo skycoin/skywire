@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywireconfig/skyenvfile"
 )
 
@@ -75,6 +75,9 @@ var envChecks = map[string]string{
 	"LOGLVL":           CheckLogLevel,
 }
 
+// CheckValue applies a flag's check rule to a value, as a save does.
+func CheckValue(rule, value string) error { return checkValue(rule, value) }
+
 // checkValue applies rule to value. An empty value always passes: it leaves
 // the variable blank, which config gen reads as its default.
 func checkValue(rule, value string) error {
@@ -89,7 +92,7 @@ func checkValue(rule, value string) error {
 			return fmt.Errorf("%q is not a public key", value)
 		}
 	case CheckPKs:
-		for _, s := range strings.Split(value, ",") {
+		for s := range strings.SplitSeq(value, ",") {
 			if err := checkValue(CheckPK, s); err != nil {
 				return err
 			}
@@ -107,7 +110,7 @@ func checkValue(rule, value string) error {
 			return fmt.Errorf("%q is not a duration like 10s or 5m", value)
 		}
 	case CheckLogLevel:
-		if _, err := logrus.ParseLevel(value); err != nil {
+		if _, err := logging.ParseLevel(value); err != nil {
 			return fmt.Errorf("%q is not a log level (trace, debug, info, warn, error, fatal, panic)", value)
 		}
 	}

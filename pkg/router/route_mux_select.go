@@ -3,7 +3,6 @@ package router
 
 import (
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,7 +15,7 @@ import (
 
 // selectTransport picks the next transport/rule pair for sending.
 // Uses latency-weighted selection when data is available, falls back to round-robin.
-// Returns the index in tps[] alongside the tp/rule so the caller can
+// Returns the index in legs alongside the tp/rule so the caller can
 // record per-leg byte counts after a successful write.
 //
 // payload is the upcoming packet's payload bytes (or nil for
@@ -33,24 +32,21 @@ import (
 // a send (if every alive-ready leg is already block-full it keeps the raw pick),
 // and it is inert unless FEC is negotiated on a multi-leg group — so the
 // pre-integration selection is preserved byte-for-byte when fecEnabled=false.
-func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []routing.Rule, payload []byte) (*transport.ManagedTransport, routing.Rule, int, error) {
-	tp, rule, idx, err := m.selectTransportRaw(tps, fwd, payload)
+func (m *routeMux) selectTransport(legs []groupLeg, payload []byte) (*transport.ManagedTransport, routing.Rule, int, error) {
+	tp, rule, idx, err := m.selectTransportRaw(legs, payload)
 	if err != nil || idx < 0 {
 		return tp, rule, idx, err
 	}
-	if alt, ok := m.fecStripeReassign(tps, idx); ok && alt < len(fwd) {
-		tp, rule, idx = tps[alt], fwd[alt], alt
+	if alt, ok := m.fecStripeReassign(legs, idx); ok && alt < len(legs) {
+		tp, rule, idx = legs[alt].tp, legs[alt].fwd, alt
 	}
 	m.fecStripeUse(idx)
 	return tp, rule, idx, nil
 }
 
-func (m *routeMux) selectTransportRaw(tps []*transport.ManagedTransport, fwd []routing.Rule, payload []byte) (*transport.ManagedTransport, routing.Rule, int, error) {
-	if len(tps) == 0 {
+func (m *routeMux) selectTransportRaw(legs []groupLeg, payload []byte) (*transport.ManagedTransport, routing.Rule, int, error) {
+	if len(legs) == 0 {
 		return nil, nil, -1, ErrNoTransports
-	}
-	if len(fwd) == 0 {
-		return nil, nil, -1, ErrNoRules
 	}
 
 	// Unidirectional send selection (CapUniDir).
@@ -80,10 +76,10 @@ func (m *routeMux) selectTransportRaw(tps []*transport.ManagedTransport, fwd []r
 		// is the measured 79 % / 21 % split across a 44 ms and a 166 ms leg, and
 		// the 6 flips in ten rows behind it.
 		if m.forwardSender() {
-			if tp, rule, idx, ok := m.selectConfinedForwardFor(tps, fwd, payload, wantDirect, dstPK, srcPK); ok {
+			if tp, rule, idx, ok := m.selectConfinedForwardFor(legs, payload, wantDirect, dstPK, srcPK); ok {
 				return tp, rule, idx, nil
 			}
-		} else if tp, rule, idx, ok := m.selectByDirection(tps, fwd, wantDirect, dstPK, srcPK); ok {
+		} else if tp, rule, idx, ok := m.selectByDirection(legs, wantDirect, dstPK, srcPK); ok {
 			// REVERSE (exit -> client: downloads) keeps its fan-out untouched.
 			return tp, rule, idx, nil
 		}
@@ -107,15 +103,15 @@ func (m *routeMux) selectTransportRaw(tps []*transport.ManagedTransport, fwd []r
 			WeightModeECF,
 			WeightModeOTIAS,
 			WeightModeSTMS:
-			m.feedInflight(tps)
+			m.feedInflight(legs)
 			idx := m.tpSelector.SelectForPayload(payload)
 			// A leg ruled probe-only that has spent its budget declines the
 			// frame here and the weighted path below re-homes it; every other
 			// leg answers false, so a group of comparable legs is unchanged.
-			if idx < len(tps) && !m.legProbeExhausted(idx) {
-				tp := tps[idx]
+			if idx < len(legs) && !m.legProbeExhausted(idx) {
+				tp := legs[idx].tp
 				if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) {
-					return tp, fwd[idx], idx, nil
+					return tp, legs[idx].fwd, idx, nil
 				}
 			}
 		}
@@ -128,7 +124,7 @@ func (m *routeMux) selectTransportRaw(tps []*transport.ManagedTransport, fwd []r
 		// leg with room, so the window bounds every mode, not only the
 		// predictive ones that consult saturation themselves.
 		if m.retxBuf != nil && m.sackEnabled {
-			m.feedInflight(tps)
+			m.feedInflight(legs)
 			if m.tpSelector.Saturated(idx) {
 				if alt := m.tpSelector.FirstUnsaturated(); alt >= 0 {
 					idx = alt
@@ -139,14 +135,14 @@ func (m *routeMux) selectTransportRaw(tps []*transport.ManagedTransport, fwd []r
 		// still has a share, so a leg whose delay basis is a multiple of its
 		// sibling's cannot take every other frame.
 		if m.legProbeExhausted(idx) {
-			if alt := m.firstProbeReadyLeg(tps); alt >= 0 {
+			if alt := m.firstProbeReadyLeg(legs); alt >= 0 {
 				idx = alt
 			}
 		}
-		if idx < len(tps) {
-			tp := tps[idx]
+		if idx < len(legs) {
+			tp := legs[idx].tp
 			if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) {
-				return tp, fwd[idx], idx, nil
+				return tp, legs[idx].fwd, idx, nil
 			}
 		}
 	}
@@ -156,13 +152,13 @@ func (m *routeMux) selectTransportRaw(tps []*transport.ManagedTransport, fwd []r
 	// packets onto a route whose rule the peer has not registered; the
 	// primary leg (0) is always ready, so this loop always finds it. When
 	// direction filtering is active, non-matching legs are skipped here too.
-	n := uint32(len(tps)) //nolint:gosec
-	start := atomic.AddUint32(&m.tpIndex, 1) - 1
-	for i := uint32(0); i < n; i++ {
+	n := uint32(len(legs)) //nolint:gosec
+	start := m.tpIndex.Add(1) - 1
+	for i := range n {
 		idx := int((start + i) % n) //nolint:gosec
-		tp := tps[idx]
+		tp := legs[idx].tp
 		if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) {
-			return tp, fwd[idx], idx, nil
+			return tp, legs[idx].fwd, idx, nil
 		}
 	}
 
@@ -178,11 +174,11 @@ func (m *routeMux) selectTransportRaw(tps []*transport.ManagedTransport, fwd []r
 	// guarantees no gap. legSelectableIgnoringStandby is legReadyAt WITHOUT the
 	// standby exclusion (a parked leg that was active is ready), so it never
 	// picks a leg the peer has not confirmed.
-	for i := uint32(0); i < n; i++ {
+	for i := range n {
 		idx := int((start + i) % n) //nolint:gosec
-		tp := tps[idx]
+		tp := legs[idx].tp
 		if tp != nil && !tp.IsClosed() && m.legSelectableIgnoringStandby(idx) {
-			return tp, fwd[idx], idx, nil
+			return tp, legs[idx].fwd, idx, nil
 		}
 	}
 	return nil, nil, -1, ErrNoSuitableTransport
@@ -201,16 +197,14 @@ func (m *routeMux) selectTransportRaw(tps []*transport.ManagedTransport, fwd []r
 // the whole stream: it still carries its share of new data, but its stragglers
 // are rescued on a fast path. Falls back to the first ready leg when no leg has
 // a latency measurement yet.
-func (m *routeMux) selectFastestTransport(tps []*transport.ManagedTransport, fwd []routing.Rule) (*transport.ManagedTransport, routing.Rule, int, error) {
-	if len(tps) == 0 {
+func (m *routeMux) selectFastestTransport(legs []groupLeg) (*transport.ManagedTransport, routing.Rule, int, error) {
+	if len(legs) == 0 {
 		return nil, nil, -1, ErrNoTransports
-	}
-	if len(fwd) == 0 {
-		return nil, nil, -1, ErrNoRules
 	}
 	bestIdx, firstReady := -1, -1
 	bestLat := -1.0
-	for idx, tp := range tps {
+	for idx := range legs {
+		tp := legs[idx].tp
 		if tp == nil || tp.IsClosed() || !m.legReadyAt(idx) {
 			continue
 		}
@@ -231,7 +225,7 @@ func (m *routeMux) selectFastestTransport(tps []*transport.ManagedTransport, fwd
 	if bestIdx < 0 {
 		return nil, nil, -1, ErrNoSuitableTransport
 	}
-	return tps[bestIdx], fwd[bestIdx], bestIdx, nil
+	return legs[bestIdx].tp, legs[bestIdx].fwd, bestIdx, nil
 }
 
 // selectRetxTransport is selectFastestTransport with one extra rule: it refuses
@@ -255,17 +249,15 @@ func (m *routeMux) selectFastestTransport(tps []*transport.ManagedTransport, fwd
 // is the whole recovery when the leg is dead. It never strands a retransmit:
 // with no other ready leg — a single-leg group, or every sibling parked — it
 // falls back to the unrestricted pick.
-func (m *routeMux) selectRetxTransport(tps []*transport.ManagedTransport, fwd []routing.Rule, avoid uuid.UUID) (*transport.ManagedTransport, routing.Rule, int, error) {
-	if avoid == uuid.Nil || len(tps) < 2 {
-		return m.selectFastestTransport(tps, fwd)
-	}
-	if len(fwd) == 0 {
-		return nil, nil, -1, ErrNoRules
+func (m *routeMux) selectRetxTransport(legs []groupLeg, avoid uuid.UUID) (*transport.ManagedTransport, routing.Rule, int, error) {
+	if avoid == uuid.Nil || len(legs) < 2 {
+		return m.selectFastestTransport(legs)
 	}
 	bestIdx, firstReady := -1, -1
 	bestLat := -1.0
-	for idx, tp := range tps {
-		if tp == nil || tp.IsClosed() || tp.Entry.ID == avoid || !m.legReadyAt(idx) || idx >= len(fwd) {
+	for idx := range legs {
+		tp := legs[idx].tp
+		if tp == nil || tp.IsClosed() || tp.Entry.ID == avoid || !m.legReadyAt(idx) {
 			continue
 		}
 		if firstReady < 0 {
@@ -285,9 +277,9 @@ func (m *routeMux) selectRetxTransport(tps []*transport.ManagedTransport, fwd []
 	if bestIdx < 0 {
 		// Nothing else is ready: better to retry down the same leg than to
 		// drop the frame the receiver's frontier is waiting for.
-		return m.selectFastestTransport(tps, fwd)
+		return m.selectFastestTransport(legs)
 	}
-	return tps[bestIdx], fwd[bestIdx], bestIdx, nil
+	return legs[bestIdx].tp, legs[bestIdx].fwd, bestIdx, nil
 }
 
 // retxLastTp is the transport a held sequence was last sent on, or uuid.Nil when
@@ -357,16 +349,16 @@ func (m *routeMux) confinedForwardIdx() int { return int(m.confinedFwdCur.Load()
 // payload is the frame's application bytes, or nil on the retransmit path: it
 // is only read by the fan-out's scheduler pick, which is the one decision here
 // that depends on how big the frame is.
-func (m *routeMux) selectConfinedForward(tps []*transport.ManagedTransport, fwd []routing.Rule,
+func (m *routeMux) selectConfinedForward(legs []groupLeg,
 	wantDirect bool, dst, src cipher.PubKey) (*transport.ManagedTransport, routing.Rule, int, bool) {
-	return m.selectConfinedForwardFor(tps, fwd, nil, wantDirect, dst, src)
+	return m.selectConfinedForwardFor(legs, nil, wantDirect, dst, src)
 }
 
 // selectConfinedForwardFor is selectConfinedForward with the frame in hand.
-func (m *routeMux) selectConfinedForwardFor(tps []*transport.ManagedTransport, fwd []routing.Rule, payload []byte,
+func (m *routeMux) selectConfinedForwardFor(legs []groupLeg, payload []byte,
 	wantDirect bool, dst, src cipher.PubKey) (*transport.ManagedTransport, routing.Rule, int, bool) {
-	idx := m.confinedForwardLeg(tps, wantDirect, dst, src)
-	if idx < 0 || idx >= len(fwd) || idx >= len(tps) {
+	idx := m.confinedForwardLeg(legs, wantDirect, dst, src)
+	if idx < 0 || idx >= len(legs) {
 		return nil, nil, -1, false
 	}
 	// Load-triggered fan-out: the direction it is confined to has been filling
@@ -382,22 +374,22 @@ func (m *routeMux) selectConfinedForwardFor(tps []*transport.ManagedTransport, f
 	// stride collapses back onto the confined leg (measured: 75 %/25 % and
 	// x1.14 instead of 48 %/52 % and x1.39).
 	if m.tpSelector != nil && m.retxBuf != nil && m.sackEnabled && m.forwardFanoutActive() {
-		m.feedInflight(tps)
-		if alt := m.pickFanoutLeg(tps, payload, idx); alt >= 0 && alt < len(fwd) && alt < len(tps) {
-			return tps[alt], fwd[alt], alt, true
+		m.feedInflight(legs)
+		if alt := m.pickFanoutLeg(legs, payload, idx); alt >= 0 && alt < len(legs) {
+			return legs[alt].tp, legs[alt].fwd, alt, true
 		}
 	}
 	if ForwardSpill() && m.tpSelector != nil && m.retxBuf != nil && m.sackEnabled {
-		m.feedInflight(tps)
+		m.feedInflight(legs)
 		if m.tpSelector.Saturated(idx) {
-			if alt := m.tpSelector.FirstUnsaturated(); alt >= 0 && alt < len(fwd) && alt < len(tps) {
-				if tp := tps[alt]; tp != nil && !tp.IsClosed() && m.legReadyAt(alt) {
-					return tp, fwd[alt], alt, true
+			if alt := m.tpSelector.FirstUnsaturated(); alt >= 0 && alt < len(legs) {
+				if tp := legs[alt].tp; tp != nil && !tp.IsClosed() && m.legReadyAt(alt) {
+					return tp, legs[alt].fwd, alt, true
 				}
 			}
 		}
 	}
-	return tps[idx], fwd[idx], idx, true
+	return legs[idx].tp, legs[idx].fwd, idx, true
 }
 
 // forwardCandidates lists the legs the forward direction may be confined to, in
@@ -405,20 +397,20 @@ func (m *routeMux) selectConfinedForwardFor(tps []*transport.ManagedTransport, f
 // active; then any live, ready, active leg (a multihop-only group has no direct
 // leg to sit on, which is the legs-2 shape); then any live leg with a rule at
 // all, so a group whose whole active set was just parked still sends.
-func (m *routeMux) forwardCandidates(tps []*transport.ManagedTransport, wantDirect bool, dst, src cipher.PubKey) []int {
+func (m *routeMux) forwardCandidates(legs []groupLeg, wantDirect bool, dst, src cipher.PubKey) []int {
 	live := func(idx int) bool {
-		tp := tps[idx]
+		tp := legs[idx].tp
 		return tp != nil && !tp.IsClosed()
 	}
 	for _, match := range []func(int) bool{
 		func(idx int) bool {
-			return live(idx) && legIsDirect(tps[idx], dst, src) == wantDirect && m.legReadyAt(idx)
+			return live(idx) && legIsDirect(legs[idx].tp, dst, src) == wantDirect && m.legReadyAt(idx)
 		},
 		func(idx int) bool { return live(idx) && m.legReadyAt(idx) },
 		func(idx int) bool { return live(idx) && m.legSelectableIgnoringStandby(idx) },
 	} {
-		cand := make([]int, 0, len(tps))
-		for idx := range tps {
+		cand := make([]int, 0, len(legs))
+		for idx := range legs {
 			if match(idx) {
 				cand = append(cand, idx)
 			}
@@ -438,12 +430,12 @@ func (m *routeMux) forwardCandidates(tps []*transport.ManagedTransport, wantDire
 // would hand the direction to whichever leg happened to lack a pong. ok=false
 // means "not comparably measured", and the caller keeps the lowest-indexed
 // candidate (leg 0 in practice) exactly as an unmeasured group did before.
-func (m *routeMux) forwardLatencies(tps []*transport.ManagedTransport, cand []int) ([]float64, bool) {
+func (m *routeMux) forwardLatencies(legs []groupLeg, cand []int) ([]float64, bool) {
 	lat := make([]float64, len(cand))
 	if m.legLatencyFn != nil {
 		ok := true
 		for i, idx := range cand {
-			ms := m.legLatencyFn(tps[idx].Entry.ID)
+			ms := m.legLatencyFn(legs[idx].tp.Entry.ID)
 			if ms <= 0 {
 				ok = false
 				break
@@ -455,7 +447,7 @@ func (m *routeMux) forwardLatencies(tps []*transport.ManagedTransport, cand []in
 		}
 	}
 	for i, idx := range cand {
-		ms := tps[idx].GetLatency()
+		ms := legs[idx].tp.GetLatency()
 		if ms <= 0 {
 			return nil, false
 		}
@@ -487,20 +479,20 @@ func (m *routeMux) forwardLatencies(tps []*transport.ManagedTransport, cand []in
 // so `visor state --select diag` says which leg took the direction and why.
 //
 // Caller holds the route group's mu (as for selectTransportRaw).
-func (m *routeMux) confinedForwardLeg(tps []*transport.ManagedTransport, wantDirect bool, dst, src cipher.PubKey) int {
+func (m *routeMux) confinedForwardLeg(legs []groupLeg, wantDirect bool, dst, src cipher.PubKey) int {
 	now := time.Now().UnixNano()
-	if m.confinedFwdIdx >= 0 && m.confinedFwdIdx < len(tps) &&
+	if m.confinedFwdIdx >= 0 && m.confinedFwdIdx < len(legs) &&
 		now-m.confinedFwdAtNano < int64(confinedForwardRefresh) {
-		if tp := tps[m.confinedFwdIdx]; tp != nil && !tp.IsClosed() && m.legReadyAt(m.confinedFwdIdx) {
+		if tp := legs[m.confinedFwdIdx].tp; tp != nil && !tp.IsClosed() && m.legReadyAt(m.confinedFwdIdx) {
 			return m.confinedFwdIdx
 		}
 	}
 
-	cand := m.forwardCandidates(tps, wantDirect, dst, src)
+	cand := m.forwardCandidates(legs, wantDirect, dst, src)
 	if len(cand) == 0 {
 		return -1
 	}
-	lat, measured := m.forwardLatencies(tps, cand)
+	lat, measured := m.forwardLatencies(legs, cand)
 
 	prev := m.confinedFwdIdx
 	// Is the leg the direction already holds still eligible?
@@ -572,7 +564,7 @@ func (m *routeMux) confinedForwardLeg(tps []*transport.ManagedTransport, wantDir
 	m.confinedFwdIdx, m.confinedFwdAtNano = best, at
 	m.confinedFwdCur.Store(int64(best))
 	if reason != "" && prev != best && m.onForwardRehome != nil {
-		m.onForwardRehome(prev, best, tps[best], len(tps), reason)
+		m.onForwardRehome(prev, best, legs[best].tp, len(legs), reason)
 	}
 	return best
 }

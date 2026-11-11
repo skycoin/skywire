@@ -49,6 +49,8 @@ type NetworkState struct {
 	// address watcher and the public IP recheck, "off" when disabled.
 	WatchInterval         string `json:"watch_interval"`
 	PublicIPCheckInterval string `json:"public_ip_check_interval"`
+	// Connectivity is whether the visor can reach the skywire network now.
+	Connectivity Connectivity `json:"connectivity"`
 }
 
 // NetworkSettings is a change to the network policy, the argument of
@@ -88,8 +90,9 @@ var Modes = []string{ModeNormal, ModeLean, ModeDmsgOnly, ModeOffline}
 // NetworkEvent is what an app reports about the network, the body of POST
 // /api/network and the argument of the NetworkEvent RPC.
 type NetworkEvent struct {
-	// Event is "moved" when the network changed under the visor, or
-	// "changed" when only its properties did.
+	// Event is "moved" when the network changed under the visor,
+	// "changed" when only its properties did, "offline" (or "lost") when
+	// the device has no network, and "online" when it has one again.
 	Event string `json:"event"`
 	// Metered is the system's metered flag, nil when the app cannot tell.
 	Metered *bool `json:"metered,omitempty"`
@@ -100,4 +103,32 @@ type NetworkEvent struct {
 	// MeteredText carries Metered over gob, which drops a pointer to false.
 	// The RPC client fills it and the RPC server reads it.
 	MeteredText string `json:"-"`
+}
+
+// The connectivity states. A visor starts connecting, is online while it
+// has a live transport, dmsg-only while it has none but holds a dmsg
+// session, and offline once it has had neither for a while or an app
+// reported that the device has no network.
+const (
+	ConnConnecting = "connecting"
+	ConnOnline     = "online"
+	ConnDmsgOnly   = "dmsg-only"
+	ConnOffline    = "offline"
+)
+
+// Connectivity says whether the visor can reach the skywire network.
+type Connectivity struct {
+	// State is one of ConnConnecting, ConnOnline, ConnDmsgOnly or
+	// ConnOffline, and Online is true only for ConnOnline.
+	State  string `json:"state"`
+	Online bool   `json:"online"`
+	// Since is when State began and Reason what decided it.
+	Since  time.Time `json:"since,omitzero"`
+	Reason string    `json:"reason,omitempty"`
+	// Changes counts the state changes since start.
+	Changes uint64 `json:"changes"`
+	// Transports and DmsgSessions are the live transports and dmsg
+	// sessions at the last check.
+	Transports   int `json:"transports"`
+	DmsgSessions int `json:"dmsg_sessions"`
 }

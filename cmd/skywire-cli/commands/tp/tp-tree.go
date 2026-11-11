@@ -2,11 +2,12 @@
 package clitp
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
@@ -230,8 +231,8 @@ var treeCmd = &cobra.Command{
 			}
 			sortedEdges = append(sortedEdges, edgeWithCount{pk: pk, count: count})
 		}
-		sort.Slice(sortedEdges, func(i, j int) bool {
-			return sortedEdges[i].count > sortedEdges[j].count
+		slices.SortFunc(sortedEdges, func(a, b edgeWithCount) int {
+			return cmp.Compare(b.count, a.count)
 		})
 
 		// Stats mode
@@ -433,10 +434,7 @@ var treeCmd = &cobra.Command{
 					// Format transport info
 					tpInfo := ""
 					if level > 0 {
-						padding := padSpaces - 4 - level*2
-						if padding < 0 {
-							padding = 0
-						}
+						padding := max(padSpaces-4-level*2, 0)
 						tpInfo = strings.Repeat(" ", padding) + n.tpID + " " + n.tpType
 					}
 
@@ -545,8 +543,8 @@ var treeCmd = &cobra.Command{
 				}
 
 				pterm.Println(pterm.Red("Reverse Route:"))
-				for i := len(foundPath) - 1; i >= 0; i-- {
-					hop := foundPath[i]
+				for i, hop := range slices.Backward(foundPath) {
+
 					nextPK := rootPK
 					if i > 0 {
 						nextPK = foundPath[i-1].pk

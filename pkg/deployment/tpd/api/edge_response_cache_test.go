@@ -18,9 +18,9 @@ func TestEdgeRespCache(t *testing.T) {
 
 	t.Run("memoizes within TTL + gzip matches raw", func(t *testing.T) {
 		c := newEdgeRespCache(time.Minute)
-		var calls int32
+		var calls atomic.Int32
 		compute := func() ([]byte, error) {
-			atomic.AddInt32(&calls, 1)
+			calls.Add(1)
 			return []byte(`[{"id":"x"}]`), nil
 		}
 		raw1, gz1, err := c.body(pkA, compute)
@@ -28,7 +28,7 @@ func TestEdgeRespCache(t *testing.T) {
 		raw2, gz2, err := c.body(pkA, compute)
 		require.NoError(t, err)
 
-		assert.Equal(t, int32(1), atomic.LoadInt32(&calls), "second call within TTL must not recompute")
+		assert.Equal(t, int32(1), calls.Load(), "second call within TTL must not recompute")
 		assert.Equal(t, raw1, raw2)
 		assert.Equal(t, gz1, gz2)
 		assert.Equal(t, raw1, gunzip(t, gz1), "gzip body must decompress to the raw body")

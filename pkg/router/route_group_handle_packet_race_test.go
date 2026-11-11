@@ -43,7 +43,7 @@ func TestHandleDataPacket_NoSendOnClosedReadCh(t *testing.T) {
 
 	// One real reverse rule so handleDataPacket has something to
 	// look up in the mux-recv path (and to give close() a non-empty
-	// fwd-set to clean up). We don't add to rg.fwd / rg.tps so
+	// fwd-set to clean up). We don't add to rg.legs so
 	// broadcastClosePackets is a no-op — the test exercises the
 	// once.Do close path without needing a live transport.
 	pkt, err := routing.MakeDataPacket(routing.RouteID(1), []byte("test-payload"))
@@ -53,25 +53,23 @@ func TestHandleDataPacket_NoSendOnClosedReadCh(t *testing.T) {
 	// pre-fix is tiny; loop count is high enough to hit it reliably
 	// under -race.
 	const N = 200
-	var sentOK, recovered int32
+	var sentOK, recovered atomic.Int32
 
 	var wg sync.WaitGroup
-	for i := 0; i < N; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range N {
+		wg.Go(func() {
 			defer func() {
 				// Test-level recover so a panic in handleDataPacket
 				// (i.e. the fix being absent) fails the test
 				// loudly instead of nuking the test binary.
 				if r := recover(); r != nil {
-					atomic.AddInt32(&recovered, 1)
+					recovered.Add(1)
 				}
 			}()
 			if err := rg.handleDataPacket(pkt); err == nil {
-				atomic.AddInt32(&sentOK, 1)
+				sentOK.Add(1)
 			}
-		}()
+		})
 	}
 
 	// Run remote-initiated close concurrently with the senders.
@@ -100,10 +98,10 @@ func TestHandleDataPacket_NoSendOnClosedReadCh(t *testing.T) {
 	// hitting handleDataPacket's defer-recover. recovered > 0
 	// means the fix is incomplete (test-level recover caught what
 	// handleDataPacket's didn't).
-	require.Zero(t, atomic.LoadInt32(&recovered),
+	require.Zero(t, recovered.Load(),
 		"handleDataPacket panicked %d/%d times — fix incomplete",
-		atomic.LoadInt32(&recovered), N)
+		recovered.Load(), N)
 
 	t.Logf("ok: %d/%d sends succeeded, %d goroutines recovered at test level",
-		atomic.LoadInt32(&sentOK), N, atomic.LoadInt32(&recovered))
+		sentOK.Load(), N, recovered.Load())
 }

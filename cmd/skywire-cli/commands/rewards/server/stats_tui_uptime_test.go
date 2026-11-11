@@ -15,11 +15,11 @@ func sampleUptimeGraph() uptimeGraphStats {
 	now := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
 	solid := map[string]string{}
 	patchy := map[string]string{}
-	for d := 0; d < 4; d++ {
+	for d := range 4 {
 		day := now.Add(-time.Duration(d) * 24 * time.Hour).Format("2006-01-02")
 		solid[day] = strings.Repeat(".", uptimestats.TimelineSlots)
 		var b strings.Builder
-		for i := 0; i < uptimestats.TimelineSlots; i++ {
+		for i := range uptimestats.TimelineSlots {
 			if i%4 == 0 {
 				b.WriteByte('.')
 			} else {
@@ -103,7 +103,7 @@ func TestUptimeGraphPanelSeparatesUpFromDark(t *testing.T) {
 // The bar is 72 blocks and the public key is 66 characters; neither may be
 // shortened, so the row is split and every line must still fit the box.
 func TestUptimeGraphPanelFitsThePanelWidth(t *testing.T) {
-	for _, line := range strings.Split(renderUptimeGraphPanelANSI(sampleUptimeGraph()), "\n") {
+	for line := range strings.SplitSeq(renderUptimeGraphPanelANSI(sampleUptimeGraph()), "\n") {
 		if got := len([]rune(stripANSI(line))); got > tuiWidth+2 {
 			t.Errorf("line runs to %d columns: %q", got, stripANSI(line))
 		}
@@ -129,7 +129,7 @@ func TestUptimeGraphRulerMarksTheWindow(t *testing.T) {
 	if !strings.Contains(r, "-72h") {
 		t.Error("the ruler does not mark the start of the window")
 	}
-	for _, line := range strings.Split(strings.TrimRight(r, "\n"), "\n") {
+	for line := range strings.SplitSeq(strings.TrimRight(r, "\n"), "\n") {
 		if got := len([]rune(stripANSI(line))); got > tuiWidth {
 			t.Errorf("ruler line runs to %d columns: %q", got, stripANSI(line))
 		}

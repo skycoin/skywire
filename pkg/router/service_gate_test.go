@@ -192,14 +192,14 @@ func TestSingleLegDormant(t *testing.T) {
 	require.True(t, rg.singleLegDormant(), "an empty group has no second leg")
 
 	rg.mu.Lock()
-	rg.tps = make([]*transport.ManagedTransport, 2)
+	setTestLegs(rg, make([]*transport.ManagedTransport, 2), nil, nil)
 	rg.mu.Unlock()
 	require.False(t, rg.singleLegDormant(), "a two-leg group must run the leg loops")
 
-	// tps[] without matching fwd[]/rvs[] entries is not a state Close accepts,
+	// Legs without forward rules are not a state Close accepts,
 	// so put the group back the way it was found before the cleanup runs.
 	rg.mu.Lock()
-	rg.tps = nil
+	setTestLegs(rg, nil, nil, nil)
 	rg.mu.Unlock()
 }
 

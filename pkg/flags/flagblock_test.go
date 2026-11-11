@@ -54,11 +54,11 @@ func TestDescriptionWithDoubleSpaceIsColored(t *testing.T) {
 		t.Fatalf("no color at all in:\n%q", block)
 	}
 	// The description must be inside a color run, not trailing after one.
-	idx := strings.Index(block, "pick one")
-	if idx < 0 {
+	before, _, ok := strings.Cut(block, "pick one")
+	if !ok {
 		t.Fatalf("description missing from:\n%q", block)
 	}
-	if !strings.Contains(block[:idx], "\x1b[") {
+	if !strings.Contains(before, "\x1b[") {
 		t.Errorf("description is not preceded by a color escape: %q", block)
 	}
 }
@@ -82,12 +82,12 @@ func TestFlagInDescriptionDoesNotEndTheColor(t *testing.T) {
 	// --json with visible text still to come on that same line leaves that
 	// text bare. A reset at the end of a line is not the bug — every line
 	// closes its own color and the next one opens its own.
-	for _, l := range strings.Split(block, "\n") {
-		m := strings.Index(l, "--json")
-		if m < 0 {
+	for l := range strings.SplitSeq(block, "\n") {
+		_, after, ok := strings.Cut(l, "--json")
+		if !ok {
 			continue
 		}
-		rest := l[m+len("--json"):]
+		rest := after
 		i := strings.Index(rest, "\x1b[0m")
 		if i < 0 {
 			continue
@@ -130,7 +130,7 @@ func TestNothingExceedsHelpWidth(t *testing.T) {
 	fs.String("rpc", "localhost:3435", "RPC server address")
 	fs.Bool("standalone", false, "not supported for pty exec yet, accepted for vocabulary parity; errors if set")
 
-	for _, l := range strings.Split(FlagBlock(fs), "\n") {
+	for l := range strings.SplitSeq(FlagBlock(fs), "\n") {
 		if len(l) > HelpWidth {
 			t.Errorf("line is %d wide, over the %d limit: %q", len(l), HelpWidth, l)
 		}
@@ -210,7 +210,7 @@ func TestNothingExceedsANarrowTerminal(t *testing.T) {
 	fs.String("jq", "", "filter JSON output through a jq/gojq expression (implies --json)")
 	fs.BoolP("bv", "b", false, "print runtime/debug.BuildInfo.Main.Version")
 
-	for _, l := range strings.Split(FlagBlock(fs), "\n") {
+	for l := range strings.SplitSeq(FlagBlock(fs), "\n") {
 		if len(l) > cols {
 			t.Errorf("line is %d wide on a %d column terminal: %q", len(l), cols, l)
 		}

@@ -6,7 +6,7 @@ import { Router, ActivatedRoute } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 
 import { NodeService, NodeSection, KnownHealthStatuses } from '../../../services/node.service';
-import { Node } from '../../../app.datatypes';
+import { Application, Node } from '../../../app.datatypes';
 import { AuthService, AuthStates } from '../../../services/auth.service';
 import { EditLabelComponent } from '../../layout/edit-label/edit-label.component';
 import { StorageService, LabeledElementTypes } from '../../../services/storage.service';
@@ -27,15 +27,31 @@ import { MultipleNodeDataService, MultipleNodesBackendData } from 'src/app/servi
 import { PageBaseComponent } from 'src/app/utils/page-base';
 import { AppComponent } from 'src/app/app.component';
 import { RewardService, VisorRewardData } from 'src/app/services/reward.service';
+import { AlertsService } from 'src/app/services/alerts.service';
+import { BulkAppActionComponent, BulkAppMode, BulkAppNode } from '../../layout/bulk-app-action/bulk-app-action.component';
 
-// Where the compact-rows choice is remembered in this browser.
+// Where the compact-rows and apps-column choices are remembered in this browser.
 const compactKey = 'nodeListCompact';
+const appsColumnKey = 'nodeListApps';
+const collapsedSectionsKey = 'nodeListCollapsedHypervisors';
 
-function loadCompact(): boolean {
+function loadCollapsedSections(): string[] {
   try {
-    return localStorage.getItem(compactKey) !== 'false';
+    const saved = JSON.parse(localStorage.getItem(collapsedSectionsKey) || '[]');
+
+    return Array.isArray(saved) ? saved : [];
   } catch {
-    return true;
+    return [];
+  }
+}
+
+function loadFlag(key: string, fallback: boolean): boolean {
+  try {
+    const v = localStorage.getItem(key);
+
+    return v === null ? fallback : v === 'true';
+  } catch {
+    return fallback;
   }
 }
 
@@ -54,6 +70,38 @@ export function compareVersions(a: number[], b: number[]): number {
   }
 
   return 0;
+}
+
+/** True when the app is running or starting (Application.status 1 or 3). */
+export function appIsUp(app: Application): boolean {
+  return app.status === 1 || app.status === 3;
+}
+
+/** Whether the visor runs the named app. */
+export function runsApp(node: Node, name: string): boolean {
+  return (node.apps || []).some(a => a.name === name && appIsUp(a));
+}
+
+/** Every app name configured on any of the visors, sorted. */
+export function fleetAppNames(nodes: Node[]): string[] {
+  const names = new Set<string>();
+  nodes.forEach(n => (n.apps || []).forEach(a => names.add(a.name)));
+
+  return [...names].sort();
+}
+
+export interface AppChip {
+  name: string;
+  running: boolean;
+}
+
+/** The visor's apps for the apps column, running ones first. */
+export function appChips(node: Node): AppChip[] {
+  return (node.apps || [])
+    .map(a => {
+      return { name: a.name, running: appIsUp(a) };
+    })
+    .sort((a, b) => Number(b.running) - Number(a.running) || a.name.localeCompare(b.name));
 }
 
 /**
@@ -148,7 +196,13 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   // The newest version among the listed visors; older ones count as outdated.
   newestVersion: number[] | null = null;
   // One line per visor instead of the per-type transport breakdown.
-  compact = loadCompact();
+  compact = loadFlag(compactKey, true);
+  // Shows a column with each visor's running and stopped apps.
+  showApps = loadFlag(appsColumnKey, false);
+  // Only visors running this app are listed when set.
+  appFilter = '';
+  // The app names configured anywhere in the list, for the app filter.
+  appNames: string[] = [];
   // Keys of the visors ticked for a bulk action.
   selected = new Set<string>();
   nodesToShow!: Node[] | null;
@@ -180,6 +234,14 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   get subSections(): NodeSection[] {
     return this.sections.length > 1 ? this.sections.slice(1) : [];
   }
+
+  /** Sub-sections whose hypervisor has no row on this page, so they keep a panel of their own. */
+  get detachedSections(): NodeSection[] {
+    return this.subSections.filter(s => !this.dataSource.some(n => n.localPk === s.hypervisorPk));
+  }
+
+  // Sub-hypervisors whose visors are folded away under their row.
+  collapsedSections = new Set<string>(loadCollapsedSections());
 
   // Array with the properties of the columns that can be used for filtering the data.
   filterProperties: FilterProperties[] = [
@@ -253,6 +315,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     private clipboardService: ClipboardService,
     private translateService: TranslateService,
     private rewardService: RewardService,
+    private alertsService: AlertsService,
     route: ActivatedRoute,
     private changeDetectorRef: ChangeDetectorRef,
   ) {
@@ -484,6 +547,10 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       } else {
         return forDot ? 'dot-outline-gray' : '';
       }
+    } else if (node.linkState === 'reconnecting' || node.linkState === 'restarting') {
+      return forDot ? 'dot-yellow' : 'yellow-text';
+    } else if (node.linkState === 'detached') {
+      return forDot ? 'dot-outline-gray' : '';
     } else if (node.isStale) {
       // Offline but the row carries last-known data from the
       // hypervisor's summary cache. Distinguish from plain offline.
@@ -509,6 +576,8 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       } else {
         return 'node.statuses.unknown' + (forTooltip ? '-tooltip' : '');
       }
+    } else if (node.linkState === 'reconnecting' || node.linkState === 'restarting' || node.linkState === 'detached') {
+      return 'node.statuses.' + node.linkState + (forTooltip ? '-tooltip' : '');
     } else if (node.isStale) {
       return 'node.statuses.stale' + (forTooltip ? '-tooltip' : '');
     } else {
@@ -684,6 +753,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
 
         return v && (!best || compareVersions(v, best) > 0) ? v : best;
       }, null);
+      this.appNames = fleetAppNames(everyNode);
       const visible = this.filteredNodes.filter(n => this.matchesQuickFilter(n));
       this.quickFilterHides = this.filteredNodes.length - visible.length;
 
@@ -737,6 +807,9 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
         }
         break;
     }
+    if (this.appFilter && !runsApp(node, this.appFilter)) {
+      return false;
+    }
     const q = this.quickSearch.trim().toLowerCase();
     if (!q) {
       return true;
@@ -749,6 +822,32 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   /** A sub-hypervisor section's visors that pass the search box and chip. */
   quickFiltered(nodes: Node[] | undefined): Node[] {
     return (nodes || []).filter(n => this.matchesQuickFilter(n));
+  }
+
+  /** Whether a row is the hypervisor serving this UI, which keeps the gold star. */
+  isLocalHypervisor(node: Node): boolean {
+    return this.localHypervisorPk ? node.localPk === this.localHypervisorPk : !!node.isHypervisor;
+  }
+
+  /** The sub-section a row's visor runs as hypervisor, if any. */
+  sectionOf(pk: string): NodeSection | undefined {
+    return this.subSections.find(s => s.hypervisorPk === pk);
+  }
+
+  /** A sub-hypervisor's visors for nesting under its row, without its own row. */
+  childNodes(section: NodeSection): Node[] {
+    return this.quickFiltered(section.nodes).filter(n => n.localPk !== section.hypervisorPk);
+  }
+
+  toggleSection(pk: string) {
+    if (!this.collapsedSections.delete(pk)) {
+      this.collapsedSections.add(pk);
+    }
+    try {
+      localStorage.setItem(collapsedSectionsKey, JSON.stringify([...this.collapsedSections]));
+    } catch {
+      // The choice then lasts only for this page view.
+    }
   }
 
   setQuickSearch(text: string) {
@@ -770,6 +869,25 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     } catch {
       // The choice then lasts only for this page view.
     }
+  }
+
+  setAppFilter(name: string) {
+    this.appFilter = name;
+    this.recalculateElementsToShow();
+    this.changeDetectorRef.markForCheck();
+  }
+
+  toggleApps() {
+    this.showApps = !this.showApps;
+    try {
+      localStorage.setItem(appsColumnKey, String(this.showApps));
+    } catch {
+      // The choice then lasts only for this page view.
+    }
+  }
+
+  nodeAppChips(node: Node): AppChip[] {
+    return appChips(node);
   }
 
   /** The per-type transport counts as one line each, for the compact row's tooltip. */
@@ -806,9 +924,38 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     this.selected.clear();
   }
 
-  /** The ticked visors that are still in the list. */
+  /** The ticked visors that are still in the list, sub-hypervisor sections included. */
   private selectedNodes(): Node[] {
-    return (this.allNodes || []).filter(n => this.selected.has(n.localPk));
+    const seen = new Set<string>();
+
+    return (this.allNodes || []).concat(...this.subSections.map(s => s.nodes || [])).filter(n => {
+      if (!this.selected.has(n.localPk) || seen.has(n.localPk)) {
+        return false;
+      }
+      seen.add(n.localPk);
+
+      return true;
+    });
+  }
+
+  /** Opens the dialog that adds, starts or stops an app on each ticked visor. */
+  appActionSelected(mode: BulkAppMode) {
+    const direct = new Set((this.allNodes || []).map(n => n.localPk));
+    const nodes: BulkAppNode[] = this.selectedNodes().map(n => {
+      return {
+        key: n.localPk,
+        label: n.label,
+        online: !!n.online,
+        viaSubHypervisor: !direct.has(n.localPk),
+        apps: (n.apps || []).map(a => a.name),
+      };
+    });
+    BulkAppActionComponent.openDialog(this.dialog, { mode: mode, nodes: nodes }).afterClosed().subscribe(changed => {
+      if (changed) {
+        this.multipleNodeDataService.forceRefresh();
+      }
+      this.changeDetectorRef.markForCheck();
+    });
   }
 
   updateSelected() {
@@ -1194,6 +1341,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.close();
       this.storageService.setLocalNodesAsHidden([node.localPk], [node.ip]);
+      this.forgetOnHypervisor([node.localPk]);
       this.forceDataRefresh();
       this.snackbarService.showDone('nodes.deleted');
       this.changeDetectorRef.markForCheck();
@@ -1372,6 +1520,14 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   }
 
   /**
+   * Also drops the visors from the hypervisor's remembered list, so they stay
+   * gone after it restarts. A visor that is connected again is refused there.
+   */
+  private forgetOnHypervisor(pks: string[]) {
+    pks.forEach(pk => this.alertsService.forget(pk).subscribe({ error: () => {} }));
+  }
+
+  /**
    * Removes all offline nodes from the list, until seeing them online again.
    */
   removeOffline() {
@@ -1398,6 +1554,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       // Remove the nodes and show the result.
       if (nodesToRemove.length > 0) {
         this.storageService.setLocalNodesAsHidden(nodesToRemove, ipsToRemove);
+        this.forgetOnHypervisor(nodesToRemove);
 
         this.forceDataRefresh();
 

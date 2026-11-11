@@ -47,6 +47,7 @@ package router
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -83,13 +84,7 @@ func poolPlanAdmitted(log *logging.Logger, port routing.Port, fwd []routing.Hop,
 	}
 	if types := routersettings.PoolTpTypes.Strings(); len(types) > 0 && tp != nil {
 		want := string(tp.Entry.Type)
-		ok := false
-		for _, t := range types {
-			if t == want {
-				ok = true
-				break
-			}
-		}
+		ok := slices.Contains(types, want)
 		if !ok {
 			if log != nil {
 				log.Debugf("pool plan from standby group :%d skipped: first hop type %q not in pool.tp_types", port, want)
@@ -255,7 +250,8 @@ func (r *router) standbyPoolPlans(desc routing.RouteDescriptor, minHops uint16) 
 	app := target.rg.AppName()
 	held := make(map[uuid.UUID]struct{})
 	target.rg.mu.Lock()
-	for _, tp := range target.rg.tps {
+	for _, lg := range target.rg.legs {
+		tp := lg.tp
 		if tp != nil {
 			held[tp.Entry.ID] = struct{}{}
 		}
@@ -268,11 +264,11 @@ func (r *router) standbyPoolPlans(desc routing.RouteDescriptor, minHops uint16) 
 		if rg.AppName() != app || rg.TunnelRole() != tunnelRoleStandby {
 			continue
 		}
-		// A standby tunnel is a single-leg group: tps[0] IS its route.
+		// A standby tunnel is a single-leg group: legs[0] IS its route.
 		rg.mu.Lock()
 		var tp *transport.ManagedTransport
-		if len(rg.tps) > 0 {
-			tp = rg.tps[0]
+		if len(rg.legs) > 0 {
+			tp = rg.legs[0].tp
 		}
 		rg.mu.Unlock()
 		if tp == nil {
@@ -492,8 +488,9 @@ func (r *router) groupExcludes(nrg *NoiseRouteGroup, lPK, rPK cipher.PubKey) (ex
 	excludePKs = intermediatesOfRouteGroup(nrg, lPK, rPK)
 	excludePKs = appendUniquePKs(excludePKs, r.sameLANExcludedPKs())
 	nrg.rg.mu.Lock()
-	excludeIDs = make([]uuid.UUID, 0, len(nrg.rg.tps))
-	for _, tp := range nrg.rg.tps {
+	excludeIDs = make([]uuid.UUID, 0, len(nrg.rg.legs))
+	for _, lg := range nrg.rg.legs {
+		tp := lg.tp
 		if tp != nil {
 			excludeIDs = append(excludeIDs, tp.Entry.ID)
 		}

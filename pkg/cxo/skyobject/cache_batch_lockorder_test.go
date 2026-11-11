@@ -55,7 +55,7 @@ func TestWithBatch_DoesNotInvertCacheAndWriterLocks(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		for i := 0; i < lockOrderRounds; i++ {
+		for i := range lockOrderRounds {
 			lockOrderRound(t, c, i)
 		}
 	}()
@@ -112,9 +112,7 @@ func lockOrderRound(t *testing.T, c *Container, round int) {
 	holding, release := make(chan struct{}), make(chan struct{})
 
 	// (a) Occupy the writer lock so (b) and (c) both have to wait.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := c.DB().CXDS().RunBatch(func(_ data.CXDS) error {
 			close(holding)
 			<-release
@@ -123,14 +121,12 @@ func lockOrderRound(t *testing.T, c *Container, round int) {
 		if err != nil {
 			t.Errorf("holder RunBatch: %v", err)
 		}
-	}()
+	})
 	<-holding
 
 	// (b) The publisher's batch. Queues on the writer first, so it is
 	// the one that gets it.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := c.WithBatch(func() error {
 			k := cipher.SumSHA256([]byte(fmt.Sprintf("lock-order-batch-%d", round)))
 			_, err := c.Set(k, []byte("batched"), 1)
@@ -139,7 +135,7 @@ func lockOrderRound(t *testing.T, c *Container, round int) {
 		if err != nil {
 			t.Errorf("WithBatch: %v", err)
 		}
-	}()
+	})
 	// No signal exists for "now blocked on the writer", so give it a
 	// moment. A too-short wait only weakens the round; it cannot cause a
 	// false failure, since a correct WithBatch never deadlocks either
@@ -148,13 +144,11 @@ func lockOrderRound(t *testing.T, c *Container, round int) {
 
 	// (c) The cache reader. inc != 0 makes it a read-modify-write, which
 	// bbolt serves from a write tx — so it parks with Cache.mx held.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		// The returned value and error don't matter — the locks this
 		// call takes on its way to bbolt are the whole point.
 		_, _, _ = c.Get(key, 1) //nolint:errcheck,gosec // see above
-	}()
+	})
 	time.Sleep(100 * time.Millisecond)
 
 	close(release)

@@ -47,7 +47,7 @@ func (d *Dynamic) IsBlank() bool {
 // must be a non-nil pointer
 func (d *Dynamic) Value(
 	pack Pack, //       : pack to get
-	obj interface{}, // : pointer to object to decode to
+	obj any, // : pointer to object to decode to
 ) (
 	err error, //       : get or decode error
 ) {
@@ -69,7 +69,7 @@ func (d *Dynamic) Value(
 // SchemaRef field will not be changed
 func (d *Dynamic) SetValue(
 	pack Pack, //       : pack to save
-	obj interface{}, // : an encodable object
+	obj any, // : an encodable object
 ) (
 	err error, //       : saving error
 ) {

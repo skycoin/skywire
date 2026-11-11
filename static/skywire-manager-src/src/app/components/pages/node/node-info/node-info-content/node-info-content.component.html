@@ -100,7 +100,7 @@
         </span>
         <span class="info-line">
           <span class="title">{{ 'node.details.node-info.node-version' | translate }} </span>
-          {{ node.version ? node.version : ('common.unknown' | translate) }}
+          <span [matTooltip]="node.version">{{ node.version ? (node.version | versionLabel) : ('common.unknown' | translate) }}</span>
         </span>
         <span class="info-line">
           <span class="title">{{ 'node.details.node-info.config-version' | translate }} </span>

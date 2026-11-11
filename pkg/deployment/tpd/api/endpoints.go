@@ -11,13 +11,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -310,7 +310,7 @@ func (api *API) getTransportStats(w http.ResponseWriter, r *http.Request) {
 		byType[string(entry.Type)]++
 	}
 
-	stats := map[string]interface{}{
+	stats := map[string]any{
 		"total":   len(entries),
 		"by_type": byType,
 	}
@@ -568,7 +568,7 @@ func (api *API) deregisterTransport(w http.ResponseWriter, r *http.Request) {
 	}
 	api.mirrorEdges(r.Context(), touchedEdges)
 
-	api.log(r).WithFields(logrus.Fields{"Number of Transports": len(tps), "Transports": tps}).Info("Deregistration process completed.")
+	api.log(r).WithFields(logging.Fields{"Number of Transports": len(tps), "Transports": tps}).Info("Deregistration process completed.")
 	httputil.WriteJSON(w, r, http.StatusOK, nil)
 }
 
@@ -836,7 +836,7 @@ func (api *API) postTransportUptimes(w http.ResponseWriter, r *http.Request) {
 // PK hex matches one of the semicolon-separated PKs.
 func filterByPKs(summaries []store.VisorSummary, pksParam string) []store.VisorSummary {
 	want := make(map[string]struct{})
-	for _, pk := range strings.Split(pksParam, ";") {
+	for pk := range strings.SplitSeq(pksParam, ";") {
 		pk = strings.TrimSpace(pk)
 		if pk != "" {
 			want[pk] = struct{}{}
@@ -1050,7 +1050,7 @@ func (api *API) getVersionsByPKs(w http.ResponseWriter, r *http.Request) {
 // splitPKs splits a comma-separated list of public keys
 func splitPKs(pks string) []string {
 	var result []string
-	for _, pk := range strings.Split(pks, ",") {
+	for pk := range strings.SplitSeq(pks, ",") {
 		pk = strings.TrimSpace(pk)
 		if pk != "" {
 			result = append(result, pk)
@@ -1092,7 +1092,7 @@ func (api *API) getTransportUptimes(w http.ResponseWriter, r *http.Request) {
 		summaries, err = api.store.GetTransportUptimeSummaries(r.Context(), ids, v2, timeline)
 	} else if visorsParam != "" {
 		// Filter by visor PKs — get all transports for those visors.
-		for _, pkHex := range strings.Split(visorsParam, ";") {
+		for pkHex := range strings.SplitSeq(visorsParam, ";") {
 			pkHex = strings.TrimSpace(pkHex)
 			if pkHex == "" {
 				continue
@@ -1259,7 +1259,7 @@ func (api *API) getTransportUptimeByVisors(w http.ResponseWriter, r *http.Reques
 // parseTpIDs parses semicolon-separated transport UUIDs.
 func parseTpIDs(param string) []uuid.UUID {
 	var ids []uuid.UUID
-	for _, s := range strings.Split(param, ";") {
+	for s := range strings.SplitSeq(param, ";") {
 		s = strings.TrimSpace(s)
 		if s == "" {
 			continue

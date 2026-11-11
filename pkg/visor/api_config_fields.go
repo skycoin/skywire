@@ -37,11 +37,12 @@ package visor
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 
@@ -400,7 +401,9 @@ func LiveConfigFields() []ConfigFieldDoc {
 	for _, f := range liveConfigFieldTable {
 		out = append(out, ConfigFieldDoc{Path: f.Path, Desc: f.Desc})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	slices.SortFunc(out, func(a, b ConfigFieldDoc) int {
+		return cmp.Compare(a.Path, b.Path)
+	})
 	return out
 }
 
@@ -439,7 +442,7 @@ func (v *Visor) SetConfigFields(fields map[string]json.RawMessage) ([]visorapi.C
 	for p := range fields {
 		paths = append(paths, p)
 	}
-	sort.Strings(paths)
+	slices.Sort(paths)
 
 	root := reflect.ValueOf(v.conf).Elem()
 
@@ -526,12 +529,7 @@ func (v *Visor) SetConfigFields(fields map[string]json.RawMessage) ([]visorapi.C
 func (v *Visor) setHypervisorsLive(want []cipher.PubKey) error {
 	have := v.configuredHypervisors()
 	in := func(set []cipher.PubKey, pk cipher.PubKey) bool {
-		for _, p := range set {
-			if p == pk {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(set, pk)
 	}
 	for _, pk := range want {
 		if !in(have, pk) {
@@ -655,7 +653,7 @@ func resolveConfigTarget(root reflect.Value, path string) (*configTarget, error)
 		}
 		switch container.Kind() {
 		case reflect.Slice, reflect.Array:
-			if container.Type().Elem() == reflect.TypeOf(services.Block{}) {
+			if container.Type().Elem() == reflect.TypeFor[services.Block]() {
 				return blockConfigTarget(container, seg.idx, segs[i+1:], path, strings.Join(tmpl, "."))
 			}
 			j := indexByNameField(container, seg.idx)
@@ -717,7 +715,7 @@ func mapConfigTarget(m reflect.Value, key, tmpl, idx string) *configTarget {
 // derefConfigValue follows pointers/interfaces to the underlying value,
 // erroring on a nil one rather than allocating a half-built config block.
 func derefConfigValue(v reflect.Value) (reflect.Value, error) {
-	for v.Kind() == reflect.Ptr || v.Kind() == reflect.Interface {
+	for v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface {
 		if v.IsNil() {
 			return reflect.Value{}, errors.New("nil config block")
 		}
@@ -739,7 +737,7 @@ func fieldByJSONTag(s reflect.Value, name string) (reflect.Value, bool) {
 		if sf.PkgPath != "" { // unexported (V1.mu, Common.path, …)
 			continue
 		}
-		tag := strings.Split(sf.Tag.Get("json"), ",")[0]
+		tag, _, _ := strings.Cut(sf.Tag.Get("json"), ",")
 		if tag == "-" {
 			continue
 		}
@@ -818,7 +816,7 @@ func decodeConfigValue(t reflect.Type, raw json.RawMessage) (reflect.Value, erro
 	return reflect.Value{}, fmt.Errorf("value %s is not valid for this field (%s): %w", string(raw), t, err)
 }
 
-func strictDecode(raw json.RawMessage, into interface{}) error {
+func strictDecode(raw json.RawMessage, into any) error {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(into); err != nil {
@@ -889,13 +887,12 @@ func (v *Visor) setEmbeddedProxyUpstreamPersist(kind, addr string) error {
 
 // mirroredJSONField reports whether the block has a field NAMED for this JSON
 // key but tagged `json:"-"` — a mirror the block's own MarshalJSON writes out
-// while the canonical value lives elsewhere. Matched on the Go field name in
-// UpperCamel, which is how every such mirror in the config is spelled.
+// while the canonical value lives elsewhere. Matched case-insensitively on the
+// Go field name with the underscores of the snake_case key removed.
 func mirroredJSONField(block reflect.Value, name string) bool {
-	want := strings.ReplaceAll(strings.Title(strings.ReplaceAll(name, "_", " ")), " ", "") //nolint:staticcheck // ASCII config keys
+	want := strings.ReplaceAll(name, "_", "")
 	t := block.Type()
-	for i := 0; i < t.NumField(); i++ {
-		sf := t.Field(i)
+	for sf := range t.Fields() {
 		if sf.PkgPath != "" {
 			continue
 		}
@@ -983,7 +980,7 @@ func blockConfigTarget(list reflect.Value, label string, rest []configSeg, path,
 	// key the block lacks takes JSON, except log_level, which is a string.
 	typ := jsonKindType(fields[key])
 	if _, ok := fields[key]; !ok && key == "log_level" {
-		typ = reflect.TypeOf("")
+		typ = reflect.TypeFor[string]()
 	}
 	return &configTarget{
 		typ: typ,
@@ -1024,13 +1021,13 @@ func jsonKindType(cur json.RawMessage) reflect.Type {
 	s := strings.TrimSpace(string(cur))
 	switch {
 	case s == "":
-		return reflect.TypeOf(json.RawMessage{})
+		return reflect.TypeFor[json.RawMessage]()
 	case s[0] == '"':
-		return reflect.TypeOf("")
+		return reflect.TypeFor[string]()
 	case s == "true" || s == "false":
 		return reflect.TypeOf(false)
 	case s[0] == '-' || (s[0] >= '0' && s[0] <= '9'):
-		return reflect.TypeOf(float64(0))
+		return reflect.TypeFor[float64]()
 	}
-	return reflect.TypeOf(json.RawMessage{})
+	return reflect.TypeFor[json.RawMessage]()
 }

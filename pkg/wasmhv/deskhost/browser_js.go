@@ -27,7 +27,7 @@ import (
 // installBrowser publishes globalThis.skywireBrowser for the desk launcher:
 // open(el) mounts the Go browser into el and runs it in this instance.
 func installBrowser() {
-	js.Global().Set("skywireBrowser", js.ValueOf(map[string]interface{}{
+	js.Global().Set("skywireBrowser", js.ValueOf(map[string]any{
 		"open":   js.FuncOf(jsOpenBrowser),
 		"newTab": js.FuncOf(jsBrowserNewTab),
 		// state() is netscrape.State as JSON: each window's tabs, history and

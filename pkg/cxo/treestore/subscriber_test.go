@@ -1,7 +1,7 @@
 package treestore
 
 import (
-	"sort"
+	"slices"
 	"sync"
 	"testing"
 
@@ -71,7 +71,7 @@ func TestSubscriberApplySnapshotFiresChangesOnce(t *testing.T) {
 		t.Errorf("second snapshot: batches = %d, want 1", batches)
 	}
 	paths := pathsOf(got)
-	sort.Strings(paths)
+	slices.Sort(paths)
 	want := []string{"a/b", "e/f"}
 	if !equalSlice(paths, want) {
 		t.Errorf("second snapshot: changed paths = %v, want %v (c/d should not be reported as changed)", paths, want)
@@ -264,7 +264,7 @@ func TestSubscriberMergePartialSnapshotInsertUpdateOnly(t *testing.T) {
 	gotMu.Lock()
 	paths := pathsOf(got)
 	gotMu.Unlock()
-	sort.Strings(paths)
+	slices.Sort(paths)
 	if len(paths) != 2 || paths[0] != "new/c" || paths[1] != "upd/b" {
 		t.Fatalf("merge fired events for %v, want [new/c upd/b]", paths)
 	}

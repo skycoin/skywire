@@ -114,7 +114,7 @@ func TestTelemetryPacerSkipKeepsCountersExact(t *testing.T) {
 	k := newTelKey(t)
 	t0 := time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)
 	var written, last uint64
-	for i := 0; i < 400; i++ {
+	for i := range 400 {
 		now := t0.Add(time.Duration(i) * 45 * time.Second)
 		if i%7 == 0 {
 			last += uint64(i) // moves now and then, idle in between
@@ -189,7 +189,7 @@ func TestTpCodeTable(t *testing.T) {
 	for _, s := range []string{"", "stcpr", "dmsg", "stcpr", "legacy-type"} {
 		require.Equal(t, s, tpCodeOf(s).String())
 	}
-	for i := 0; i < 300; i++ {
+	for i := range 300 {
 		tpCodeOf(fmt.Sprintf("junk-%d", i))
 	}
 	require.Equal(t, "", tpCodeOf("one-too-many").String())

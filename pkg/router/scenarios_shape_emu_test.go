@@ -16,11 +16,11 @@ package router
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/logging"
@@ -50,7 +50,7 @@ func (h *emuHost) allGroups() []*RouteGroup {
 func shapeEmuRig(t *testing.T, actives, standby int) []*emuRig {
 	t.Helper()
 	ml := logging.NewMasterLogger()
-	ml.SetLevel(logrus.PanicLevel)
+	ml.SetLevel(logging.PanicLevel)
 	shared := newEmuShared(ml)
 	rigs := make([]*emuRig, 0, actives+standby)
 	for i := 0; i < actives+standby; i++ {
@@ -103,7 +103,7 @@ func shapeChainBudget(rigs []*emuRig) (int, map[uuid.UUID]struct{}) {
 	n := 0
 	for _, rg := range append(append([]*RouteGroup(nil), active...), pool...) {
 		rg.mu.Lock()
-		for _, tp := range rg.tps {
+		for _, tp := range legTransports(rg.legs) {
 			if tp != nil && !tp.IsClosed() {
 				tps[tp.Entry.ID] = struct{}{}
 				n++
@@ -143,7 +143,7 @@ func driveShape(t *testing.T, rigs []*emuRig, spec, want string) int {
 	require.NoError(t, routersettings.SetApp(shapeEmuApp, routersettings.MuxShape.Name(), spec))
 	now := time.Now()
 	moves := 0
-	for i := 0; i < 60; i++ {
+	for range 60 {
 		active, pool := shapeSession0(rigs)
 		before := shapeOf(rigs)
 		poolArbiterRound(active, pool, now, nil)
@@ -225,10 +225,8 @@ func TestEmuShapeRoundTripsBackTo2x2(t *testing.T) {
 func rigForTp(t *testing.T, rigs []*emuRig, tp uuid.UUID) *emuRig {
 	t.Helper()
 	for _, r := range rigs {
-		for _, id := range r.ids {
-			if id == tp {
-				return r
-			}
+		if slices.Contains(r.ids, tp) {
+			return r
 		}
 	}
 	t.Fatalf("no rig holds transport %s", tp)

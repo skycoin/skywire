@@ -32,14 +32,17 @@
 package group
 
 import (
+	"cmp"
 	"context"
 	cryptoRand "crypto/rand"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -384,6 +387,9 @@ type Session struct {
 	// admins after applyRosterLeaf/applyAdminLeaf mutate the roster, so the
 	// manager can persist the converged Record. See SetRosterChangeHandler.
 	onRosterChange func(members, admins []cipher.PubKey)
+	// onRemoved is invoked when an admin removes this visor from the group.
+	// See SetRemovedHandler.
+	onRemoved func()
 	// onModChange is invoked with a snapshot of the converged moderation
 	// state after applyModLeaf mutates it, so the manager can persist it.
 	// Parallel to onRosterChange. See SetModChangeHandler.
@@ -400,7 +406,9 @@ type Session struct {
 	// admission authority (e.g. the native-TCP standalone path, which
 	// has no Manager) and every request is refused.
 	onJoinRequest JoinRequestHandler
-	log           *logging.Logger
+	// onLeave removes a member that asked to leave. See SetLeaveHandler.
+	onLeave LeaveHandler
+	log     *logging.Logger
 
 	// lastInboundNs is the unified liveness signal for this session,
 	// in unix-nanoseconds. Set on every observable inbound event —
@@ -764,6 +772,7 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 		peerUpdateCount:   make(map[cipher.PubKey]*atomic.Uint64),
 		dedup:             newRecentSet(inboxDedupCap),
 	}
+	pub.OnRecovered(s.onRecovered)
 
 	// Per-member subscribers: each non-owner-self member publishes
 	// their own message feed at memberPK:Record.Port. Owner follows
@@ -877,6 +886,10 @@ func (s *Session) runHeartbeatLoop(ctx context.Context, interval time.Duration) 
 		case <-ctx.Done():
 			return
 		case <-t.C:
+			// Nobody to reassure, and each one would climb the feed's Root seq.
+			if s.pub.Stats().ActiveConnections == 0 {
+				continue
+			}
 			if err := s.publishAs(s.cfg.MyPK, HeartbeatMarker, time.Now().UTC()); err != nil {
 				s.log.WithError(err).Debug("group: heartbeat publish failed")
 			}
@@ -950,6 +963,7 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 		peerUpdateCount:   make(map[cipher.PubKey]*atomic.Uint64),
 		dedup:             newRecentSet(inboxDedupCap),
 	}
+	pub.OnRecovered(s.onRecovered)
 
 	// Admin-aggregator topology (post-#2685 signed leaves):
 	//
@@ -1121,9 +1135,7 @@ func (s *Session) Connect(ctx context.Context) error {
 	// failure state, so the backoff schedule never engages either.
 	s.peerSubsMu.RLock()
 	peers := make(map[cipher.PubKey]*treestore.Subscriber, len(s.peerSubs))
-	for k, v := range s.peerSubs {
-		peers[k] = v
-	}
+	maps.Copy(peers, s.peerSubs)
 	s.peerSubsMu.RUnlock()
 	peerSuccessCount := 0
 	now := time.Now().UnixNano()
@@ -1285,7 +1297,9 @@ func (s *Session) PeerPKs() []cipher.PubKey {
 	// Sort by hex form for determinism; cipher.PubKey doesn't have a
 	// natural ordering otherwise. The ~5 byte allocations per call are
 	// trivial vs. the reconnect machinery's work.
-	sort.Slice(out, func(i, j int) bool { return out[i].Hex() < out[j].Hex() })
+	slices.SortFunc(out, func(a, b cipher.PubKey) int {
+		return cmp.Compare(a.Hex(), b.Hex())
+	})
 	return out
 }
 
@@ -1608,6 +1622,8 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) ([]cipher.PubKey, error)
 	s.pub.SetAllowlist(append([]cipher.PubKey(nil), members...))
 	s.membersMu.Lock()
 	s.members = snap
+	// The gossip reconciler edits this copy and persists it over the store.
+	s.cfg.Record.Members = append([]cipher.PubKey(nil), members...)
 	s.membersMu.Unlock()
 	if s.cfg.Record.Role != RoleOwner {
 		// Allowlist refreshed; the rest of this function is the owner's
@@ -1730,7 +1746,9 @@ func ringSuccessors(candidates []cipher.PubKey, self cipher.PubKey, k int) []cip
 		return nil
 	}
 	sorted := append([]cipher.PubKey(nil), candidates...)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Hex() < sorted[j].Hex() })
+	slices.SortFunc(sorted, func(a, b cipher.PubKey) int {
+		return cmp.Compare(a.Hex(), b.Hex())
+	})
 	if k >= len(sorted) {
 		return sorted
 	}
@@ -1740,7 +1758,7 @@ func ringSuccessors(candidates []cipher.PubKey, self cipher.PubKey, k int) []cip
 	selfHex := self.Hex()
 	start := sort.Search(len(sorted), func(i int) bool { return sorted[i].Hex() >= selfHex })
 	out := make([]cipher.PubKey, 0, k)
-	for i := 0; i < k; i++ {
+	for i := range k {
 		out = append(out, sorted[(start+i)%len(sorted)])
 	}
 	return out
@@ -2251,6 +2269,10 @@ func (s *Session) handleRelay(c net.Conn) {
 		s.handleJoinRequest(c, payload)
 		return
 	}
+	if probe.Kind == frameKindLeave {
+		s.handleLeave(c, payload)
+		return
+	}
 	// Chat submission is the owner's job. Member sessions bind this port
 	// to answer join requests, and republishing someone else's text onto
 	// a member's own feed is not something any honest peer asks for:
@@ -2329,12 +2351,7 @@ func (s *Session) handleRelay(c net.Conn) {
 func (s *Session) isMember(pk cipher.PubKey) bool {
 	s.membersMu.RLock()
 	defer s.membersMu.RUnlock()
-	for _, m := range s.members {
-		if m == pk {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s.members, pk)
 }
 
 // publishAs is the shared write path used by:
@@ -2725,8 +2742,8 @@ func (s *Session) ReplayHistoryThrough(handler MessageHandler, cap int) {
 	if len(out) == 0 {
 		return
 	}
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].msg.TS.Before(out[j].msg.TS)
+	slices.SortFunc(out, func(a, b decoded) int {
+		return a.msg.TS.Compare(b.msg.TS)
 	})
 	start := 0
 	if len(out) > cap {
@@ -2750,6 +2767,16 @@ func (s *Session) ReplayHistoryThrough(handler MessageHandler, cap int) {
 // that replaces the four-flag tangle (subAlive bool +
 // lastHeartbeatNs + LastMessageAt + Status's health semantics).
 func (s *Session) onUpdate(events []treestore.UpdateEvent) {
+	s.applyUpdates(events, false)
+}
+
+// onRecovered takes the leaves a restored visor got back from a peer. Its own
+// posts count here, since it holds no copy and no local echo will come.
+func (s *Session) onRecovered(events []treestore.UpdateEvent) {
+	s.applyUpdates(events, true)
+}
+
+func (s *Session) applyUpdates(events []treestore.UpdateEvent, ownToo bool) {
 	if len(events) > 0 {
 		s.lastInboundNs.Store(time.Now().UnixNano())
 	}
@@ -2947,7 +2974,7 @@ func (s *Session) onUpdate(events []treestore.UpdateEvent) {
 		// member sees its own message echoed back after sending. The UI shows
 		// local sends optimistically, so the round-tripped copy is a duplicate.
 		// (Owner-role self-echo is delivered separately from publishAs, not here.)
-		if msg.SenderPK == s.cfg.MyPK {
+		if msg.SenderPK == s.cfg.MyPK && !ownToo {
 			continue
 		}
 		h(s.cfg.Record.ID, msg.SenderPK, msg)

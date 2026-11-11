@@ -38,9 +38,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/skynetca"
 	"github.com/skycoin/skywire/pkg/skynetweb"
@@ -71,7 +70,7 @@ type Gateway struct {
 	dial    MeshDial
 	local   LocalDial                // optional: the visor's own names (status pages)
 	aliases map[string]cipher.PubKey // optional friendly-name → PK
-	log     logrus.FieldLogger
+	log     logging.FieldLogger
 
 	// TLS-MITM (optional): when minter is non-nil, connections whose original
 	// destination port is tlsPort are TLS-terminated here — the gateway presents
@@ -116,12 +115,12 @@ func (g *Gateway) SetLocal(local LocalDial) { g.local = local }
 // "100.64.0.0/16" — a slice of shared/CGNAT space unlikely to collide with the
 // LAN). dial performs the mesh dial; aliases (may be nil) maps friendly names to
 // PKs for names that aren't a raw PK label.
-func New(dial MeshDial, cidr string, aliases map[string]cipher.PubKey, log logrus.FieldLogger) (*Gateway, error) {
+func New(dial MeshDial, cidr string, aliases map[string]cipher.PubKey, log logging.FieldLogger) (*Gateway, error) {
 	if dial == nil {
 		return nil, errors.New("meshgw: nil MeshDial")
 	}
 	if log == nil {
-		log = logrus.New()
+		log = logging.New()
 	}
 	pool, err := newIPPool(cidr)
 	if err != nil {

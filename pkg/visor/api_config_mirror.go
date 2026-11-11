@@ -2,9 +2,10 @@
 package visor
 
 import (
+	"cmp"
 	"os"
 	"reflect"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -57,6 +58,12 @@ var mirrorGetters = map[string]func(c *visorconfig.V1) (flag, value string, ok b
 		}
 		return "minsess", strconv.Itoa(c.Dmsg.Primary().SessionsCount), true
 	},
+	"resolvers": func(c *visorconfig.V1) (string, string, bool) {
+		if len(c.Resolvers) == 0 {
+			return "", "", false
+		}
+		return "resolvers", visorconfig.FormatResolverSpecs(c.Resolvers), true
+	},
 }
 
 func boolFlag(flag string) func(reflect.Value) (string, string) {
@@ -93,7 +100,7 @@ func mapIntFlag(flag string) func(reflect.Value) (string, string) {
 		for k, n := range m {
 			pairs = append(pairs, k+"="+strconv.Itoa(n))
 		}
-		sort.Strings(pairs)
+		slices.Sort(pairs)
 		return flag, strings.Join(pairs, ",")
 	}
 }
@@ -176,7 +183,9 @@ func (v *Visor) mirrorChanges() {
 		}
 	}
 	v.skyenvSeen = now
-	sort.Slice(flags, func(i, j int) bool { return flags[i][0] < flags[j][0] })
+	slices.SortFunc(flags, func(a, b [2]string) int {
+		return cmp.Compare(a[0], b[0])
+	})
 	v.mirrorToSkyenv(flags)
 }
 
@@ -208,7 +217,7 @@ func (v *Visor) mirroredValues() map[string][2]string {
 
 // configFieldType walks a dotted path of json names through struct types.
 func configFieldType(t reflect.Type, path string) reflect.Type {
-	for _, name := range strings.Split(path, ".") {
+	for name := range strings.SplitSeq(path, ".") {
 		for t.Kind() == reflect.Pointer {
 			t = t.Elem()
 		}
@@ -225,8 +234,7 @@ func configFieldType(t reflect.Type, path string) reflect.Type {
 }
 
 func structFieldByJSONName(t reflect.Type, name string) (reflect.StructField, bool) {
-	for i := 0; i < t.NumField(); i++ {
-		f := t.Field(i)
+	for f := range t.Fields() {
 		if f.Anonymous && f.Tag.Get("json") == "" {
 			et := f.Type
 			if et.Kind() == reflect.Pointer {

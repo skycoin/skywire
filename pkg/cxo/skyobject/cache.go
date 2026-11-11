@@ -2,9 +2,10 @@
 package skyobject
 
 import (
+	"cmp"
 	"fmt"
 	"log"
-	"sort"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -539,8 +540,8 @@ func (c *Cache) cleanDown(vol int) (err error) {
 	// sort the rank using cachePoints; we
 	// are removing items with less points
 
-	sort.Slice(rank, func(i, j int) bool {
-		return rank[i].it.cachePoints < rank[j].it.cachePoints
+	slices.SortFunc(rank, func(a, b rankItem) int {
+		return cmp.Compare(a.it.cachePoints, b.it.cachePoints)
 	})
 
 	// clean by amount first
@@ -1273,6 +1274,32 @@ func (c *Cache) Want(
 ) (
 	err error,
 ) {
+	_, err = c.want(key, gc, inc, true)
+	return
+}
+
+// WantArriving is Want with inc 0 for serving a peer. It sends the object
+// if it is stored, or waits for it only if a filler already wants it.
+// Otherwise it returns false and registers nothing.
+func (c *Cache) WantArriving(
+	key cipher.SHA256,
+	gc chan<- Object,
+) (
+	ok bool,
+	err error,
+) {
+	return c.want(key, gc, 0, false)
+}
+
+func (c *Cache) want(
+	key cipher.SHA256,
+	gc chan<- Object,
+	inc int,
+	create bool,
+) (
+	_ bool,
+	err error,
+) {
 
 	c.mx.Lock()
 	defer c.mx.Unlock()
@@ -1283,7 +1310,7 @@ func (c *Cache) Want(
 
 		if it.isWanted() == true { //nolint:staticcheck
 			it.fwant[gc] += inc
-			return err
+			return true, err
 		}
 
 		if it.isFilling() == true { //nolint:staticcheck // but not wanted
@@ -1296,11 +1323,14 @@ func (c *Cache) Want(
 			if val, rc, err = c.getFilling(key, inc, it); err != nil {
 
 				if err == data.ErrNotFound {
+					if !create {
+						return false, nil
+					}
 					it.fwant = map[chan<- Object]int{gc: inc} // want
-					err = nil                                 // clear
+					return true, nil
 				}
 
-				return err // DB failure or nil (not found)
+				return false, err // DB failure
 			}
 
 			// found
@@ -1311,7 +1341,7 @@ func (c *Cache) Want(
 			it.fc += inc
 			sendWanted(gc, Object{key, val, rc - inc, nil})
 
-			return err
+			return true, err
 		}
 
 		// regular item in the cache
@@ -1326,7 +1356,7 @@ func (c *Cache) Want(
 		}
 
 		it.touch(c.c.conf.CachePolicy)
-		return err
+		return true, err
 
 	}
 
@@ -1343,14 +1373,17 @@ func (c *Cache) Want(
 	if err != nil {
 
 		if err == data.ErrNotFound {
+			if !create {
+				return false, nil
+			}
 			// create wanted item
 			it = new(item)
 			it.fwant = map[chan<- Object]int{gc: inc}
 			c.is[key] = it
-			err = nil // clear
+			return true, nil
 		}
 
-		return err // DB failure or 'not found'
+		return false, err // DB failure
 	}
 
 	// found
@@ -1373,7 +1406,7 @@ func (c *Cache) Want(
 	it.fc = inc
 
 	if err = c.putFillingItem(val, int(urc), it); err != nil {
-		return err
+		return true, err
 	}
 	if len(it.val) != 0 { // putFillingItem cached the value
 		c.is[key] = it
@@ -1388,7 +1421,7 @@ func (c *Cache) Want(
 		// stopped the c.is phantom but left this DB-rc residual).
 		_, _ = c.db().Inc(key, -inc) //nolint:errcheck // best-effort undo
 	}
-	return err
+	return true, err
 }
 
 // Unwant used to unsibscribe after the Want, if,

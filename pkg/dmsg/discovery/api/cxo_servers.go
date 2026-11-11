@@ -21,11 +21,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/discovery/serverfeed"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 const serversCXOEvery = time.Minute
@@ -98,7 +97,7 @@ func (p *ClientsByServerCXOPublisher) PublishServers(servers []*disc.Entry) {
 
 // RunServersCXO publishes the registered servers to the feed every minute
 // until ctx ends. A server whose entry expires drops out on the next round.
-func (a *API) RunServersCXO(ctx context.Context, log logrus.FieldLogger) {
+func (a *API) RunServersCXO(ctx context.Context, log logging.FieldLogger) {
 	t := time.NewTicker(serversCXOEvery)
 	defer t.Stop()
 	for {

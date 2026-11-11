@@ -49,6 +49,7 @@ func registerVoiceHTTPHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("/voice/my-ringback", requireAuthFunc(voiceMyRingbackHandler()))
 	mux.HandleFunc("/voice/levels", requireAuthFunc(voiceLevelsHandler()))
 	mux.HandleFunc("/voice/audio", requireAuthFunc(voiceAudioHandler()))
+	mux.HandleFunc("/voice/devices", requireAuthFunc(voiceDevicesHandler()))
 }
 
 // voiceRPCDown reports whether the visor RPC is unavailable and, if so, writes a
@@ -322,8 +323,7 @@ func voiceMyRingbackHandler() http.HandlerFunc {
 		case http.MethodPut:
 			data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxRingbackUpload))
 			if err != nil {
-				var tooBig *http.MaxBytesError
-				if errors.As(err, &tooBig) {
+				if errors.As(err, new(*http.MaxBytesError)) {
 					http.Error(w, "ringback tone too large (the limit is 1 MB)", http.StatusRequestEntityTooLarge)
 					return
 				}
@@ -469,4 +469,33 @@ func voiceRMS(pcm []int16) float64 {
 		sum += f * f
 	}
 	return math.Sqrt(sum / float64(len(pcm)))
+}
+
+// voiceDevicesHandler serves GET /voice/devices?call=<id> → whether the call
+// has a real mic and speaker on this visor, and why not when it has none.
+func voiceDevicesHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if voiceRPCDown(w) {
+			return
+		}
+		if r.Method != http.MethodGet {
+			http.Error(w, "GET only", http.StatusMethodNotAllowed)
+			return
+		}
+		callID := strings.TrimSpace(r.URL.Query().Get("call"))
+		if callID == "" {
+			http.Error(w, "call required", http.StatusBadRequest)
+			return
+		}
+		var dev visorapi.VoiceDevices
+		if err := pairRPCCall("VoiceCallDevices", func(c visorapi.API) error {
+			d, e := c.VoiceCallDevices(callID)
+			dev = d
+			return e
+		}); err != nil {
+			http.Error(w, err.Error(), voiceErrStatus(err))
+			return
+		}
+		writeJSON(w, dev)
+	}
 }

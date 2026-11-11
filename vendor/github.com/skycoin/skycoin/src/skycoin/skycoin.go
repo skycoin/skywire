@@ -27,6 +27,7 @@ import (
 	"github.com/skycoin/skycoin/src/params"
 	"github.com/skycoin/skycoin/src/readable"
 	"github.com/skycoin/skycoin/src/skycoin-web/src/gui"
+	"github.com/skycoin/skycoin/src/ui2"
 	"github.com/skycoin/skycoin/src/util/apputil"
 	"github.com/skycoin/skycoin/src/util/certutil"
 	"github.com/skycoin/skycoin/src/util/droplet"
@@ -182,6 +183,7 @@ func (c *Coin) Run() error {
 	dv := dbVerify{
 		blockchainPubkey: c.config.Node.blockchainPubkey,
 		pqBlocks:         coin.PQBlockRule{Pubkey: c.config.Node.blockchainPQPubkey, ForkSeq: c.config.Node.PQForkSeq},
+		multiSigner:      c.config.Node.multiSigner,
 		logger:           c.logger,
 		quit:             quit,
 	}
@@ -387,6 +389,7 @@ func (c *Coin) ConfigureVisor() visor.Config {
 	vc.PQBlocks = coin.PQBlockRule{Pubkey: c.config.Node.blockchainPQPubkey, ForkSeq: c.config.Node.PQForkSeq}
 	vc.BlockchainPQSeckey = c.config.Node.blockchainPQSeckey
 	vc.PQAddressForkSeq = c.config.Node.PQAddressForkSeq
+	vc.MultiSigner = c.config.Node.multiSigner
 
 	vc.UnconfirmedVerifyTxn = c.config.Node.UnconfirmedVerifyTxn
 	vc.CreateBlockVerifyTxn = c.config.Node.CreateBlockVerifyTxn
@@ -475,6 +478,7 @@ func (c *Coin) ConfigureDaemon() daemon.Config {
 	dc.Daemon.GenesisHash = c.config.Node.genesisHash
 	dc.Daemon.UserAgent = c.config.Node.userAgent
 	dc.Daemon.UnconfirmedVerifyTxn = c.config.Node.UnconfirmedVerifyTxn
+	dc.Daemon.BlockRoundTimeout = c.config.Node.BlockRoundTimeout
 
 	if c.config.Node.OutgoingConnectionsRate == 0 {
 		c.config.Node.OutgoingConnectionsRate = time.Millisecond
@@ -506,6 +510,7 @@ func (c *Coin) createGUI(gw *api.Gateway, host string, quit chan struct{}) (*api
 			BlockchainPubkey: c.config.Node.blockchainPubkey,
 			PQBlocks:         coin.PQBlockRule{Pubkey: c.config.Node.blockchainPQPubkey, ForkSeq: c.config.Node.PQForkSeq},
 			PQAddressForkSeq: c.config.Node.PQAddressForkSeq,
+			MultiSigner:      c.config.Node.multiSigner,
 		},
 		Username:     c.config.Node.WebInterfaceUsername,
 		Password:     c.config.Node.WebInterfacePassword,
@@ -524,6 +529,7 @@ func (c *Coin) createGUI(gw *api.Gateway, host string, quit chan struct{}) (*api
 			}
 			config.WebWallet = wallet
 		}
+		config.UI2 = func(client *api.Client) http.Handler { return ui2.Handler(client, ui2.Options{}) }
 	}
 
 	var s *api.Server

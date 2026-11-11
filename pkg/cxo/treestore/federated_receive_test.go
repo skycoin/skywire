@@ -89,7 +89,7 @@ func newFederatedBurstRig(t *testing.T, n int) *federatedBurstRig {
 
 	// Generate keys + clients first so we can wire each visor's
 	// publisher to its own dmsg client.
-	for i := 0; i < n; i++ {
+	for i := range n {
 		pk, sk := cipher.GenerateKeyPair()
 		_, err := env.NewClientWithKeys(pk, sk, &dmsg.Config{MinSessions: 1})
 		require.NoErrorf(t, err, "visor %d: NewClientWithKeys", i)

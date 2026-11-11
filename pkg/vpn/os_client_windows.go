@@ -1,12 +1,11 @@
 //go:build windows
-// +build windows
 
 // Package vpn pkg/vpn/os_client_windows.go c4-app-vpn
 package vpn
 
 import (
 	"bytes"
-	"net"
+	"net/netip"
 	"regexp"
 
 	"github.com/skycoin/skywire/pkg/util/osutil"
@@ -19,16 +18,16 @@ const (
 var redundantWhitespacesCleanupRegex = regexp.MustCompile(`[\s\p{Zs}]{2,}`)
 
 // DefaultNetworkGateway fetches system's default network gateway.
-func DefaultNetworkGateway() (net.IP, error) {
+func DefaultNetworkGateway() (netip.Addr, error) {
 	outBytes, err := osutil.RunWithResult("cmd", "/C", defaultNetworkGatewayCMD)
 	if err != nil {
-		return nil, err
+		return netip.Addr{}, err
 	}
 
 	outBytes = bytes.TrimRight(outBytes, "\n\r")
 
-	lines := bytes.Split(outBytes, []byte{'\n'})
-	for _, line := range lines {
+	lines := bytes.SplitSeq(outBytes, []byte{'\n'})
+	for line := range lines {
 		line = bytes.TrimLeft(line, " \t\r\n")
 		if !bytes.HasPrefix(line, []byte("0.0.0.0")) {
 			continue
@@ -39,17 +38,16 @@ func DefaultNetworkGateway() (net.IP, error) {
 		line := redundantWhitespacesCleanupRegex.ReplaceAll(line, []byte{' '})
 
 		lineTokens := bytes.Split(line, []byte{' '})
-		if len(lineTokens) < 2 {
+		if len(lineTokens) < 3 {
 			continue
 		}
 
-		ip := net.ParseIP(string(lineTokens[2]))
-		if ip != nil && ip.To4() != nil {
-			return ip, nil
+		if ip, err := netip.ParseAddr(string(lineTokens[2])); err == nil && ip.Unmap().Is4() {
+			return ip.Unmap(), nil
 		}
 	}
 
-	return nil, errCouldFindDefaultNetworkGateway
+	return netip.Addr{}, errCouldFindDefaultNetworkGateway
 }
 
 func setupClientSysPrivileges() (suid int, err error) { //nolint:unused

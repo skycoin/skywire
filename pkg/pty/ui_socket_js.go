@@ -8,7 +8,7 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/logging"
 	"golang.org/x/net/websocket"
 )
 
@@ -17,7 +17,7 @@ import (
 type uiSocket struct{ c *websocket.Conn }
 
 // acceptUISocket upgrades the request and runs serve on the socket.
-func acceptUISocket(w http.ResponseWriter, r *http.Request, log logrus.FieldLogger, serve func(*uiSocket)) {
+func acceptUISocket(w http.ResponseWriter, r *http.Request, log logging.FieldLogger, serve func(*uiSocket)) {
 	websocket.Server{
 		// The page and this server share the tab, and the vnet bridge sends
 		// the page's origin; the handshake is not a cross-site request.
@@ -35,8 +35,8 @@ func (s *uiSocket) Conn() net.Conn { return s.c }
 
 // typedCodec reads one message and reports whether it was text.
 var typedCodec = websocket.Codec{
-	Marshal: func(v interface{}) ([]byte, byte, error) { return v.([]byte), websocket.TextFrame, nil },
-	Unmarshal: func(data []byte, payloadType byte, v interface{}) error {
+	Marshal: func(v any) ([]byte, byte, error) { return v.([]byte), websocket.TextFrame, nil },
+	Unmarshal: func(data []byte, payloadType byte, v any) error {
 		m := v.(*typedMsg)
 		m.text, m.data = payloadType == websocket.TextFrame, data
 		return nil

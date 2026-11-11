@@ -12,7 +12,9 @@ package commands
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -174,7 +176,7 @@ func exportDeployment(r *resolvedConfig) error {
 func syncDeploymentDropIn(path string) (bool, error) {
 	if path == "" {
 		err := os.Remove(deploymentDropIn)
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return false, nil
 		}
 		return err == nil, err

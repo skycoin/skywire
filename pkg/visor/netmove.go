@@ -14,7 +14,6 @@ import (
 	"net"
 	"runtime"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -62,6 +61,7 @@ type netMoveState struct {
 	refresh                func(reason string) // tests replace the refresh
 	fingerprint            func() string       // tests replace the address source
 	runs                   atomic.Int64
+	online                 onlineState // guarded by mu
 }
 
 func (s *netMoveState) wakeChs() (watch, ip chan struct{}) {
@@ -215,8 +215,9 @@ func (v *Visor) refreshNetwork(reason string) {
 	v.initLock.Unlock()
 
 	// Sessions dialed from the old network can linger. The public IP lookup
-	// asks these sessions, so they have to be fresh first.
-	if v.dmsgC != nil {
+	// asks these sessions, so they have to be fresh first. Sessions that
+	// just brought the visor back online are kept.
+	if v.dmsgC != nil && (reason != netBackOnline || len(v.dmsgC.AllSessions()) == 0) {
 		v.dmsgC.ForceReconnect()
 		deadline := time.Now().Add(netMoveDmsgWait)
 		for len(v.dmsgC.AllSessions()) == 0 && time.Now().Before(deadline) {
@@ -307,14 +308,15 @@ func (v *Visor) NetworkState() *visorapi.NetworkState {
 		Pending:               s.scheduled,
 		WatchInterval:         intervalString(intervalOf(&s.watchNS, defaultNetworkWatchInterval)),
 		PublicIPCheckInterval: intervalString(intervalOf(&s.ipCheckNS, defaultPublicIPCheckInterval)),
+		Connectivity:          s.online.snapshot(),
 	}
 	s.mu.Unlock()
 	if sc := v.stun.client.Load(); sc != nil {
 		out.NAT = sc.NATType.String()
 	}
 	if addrs, excluded, err := netutil.LocalAddressesDetail(); err == nil {
-		sort.Strings(addrs)
-		sort.Strings(excluded)
+		slices.Sort(addrs)
+		slices.Sort(excluded)
 		out.LocalAddresses = addrs
 		out.PolicyExcluded = excluded
 	}
@@ -375,7 +377,7 @@ func netFingerprint() string {
 	for k := range set {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	return strings.Join(keys, ",")
 }
 
@@ -468,6 +470,10 @@ func (v *Visor) setNetworkIntervals(watch, ipCheck time.Duration) {
 
 // initNetworkWatch starts the address watcher and the public IP recheck.
 func initNetworkWatch(_ context.Context, v *Visor, _ *logging.Logger) error {
+	if v.ctx != nil {
+		go v.watchOnline(v.ctx)
+		watchBrowserOnline(v.ctx, v)
+	}
 	if runtime.GOOS == "js" {
 		return nil
 	}

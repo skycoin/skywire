@@ -2,11 +2,12 @@
 package clitp
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -171,8 +172,8 @@ var addPvCmd = &cobra.Command{
 		}
 
 		// Sort by transport count descending
-		sort.Slice(candidates, func(i, j int) bool {
-			return candidates[i].count > candidates[j].count
+		slices.SortFunc(candidates, func(a, b visorInfo) int {
+			return cmp.Compare(b.count, a.count)
 		})
 
 		if len(candidates) == 0 {
@@ -312,12 +313,7 @@ var addPvCmd = &cobra.Command{
 		}
 
 		contains := func(slice []string, s string) bool {
-			for _, item := range slice {
-				if item == s {
-					return true
-				}
-			}
-			return false
+			return slices.Contains(slice, s)
 		}
 
 		// Add transports to candidates

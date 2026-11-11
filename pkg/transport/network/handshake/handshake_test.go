@@ -48,7 +48,7 @@ func TestHandshake(t *testing.T) {
 		err   error
 	}
 
-	for i := byte(0); i < 64; i++ {
+	for i := range byte(64) {
 		initPK, initSK, err := cipher.GenerateDeterministicKeyPair(append([]byte("init"), i))
 		require.NoError(t, err)
 
@@ -115,13 +115,7 @@ func (c *chunkedReader) Read(p []byte) (int, error) {
 	if len(c.data) == 0 {
 		return 0, io.EOF
 	}
-	n := c.chunk
-	if n > len(c.data) {
-		n = len(c.data)
-	}
-	if n > len(p) {
-		n = len(p)
-	}
+	n := min(min(c.chunk, len(c.data)), len(p))
 	copy(p, c.data[:n])
 	c.data = c.data[n:]
 	return n, nil

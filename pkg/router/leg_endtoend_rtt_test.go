@@ -32,7 +32,7 @@ func TestRefreshLegWindowsUsesEndToEndFeedbackDelay(t *testing.T) {
 	rg.mux.recordAckDelayTp(mts[0].Entry.ID, 170*time.Millisecond)
 	rg.mux.recordAckDelayTp(mts[1].Entry.ID, 170*time.Millisecond)
 
-	rg.mux.refreshLegWindows(mts)
+	rg.mux.refreshLegWindows(tpLegs(mts))
 
 	states := ecfStatesOf(rg.mux)
 	require.Len(t, states, 2)
@@ -120,7 +120,7 @@ func TestLatencyBandJudgesOnWindowedMinRTT(t *testing.T) {
 
 	rg.enforceLatencyBand(nil)
 
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		require.False(t, rg.mux.isLegStandby(i),
 			"leg %d must stay active: its min-RTT over the window is level with the cluster", i)
 	}

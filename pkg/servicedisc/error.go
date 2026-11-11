@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // HTTPError represents an HTTP error.
@@ -20,7 +20,7 @@ func (err *HTTPError) Error() string {
 }
 
 // Log prints a log message for the HTTP error.
-func (err *HTTPError) Log(log logrus.FieldLogger) {
+func (err *HTTPError) Log(log logging.FieldLogger) {
 	log.WithError(err).
 		WithField("msg", err.Err).
 		WithField("http_status", http.StatusText(err.HTTPStatus)).

@@ -30,7 +30,7 @@ func TestServeListener_AcceptAndControl(t *testing.T) {
 	// We should receive two Controls from the channel.
 	var ctrls []*dmsgctrl.Control
 	timeout := time.After(2 * time.Second)
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		select {
 		case ctrl, ok := <-ch:
 			require.True(t, ok, "channel closed unexpectedly")
@@ -324,7 +324,7 @@ func TestControl_ConcurrentPing(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	for i := 0; i < goroutines; i++ {
+	for range goroutines {
 		go func() {
 			defer wg.Done()
 			_, _ = ctrlA.Ping(ctx) //nolint:errcheck,gosec

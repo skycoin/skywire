@@ -162,7 +162,7 @@ func testFillRefsWithUsers(
 	pack Pack, //           : pack to save the users in
 	n int, //               : number of users
 ) (
-	users []interface{}, // : the users
+	users []any, // : the users
 ) {
 
 	var err error
@@ -205,7 +205,7 @@ func TestRefs_Init(t *testing.T) {
 	t.Run("blank", func(t *testing.T) {
 
 		// (1) load and (2) use already loaded Refs
-		for i := 0; i < 2; i++ {
+		for range 2 {
 
 			if err = refs.Init(pack); err != nil {
 				t.Fatal("can't initialize blank Refs:", err)
@@ -214,9 +214,9 @@ func TestRefs_Init(t *testing.T) {
 		}
 
 		testRefsTest(t, &refs, &testRefs{
-			testNode: testNode{mods: loadedMod},
-			flags:    testNoMeaninFlag,
-			degree:   pack.Degree(),
+			mods:   loadedMod,
+			flags:  testNoMeaninFlag,
+			degree: pack.Degree(),
 		})
 
 		logRefsTree(t, &refs, pack, false)
@@ -284,7 +284,7 @@ func TestRefs_Init(t *testing.T) {
 			refs.Reset() //nolint:errcheck,gosec // reset the refs
 
 			// (1) load and (2) use already loaded Refs
-			for i := 0; i < 2; i++ {
+			for range 2 {
 
 				if err = refs.Init(pack); err != nil {
 					t.Fatal(err)
@@ -304,7 +304,7 @@ func TestRefs_Init(t *testing.T) {
 			pack.AddFlags(EntireRefs) // set the flag to load entire Refs
 
 			// (1) load and (2) use already loaded Refs
-			for i := 0; i < 2; i++ {
+			for range 2 {
 
 				if err = refs.Init(pack); err != nil {
 					t.Fatal(err)
@@ -327,7 +327,7 @@ func TestRefs_Init(t *testing.T) {
 			pack.AddFlags(HashTableIndex)
 
 			// (1) load and (2) use already loaded Refs
-			for i := 0; i < 2; i++ {
+			for range 2 {
 
 				if err = refs.Init(pack); err != nil {
 					t.Fatal(err)
@@ -366,7 +366,7 @@ func TestRefs_Len(t *testing.T) {
 	t.Run("blank", func(t *testing.T) {
 
 		// (1) load and (2) use already loaded Refs
-		for i := 0; i < 2; i++ {
+		for range 2 {
 
 			if ln, err = refs.Len(pack); err != nil {
 				t.Fatal("can't initialize blank Refs:", err)
@@ -377,9 +377,9 @@ func TestRefs_Len(t *testing.T) {
 		}
 
 		testRefsTest(t, &refs, &testRefs{
-			testNode: testNode{mods: loadedMod},
-			flags:    testNoMeaninFlag,
-			degree:   pack.Degree(),
+			mods:   loadedMod,
+			flags:  testNoMeaninFlag,
+			degree: pack.Degree(),
 		})
 
 		logRefsTree(t, &refs, pack, false)
@@ -447,7 +447,7 @@ func TestRefs_Len(t *testing.T) {
 			refs.Reset() //nolint:errcheck,gosec // reset the refs
 
 			// (1) laod and (2) use already loaded Refs
-			for i := 0; i < 2; i++ {
+			for range 2 {
 
 				if ln, err = refs.Len(pack); err != nil {
 					t.Fatal(err)
@@ -469,7 +469,7 @@ func TestRefs_Len(t *testing.T) {
 			pack.AddFlags(EntireRefs) // set the flag to load entire Refs
 
 			// (1) laod and (2) use already loaded Refs
-			for i := 0; i < 2; i++ {
+			for range 2 {
 
 				if ln, err = refs.Len(pack); err != nil {
 					t.Fatal(err)
@@ -494,7 +494,7 @@ func TestRefs_Len(t *testing.T) {
 			pack.AddFlags(HashTableIndex)
 
 			// (1) laod and (2) use already loaded Refs
-			for i := 0; i < 2; i++ {
+			for range 2 {
 
 				if ln, err = refs.Len(pack); err != nil {
 					t.Fatal(err)
@@ -533,7 +533,7 @@ func TestRefs_Depth(t *testing.T) {
 	t.Run("blank", func(t *testing.T) {
 
 		// (1) load and (2) use already loaded Refs
-		for i := 0; i < 2; i++ {
+		for range 2 {
 
 			if dp, err = refs.Depth(pack); err != nil {
 				t.Fatal("can't initialize blank Refs:", err)
@@ -544,9 +544,9 @@ func TestRefs_Depth(t *testing.T) {
 		}
 
 		testRefsTest(t, &refs, &testRefs{
-			testNode: testNode{mods: loadedMod},
-			flags:    testNoMeaninFlag,
-			degree:   pack.Degree(),
+			mods:   loadedMod,
+			flags:  testNoMeaninFlag,
+			degree: pack.Degree(),
 		})
 
 		logRefsTree(t, &refs, pack, false)
@@ -616,7 +616,7 @@ func TestRefs_Depth(t *testing.T) {
 			refs.Reset() //nolint:errcheck,gosec // reset the refs
 
 			// (1) laod and (2) use already loaded Refs
-			for i := 0; i < 2; i++ {
+			for range 2 {
 
 				if dp, err = refs.Depth(pack); err != nil {
 					t.Fatal(err)
@@ -638,7 +638,7 @@ func TestRefs_Depth(t *testing.T) {
 			pack.AddFlags(EntireRefs) // set the flag to load entire Refs
 
 			// (1) laod and (2) use already loaded Refs
-			for i := 0; i < 2; i++ {
+			for range 2 {
 
 				if dp, err = refs.Depth(pack); err != nil {
 					t.Fatal(err)
@@ -663,7 +663,7 @@ func TestRefs_Depth(t *testing.T) {
 			pack.AddFlags(HashTableIndex)
 
 			// (1) laod and (2) use already loaded Refs
-			for i := 0; i < 2; i++ {
+			for range 2 {
 
 				if dp, err = refs.Depth(pack); err != nil {
 					t.Fatal(err)
@@ -727,9 +727,9 @@ func TestRefs_Degree(t *testing.T) {
 			}
 
 			testRefsTest(t, &refs, &testRefs{
-				testNode: testNode{mods: loadedMod},
-				flags:    testNoMeaninFlag,
-				degree:   degree,
+				mods:   loadedMod,
+				flags:  testNoMeaninFlag,
+				degree: degree,
 			})
 
 			logRefsTree(t, &refs, pack, false)
@@ -815,7 +815,7 @@ func TestRefs_Degree(t *testing.T) {
 				refs.Reset() //nolint:errcheck,gosec // reset the refs
 
 				// (1) laod and (2) use already loaded Refs
-				for i := 0; i < 2; i++ {
+				for range 2 {
 
 					if dg, err = refs.Degree(pack); err != nil {
 						t.Fatal(err)
@@ -837,7 +837,7 @@ func TestRefs_Degree(t *testing.T) {
 				pack.AddFlags(EntireRefs) // set the flag to load entire Refs
 
 				// (1) laod and (2) use already loaded Refs
-				for i := 0; i < 2; i++ {
+				for range 2 {
 
 					if dg, err = refs.Degree(pack); err != nil {
 						t.Fatal(err)
@@ -863,7 +863,7 @@ func TestRefs_Degree(t *testing.T) {
 					pack.AddFlags(HashTableIndex)
 
 					// (1) laod and (2) use already loaded Refs
-					for i := 0; i < 2; i++ {
+					for range 2 {
 
 						if dg, err = refs.Degree(pack); err != nil {
 							t.Fatal(err)
@@ -906,7 +906,7 @@ func TestRefs_Reset(t *testing.T) {
 
 }
 
-func getHashList(users []interface{}) (has []cipher.SHA256) {
+func getHashList(users []any) (has []cipher.SHA256) {
 
 	has = make([]cipher.SHA256, 0, len(users))
 
@@ -934,7 +934,7 @@ func testRefsHasHash(
 	// check the "not" first
 
 	// (1) init and (2) use initialized Refs
-	for i := 0; i < 2; i++ {
+	for range 2 {
 
 		if ok, err = r.HasHash(pack, not); err != nil {
 			t.Error(err)
@@ -970,7 +970,7 @@ func TestRefs_HasHash(t *testing.T) {
 		has []cipher.SHA256 // the users
 		not = cipher.SumSHA256([]byte("any Refs doesn't contain this hash"))
 
-		users []interface{}
+		users []any
 
 		clear = func(t *testing.T, r *Refs, degree Degree) { //nolint:unparam
 			refs.Clear()                 // clear the Refs making it Refs{}
@@ -1095,7 +1095,7 @@ func testRefsValueByHash(
 	pack Pack, //            : the pack
 	not cipher.SHA256, //    : has not this hash
 	has []cipher.SHA256, //  : has this hashes
-	valuse []interface{}, // : expected values
+	valuse []any, // : expected values
 ) {
 
 	var (
@@ -1106,7 +1106,7 @@ func testRefsValueByHash(
 	// check the "not" first
 
 	// (1) init and (2) use initialized Refs
-	for i := 0; i < 2; i++ {
+	for range 2 {
 
 		if err = r.ValueByHash(pack, not, &usr); err == nil {
 			t.Error("missing error")
@@ -1147,7 +1147,7 @@ func TestRefs_ValueByHash(t *testing.T) {
 		has []cipher.SHA256 // the users
 		not = cipher.SumSHA256([]byte("any Refs doesn't contain this hash"))
 
-		users []interface{}
+		users []any
 
 		clear = func(t *testing.T, r *Refs, degree Degree) { //nolint:unparam
 			refs.Clear()                 // clear the Refs making it Refs{}
@@ -1277,7 +1277,7 @@ func testRefsIndexOfHash(
 	// check the "not" first
 
 	// (1) init and (2) use initialized Refs
-	for i := 0; i < 2; i++ {
+	for range 2 {
 
 		if _, err = r.IndexOfHash(pack, not); err == nil {
 			t.Error("missing error")
@@ -1315,7 +1315,7 @@ func TestRefs_IndexOfHash(t *testing.T) {
 		has []cipher.SHA256 // the users
 		not = cipher.SumSHA256([]byte("any Refs doesn't contain this hash"))
 
-		users []interface{}
+		users []any
 
 		clear = func(t *testing.T, r *Refs, degree Degree) { //nolint:unparam
 			refs.Clear()                 // clear the Refs making it Refs{}
@@ -1452,7 +1452,7 @@ func testRefsIndicesByHash(
 	// check the "not" first
 
 	// (1) init and (2) use initialized Refs
-	for i := 0; i < 2; i++ {
+	for range 2 {
 
 		if _, err = r.IndicesByHash(pack, not); err == nil {
 			t.Error("missing error")
@@ -1492,7 +1492,7 @@ func testFillRefsWithUsersTwice(
 	pack Pack,
 	n int,
 ) (
-	users []interface{},
+	users []any,
 ) {
 
 	users = testFillRefsWithUsers(t, r, pack, n)
@@ -1523,7 +1523,7 @@ func TestRefs_IndicesByHash(t *testing.T) {
 		has []cipher.SHA256 // the users
 		not = cipher.SumSHA256([]byte("any Refs doesn't contain this hash"))
 
-		users []interface{}
+		users []any
 
 		clear = func(t *testing.T, r *Refs, degree Degree) { //nolint:unparam
 			refs.Clear()                 // clear the Refs making it Refs{}
@@ -1981,7 +1981,7 @@ func TestRefs_SetHashByIndex(t *testing.T) {
 				testRefsSetHashByIndexOutOfRange(t, &r, pack, -1, hash)
 				testRefsSetHashByIndexOutOfRange(t, &r, pack, len(users), hash)
 
-				for i := 0; i < length; i++ {
+				for i := range length {
 
 					// loaded
 					hash = hashByNumber(uint64(i)) //nolint:gosec
@@ -2334,7 +2334,7 @@ func TestRefs_DeleteByHash(t *testing.T) {
 
 				t.Run("many (load)", func(t *testing.T) {
 					clearRefs(t, &r, pack, degree)
-					for i := 0; i < length; i++ {
+					for i := range length {
 						users[i] = cipher.SHA256{} // any hash
 					}
 					if err = r.AppendHashes(pack, users...); err != nil {

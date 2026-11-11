@@ -22,9 +22,11 @@
 package routersettings
 
 import (
+	"cmp"
 	"fmt"
+	"maps"
 	"math"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -635,7 +637,9 @@ func Snapshot() []Entry {
 			Set:        k.set.Load(),
 		})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	slices.SortFunc(out, func(a, b Entry) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
 	return out
 }
 
@@ -674,9 +678,7 @@ func AppOverrides() map[string]map[string]string {
 		if m == nil {
 			m = map[string]string{}
 		}
-		for name, v := range vals {
-			m[name] = v
-		}
+		maps.Copy(m, vals)
 		if len(m) > 0 {
 			out[app] = m
 		}
@@ -698,7 +700,7 @@ func applyTo(app string, vals map[string]string) error {
 	for n := range vals {
 		names = append(names, n)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	for _, n := range names {
 		if err := SetApp(app, n, vals[n]); err != nil {
 			return err
@@ -715,7 +717,9 @@ func Catalog() []Def {
 	for _, k := range order {
 		out = append(out, k.def)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	slices.SortFunc(out, func(a, b Def) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
 	return out
 }
 

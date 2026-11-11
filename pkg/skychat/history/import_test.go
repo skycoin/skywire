@@ -1,5 +1,4 @@
 //go:build !js
-// +build !js
 
 // Package history import_test.go — Store.Import across both backends.
 //
@@ -25,7 +24,7 @@ func testPeer(prefix string) string {
 // archiveOf builds n messages for peer, oldest first, one second apart.
 func archiveOf(peer string, n int, base time.Time) []Message {
 	out := make([]Message, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		out = append(out, Message{
 			Peer:      peer,
 			Text:      "message " + string(rune('a'+i%26)),
@@ -72,7 +71,7 @@ func TestImport_IsNotRateLimited(t *testing.T) {
 			time.Sleep(d + 100*time.Millisecond)
 		}
 		accepted := 0
-		for i := 0; i < 20; i++ {
+		for range 20 {
 			if err := s.Append(Message{
 				Peer: peer, Text: "live", Timestamp: time.Now().UTC(),
 			}); err == nil {

@@ -99,7 +99,7 @@ func TestVStreamMux_ReadBufOccupancyIsReported(t *testing.T) {
 	// Queue frames the reader does not take.
 	// Round UP to the first depth that actually crosses the 90% line.
 	const queued = (vstreamReadBuf*readBufNearFullNum + readBufNearFullDen - 1) / readBufNearFullDen
-	for i := 0; i < queued; i++ {
+	for range queued {
 		mux.deliver(s, []byte("frame"))
 	}
 

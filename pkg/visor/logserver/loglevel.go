@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 )
@@ -30,7 +28,7 @@ type LogLevelStatus struct {
 // temporary level is never written to the config, so a restart ends it too.
 type LogLevelController interface {
 	LogLevelStatus() LogLevelStatus
-	SetTempLogLevel(level logrus.Level, ttl time.Duration) (LogLevelStatus, error)
+	SetTempLogLevel(level logging.Level, ttl time.Duration) (LogLevelStatus, error)
 	ClearTempLogLevel() LogLevelStatus
 }
 

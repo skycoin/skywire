@@ -1,5 +1,4 @@
 //go:build meshgwint && linux
-// +build meshgwint,linux
 
 // Package meshgw pkg/vpnrouter/meshgw/redirect_netns_linux_test.go c4-app-vpn
 //

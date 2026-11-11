@@ -135,7 +135,7 @@ func (sf *ServiceFlags) Logger() *logging.Logger {
 
 // ParseConfig parses config from service tags.
 // If checkArgs is set, we additionally parse os.Args to find a config path.
-func (sf *ServiceFlags) ParseConfig(args []string, checkArgs bool, v interface{}, genDefaultFunc func() (io.ReadCloser, error)) error {
+func (sf *ServiceFlags) ParseConfig(args []string, checkArgs bool, v any, genDefaultFunc func() (io.ReadCloser, error)) error {
 	r, err := sf.obtainConfigReader(args, checkArgs, genDefaultFunc)
 	if err != nil {
 		return err

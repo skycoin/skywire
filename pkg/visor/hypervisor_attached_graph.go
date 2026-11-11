@@ -7,8 +7,10 @@
 package visor
 
 import (
+	"cmp"
 	"crypto/sha256"
-	"sort"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -30,9 +32,7 @@ const attachedGraphStaleAfter = 2 * hypervisorBackgroundPollInterval
 func (hv *Hypervisor) AttachedTransportEntries() ([]*transport.Entry, time.Time) {
 	hv.summaryCacheMx.RLock()
 	cache := make(map[cipher.PubKey]cachedSummary, len(hv.summaryCache))
-	for pk, cs := range hv.summaryCache {
-		cache[pk] = cs
-	}
+	maps.Copy(cache, hv.summaryCache)
 	hv.summaryCacheMx.RUnlock()
 
 	entries, sum := attachedEntriesFromSummaries(cache, time.Now())
@@ -84,8 +84,8 @@ func attachedEntriesFromSummaries(cache map[cipher.PubKey]cachedSummary, now tim
 	for _, e := range byID {
 		entries = append(entries, e)
 	}
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].ID.String() < entries[j].ID.String()
+	slices.SortFunc(entries, func(a, b *transport.Entry) int {
+		return cmp.Compare(a.ID.String(), b.ID.String())
 	})
 	h := sha256.New()
 	for _, e := range entries {

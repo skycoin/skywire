@@ -52,7 +52,6 @@ func TestBidirectionalStreams(t *testing.T) {
 	}
 
 	for _, p := range payloads {
-		p := p
 		t.Run(p.name, func(t *testing.T) {
 			env := NewEnv(t, timeout)
 			require.NoError(t, env.Startup(0, 1, 2, &dmsg.Config{MinSessions: 1}))
@@ -84,12 +83,10 @@ func TestBidirectionalStreams(t *testing.T) {
 			dataAtoB := cipher.RandByte(p.size)
 			var wg sync.WaitGroup
 
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				_, wErr := connA.Write(dataAtoB)
 				assert.NoError(t, wErr)
-			}()
+			})
 
 			recvAtoB := make([]byte, p.size)
 			_, err = io.ReadFull(streamB, recvAtoB)
@@ -100,12 +97,10 @@ func TestBidirectionalStreams(t *testing.T) {
 			// Test B -> A
 			dataBtoA := cipher.RandByte(p.size)
 
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				_, wErr := streamB.Write(dataBtoA)
 				assert.NoError(t, wErr)
-			}()
+			})
 
 			recvBtoA := make([]byte, p.size)
 			_, err = io.ReadFull(connA, recvBtoA)
@@ -166,12 +161,10 @@ func TestMultiServerStreams(t *testing.T) {
 	dataAB := cipher.RandByte(512)
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_, wErr := streamAB.Write(dataAB)
 		assert.NoError(t, wErr)
-	}()
+	})
 
 	recvAB := make([]byte, 512)
 	_, err = io.ReadFull(connBA, recvAB)
@@ -182,12 +175,10 @@ func TestMultiServerStreams(t *testing.T) {
 	// Verify data flows on B->C stream.
 	dataBC := cipher.RandByte(512)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_, wErr := streamBC.Write(dataBC)
 		assert.NoError(t, wErr)
-	}()
+	})
 
 	recvBC := make([]byte, 512)
 	_, err = io.ReadFull(connCB, recvBC)
@@ -206,12 +197,10 @@ func TestMultiServerStreams(t *testing.T) {
 
 	dataAB2 := cipher.RandByte(256)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_, wErr := streamAB2.Write(dataAB2)
 		assert.NoError(t, wErr)
-	}()
+	})
 
 	recvAB2 := make([]byte, 256)
 	_, err = io.ReadFull(connBA2, recvAB2)
@@ -251,7 +240,7 @@ func TestConcurrentStreams(t *testing.T) {
 	acceptCh := make(chan acceptedStream, numStreams)
 
 	go func() {
-		for i := 0; i < numStreams; i++ {
+		for range numStreams {
 			s, aErr := lisA.AcceptStream()
 			acceptCh <- acceptedStream{stream: s, err: aErr}
 		}
@@ -268,16 +257,13 @@ func TestConcurrentStreams(t *testing.T) {
 	results := make([]streamResult, numStreams)
 	var wg sync.WaitGroup
 
-	for i := 0; i < numStreams; i++ {
-		i := i
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for i := range numStreams {
+		wg.Go(func() {
 			// Retry dials — on slow CI runners, concurrent handshakes
 			// can transiently fail with "cannot connect to delegated server".
 			var s *dmsg.Stream
 			var dErr error
-			for attempt := 0; attempt < 10; attempt++ {
+			for attempt := range 10 {
 				s, dErr = clientB.DialStream(ctx, dmsg.Addr{PK: clientA.LocalPK(), Port: port})
 				if dErr == nil {
 					break
@@ -289,13 +275,13 @@ func TestConcurrentStreams(t *testing.T) {
 				return
 			}
 			results[i] = streamResult{idx: i, stream: s, sent: cipher.RandByte(payloadSize)}
-		}()
+		})
 	}
 	wg.Wait()
 
 	// Collect accepted streams.
 	accepted := make([]*dmsg.Stream, 0, numStreams)
-	for i := 0; i < numStreams; i++ {
+	for range numStreams {
 		a := <-acceptCh
 		require.NoError(t, a.err)
 		accepted = append(accepted, a.stream)
@@ -303,40 +289,35 @@ func TestConcurrentStreams(t *testing.T) {
 
 	// Send data on each dialed stream and read on the accepted side.
 	var sendWg sync.WaitGroup
-	for i := 0; i < numStreams; i++ {
+	for i := range numStreams {
 		require.NoError(t, results[i].err, "stream %d dial failed", i)
 		i := i
-		sendWg.Add(1)
-		go func() {
-			defer sendWg.Done()
+		sendWg.Go(func() {
 			_, wErr := results[i].stream.Write(results[i].sent)
 			assert.NoError(t, wErr, "stream %d write failed", i)
-		}()
+		})
 	}
 
 	// Read from each accepted stream. Since we do not know which accepted stream
 	// corresponds to which dialed stream, we collect all received data and match.
 	recvData := make([][]byte, numStreams)
 	var recvWg sync.WaitGroup
-	for i := 0; i < numStreams; i++ {
-		i := i
-		recvWg.Add(1)
-		go func() {
-			defer recvWg.Done()
+	for i := range numStreams {
+		recvWg.Go(func() {
 			buf := make([]byte, payloadSize)
 			_, rErr := io.ReadFull(accepted[i], buf)
 			assert.NoError(t, rErr, "stream %d read failed", i)
 			recvData[i] = buf
-		}()
+		})
 	}
 
 	sendWg.Wait()
 	recvWg.Wait()
 
 	// Verify each sent payload appears exactly once in received data.
-	for i := 0; i < numStreams; i++ {
+	for i := range numStreams {
 		found := false
-		for j := 0; j < numStreams; j++ {
+		for j := range numStreams {
 			if bytes.Equal(results[i].sent, recvData[j]) {
 				found = true
 				break
@@ -346,7 +327,7 @@ func TestConcurrentStreams(t *testing.T) {
 	}
 
 	// Cleanup streams.
-	for i := 0; i < numStreams; i++ {
+	for i := range numStreams {
 		_ = results[i].stream.Close()
 		_ = accepted[i].Close()
 	}
@@ -391,12 +372,10 @@ func TestSessionReconnect(t *testing.T) {
 	data1 := cipher.RandByte(64)
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_, wErr := stream1.Write(data1)
 		assert.NoError(t, wErr)
-	}()
+	})
 
 	recv1 := make([]byte, 64)
 	_, err = io.ReadFull(conn1, recv1)
@@ -428,12 +407,10 @@ func TestSessionReconnect(t *testing.T) {
 
 	data2 := cipher.RandByte(64)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_, wErr := stream2.Write(data2)
 		assert.NoError(t, wErr)
-	}()
+	})
 
 	recv2 := make([]byte, 64)
 	_, err = io.ReadFull(conn2, recv2)
@@ -466,14 +443,14 @@ func TestListenerAcceptAll(t *testing.T) {
 
 	// Dial numConns connections and accept them all.
 	dialedStreams := make([]*dmsg.Stream, 0, numConns)
-	for i := 0; i < numConns; i++ {
+	for i := range numConns {
 		s, dErr := clientB.DialStream(ctx, dmsg.Addr{PK: clientA.LocalPK(), Port: port})
 		require.NoError(t, dErr, "dial %d should succeed", i)
 		dialedStreams = append(dialedStreams, s)
 	}
 
 	// Accept all connections.
-	for i := 0; i < numConns; i++ {
+	for i := range numConns {
 		conn, aErr := lisA.AcceptStream()
 		require.NoError(t, aErr, "accept %d should succeed", i)
 		require.NotNil(t, conn)

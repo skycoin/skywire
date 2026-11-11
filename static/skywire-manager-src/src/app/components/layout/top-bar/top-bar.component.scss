@@ -20,6 +20,12 @@ $top-bar-height: 56px;
   height: 100px;
   display: flex;
 
+  // Grows when the tabs wrap onto more lines.
+  @media (min-width: map.get(bootstrap_overrides.$grid-breakpoints, lg)) {
+    height: auto;
+    min-height: 100px;
+  }
+
   .main-area {
     flex-grow: 1;
     // Without this the flex item keeps min-width:auto, so its min-content size
@@ -83,6 +89,13 @@ $top-bar-height: 56px;
       overflow-x: auto;
       overflow-y: hidden;
       scrollbar-width: thin;
+
+      // Large screens wrap the tabs onto more lines instead of scrolling them.
+      @media (min-width: map.get(bootstrap_overrides.$grid-breakpoints, lg)) {
+        flex-wrap: wrap;
+        row-gap: 4px;
+        overflow-x: visible;
+      }
     }
 
     // Visual divider between tab groups (e.g. "this hypervisor"
@@ -91,8 +104,9 @@ $top-bar-height: 56px;
     // marker on TabButtonData changes between adjacent tabs.
     .tab-group-separator {
       width: 1px;
+      flex: 0 0 1px;
       height: 20px;
-      background: rgba(255, 255, 255, 0.2);
+      background: rgba(var(--sw-fg-rgb), 0.2);
       margin: 0 8px;
       align-self: center;
     }
@@ -106,14 +120,16 @@ $top-bar-height: 56px;
     }
 
     .tab-button {
-      color: variables.$white;
+      color: var(--sw-text);
       border-radius: variables.$mat-dialog-radius;
-      opacity: 0.5;
+      opacity: var(--sw-dim);
       margin-right: 0;
       text-decoration: none;
       height: variables.$header-buttons-height;
       display: flex;
       align-items: center;
+      // Overrides the global 16px mat-button padding so a full strip fits at 1920.
+      padding: 0 10px !important;
 
       &:hover {
         opacity: 0.75;
@@ -121,8 +137,8 @@ $top-bar-height: 56px;
 
       &[disabled] {
         opacity: 1 !important;
-        color: variables.$white;
-        background: variables.$dark-background !important;
+        color: var(--sw-text);
+        background: var(--sw-selected-bg) !important;
       }
     
       .mat-icon {
@@ -151,6 +167,7 @@ $top-bar-height: 56px;
       display: flex;
       flex: 0 0 auto;
       align-items: center;
+      align-self: flex-start;
       margin-left: auto;
 
       // Mode badge (backend + visor version) shown top-right on home pages.
@@ -160,10 +177,15 @@ $top-bar-height: 56px;
         font-size: variables.$font-size-sm;
         opacity: 0.75;
         margin-right: 10px;
-        max-width: 45vw;
+        max-width: min(45vw, 13rem);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+
+        // On a phone the tab picker needs the room.
+        @media (max-width: 767.98px) {
+          display: none;
+        }
       }
 
       // Opens the command palette; small so it stays out of the way.
@@ -173,17 +195,22 @@ $top-bar-height: 56px;
         margin-right: 10px;
         padding: 2px 8px;
         font-size: variables.$font-size-smaller;
-        color: rgba(248, 249, 249, 0.85);
+        color: rgba(var(--sw-fg-rgb), 0.85);
         background: transparent;
-        border: 1px solid rgba(248, 249, 249, 0.4);
+        border: 1px solid rgba(var(--sw-fg-rgb), 0.4);
         border-radius: 4px;
         cursor: pointer;
         white-space: nowrap;
 
         &:hover {
-          color: variables.$white;
-          border-color: #00d4ff;
+          color: var(--sw-text);
+          border-color: rgb(var(--sw-cyan-rgb));
         }
+      }
+
+      .ui2-link {
+        display: inline-flex;
+        text-decoration: none;
       }
 
       app-refresh-button {
@@ -230,11 +257,12 @@ $top-bar-height: 56px;
   z-index: 10;
   width: 100%;
   height: $top-bar-height;
-  background-color: variables.$white;
+  background-color: var(--sw-menu-bg);
+  border-bottom: 1px solid var(--sw-card-border);
   top: 0;
   left: 0;
   right: 0;
-  color: variables.$black;
+  color: var(--sw-text);
   display: flex;
 
   .logo-container {
@@ -245,6 +273,8 @@ $top-bar-height: 56px;
 
     img {
       height: math.div($top-bar-height, 2);
+      // The logo art has black text; this keeps its blue and makes the text white.
+      filter: invert(1) hue-rotate(180deg);
     }
   }
 
@@ -257,6 +287,10 @@ $top-bar-height: 56px;
       height: $top-bar-height;
     }
   }
+}
+
+:host-context([data-theme="light"]) .top-bar .logo-container img {
+  filter: none;
 }
 
 .top-bar-margin {
@@ -349,7 +383,7 @@ $top-bar-height: 56px;
   }
 
   mat-spinner ::ng-deep circle {
-    stroke: variables.$white;
+    stroke: var(--sw-text);
   }
 }
 
@@ -455,13 +489,14 @@ $top-bar-height: 56px;
   // chips render with Material's default near-black text on the dark bar
   // and are effectively invisible. Restate the legible styling here.
   .tab-button {
-    color: variables.$white;
+    color: var(--sw-text);
     opacity: 0.75;
     text-decoration: none;
     display: flex;
     align-items: center;
     border-radius: variables.$mat-dialog-radius;
     height: variables.$header-buttons-height;
+    padding: 0 10px !important;
 
     &:hover {
       opacity: 1;
@@ -471,7 +506,7 @@ $top-bar-height: 56px;
     // filled background so "you are here" reads at a glance.
     &[disabled] {
       opacity: 1 !important;
-      color: variables.$white;
+      color: var(--sw-text);
       background: variables.$dark-background !important;
     }
 

@@ -1,7 +1,6 @@
 // Package integration_test provides end-to-end tests for all skywire services.
 //
 //go:build !no_ci
-// +build !no_ci
 
 package integration_test
 
@@ -407,7 +406,7 @@ func (env *TestEnv) checkServicesDmsgHealth() bool {
 		}(svc.name, svc.pk)
 	}
 	healthy := true
-	for i := 0; i < len(services); i++ {
+	for range services {
 		r := <-results
 		if !r.healthy {
 			env.logger.Warnf("SERVICE DMSG HEALTH [%s]: not reachable: err=%v out=%.120s", r.name, r.err, r.out)

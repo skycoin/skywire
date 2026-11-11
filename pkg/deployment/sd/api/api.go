@@ -6,16 +6,15 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"math/rand"
+	"math/rand/v2"
 	"net"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -25,6 +24,7 @@ import (
 	"github.com/skycoin/skywire/pkg/geo"
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 )
@@ -64,7 +64,7 @@ type API struct {
 	// on every single request before serving it.
 	http.Handler
 
-	log                         logrus.FieldLogger
+	log                         logging.FieldLogger
 	db                          store.Store
 	metrics                     sdmetrics.Metrics
 	enableMetrics               bool
@@ -85,7 +85,7 @@ type API struct {
 	// visors with both vpn and skysocks don't overwrite each other's
 	// entry. Delete drops the target when a visor has no services left.
 	dhtMirror interface {
-		Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
+		Mirror(subjectPK cipher.PubKey, entry any, seq uint64)
 		Delete(subjectPK cipher.PubKey)
 	}
 
@@ -104,7 +104,7 @@ type API struct {
 // SetDHTMirror sets a mirror that publishes per-visor service lists to
 // the DHT on every registration and clears them on full deregistration.
 func (a *API) SetDHTMirror(m interface {
-	Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
+	Mirror(subjectPK cipher.PubKey, entry any, seq uint64)
 	Delete(subjectPK cipher.PubKey)
 }) {
 	a.dhtMirror = m
@@ -183,7 +183,7 @@ func (a *API) mirrorVisorServices(ctx context.Context, pk cipher.PubKey) {
 // one DHT item per visor (value = all that visor's services) matches
 // HTTP discovery and replaces the pre-#2333 per-service mirror which
 // overwrote the same target for visors offering multiple service types.
-func (a *API) BackfillDHTMirror(ctx context.Context, log logrus.FieldLogger) {
+func (a *API) BackfillDHTMirror(ctx context.Context, log logging.FieldLogger) {
 	if a.dhtMirror == nil {
 		return
 	}
@@ -213,7 +213,7 @@ func (a *API) BackfillDHTMirror(ctx context.Context, log logrus.FieldLogger) {
 }
 
 // New creates an API.
-func New(log logrus.FieldLogger, db store.Store, nonceDB httpauth.NonceStore,
+func New(log logging.FieldLogger, db store.Store, nonceDB httpauth.NonceStore,
 	enableMetrics bool, m sdmetrics.Metrics, dmsgAddr, geoipURL string) *API {
 	api := &API{
 		log:                         log,
@@ -296,7 +296,7 @@ func (a *API) newRouter() *httputil.Router {
 }
 
 // RunBackgroundTasks is goroutine which runs in background periodic tasks of skycoin-service-discovery.
-func (a *API) RunBackgroundTasks(ctx context.Context, log logrus.FieldLogger) {
+func (a *API) RunBackgroundTasks(ctx context.Context, log logging.FieldLogger) {
 	stateTicker := time.NewTicker(time.Second * 10)
 	defer stateTicker.Stop()
 
@@ -319,7 +319,7 @@ func (a *API) RunBackgroundTasks(ctx context.Context, log logrus.FieldLogger) {
 }
 
 // refreshUptimesCache fetches visor summaries and caches v1 and v2 formats.
-func (a *API) refreshUptimesCache(ctx context.Context, logger logrus.FieldLogger) {
+func (a *API) refreshUptimesCache(ctx context.Context, logger logging.FieldLogger) {
 	uptimes, err := a.db.GetAllVisorSummaries(ctx, false, false)
 	if err != nil {
 		logger.WithError(err).Error("failed to refresh uptimes cache")
@@ -348,7 +348,7 @@ func (a *API) getUptimesV2FromCache() []store.VisorSummary {
 	return a.uptimesV2Cache
 }
 
-func (a *API) updateInternalState(ctx context.Context, logger logrus.FieldLogger) {
+func (a *API) updateInternalState(ctx context.Context, logger logging.FieldLogger) {
 	serviceTypesCount, err := a.db.CountServiceTypes(ctx)
 	if err != nil {
 		logger.WithError(err).Errorf("failed to get service types count")
@@ -601,7 +601,7 @@ func (a *API) deregisterEntry(w http.ResponseWriter, r *http.Request) {
 	for _, key := range keys {
 		serviceAddr := servicedisc.NewSWAddr(key, 0)
 		if sErr := a.db.DeleteService(r.Context(), sType, serviceAddr); sErr != nil {
-			a.log.WithFields(logrus.Fields{"PK": key.Hex(), "Step": "Delete Service"}).Error("Deregistration process interrupt.")
+			a.log.WithFields(logging.Fields{"PK": key.Hex(), "Step": "Delete Service"}).Error("Deregistration process interrupt.")
 			sErr.Log(a.log)
 			a.writeError(w, r, sErr.HTTPStatus, sErr.Err)
 			return
@@ -609,7 +609,7 @@ func (a *API) deregisterEntry(w http.ResponseWriter, r *http.Request) {
 		a.mirrorVisorServices(r.Context(), key)
 		a.cxoPublisher.DelEntry(sType, key)
 	}
-	a.log.WithFields(logrus.Fields{"Number of Keys": len(keys), "Keys": keys, "Type": sType}).Info("Deregistration process completed.")
+	a.log.WithFields(logging.Fields{"Number of Keys": len(keys), "Keys": keys, "Type": sType}).Info("Deregistration process completed.")
 	httputil.WriteJSON(w, r, http.StatusOK, true)
 }
 
@@ -725,7 +725,7 @@ func (a *API) postUptimes(w http.ResponseWriter, r *http.Request) {
 // PK hex matches one of the semicolon-separated PKs.
 func filterByPKs(summaries []store.VisorSummary, pksParam string) []store.VisorSummary {
 	want := make(map[string]struct{})
-	for _, pk := range strings.Split(pksParam, ";") {
+	for pk := range strings.SplitSeq(pksParam, ";") {
 		pk = strings.TrimSpace(pk)
 		if pk != "" {
 			want[pk] = struct{}{}
@@ -763,13 +763,7 @@ func (a *API) health(w http.ResponseWriter, r *http.Request) {
 */
 
 func ipIsPublic(se servicedisc.Service, remoteIP string) bool {
-	for _, localIP := range se.LocalIPs {
-		if localIP == remoteIP {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(se.LocalIPs, remoteIP)
 }
 
 func serviceAddrFromParam(r *http.Request) (servicedisc.SWAddr, error) {

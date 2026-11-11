@@ -211,3 +211,24 @@ func TestHandlePairControlFrame_InviteAnnouncedOnce(t *testing.T) {
 		t.Errorf("opening the page replayed %d invite envelope(s): %v", len(got), got)
 	}
 }
+
+// A frame that arrives live and again from the peer's inbox takes effect once.
+func TestHandlePairControlFrame_SameIDOnce(t *testing.T) {
+	fake := &pairControlAPI{}
+	withPairControlEnv(t, fake)
+	peer, _ := cipher.GenerateKeyPair()
+	decline, _ := json.Marshal(pairMsg{Type: pairTypeDecline, ID: "d1"}) //nolint:errcheck
+	for range 2 {
+		if !handlePairControlFrame(context.Background(), peer, decline) {
+			t.Fatal("pair-decline should be consumed")
+		}
+	}
+	if len(fake.removed) != 1 {
+		t.Errorf("PairRemove ran %d times, want once", len(fake.removed))
+	}
+	again, _ := json.Marshal(pairMsg{Type: pairTypeDecline, ID: "d2"}) //nolint:errcheck
+	handlePairControlFrame(context.Background(), peer, again)
+	if len(fake.removed) != 2 {
+		t.Errorf("a new id should take effect, PairRemove ran %d times", len(fake.removed))
+	}
+}

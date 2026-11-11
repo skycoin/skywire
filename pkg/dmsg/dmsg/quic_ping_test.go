@@ -69,7 +69,7 @@ func TestQUICSessionPing(t *testing.T) {
 
 	// Repeated pings must keep working: pingSessionsLoop needs two consecutive
 	// successes' worth of reliability to never trip pingDeadThreshold.
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		_, err := ses.Ping()
 		require.NoErrorf(t, err, "ping %d failed on a healthy QUIC session", i+2)
 	}

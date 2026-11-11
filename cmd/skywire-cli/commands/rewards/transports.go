@@ -4,8 +4,9 @@ package clirewards
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -130,7 +131,7 @@ This is designed to be run hourly by the reward service.`,
 			}
 		}
 
-		sort.Strings(qualifying)
+		slices.Sort(qualifying)
 
 		tpLog.Infof("Found %d visors with >= %d transports", len(qualifying), minTp)
 
@@ -153,7 +154,7 @@ This is designed to be run hourly by the reward service.`,
 		// Read existing entries to avoid duplicates
 		existing := make(map[string]struct{})
 		if data, err := os.ReadFile(dailyFile); err == nil { //nolint:gosec
-			for _, line := range strings.Split(string(data), "\n") {
+			for line := range strings.SplitSeq(string(data), "\n") {
 				line = strings.TrimSpace(line)
 				if line != "" {
 					existing[line] = struct{}{}
@@ -213,9 +214,7 @@ func parsePerKeyStats(data []byte) (PerKeyStats, error) {
 	for _, entry := range oldStats {
 		counts := make(map[string]int, len(entry.ByType)+1)
 		counts["total"] = entry.Total
-		for tpType, count := range entry.ByType {
-			counts[tpType] = count
-		}
+		maps.Copy(counts, entry.ByType)
 		stats[entry.PK] = counts
 	}
 

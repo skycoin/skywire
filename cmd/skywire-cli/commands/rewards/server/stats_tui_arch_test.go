@@ -2,7 +2,8 @@
 package clirewardsserver
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -22,7 +23,9 @@ func sampleArch() archStats {
 	for _, it := range items {
 		total += it.Count
 	}
-	sort.SliceStable(items, func(i, j int) bool { return items[i].Count > items[j].Count })
+	slices.SortStableFunc(items, func(a, b PieChartItem) int {
+		return cmp.Compare(b.Count, a.Count)
+	})
 	return archStats{Items: items, Total: total, Src: "source: operator surveys (node-info.json go_arch)"}
 }
 
@@ -169,7 +172,7 @@ func TestArchPanelNamesFailures(t *testing.T) {
 
 // The panel is drawn beside a legend inside a 78-column rule.
 func TestArchPanelFitsThePanelWidth(t *testing.T) {
-	for _, line := range strings.Split(renderArchPanelANSI(sampleArch()), "\n") {
+	for line := range strings.SplitSeq(renderArchPanelANSI(sampleArch()), "\n") {
 		if got := len([]rune(stripANSI(line))); got > tuiWidth+2 {
 			t.Errorf("line runs to %d columns: %q", got, stripANSI(line))
 		}

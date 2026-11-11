@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // acceptRetryDelay paces the accept loop after a transient error so a
@@ -58,6 +58,28 @@ func sessionLimit(h Handler) int64 {
 	return dataSizeLimit
 }
 
+// DataLimiter is implemented by a Handler that reads more DATA than the
+// SIZE it advertises, because some bodies wrap a message of that size,
+// and checks what each body holds in Deliver.
+type DataLimiter interface {
+	MaxDataSize() int64
+}
+
+func dataLimit(h Handler, limit int64) int64 {
+	if dl, ok := h.(DataLimiter); ok {
+		if n := dl.MaxDataSize(); n > limit {
+			return min(n, dataSizeLimit)
+		}
+	}
+	return limit
+}
+
+// Extender is implemented by a Handler that offers EHLO keywords of its
+// own.
+type Extender interface {
+	Extensions() []string
+}
+
 // Reply is an SMTP reply a Handler returns as an error to pick the code
 // the session sends.
 type Reply struct {
@@ -72,23 +94,22 @@ func (r *Reply) Error() string {
 
 // replyOr renders err as a *Reply when it is one, else as the fallback.
 func replyOr(err error, code int, enhanced string) string {
-	var r *Reply
-	if errors.As(err, &r) {
+	if r, ok := errors.AsType[*Reply](err); ok {
 		return r.Error()
 	}
 	return fmt.Sprintf("%d %s %s", code, enhanced, err)
 }
 
-func orDefaultLog(log logrus.FieldLogger) logrus.FieldLogger {
+func orDefaultLog(log logging.FieldLogger) logging.FieldLogger {
 	if log == nil {
-		return logrus.NewEntry(logrus.New())
+		return logging.NewEntry(logging.New())
 	}
 	return log
 }
 
 // ServeHandler runs an SMTP server on lis until ctx is canceled or lis
 // is closed, handing every connection to its own session with h.
-func ServeHandler(ctx context.Context, lis net.Listener, h Handler, heloName string, log logrus.FieldLogger) error {
+func ServeHandler(ctx context.Context, lis net.Listener, h Handler, heloName string, log logging.FieldLogger) error {
 	if h == nil {
 		return errors.New("skymailbridge: Handler is nil")
 	}
@@ -113,12 +134,10 @@ func ServeHandler(ctx context.Context, lis net.Listener, h Handler, heloName str
 			time.Sleep(acceptRetryDelay)
 			continue
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			defer c.Close() //nolint:errcheck,gosec
 			handleSession(ctx, c, h, heloName)
-		}()
+		})
 	}
 	wg.Wait()
 	return nil
@@ -128,6 +147,11 @@ func ServeHandler(ctx context.Context, lis net.Listener, h Handler, heloName str
 func handleSession(ctx context.Context, c net.Conn, h Handler, heloName string) {
 	br := bufio.NewReaderSize(c, readLineLimit)
 	limit := sessionLimit(h)
+	dlimit := dataLimit(h, limit)
+	var ext []string
+	if e, ok := h.(Extender); ok {
+		ext = e.Extensions()
+	}
 	tp := textproto.NewWriter(bufio.NewWriter(c))
 
 	if err := tp.PrintfLine("220 %s ESMTP skymail", heloName); err != nil {
@@ -155,7 +179,10 @@ func handleSession(ctx context.Context, c net.Conn, h Handler, heloName string) 
 		case "EHLO":
 			_ = tp.PrintfLine("250-%s", heloName)   //nolint:errcheck,gosec
 			_ = tp.PrintfLine("250-SIZE %d", limit) //nolint:errcheck,gosec
-			_ = tp.PrintfLine("250 8BITMIME")       //nolint:errcheck,gosec
+			for _, e := range ext {
+				_ = tp.PrintfLine("250-%s", e) //nolint:errcheck,gosec
+			}
+			_ = tp.PrintfLine("250 8BITMIME") //nolint:errcheck,gosec
 		case "MAIL":
 			addr, perr := parseAngleAddr(arg, "FROM")
 			if perr != nil {
@@ -192,9 +219,9 @@ func handleSession(ctx context.Context, c net.Conn, h Handler, heloName string) 
 				continue
 			}
 			_ = tp.PrintfLine("354 end with <CR><LF>.<CR><LF>") //nolint:errcheck,gosec
-			body, derr := readDATA(br, limit)
+			body, derr := readDATA(br, dlimit)
 			if errors.Is(derr, errTooBig) {
-				_ = tp.PrintfLine("552 5.3.4 message exceeds the limit of %d octets", limit) //nolint:errcheck,gosec
+				_ = tp.PrintfLine("552 5.3.4 message exceeds the limit of %d octets", dlimit) //nolint:errcheck,gosec
 				reset()
 				continue
 			}

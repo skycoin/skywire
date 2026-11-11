@@ -30,6 +30,18 @@ func (hv *Hypervisor) getApps() http.HandlerFunc {
 	})
 }
 
+// getAppCatalog lists every app the visor can run, merged with its configured instances.
+func (hv *Hypervisor) getAppCatalog() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		entries, err := ctx.API.AppCatalog()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, entries)
+	})
+}
+
 // returns an app summary of a given visor's pk and app name
 func (hv *Hypervisor) getApp() http.HandlerFunc {
 	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
@@ -86,6 +98,18 @@ func (hv *Hypervisor) appHelp() http.HandlerFunc {
 			return
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, map[string]string{"help": out})
+	})
+}
+
+// appFlags describes the flags the named app accepts, for the settings form.
+func (hv *Hypervisor) appFlags() http.HandlerFunc {
+	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		out, err := ctx.API.AppFlags(ctx.App.Name)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, out)
 	})
 }
 
@@ -298,6 +322,14 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 			}
 		}
 
+		if ctx.rec != nil {
+			// The visor is offline, so only the autostart this request sets is known.
+			if reqBody.AutoStart != nil {
+				ctx.App.AutoStart = *reqBody.AutoStart
+			}
+			httputil.WriteJSON(w, r, http.StatusOK, ctx.App)
+			return
+		}
 		// get the latest AppState of the app after changes
 		app, err := ctx.API.App(ctx.App.Name)
 		if err != nil {

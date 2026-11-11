@@ -11,15 +11,16 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/orandin/lumberjackrus"
-	"github.com/sirupsen/logrus"
 	"github.com/toqueteos/webbrowser"
+	"gopkg.in/natefinch/lumberjack.v2"
 
+	"github.com/skycoin/skywire/pkg/alerts"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -237,6 +238,9 @@ type Visor struct {
 	// contacts is the address book, opened on first use.
 	contacts contactBook
 
+	// async is dmsg-async: the inbox host and this visor's own inbox.
+	async asyncState
+
 	// visorCharts samples this visor's load and traffic for /status/visor.
 	visorCharts atomic.Pointer[visorCharts]
 
@@ -281,6 +285,9 @@ type Visor struct {
 	// (those that came through AddHypervisor / RPC); config-loaded
 	// hypervisors take a different path that doesn't enter this map.
 	hypervisorCancels map[cipher.PubKey]context.CancelFunc
+	// hvLinks carries the goodbye owed to each hypervisor.
+	hvLinksMu sync.Mutex
+	hvLinks   map[cipher.PubKey]*hvLink
 
 	// Allowed ports for app connections (legacy — being replaced by forwardedPorts)
 	allowed allowedPortsState
@@ -486,8 +493,9 @@ type Visor struct {
 	arBindings            arBindingsIndex            // the address resolver's bindings feed, for lookups
 	serviceHealth         healthCache                // the last service-health probe (service_health_cache.go)
 	autoTpCooldown        autoTpCooldown             // automatic transports that failed recently, by peer and type
-	mail                  skymailHost
-	embeddedWisp          *EmbeddedWisp
+	// mailHandler, when set, stands in for the skymail app's control surface.
+	mailHandler  http.Handler
+	embeddedWisp *EmbeddedWisp
 	// Shared VStreamMux for skynet forwarding (route ID 0).
 	// Used by both the forwarding server (Accept) and the skynetweb dialer (Dial).
 	skynetFwdMux *transport.VStreamMux
@@ -513,6 +521,9 @@ type Visor struct {
 
 	// Hypervisor instance (nil if never initialized; may be enabled/disabled at runtime)
 	hvInstance *Hypervisor
+	// alertSvc is the offline alerts (alerts.go), set by initAlerts.
+	alertsMu sync.RWMutex
+	alertSvc *alerts.Service
 	// pressure is the visor's resource pressure, see pressure.go.
 	pressure pressureState
 
@@ -695,7 +706,7 @@ func Run(parentCtx context.Context, conf *visorconfig.V1, opts Options) error {
 // hypervisor HTTP port and dies deep in init with an opaque bind error; here we
 // detect it up front and say exactly what is already running. A second visor
 // on the host is configured with its own cli_addr, which this check passes.
-func preflightSingleInstance(conf *visorconfig.V1, log logrus.FieldLogger) error {
+func preflightSingleInstance(conf *visorconfig.V1, log logging.FieldLogger) error {
 	addr := conf.CLIAddr
 	if addr == "" {
 		return nil // no local RPC configured — nothing to probe
@@ -1169,7 +1180,7 @@ func runBrowser(httpAddr string, enableTLS bool) {
 
 func isHvRunning(addr string, retries int) bool {
 	url := addr + "/api/ping"
-	for i := 0; i < retries; i++ {
+	for range retries {
 		time.Sleep(500 * time.Millisecond)
 		resp, err := http.Get(url) // nolint: gosec
 		if err != nil {
@@ -1205,6 +1216,9 @@ func (v *Visor) Close() error {
 		v.cxoSubMgr.Close()
 	}
 
+	// Tell the hypervisors this is a restart, before their links go.
+	v.sayGoodbye(byeRestarting)
+
 	// Cleanly close ongoing raw TCP forward conns
 	for _, forwardConn := range appnet.GetAllRawTCPForwardConns() {
 		err := forwardConn.Close()
@@ -1226,8 +1240,7 @@ func (v *Visor) Close() error {
 	closeStack := append([]closer(nil), v.closeStack...)
 	v.initLock.RUnlock()
 
-	for i := len(closeStack) - 1; i >= 0; i-- {
-		cl := closeStack[i]
+	for i, cl := range slices.Backward(closeStack) {
 
 		start := time.Now()
 		errCh := make(chan error, 1)
@@ -1286,7 +1299,7 @@ func (v *Visor) SetLogBroadcaster(b *logging.Broadcaster) {
 // Wraps the broadcaster so callers don't need a direct handle.
 // Returns nil channel + nil cancel when the broadcaster is not
 // installed (e.g. tests).
-func (v *Visor) SubscribeLogs(f logging.Filter, capacity int) (<-chan *logrus.Entry, func() uint64) {
+func (v *Visor) SubscribeLogs(f logging.Filter, capacity int) (<-chan *logging.Entry, func() uint64) {
 	if v.logBcast == nil {
 		return nil, func() uint64 { return 0 }
 	}
@@ -1297,7 +1310,7 @@ func (v *Visor) SubscribeLogs(f logging.Filter, capacity int) (<-chan *logrus.En
 // lines captured for appName by the log broadcaster's per-app ring, filtered to
 // entries at least as severe as minLevel. Both slices are oldest-first. Returns
 // empty slices (not an error) when nothing has been captured.
-func (v *Visor) RecentAppEvents(appName string, minLevel logrus.Level) (events, logs []logging.Record) {
+func (v *Visor) RecentAppEvents(appName string, minLevel logging.Level) (events, logs []logging.Record) {
 	if v.logBcast == nil {
 		return nil, nil
 	}
@@ -1307,7 +1320,7 @@ func (v *Visor) RecentAppEvents(appName string, minLevel logrus.Level) (events, 
 // RecentAppLogMerged returns the recent events+logs for appName merged into one
 // time-ordered slice (oldest first), filtered to entries at least as severe as
 // minLevel. This is the "reading the log" view `cli proxy log` prints.
-func (v *Visor) RecentAppLogMerged(appName string, minLevel logrus.Level) []logging.Record {
+func (v *Visor) RecentAppLogMerged(appName string, minLevel logging.Level) []logging.Record {
 	if v.logBcast == nil {
 		return nil
 	}
@@ -1514,7 +1527,7 @@ func storeLog(conf *visorconfig.V1, logJSON bool) {
 
 	// Pre-create or fix permissions on the log file to make it readable
 	// This is important when running as root in a directory not owned by root
-	if _, err := os.Stat(logFile); os.IsNotExist(err) {
+	if _, err := os.Stat(logFile); errors.Is(err, fs.ErrNotExist) {
 		// Create new file with readable permissions
 		f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY, 0644) //nolint:gosec
 		if err == nil {
@@ -1527,12 +1540,9 @@ func storeLog(conf *visorconfig.V1, logJSON bool) {
 		_ = os.Chmod(logFile, 0644) //nolint:gosec,errcheck
 	}
 
-	if hook, err := newTextLogHook(logFile); err != nil {
-		mLog.WithError(err).Warn("Failed to open the log file; logging to stdout only")
-	} else {
-		mLog.Hooks.Add(hook)
-		conf.MasterLogger().Hooks.Add(hook)
-	}
+	hook := newTextLogHook(logFile)
+	mLog.Hooks.Add(hook)
+	conf.MasterLogger().Hooks.Add(hook)
 
 	if logJSON {
 		addJSONLogHook(conf)
@@ -1544,7 +1554,7 @@ func storeLog(conf *visorconfig.V1, logJSON bool) {
 //
 // The text log is the right thing to read; it is the wrong thing to query.
 // Answering "what did wasm-serve report during this boot" means grepping a
-// format that was never meant to be parsed, and the fields logrus was given —
+// format that was never meant to be parsed, and the fields the logger was given —
 // module, error, and whatever WithField carried — are flattened into the
 // message on the way out. The JSON lines keep them, so the same question is
 // `jq 'select(.module=="wasm-serve")' skywire.jsonl` with no regex at all.
@@ -1555,11 +1565,7 @@ func storeLog(conf *visorconfig.V1, logJSON bool) {
 // snapshot cannot express.
 func addJSONLogHook(conf *visorconfig.V1) {
 	path := conf.LocalPath + "/log/skywire.jsonl"
-	hook, err := newJSONLogHook(path)
-	if err != nil {
-		mLog.WithError(err).Warn("Failed to open the JSON log; text logging is unaffected")
-		return
-	}
+	hook := newJSONLogHook(path)
 	mLog.Hooks.Add(hook)
 	conf.MasterLogger().Hooks.Add(hook)
 	mLog.PackageLogger("visor").WithField("path", path).
@@ -1568,19 +1574,17 @@ func addJSONLogHook(conf *visorconfig.V1) {
 
 // newJSONLogHook builds the JSON-lines hook for path. Split out so a test
 // can assert the on-disk shape without a running visor.
-func newJSONLogHook(path string) (logrus.Hook, error) {
-	return lumberjackrus.NewHook(&lumberjackrus.LogFile{
+func newJSONLogHook(path string) logging.Hook {
+	return logging.NewFormatterHook(&lumberjack.Logger{
 		Filename:   path,
 		MaxSize:    1,
 		MaxBackups: 1,
 		MaxAge:     1,
-		Compress:   false,
-		LocalTime:  false,
-	}, logrus.TraceLevel, &logrus.JSONFormatter{
+	}, logging.TraceLevel, &logging.JSONFormatter{
 		// RFC3339 with nanoseconds: the text log is second-resolution, too
 		// coarse to order a boot sequence.
 		TimestampFormat: time.RFC3339Nano,
-	}, nil)
+	})
 }
 
 func setForceColor(conf *visorconfig.V1) {
@@ -1661,26 +1665,20 @@ func (v *Visor) GetNetworkTypes() []string {
 
 // newTextLogHook builds the file hook for the human-readable log at path.
 //
-// One writer, deliberately. lumberjackrus accepts a per-level LogFile map, and
-// this used to carry one entry per level, every one of them naming this same
-// file. That gave each level its own lumberjack.Logger over one path, and
-// rotation is per-writer: whichever level first crossed MaxSize renamed the
-// file and opened a fresh one while the others kept writing to the renamed —
-// then reaped — inode. DEBUG has the most volume so it always won, and the
-// INFO, WARN and ERROR lines were written to a file nobody could read. The
-// default logger alone, with no per-level overrides, keeps every level on a
-// single rotating writer.
-func newTextLogHook(path string) (logrus.Hook, error) {
-	return lumberjackrus.NewHook(&lumberjackrus.LogFile{
+// One writer, deliberately. This once had a lumberjack.Logger per level, all
+// over this same file. Rotation is per writer, so whichever level first
+// crossed MaxSize renamed the file while the others kept writing to the
+// renamed, then reaped, inode, and the INFO, WARN and ERROR lines were lost.
+// One writer keeps every level on a single rotating file.
+func newTextLogHook(path string) logging.Hook {
+	return logging.NewFormatterHook(&lumberjack.Logger{
 		Filename:   path,
 		MaxSize:    1,
 		MaxBackups: 1,
 		MaxAge:     1,
-		Compress:   false,
-		LocalTime:  false,
-	}, logrus.TraceLevel, &logging.TextFormatter{
+	}, logging.TraceLevel, &logging.TextFormatter{
 		DisableColors:   true,
 		FullTimestamp:   true,
 		ForceFormatting: true,
-	}, nil)
+	})
 }

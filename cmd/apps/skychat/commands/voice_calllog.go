@@ -21,7 +21,7 @@ import (
 type callRecord struct {
 	// Peer is the other side's public key — what a tap on the row calls back.
 	Peer string `json:"peer"`
-	// Outcome is one of the callMissed / callIncoming / callOutgoing labels.
+	// Outcome is one of the callMissed / callIncoming / callOutgoing / callUnanswered labels.
 	Outcome string `json:"outcome"`
 	// Direction is "in" or "out", so the UI can pick an arrow without
 	// re-deriving it from the label.
@@ -91,14 +91,14 @@ func parseCallRecord(text string) (callRecord, bool) {
 	outcome, durationText, hasDuration := strings.Cut(body, callTextSep)
 	outcome = strings.TrimSpace(outcome)
 	switch outcome {
-	case callMissed, callIncoming, callOutgoing:
+	case callMissed, callIncoming, callOutgoing, callUnanswered:
 	default:
 		// Someone's message that happens to start with a handset. Not ours.
 		return callRecord{}, false
 	}
 	rec := callRecord{
 		Outcome:   outcome,
-		Direction: map[bool]string{true: "out", false: "in"}[outcome == callOutgoing],
+		Direction: map[bool]string{true: "out", false: "in"}[isOutgoingOutcome(outcome)],
 	}
 	if hasDuration {
 		rec.Seconds = parseCallDuration(durationText)

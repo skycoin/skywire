@@ -9,8 +9,8 @@
 // probe-only rulings, park/promote and failover are all exercised — under
 // `go test`, with no root, no rig and no live deployment.
 //
-// The harness lives in package router because a leg is a (rg.tps, rg.fwd,
-// rg.rvs, rg.mux) tuple and none of those are exported. pkg/router/emu holds
+// The harness lives in package router because a leg is an entry of
+// rg.legs plus rg.mux state and neither is exported. pkg/router/emu holds
 // everything that does NOT need package internals: the wire itself and the
 // report format.
 //
@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"math/rand"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -31,7 +32,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -277,7 +277,7 @@ func newEmuRig(t *testing.T, opts emuOpts) *emuRig {
 	hops := []cipher.PubKey{hopA, hopB, hopC}
 
 	ml := logging.NewMasterLogger()
-	ml.SetLevel(logrus.PanicLevel)
+	ml.SetLevel(logging.PanicLevel)
 
 	cfg := DefaultRouteGroupConfig()
 	if opts.ReadChBufSize > 0 {
@@ -404,9 +404,7 @@ func (r *emuRig) wireEnd(e *emuEnd, fwd, rvs []routing.Rule, opts emuOpts, initi
 
 	rg.mu.Lock()
 	rg.mux = m
-	rg.tps = e.tps
-	rg.fwd = fwd
-	rg.rvs = rvs
+	setTestLegs(rg, e.tps, fwd, rvs)
 	rg.encrypt = false
 	m.growLegs(len(e.tps))
 	// Both ends' legs are established before the first byte, as they are
@@ -414,7 +412,7 @@ func (r *emuRig) wireEnd(e *emuEnd, fwd, rvs []routing.Rule, opts emuOpts, initi
 	for i := range e.tps {
 		m.markLegReady(i)
 	}
-	m.rebuildWeights(e.tps)
+	m.rebuildWeights(rg.legs)
 	rg.mu.Unlock()
 
 	m.SetForwardRehomeFn(rg.noteForwardRehome)
@@ -581,10 +579,7 @@ func (r *emuRig) Transfer(dir emuDir, n int64, timeout time.Duration) *emuTransf
 	const chunk = 256 * 1024
 	go func() {
 		for off := int64(0); off < n; off += chunk {
-			end := off + chunk
-			if end > n {
-				end = n
-			}
+			end := min(off+chunk, n)
 			if _, err := sender.Write(payload[off:end]); err != nil {
 				if res.Err == nil {
 					res.Err = err
@@ -691,10 +686,10 @@ func (r *emuRig) Summary(name string, dir emuDir, x *emuTransfer) emu.Summary {
 // scenario would move it.
 func (r *emuRig) AddedLegs() (a, b int) {
 	r.A.rg.mu.Lock()
-	a = len(r.A.rg.tps)
+	a = len(r.A.rg.legs)
 	r.A.rg.mu.Unlock()
 	r.B.rg.mu.Lock()
-	b = len(r.B.rg.tps)
+	b = len(r.B.rg.legs)
 	r.B.rg.mu.Unlock()
 	return a, b
 }
@@ -803,7 +798,7 @@ func (h *emuHost) singleLegGroupOn(tpID uuid.UUID) *RouteGroup {
 			continue
 		}
 		rg.mu.Lock()
-		hit := len(rg.tps) == 1 && rg.tps[0] != nil && rg.tps[0].Entry.ID == tpID
+		hit := len(rg.legs) == 1 && rg.legs[0].tp != nil && rg.legs[0].tp.Entry.ID == tpID
 		rg.mu.Unlock()
 		if hit {
 			return rg
@@ -814,10 +809,5 @@ func (h *emuHost) singleLegGroupOn(tpID uuid.UUID) *RouteGroup {
 
 // dropped reports whether this rig's simulated old relay discards the type.
 func (r *emuRig) dropped(t routing.PacketType) bool {
-	for _, d := range r.dropTypes {
-		if d == t {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(r.dropTypes, t)
 }

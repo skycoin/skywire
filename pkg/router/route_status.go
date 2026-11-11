@@ -90,7 +90,8 @@ func (r *router) ActiveRouteStatuses() []RouteStatus {
 		}
 
 		rg.mu.Lock()
-		for i, tp := range rg.tps {
+		for _, lg := range rg.legs {
+			tp := lg.tp
 			if tp == nil {
 				continue
 			}
@@ -100,11 +101,11 @@ func (r *router) ActiveRouteStatuses() []RouteStatus {
 				RemotePK: tp.Entry.RemoteEdge(desc.DstPK()),
 				Latency:  tp.GetLatency(),
 			}
-			if i < len(rg.fwd) {
-				rt.FwdRuleID = rg.fwd[i].KeyRouteID()
+			if lg.fwd != nil {
+				rt.FwdRuleID = lg.fwd.KeyRouteID()
 			}
-			if i < len(rg.rvs) {
-				rt.RvsRuleID = rg.rvs[i].KeyRouteID()
+			if lg.rvs != nil {
+				rt.RvsRuleID = lg.rvs.KeyRouteID()
 			}
 			status.Transports = append(status.Transports, rt)
 		}

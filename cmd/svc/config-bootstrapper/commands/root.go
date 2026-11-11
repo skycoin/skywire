@@ -4,8 +4,10 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -46,8 +48,8 @@ func generateExamples() string {
 	exPK2 := "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
 
 	// GET /health - api.HealthCheckResponse
-	healthExample := map[string]interface{}{
-		"build_info": map[string]interface{}{
+	healthExample := map[string]any{
+		"build_info": map[string]any{
 			"version": "v1.3.29",
 			"commit":  "abc1234",
 			"date":    "2024-01-15T10:30:00Z",
@@ -60,7 +62,7 @@ func generateExamples() string {
 	// services are dmsg-only; the example pulls the real dmsg:// URLs from the
 	// embedded services-config.json (deployment.Prod) — the single source of
 	// truth — rather than hardcoding any URL.
-	servicesExample := map[string]interface{}{
+	servicesExample := map[string]any{
 		"dmsg_discovery":      deployment.Prod.DmsgDiscoveryDmsg,
 		"transport_discovery": deployment.Prod.TransportDiscoveryDmsg,
 		"address_resolver":    deployment.Prod.AddressResolverDmsg,
@@ -200,7 +202,7 @@ HTTP Endpoints:
 func readConfig(log *logging.Logger, confPath string) (config api.Config) {
 	f, err := os.Open(confPath) //nolint:gosec
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			log.WithField("filepath", confPath).
 				Info("Config file not found, using embedded defaults.")
 			return api.Config{}

@@ -227,7 +227,7 @@ func TestRunWithFakeRunnerFindsTheBestValue(t *testing.T) {
 		t.Fatal(err)
 	}
 	rows := 0
-	for _, l := range strings.Split(strings.TrimRight(string(tsv), "\n"), "\n") {
+	for l := range strings.SplitSeq(strings.TrimRight(string(tsv), "\n"), "\n") {
 		if !strings.HasPrefix(l, "#") {
 			rows++
 			if n := len(strings.Split(l, "\t")); n != 7 {

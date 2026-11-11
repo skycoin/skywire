@@ -39,7 +39,7 @@ func TestGroupInbox_SubDropCount_LiveSumWhenChannelFull(t *testing.T) {
 	defer g.unsubscribe(sub)
 
 	pk, _ := cipher.GenerateKeyPair()
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		g.deliver("group-a", pk, skychatgroup.Message{Text: "x"})
 	}
 	// One message fits in the buf=1 channel, the other four drop.
@@ -58,7 +58,7 @@ func TestGroupInbox_SubDropCount_AccumulatesAcrossUnsubscribe(t *testing.T) {
 	// Stream 1: 3 drops, then teardown.
 	sub1 := g.subscribe(1)
 	pk, _ := cipher.GenerateKeyPair()
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		g.deliver("group-a", pk, skychatgroup.Message{Text: "x"})
 	}
 	if got := g.SubDropCount(); got != 3 {
@@ -77,7 +77,7 @@ func TestGroupInbox_SubDropCount_AccumulatesAcrossUnsubscribe(t *testing.T) {
 	}
 
 	// Stream 2 drops 2 more.
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		g.deliver("group-a", pk, skychatgroup.Message{Text: "y"})
 	}
 	if got := g.SubDropCount(); got != 5 {
@@ -96,7 +96,7 @@ func TestGroupInbox_SubDropCount_AggregatesMultipleLiveSubs(t *testing.T) {
 	defer g.unsubscribe(sub2)
 
 	pk, _ := cipher.GenerateKeyPair()
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		g.deliver("group-a", pk, skychatgroup.Message{Text: "x"})
 	}
 	// Each sub takes 1, drops 3 → total 6.
@@ -121,7 +121,7 @@ func TestGroupInbox_SubDropCount_RoomyChannelDoesNotDrop(t *testing.T) {
 	t.Cleanup(func() { g.unsubscribe(sub) })
 
 	pk, _ := cipher.GenerateKeyPair()
-	for i := 0; i < N; i++ {
+	for range N {
 		g.deliver("group-a", pk, skychatgroup.Message{Text: "x"})
 	}
 	if got := g.SubDropCount(); got != 0 {

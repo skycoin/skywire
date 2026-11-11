@@ -36,9 +36,9 @@ import (
 	"unsafe"
 
 	"github.com/0magnet/osnotify"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
@@ -78,18 +78,16 @@ type NotifyHub struct {
 	// the OS sink's errors are not actionable — which leaves an operator
 	// asking "why did nothing appear?" with nothing to read. One Debug line
 	// per publish answers it. Nil is valid (tests, a bare hub).
-	log logrus.FieldLogger
+	log logging.FieldLogger
 }
 
 type notifySub struct {
-	ch chan appserver.NotifyReq
-	// atomic.Uint64 rather than a bare uint64: on 32-bit targets (the 386 /
-	// arm / armhf builds this repo ships) a bare uint64 following the channel
-	// pointer lands at offset 4 and every atomic.AddUint64 on it panics with
-	// "unaligned 64-bit atomic operation". atomic.Uint64 carries its own
-	// alignment guarantee, so the field order stops mattering.
+	// First, so it is 8-byte aligned on 32-bit targets. A uint64 after the
+	// channel pointer lands at offset 4 and 64-bit atomics on it panic.
+	// atomic.Uint64 fixes that under Go but not under TinyGo on 386.
 	dropped atomic.Uint64
 	closed  atomic.Bool
+	ch      chan appserver.NotifyReq
 }
 
 // Compile-time guard for the alignment note above: if `dropped` ever reverts to
@@ -101,7 +99,7 @@ const _ = uint(0 - unsafe.Offsetof(notifySub{}.dropped)%8)
 
 // NewNotifyHub constructs an empty hub with the host-OS sink wired up. log may
 // be nil; it only carries the per-publish trace.
-func NewNotifyHub(log logrus.FieldLogger) *NotifyHub {
+func NewNotifyHub(log logging.FieldLogger) *NotifyHub {
 	h := &NotifyHub{
 		subs:        make(map[*notifySub]struct{}),
 		osAvailable: osnotify.Available,

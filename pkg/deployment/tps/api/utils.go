@@ -11,17 +11,16 @@ import (
 
 	rpc "github.com/0magnet/gobrpc"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 // visor RPC helpers
 
-func (api *API) visorResponse(w http.ResponseWriter, r *http.Request, pk cipher.PubKey, method string, req, result interface{}) {
+func (api *API) visorResponse(w http.ResponseWriter, r *http.Request, pk cipher.PubKey, method string, req, result any) {
 	if err := api.callVisorRPC(r.Context(), pk, method, req, result); err != nil {
 		api.internalError(w, r, err)
 		return
@@ -29,7 +28,7 @@ func (api *API) visorResponse(w http.ResponseWriter, r *http.Request, pk cipher.
 	httputil.WriteJSON(w, r, http.StatusOK, result)
 }
 
-func (api *API) callVisorRPC(ctx context.Context, pk cipher.PubKey, method string, req, result interface{}) error {
+func (api *API) callVisorRPC(ctx context.Context, pk cipher.PubKey, method string, req, result any) error {
 	port := skyenv.DmsgTransportSetupPort
 	conn, err := api.dmsgC.Dial(ctx, dmsg.Addr{PK: pk, Port: port})
 	if err != nil {
@@ -47,7 +46,7 @@ func (api *API) callVisorRPC(ctx context.Context, pk cipher.PubKey, method strin
 	return nil
 }
 
-func (api *API) log(r *http.Request) logrus.FieldLogger {
+func (api *API) log(r *http.Request) logging.FieldLogger {
 	return httputil.GetLogger(r)
 }
 

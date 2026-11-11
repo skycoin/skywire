@@ -213,6 +213,13 @@ type NodeConfig struct {
 	GenesisCoinVolume     uint64
 	DefaultConnections    []string
 
+	// BlockSigners, BlockSignerThreshold, MultiSignerForkSeq and BlockRoundTimeout
+	// configure a multi-signer chain, see fiber.NodeConfig
+	BlockSigners         []string
+	BlockSignerThreshold int
+	MultiSignerForkSeq   uint64
+	BlockRoundTimeout    time.Duration
+
 	genesisSignature cipher.Sig
 	genesisAddress   cipher.Address
 	genesisHash      cipher.SHA256
@@ -222,6 +229,8 @@ type NodeConfig struct {
 
 	blockchainPQPubkey pqsig.PubKey
 	blockchainPQSeckey pqsig.SecKey
+
+	multiSigner coin.MultiSignerRule
 
 	Fiber readable.FiberConfig
 
@@ -250,6 +259,10 @@ func NewNodeConfig(mode string, node fiber.NodeConfig) NodeConfig {
 		BlockchainPQSeckeyStr: node.BlockchainPQSeckeyStr,
 		PQForkSeq:             node.PQForkSeq,
 		PQAddressForkSeq:      node.PQAddressForkSeq,
+		BlockSigners:          node.BlockSigners,
+		BlockSignerThreshold:  node.BlockSignerThreshold,
+		MultiSignerForkSeq:    node.MultiSignerForkSeq,
+		BlockRoundTimeout:     node.BlockRoundTimeout,
 		DefaultConnections:    node.DefaultConnections,
 		// Disable peer exchange
 		DisablePEX: false,
@@ -382,6 +395,11 @@ func NewNodeConfig(mode string, node fiber.NodeConfig) NodeConfig {
 func (c *Config) postProcess() error {
 	c.parseBlockchainKeys()
 
+	var err error
+	if c.Node.multiSigner, err = coin.NewMultiSignerRule(c.Node.BlockSigners, c.Node.BlockSignerThreshold, c.Node.MultiSignerForkSeq); err != nil {
+		return err
+	}
+
 	if err := c.initDirectories(); err != nil {
 		return err
 	}
@@ -491,7 +509,7 @@ func (c *Config) initUserAgent() error {
 	return nil
 }
 
-// initAPISets builds the enabled API sets and disables GUI if wallet API is off.
+// initAPISets builds the enabled API sets. The GUI turns on the wallet API.
 func (c *Config) initAPISets() error {
 	apiSets, err := buildAPISets(c.Node)
 	if err != nil {
@@ -500,7 +518,9 @@ func (c *Config) initAPISets() error {
 
 	c.Node.enabledAPISets = apiSets
 	if _, ok := c.Node.enabledAPISets[api.EndpointsWallet]; !ok {
-		c.Node.EnableGUI = false
+		if c.Node.EnableGUI {
+			return errors.New("-enable-gui needs the WALLET API set, which -disable-api-sets removes")
+		}
 		c.Node.LaunchBrowser = false
 	}
 
@@ -666,6 +686,10 @@ func buildAPISets(c NodeConfig) (map[string]struct{}, error) {
 		apiSets[k] = struct{}{}
 	}
 
+	if c.EnableGUI {
+		apiSets[api.EndpointsWallet] = struct{}{}
+	}
+
 	// Remove the disabled API sets
 	for _, k := range disabledAPISets {
 		delete(apiSets, k)
@@ -705,7 +729,7 @@ func (c *NodeConfig) RegisterFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVar(&c.DisableIncomingConnections, "disable-incoming", c.DisableIncomingConnections, "Don't allow incoming connections")
 	cmd.Flags().BoolVar(&c.DisableNetworking, "disable-networking", c.DisableNetworking, "Disable all network activity")
 	cmd.Flags().BoolVar(&c.LegacyPeerCompat, "legacy-peer-compat", c.LegacyPeerCompat, "Allow connections from legacy peers that don't send blockchain pubkey")
-	cmd.Flags().BoolVar(&c.EnableGUI, "enable-gui", c.EnableGUI, "serve the wallet GUI, with the wallets kept in the node (needs the WALLET API set)")
+	cmd.Flags().BoolVar(&c.EnableGUI, "enable-gui", c.EnableGUI, "serve the wallet GUI, with the wallets kept in the node and enable the WALLET API set it needs")
 	cmd.Flags().BoolVar(&c.WebWallet, "web-wallet", c.WebWallet, "serve the wallet GUI even without the WALLET API set, with the wallets kept in the browser")
 	cmd.Flags().BoolVar(&c.DisableCSRF, "disable-csrf", c.DisableCSRF, "disable CSRF check")
 	cmd.Flags().BoolVar(&c.DisableHeaderCheck, "disable-header-check", c.DisableHeaderCheck, "disables the host, origin and referer header checks.")
@@ -777,6 +801,10 @@ func (c *NodeConfig) RegisterFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&c.BlockchainPQSeckeyStr, "blockchain-pq-secret-key", c.BlockchainPQSeckeyStr, "post-quantum (ML-DSA-44) secret key of the blockchain")
 	cmd.Flags().Uint64Var(&c.PQForkSeq, "pq-fork-seq", c.PQForkSeq, "first block that needs a post-quantum signature")
 	cmd.Flags().Uint64Var(&c.PQAddressForkSeq, "pq-address-fork-seq", c.PQAddressForkSeq, "first block that may hold post-quantum addresses and their spends")
+	cmd.Flags().StringSliceVar(&c.BlockSigners, "block-signers", c.BlockSigners, "public keys of the block signers of a multi-signer chain")
+	cmd.Flags().IntVar(&c.BlockSignerThreshold, "block-signer-threshold", c.BlockSignerThreshold, "signatures that make a block final, more than 2/3 of the signers (0 for the default)")
+	cmd.Flags().Uint64Var(&c.MultiSignerForkSeq, "multi-signer-fork-seq", c.MultiSignerForkSeq, "first block that needs the block signers' signatures")
+	cmd.Flags().DurationVar(&c.BlockRoundTimeout, "block-round-timeout", c.BlockRoundTimeout, "how long block signers wait for a proposal before the next proposer (0 for three block intervals)")
 
 	cmd.Flags().StringVar(&c.GenesisAddressStr, "genesis-address", c.GenesisAddressStr, "genesis address")
 	cmd.Flags().StringVar(&c.GenesisSignatureStr, "genesis-signature", c.GenesisSignatureStr, "genesis block signature")
@@ -946,6 +974,10 @@ func (c *NodeConfig) applyFiberNodeConfig(node fiber.NodeConfig) {
 	c.BlockchainPQSeckeyStr = node.BlockchainPQSeckeyStr
 	c.PQForkSeq = node.PQForkSeq
 	c.PQAddressForkSeq = node.PQAddressForkSeq
+	c.BlockSigners = node.BlockSigners
+	c.BlockSignerThreshold = node.BlockSignerThreshold
+	c.MultiSignerForkSeq = node.MultiSignerForkSeq
+	c.BlockRoundTimeout = node.BlockRoundTimeout
 	c.GenesisTimestamp = node.GenesisTimestamp
 	c.GenesisCoinVolume = node.GenesisCoinVolume
 	c.DefaultConnections = node.DefaultConnections

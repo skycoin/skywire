@@ -3,7 +3,7 @@ package vpn
 
 import (
 	"errors"
-	"net"
+	"net/netip"
 	"sync"
 )
 
@@ -32,7 +32,7 @@ func newSubnetIPIncrementer(octetLowerBorders, octetBorders [4]uint8, step uint8
 // nolint: gocyclo
 //
 //gocyclo:ignore
-func (inc *subnetIPIncrementer) next() (net.IP, error) {
+func (inc *subnetIPIncrementer) next() (netip.Addr, error) {
 	inc.mx.Lock()
 	defer inc.mx.Unlock()
 
@@ -74,7 +74,7 @@ func (inc *subnetIPIncrementer) next() (net.IP, error) {
 						inc.octets[3] = o4
 						inc.reserved[generatedIP] = struct{}{}
 
-						return net.IPv4(generatedIP[0], generatedIP[1], generatedIP[2], generatedIP[3]), nil
+						return netip.AddrFrom4(generatedIP), nil
 					}
 				}
 
@@ -116,7 +116,7 @@ func (inc *subnetIPIncrementer) next() (net.IP, error) {
 		}
 	}
 
-	return nil, errors.New("no free IPs left")
+	return netip.Addr{}, errors.New("no free IPs left")
 }
 
 func (inc *subnetIPIncrementer) reserve(octets [4]uint8) {

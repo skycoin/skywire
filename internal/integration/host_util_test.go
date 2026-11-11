@@ -1,10 +1,11 @@
 //go:build !no_ci
-// +build !no_ci
 
 package integration_test
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 )
@@ -25,7 +26,7 @@ func gitRoot(path string) (string, error) {
 			}
 			return filepath.Dir(filepath.Join(path, ".git")), nil
 		}
-		if !os.IsNotExist(err) {
+		if !errors.Is(err, fs.ErrNotExist) {
 			// unknown error
 			return "", err
 		}
@@ -56,7 +57,7 @@ func isGitDir(path string) (bool, error) {
 		if err == nil {
 			continue
 		}
-		if !os.IsNotExist(err) {
+		if !errors.Is(err, fs.ErrNotExist) {
 			// unknown error
 			return false, err
 		}

@@ -15,7 +15,7 @@ import (
 	"reflect"
 )
 
-func (c *Common) flush(v interface{}) (err error) {
+func (c *Common) flush(v any) (err error) {
 	switch c.path {
 	case "":
 		return ErrNoConfigPath

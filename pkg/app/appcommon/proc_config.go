@@ -13,9 +13,9 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -253,7 +253,7 @@ var (
 	inProcessConns   = make(map[ProcKey]net.Conn)
 
 	inProcessLogsMu sync.RWMutex
-	inProcessLogs   = make(map[ProcKey]logrus.FieldLogger)
+	inProcessLogs   = make(map[ProcKey]logging.FieldLogger)
 
 	// internalAppStartMu serializes internal app startup to prevent env var races
 	internalAppStartMu sync.Mutex
@@ -294,7 +294,7 @@ func UnregisterInProcessConn(key ProcKey) {
 // os.Stderr, so everything it logged — including the warning naming why an
 // upload failed — existed only in the visor's console. This registry is how
 // app.NewClient finds the collected logger instead.
-func RegisterInProcessLogger(key ProcKey, log logrus.FieldLogger) {
+func RegisterInProcessLogger(key ProcKey, log logging.FieldLogger) {
 	inProcessLogsMu.Lock()
 	defer inProcessLogsMu.Unlock()
 	inProcessLogs[key] = log
@@ -303,7 +303,7 @@ func RegisterInProcessLogger(key ProcKey, log logrus.FieldLogger) {
 // GetInProcessLogger retrieves the logger for an in-process app by its ProcKey,
 // or nil when the app is not in-process (the external case, where stderr is the
 // channel).
-func GetInProcessLogger(key ProcKey) logrus.FieldLogger {
+func GetInProcessLogger(key ProcKey) logging.FieldLogger {
 	inProcessLogsMu.RLock()
 	defer inProcessLogsMu.RUnlock()
 	return inProcessLogs[key]

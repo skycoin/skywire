@@ -36,6 +36,8 @@ const (
 	// DefaultRulesGCInterval is the default duration for garbage collection of routing rules.
 	DefaultRulesGCInterval = 10 * time.Second
 	acceptSize             = 1024
+	// acceptConcurrency is how many accepted setups may await a handshake at once.
+	acceptConcurrency = 64
 
 	// handshakeAwaitTimeout bounds the dial-side wait for the remote's
 	// reciprocal route-group handshake. A handshake is a single small packet
@@ -469,8 +471,8 @@ type DialOptions struct {
 	// test — set ForwardMuxRoutes=1 and ReverseMuxRoutes=4 to open a
 	// single forward leg (the GET request rides one TCP socket) while
 	// the reverse direction aggregates the bulk payload across 4
-	// multi-hop legs. The data plane already supports rg.fwd[] and
-	// rg.rvs[] being different lengths (the read path is by route-id
+	// multi-hop legs. The data plane already supports forward rules and
+	// reverse rules being different counts (the read path is by route-id
 	// lookup, not slice index), so this is purely a setup-side change.
 	//
 	// 0 (the default) means "inherit MuxRoutes" for that direction.
@@ -767,7 +769,10 @@ type router struct {
 	pendingLegs      *pendingLegs                                    // aux mux legs buffered while their route group is still initializing (see router_pending_legs.go, #80)
 	rpcSrv           *rpc.Server
 	directSetup      directSetupState // peers that refused a one-hop setup without a setup node (direct_setup.go)
-	accept           chan routing.EdgeRules
+	accept           chan acceptEntry
+	accepted         chan acceptResult // handshakes finished off the accept loop
+	acceptSem        chan struct{}     // bounds the handshakes awaited at once
+	acceptStale      atomic.Uint64     // setups dropped for outliving their initiator
 	adopted          chan net.Conn
 	done             chan struct{}
 	once             sync.Once
@@ -909,7 +914,9 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 		pending:         newPendingPackets(),
 		pendingLegs:     newPendingLegs(),
 		rpcSrv:          rpc.NewServer(),
-		accept:          make(chan routing.EdgeRules, acceptSize),
+		accept:          make(chan acceptEntry, acceptSize),
+		accepted:        make(chan acceptResult, acceptSize),
+		acceptSem:       make(chan struct{}, acceptConcurrency),
 		adopted:         make(chan net.Conn, acceptSize),
 		done:            make(chan struct{}),
 		trustedVisors:   trustedVisors,

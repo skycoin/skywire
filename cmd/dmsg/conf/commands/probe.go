@@ -2,10 +2,11 @@
 package commands
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -89,7 +90,9 @@ Server entries come from the live discovery (fetched over dmsg, like
 				return fmt.Errorf("server %s not in the %s set", pk, probeSourceName())
 			}
 		}
-		sort.Slice(entries, func(i, j int) bool { return entries[i].Static.Hex() < entries[j].Static.Hex() })
+		slices.SortFunc(entries, func(a, b *disc.Entry) int {
+			return cmp.Compare(a.Static.Hex(), b.Static.Hex())
+		})
 
 		type job struct {
 			entry   *disc.Entry
@@ -159,7 +162,7 @@ func probeEntrySet() ([]*disc.Entry, error) {
 	// fail with "202 - cannot connect to delegated server" purely by drawing an
 	// unlucky relay. Each retry bootstraps fresh sessions and redraws.
 	var err error
-	for attempt := 0; attempt < 3; attempt++ {
+	for range 3 {
 		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 		entries, ferr := fetchAllServersOverDmsg(ctx)
 		cancel()

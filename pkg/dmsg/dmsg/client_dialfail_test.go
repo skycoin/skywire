@@ -34,7 +34,7 @@ func TestDialFailBackoff(t *testing.T) {
 	// Repeated failures double the NEXT window up to the cap.
 	st := ce.dialFail[dst]
 	require.Equal(t, 2*dialFailBackoffMin, st.backoff, "second window must double")
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		ce.dialFailRecord(dst, errBoom)
 	}
 	require.Equal(t, dialFailBackoffMax, ce.dialFail[dst].backoff, "backoff must cap")

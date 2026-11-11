@@ -20,7 +20,7 @@ package router
 import (
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 
 	"github.com/google/uuid"
 
@@ -80,7 +80,7 @@ type MuxNegotiated struct {
 	SendWindowWaitMax   string  `json:"send_window_wait_max"`
 	ForwardSpill        bool    `json:"forward_spill"`
 	ForwardSwitchMargin float64 `json:"forward_switch_margin"`
-	// PerLegWindowBytes is each leg's CURRENT send window, in tps[] order —
+	// PerLegWindowBytes is each leg's CURRENT send window, in legs order —
 	// the negotiated shape as the scheduler is actually applying it.
 	PerLegWindowBytes []float64 `json:"per_leg_window_bytes,omitempty"`
 }
@@ -141,9 +141,10 @@ func (r *router) SetMuxExplicitWeights(desc routing.RouteDescriptor, weights map
 
 	rg := nrg.rg
 	rg.mu.Lock()
-	idxOf := make(map[uuid.UUID]int, len(rg.tps))
-	w := make([]float64, len(rg.tps))
-	for i, tp := range rg.tps {
+	idxOf := make(map[uuid.UUID]int, len(rg.legs))
+	w := make([]float64, len(rg.legs))
+	for i, lg := range rg.legs {
+		tp := lg.tp
 		if tp == nil {
 			continue
 		}
@@ -166,7 +167,7 @@ func (r *router) SetMuxExplicitWeights(desc routing.RouteDescriptor, weights map
 		total += v
 	}
 	if len(unknown) > 0 {
-		sort.Strings(unknown)
+		slices.Sort(unknown)
 		return MuxWeightsView{}, fmt.Errorf("transport(s) %v are not legs of this route group", unknown)
 	}
 	if total <= 0 {
@@ -177,7 +178,7 @@ func (r *router) SetMuxExplicitWeights(desc routing.RouteDescriptor, weights map
 	sel.SetExplicitWeights(w)
 	sel.SetMode(WeightModeExplicit)
 	rg.mu.Lock()
-	sel.Rebuild(rg.tps)
+	sel.Rebuild(rg.legs)
 	rg.mu.Unlock()
 	r.logger.Infof("SetMuxExplicitWeights: %s now spreads by %d explicit leg weight(s)", desc.String(), len(weights))
 	return r.MuxWeightsFor(desc)
@@ -195,7 +196,7 @@ func (r *router) ClearMuxExplicitWeights(desc routing.RouteDescriptor) (MuxWeigh
 	rg := nrg.rg
 	rg.mux.tpSelector.SetMode(WeightModeECF)
 	rg.mu.Lock()
-	rg.mux.tpSelector.Rebuild(rg.tps)
+	rg.mux.tpSelector.Rebuild(rg.legs)
 	rg.mu.Unlock()
 	r.logger.Infof("ClearMuxExplicitWeights: %s back to ecf", desc.String())
 	return r.MuxWeightsFor(desc)
@@ -230,8 +231,9 @@ func legWeightsOf(rg *RouteGroup) []LegWeight {
 	}
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	out := make([]LegWeight, 0, len(rg.tps))
-	for i, tp := range rg.tps {
+	out := make([]LegWeight, 0, len(rg.legs))
+	for i, lg := range rg.legs {
+		tp := lg.tp
 		if tp == nil || i >= len(w) {
 			continue
 		}

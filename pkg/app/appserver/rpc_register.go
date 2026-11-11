@@ -8,6 +8,7 @@ import (
 	rpc "github.com/0magnet/gobrpc"
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/routing"
 )
@@ -32,6 +33,36 @@ func registerIngressRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPCIngressG
 		return func() (any, error) {
 			rpcReply := new(AppSettingsResp)
 			return rpcReply, rpcRcvr.AppSettings(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".ChatAck", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new([]ParkedRef)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.ChatAck(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".ChatPark", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(ChatParkReq)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(cipher.PubKey)
+			return rpcReply, rpcRcvr.ChatPark(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".ChatUnpark", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(struct{})
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new([]ParkedChat)
+			return rpcReply, rpcRcvr.ChatUnpark(rpcArg, rpcReply)
 		}, nil
 	})
 	rpcSrv.HandleCall(rpcName+".CloseConn", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
@@ -112,6 +143,66 @@ func registerIngressRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPCIngressG
 		return func() (any, error) {
 			rpcReply := new([]appnet.LocalService)
 			return rpcReply, rpcRcvr.LocalServices(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".MailAck", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new([]ParkedRef)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.MailAck(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".MailHostInfo", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(struct{})
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(MailHostInfo)
+			return rpcReply, rpcRcvr.MailHostInfo(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".MailOpen", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new([]byte)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(MailOpenResp)
+			return rpcReply, rpcRcvr.MailOpen(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".MailPark", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(MailParkReq)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(cipher.PubKey)
+			return rpcReply, rpcRcvr.MailPark(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".MailSeal", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(MailSealReq)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new([]byte)
+			return rpcReply, rpcRcvr.MailSeal(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".MailUnpark", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(struct{})
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new([]ParkedMail)
+			return rpcReply, rpcRcvr.MailUnpark(rpcArg, rpcReply)
 		}, nil
 	})
 	rpcSrv.HandleCall(rpcName+".NoteMuxEvent", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {

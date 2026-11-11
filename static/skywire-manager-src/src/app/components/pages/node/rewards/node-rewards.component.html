@@ -1,5 +1,26 @@
 <!-- Reward address management — first because it gates everything
      else on this tab (no address → no rewards). -->
+<ng-template #xpubList let-x>
+  @if (x.error) {
+    <div class="exposure-warning">
+      <mat-icon [inline]="true">warning</mat-icon>
+      <span>{{ x.error }}</span>
+    </div>
+  } @else {
+    <div class="xpub-addresses">
+      <span class="xpub-addresses-info">{{ 'node.details.rewards-info.xpub-addresses' | translate }}</span>
+      @for (a of x.addresses; track a) {
+        <span class="xpub-address">
+          <app-copy-to-clipboard-text text="{{ a }}"></app-copy-to-clipboard-text>
+          <a [href]="'https://explorer.skycoin.com/app/address/' + a" target="_blank" rel="noreferrer nofollow noopener">
+            <mat-icon [inline]="true" class="link-icon transparent-button" [matTooltip]="'node.details.rewards-info.open-in-explorer' | translate">open_in_browser</mat-icon>
+          </a>
+        </span>
+      }
+      <span class="xpub-address">…</span>
+    </div>
+  }
+</ng-template>
 <div class="rounded-elevated-box mt-3">
   <div class="box-internal-container overflow">
     <span class="section-title">{{ 'node.details.rewards-info.title' | translate }}</span>
@@ -34,13 +55,28 @@
           {{ 'node.details.rewards-info.exposed-action' | translate }}
         </span>
       </div>
+    } @else if (rewardsAddress && !rewardsAddressIsXpub) {
+      <div class="single-risk">
+        <mat-icon [inline]="true">info</mat-icon>
+        <span>{{ 'node.details.rewards-info.single-risk' | translate }}</span>
+      </div>
+    }
+    @if (xpubAddresses && rewardsAddressIsXpub) {
+      <ng-container *ngTemplateOutlet="xpubList; context: { $implicit: xpubAddresses }"></ng-container>
     }
     @if (showRewardForm) {
       <form [formGroup]="rewardForm" (ngSubmit)="submitRewardAddress()" class="inline-form">
         <mat-form-field appearance="outline" class="inline-form-field">
           <mat-label>{{ 'node.details.rewards-info.rewards-address' | translate }}</mat-label>
-          <input matInput formControlName="address" maxlength="112" placeholder="2…">
+          <input matInput formControlName="address" maxlength="112" placeholder="xpub…">
+          <mat-error>{{ 'rewards-address-config.address-error' | translate }}</mat-error>
         </mat-form-field>
+        <mat-checkbox class="accept-risk" color="primary" formControlName="acceptRisk">
+          <span class="accept-risk-text">{{ 'rewards-address-config.accept-risk' | translate }}</span>
+        </mat-checkbox>
+        @if (formXpubAddresses && formXpubAddresses.xpub !== rewardsAddress) {
+          <ng-container *ngTemplateOutlet="xpubList; context: { $implicit: formXpubAddresses }"></ng-container>
+        }
         <div class="inline-form-actions">
           <button mat-raised-button color="primary" type="submit" [disabled]="!rewardForm.valid">
             {{ 'common.save' | translate }}
@@ -67,13 +103,13 @@
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-3">
       <div>
-        <span class="title">Reward History</span>
+        <span class="title">{{ 'node.details.rewards-info.history.title' | translate }}</span>
         @if (label) {
           <span class="label-text ml-2">({{ label }})</span>
         }
       </div>
       <div class="d-flex align-items-center">
-        <span class="mr-2" style="font-size: 0.85em; color: #ccc;">Show:</span>
+        <span class="mr-2" style="font-size: 0.85em; color: rgba(var(--sw-fg-rgb), 0.8);">{{ 'node.details.rewards-info.history.show' | translate }}</span>
         <button mat-button [class.active-days]="days === 7" (click)="changeDays(7)">7d</button>
         <button mat-button [class.active-days]="days === 30" (click)="changeDays(30)">30d</button>
         <button mat-button [class.active-days]="days === 90" (click)="changeDays(90)">90d</button>
@@ -82,17 +118,17 @@
 
     <!-- PK -->
     <div class="pk-row mb-3">
-      <span style="font-size: 0.75em; color: #999;">{{ pk }}</span>
+      <span style="font-size: 0.75em; color: var(--sw-status-stopped);">{{ pk }}</span>
     </div>
 
     <!-- Total -->
     @if (!loading && history.length > 0) {
       <div class="total-row mb-3">
-        <span style="font-size: 1.1em; font-weight: bold; color: #4caf50;">
-          Total: {{ total.toFixed(2) }} SKY
+        <span style="font-size: 1.1em; font-weight: bold; color: rgb(var(--sw-green-rgb));">
+          {{ 'node.details.rewards-info.history.total' | translate: { total: total.toFixed(2) } }}
         </span>
-        <span style="font-size: 0.85em; color: #999; margin-left: 12px;">
-          ({{ days }} days)
+        <span style="font-size: 0.85em; color: var(--sw-status-stopped); margin-left: 12px;">
+          {{ 'node.details.rewards-info.history.days' | translate: { days: days } }}
         </span>
       </div>
     }
@@ -106,18 +142,18 @@
 
     <!-- Error -->
     @if (errorMsg) {
-      <div class="error-msg py-2">{{ errorMsg }}</div>
+      <div class="error-msg py-2">{{ errorMsg | translate }}</div>
     }
 
     <!-- Table -->
     @if (!loading && history.length > 0) {
       <table class="responsive-table-translucid" cellspacing="0" cellpadding="0">
         <tr>
-          <th>Date</th>
-          <th>Amount (SKY)</th>
-          <th>Share (%)</th>
-          <th>Status</th>
-          <th>Transaction</th>
+          <th>{{ 'node.details.rewards-info.history.date' | translate }}</th>
+          <th>{{ 'node.details.rewards-info.history.amount' | translate }}</th>
+          <th>{{ 'node.details.rewards-info.history.share' | translate }}</th>
+          <th>{{ 'node.details.rewards-info.history.status' | translate }}</th>
+          <th>{{ 'node.details.rewards-info.history.transaction' | translate }}</th>
         </tr>
         @for (day of history; track day.date) {
           <tr [class]="statusClass(day)">
@@ -126,27 +162,27 @@
               @if (day.amount > 0) {
                 {{ day.amount.toFixed(6) }}
               } @else {
-                <span style="color: #666;">-</span>
+                <span style="color: rgba(var(--sw-fg-rgb), var(--sw-a45));">-</span>
               }
             </td>
             <td>
               @if (day.share > 0) {
                 {{ day.share.toFixed(4) }}%
               } @else {
-                <span style="color: #666;">-</span>
+                <span style="color: rgba(var(--sw-fg-rgb), var(--sw-a45));">-</span>
               }
             </td>
             <td>
-              <span [class]="'status-badge ' + statusClass(day)">{{ statusText(day) }}</span>
+              <span [class]="'status-badge ' + statusClass(day)">{{ statusText(day) | translate }}</span>
             </td>
             <td>
               @if (day.txid) {
                 <a [href]="'https://explorer.skycoin.com/app/transaction/' + day.txid" target="_blank" rel="noopener"
-                   style="font-size: 0.8em; color: #3399ff;">
+                   style="font-size: 0.8em; color: rgb(var(--sw-sky-rgb));">
                   {{ day.txid.substring(0, 12) }}...
                 </a>
               } @else {
-                <span style="color: #666;">-</span>
+                <span style="color: rgba(var(--sw-fg-rgb), var(--sw-a45));">-</span>
               }
             </td>
           </tr>
@@ -155,8 +191,8 @@
     }
 
     @if (!loading && history.length === 0 && !errorMsg) {
-      <div class="py-4 text-center" style="color: #999;">
-        No reward data available for this visor.
+      <div class="py-4 text-center" style="color: var(--sw-status-stopped);">
+        {{ 'node.details.rewards-info.history.no-data' | translate }}
       </div>
     }
   </div>

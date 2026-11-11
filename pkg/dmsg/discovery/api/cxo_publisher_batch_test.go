@@ -53,7 +53,7 @@ func TestBatchLeafCountIsPerServer(t *testing.T) {
 	}
 
 	pairs := 0
-	for i := 0; i < nClients; i++ {
+	for i := range nClients {
 		clientPK, _ := cipher.GenerateKeyPair()
 		// Each client is delegated to 3 servers → 3 pairs.
 		deleg := []cipher.PubKey{servers[i%nServers], servers[(i+1)%nServers], servers[(i+3)%nServers]}

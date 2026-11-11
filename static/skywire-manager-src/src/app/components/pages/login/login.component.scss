@@ -20,16 +20,24 @@ app-lang-button {
   width: 170px;
 }
 
+// The logo artwork is white, so it needs darkening on the light background.
+:host-context([data-theme="light"]) .logo {
+  filter: brightness(0);
+}
+
 .login-input {
   height: 35px;
   width: 300px;
   overflow: hidden;
   border-radius: variables.$mat-dialog-radius;
-  box-shadow: 0 3px 8px 0 rgba(0, 0, 0, 0.10), 0 6px 20px 0 rgba(0, 0, 0, 0.10);
+  box-shadow: 0 3px 8px 0 rgba(var(--sw-shade-rgb), 0.10), 0 6px 20px 0 rgba(var(--sw-shade-rgb), 0.10);
   display: flex;
 
+  // The field is always white, so its text stays dark in the dark theme too.
   input[type='password'] {
     background: #fff;
+    color: variables.$black;
+    caret-color: variables.$black;
     width: calc(100% - 35px);
     height: 100%;
     font-size: variables.$font-size-sm;
@@ -60,7 +68,7 @@ app-lang-button {
 }
 
 .config-link {
-  color: variables.$white;
+  color: var(--sw-text);
   font-size: variables.$font-size-mini;
   margin-top: 20px;
   @extend .cursor-pointer;

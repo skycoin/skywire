@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"slices"
 	"sync"
 	"time"
 
@@ -140,7 +141,7 @@ func (m *mockClient) AvailableServers(_ context.Context) ([]*Entry, error) {
 	defer m.mx.RUnlock()
 	list := make([]*Entry, 0, len(m.entries))
 	for _, e := range m.entries {
-		if e := e; e.Server != nil {
+		if e.Server != nil {
 			list = append(list, &e)
 		}
 	}
@@ -153,7 +154,7 @@ func (m *mockClient) AllServers(_ context.Context) ([]*Entry, error) {
 	defer m.mx.RUnlock()
 	list := make([]*Entry, 0, len(m.entries))
 	for _, e := range m.entries {
-		if e := e; e.Server != nil {
+		if e.Server != nil {
 			list = append(list, &e)
 		}
 	}
@@ -177,7 +178,7 @@ func (m *mockClient) AllClientsByServer(_ context.Context) (map[string][]*Entry,
 	defer m.mx.RUnlock()
 	result := make(map[string][]*Entry)
 	for _, e := range m.entries {
-		if e := e; e.Client != nil {
+		if e.Client != nil {
 			for _, serverPK := range e.Client.DelegatedServers {
 				result[serverPK.Hex()] = append(result[serverPK.Hex()], &e)
 			}
@@ -192,12 +193,9 @@ func (m *mockClient) ClientsByServer(_ context.Context, serverPK cipher.PubKey) 
 	defer m.mx.RUnlock()
 	var list []*Entry
 	for _, e := range m.entries {
-		if e := e; e.Client != nil {
-			for _, delegatedPK := range e.Client.DelegatedServers {
-				if delegatedPK == serverPK {
-					list = append(list, &e)
-					break
-				}
+		if e.Client != nil {
+			if slices.Contains(e.Client.DelegatedServers, serverPK) {
+				list = append(list, &e)
 			}
 		}
 	}

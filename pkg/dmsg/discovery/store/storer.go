@@ -72,6 +72,15 @@ type VisorSummary struct {
 	Timeline map[string]string `json:"timeline,omitempty"`
 }
 
+// InboxStore keeps dmsg-async inbox records (pkg/dmsg/dmsgasync.Record) as
+// the JSON the recipient signed. It does not check them.
+type InboxStore interface {
+	// SetInbox stores pk's record until ttl passes.
+	SetInbox(ctx context.Context, pk cipher.PubKey, record []byte, ttl time.Duration) error
+	// Inbox returns pk's record, or disc.ErrKeyNotFound.
+	Inbox(ctx context.Context, pk cipher.PubKey) ([]byte, error)
+}
+
 // Storer is an interface which allows to implement different kinds of stores
 // and choose which one to use in the server
 type Storer interface {
@@ -79,6 +88,7 @@ type Storer interface {
 	ServerLister
 	EntryEnumerator
 	UptimeTracker
+	InboxStore
 
 	// RemoveOldServerEntries check and remove old server entries that left on redis because of unexpected server shutdown
 	RemoveOldServerEntries(ctx context.Context) error

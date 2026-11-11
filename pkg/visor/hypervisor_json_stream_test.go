@@ -12,7 +12,7 @@ import (
 )
 
 // The streamed bodies must be byte for byte what httputil.WriteJSON wrote.
-func encoderBytes(t *testing.T, v interface{}) []byte {
+func encoderBytes(t *testing.T, v any) []byte {
 	t.Helper()
 	var buf bytes.Buffer
 	require.NoError(t, json.NewEncoder(&buf).Encode(v))

@@ -30,7 +30,7 @@
 package genvisor
 
 import (
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -105,7 +105,7 @@ func (o *objCtx) field(name string) {
 // writeIndent writes `depth*2` spaces. Matches the indent= "  "
 // argument passed to json.MarshalIndent in the !js build.
 func writeIndent(w *strings.Builder, depth int) {
-	for i := 0; i < depth; i++ {
+	for range depth {
 		w.WriteString("  ")
 	}
 }
@@ -1021,6 +1021,10 @@ func marshalTransport(w *strings.Builder, t *visorconfig.Transport, indent int) 
 		o.field("hypervisor_autoconnect")
 		writeBool(w, *t.HypervisorAutoconnect)
 	}
+	if t.DmsgServerTransports != nil {
+		o.field("dmsg_server_transports")
+		writeBool(w, *t.DmsgServerTransports)
+	}
 	if t.TCPNotSentLowat != nil {
 		o.field("tcp_notsent_lowat")
 		writeInt(w, int64(*t.TCPNotSentLowat))
@@ -1482,7 +1486,7 @@ func marshalAutoconnect(w *strings.Builder, a *visorconfig.Autoconnect, indent i
 		for k := range a.MaxPerType {
 			keys = append(keys, k)
 		}
-		sort.Strings(keys)
+		slices.Sort(keys)
 		for _, k := range keys {
 			m.field(k)
 			writeInt(w, int64(a.MaxPerType[k]))

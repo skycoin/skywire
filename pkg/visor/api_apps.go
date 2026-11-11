@@ -15,8 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
@@ -24,6 +22,8 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router/policy"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // ErrRouterNotAvailable is returned by RPC handlers that need a
@@ -150,7 +150,7 @@ func (v *Visor) SetAppRoutingPolicy(appName, path string) error {
 		return ErrPolicyHookUnavailable
 	}
 
-	logger := func(format string, args ...interface{}) {
+	logger := func(format string, args ...any) {
 		v.log.Infof(format, args...)
 	}
 	provider := newVisorPolicyProvider(v)
@@ -657,7 +657,43 @@ func (v *Visor) SetAutoStart(appName string, autoStart bool) error {
 	}
 
 	v.log.Infof("Saving auto start = %v for app %v to config", autoStart, appName)
-	return v.conf.UpdateAppAutostart(v.appL, appName, autoStart)
+	if err := v.conf.UpdateAppAutostart(v.appL, appName, autoStart); err != nil {
+		return err
+	}
+	// The mailbox starts from its own enable in settings.json, not the config.
+	if appName == skymailApp {
+		return v.MailSetSettings(visorapi.MailSettingsUpdate{Enable: &autoStart})
+	}
+	if v.setResolverEnable(appName, autoStart) {
+		return v.conf.Flush()
+	}
+	return nil
+}
+
+// setResolverEnable sets the config enable a resolving proxy autostarts from,
+// since those apps are added at runtime and have no launcher config row.
+func (v *Visor) setResolverEnable(appName string, enable bool) bool {
+	switch appName {
+	case "dmsgweb":
+		if v.conf.DmsgWeb == nil {
+			v.conf.DmsgWeb = &visorconfig.DmsgWebConfig{}
+		}
+		v.conf.DmsgWeb.Enable = enable
+		return true
+	case "skynetweb":
+		if v.conf.SkynetWeb == nil {
+			v.conf.SkynetWeb = &visorconfig.SkynetWebConfig{}
+		}
+		v.conf.SkynetWeb.Enable = enable
+		return true
+	}
+	for i := range v.conf.Resolvers {
+		if v.conf.Resolvers[i].AppName() == appName {
+			v.conf.Resolvers[i].Enable = enable
+			return true
+		}
+	}
+	return false
 }
 
 // SetAppWhitelist implements API. Updates the comma-separated PK
@@ -960,7 +996,7 @@ func (v *Visor) LogsSince(timestamp time.Time, appName string) ([]string, error)
 func (v *Visor) RecentAppLog(appName, level string) ([]string, error) {
 	minLevel, err := logging.LevelFromString(level)
 	if err != nil {
-		minLevel = logrus.DebugLevel
+		minLevel = logging.DebugLevel
 	}
 	recs := v.RecentAppLogMerged(appName, minLevel)
 	out := make([]string, 0, len(recs))

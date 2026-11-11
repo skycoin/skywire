@@ -325,7 +325,7 @@ func TestGETIncrementingNonces(t *testing.T) {
 	t.Run("ValidRequest", func(t *testing.T) {
 		const iterations = 0xFF
 
-		for i := 0; i < iterations; i++ {
+		for range iterations {
 			_, err := nonceMock.IncrementNonce(context.Background(), pubKey)
 			require.NoError(t, err)
 		}
@@ -636,9 +636,9 @@ func TestCXOPublisherErrorTracking(t *testing.T) {
 
 type fakeDHTMirror struct{ mirrored, deleted int }
 
-func (m *fakeDHTMirror) Mirror(cipher.PubKey, interface{}, uint64) { m.mirrored++ }
+func (m *fakeDHTMirror) Mirror(cipher.PubKey, any, uint64) { m.mirrored++ }
 
-func (m *fakeDHTMirror) MirrorMany([]cipher.PubKey, interface{}, uint64) { m.mirrored++ }
+func (m *fakeDHTMirror) MirrorMany([]cipher.PubKey, any, uint64) { m.mirrored++ }
 
 func (m *fakeDHTMirror) Delete(cipher.PubKey) { m.deleted++ }
 

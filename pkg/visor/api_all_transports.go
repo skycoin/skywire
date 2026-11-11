@@ -16,8 +16,10 @@
 package visor
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"time"
 )
 
 // ErrTPDAllTransportsNotReady is returned when the CXO subscriber
@@ -28,15 +30,19 @@ var ErrTPDAllTransportsNotReady = errors.New("tpd all-transports: cxo cache miss
 // FetchAllTransportsCXO returns the network's transport list as JSON, from
 // TPD's routing feed — the same list route calculation uses. withSelf is
 // kept for the callers that pass it: self-loops are not transports anyone
-// routes over, and neither feed variant carries them any more. Caller
-// treats the not-ready error as a cache miss and falls through to HTTP.
-func (v *Visor) FetchAllTransportsCXO(_ bool) ([]byte, error) {
+// routes over, and neither feed variant carries them any more. On a cold
+// feed it waits up to wait for the first sync before reporting a miss.
+func (v *Visor) FetchAllTransportsCXO(ctx context.Context, _ bool, wait time.Duration) ([]byte, error) {
 	mgr := v.CXOSubMgr()
 	if mgr == nil {
 		return nil, ErrTPDAllTransportsNotReady
 	}
+	// Pin like route calculation does: the first fill of this feed can outlast
+	// one request, and a per-request subscription restarts it every time.
+	v.routingPinOnce.Do(func() { mgr.Pin(FeedTPDRouting) })
 	mgr.AcquireFor(TabCLITransports)
 	defer mgr.ReleaseFor(TabCLITransports)
+	mgr.WaitForFirstSync(ctx, FeedTPDRouting, wait)
 
 	entries, ok := routingTransports(mgr)
 	if !ok {

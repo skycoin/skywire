@@ -3,12 +3,13 @@ package clisd
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"text/tabwriter"
 
@@ -179,7 +180,7 @@ emits the combined rows as machine-readable output.`,
 		serviceMap := make(map[string]*serviceInfo)
 
 		for _, e := range proxyEntries {
-			pk := strings.Split(e.Address, ":")[0]
+			pk, _, _ := strings.Cut(e.Address, ":")
 			if serviceMap[pk] == nil {
 				serviceMap[pk] = &serviceInfo{PK: pk, Country: e.Geo.Country, Version: e.Version}
 			}
@@ -187,7 +188,7 @@ emits the combined rows as machine-readable output.`,
 		}
 
 		for _, e := range vpnEntries {
-			pk := strings.Split(e.Address, ":")[0]
+			pk, _, _ := strings.Cut(e.Address, ":")
 			if serviceMap[pk] == nil {
 				serviceMap[pk] = &serviceInfo{PK: pk, Country: e.Geo.Country, Version: e.Version}
 			}
@@ -201,7 +202,7 @@ emits the combined rows as machine-readable output.`,
 		}
 
 		for _, e := range visorEntries {
-			pk := strings.Split(e.Address, ":")[0]
+			pk, _, _ := strings.Cut(e.Address, ":")
 			if serviceMap[pk] == nil {
 				serviceMap[pk] = &serviceInfo{PK: pk, DisplayPK: e.Address, Country: e.Geo.Country, Version: e.Version}
 			} else if serviceMap[pk].DisplayPK == "" {
@@ -342,8 +343,8 @@ emits the combined rows as machine-readable output.`,
 		}
 
 		// Sort by total transport count (descending)
-		sort.Slice(entries, func(i, j int) bool {
-			return entries[i].Total > entries[j].Total
+		slices.SortFunc(entries, func(a, b networkEntry) int {
+			return cmp.Compare(b.Total, a.Total)
 		})
 
 		// Output

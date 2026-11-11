@@ -8,7 +8,9 @@ package idxdb
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"time"
 
@@ -60,7 +62,7 @@ func NewDriveIdxDBWithOptions(fileName string, opts DriveOptions) (idx data.IdxD
 	var created bool // true if db file has been created
 
 	_, err = os.Stat(fileName)
-	created = os.IsNotExist(err) // set the created var
+	created = errors.Is(err, fs.ErrNotExist) // set the created var
 
 	// Probe-and-repair before the real open. RepairIfCorrupt returns
 	// nil when the file is absent, healthy, or successfully renamed
@@ -80,7 +82,7 @@ func NewDriveIdxDBWithOptions(fileName string, opts DriveOptions) (idx data.IdxD
 	// open below. (Cheap; bypasses unnecessary work when the file was
 	// actually healthy.)
 	if !created {
-		if _, statErr := os.Stat(fileName); os.IsNotExist(statErr) {
+		if _, statErr := os.Stat(fileName); errors.Is(statErr, fs.ErrNotExist) {
 			created = true
 		}
 	}

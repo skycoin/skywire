@@ -14,7 +14,6 @@ import (
 
 	rpc "github.com/0magnet/gobrpc"
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -22,6 +21,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/contacts"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgasync"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/pty"
@@ -67,7 +67,7 @@ const closeOnConsecTimeouts = 3
 // API provides methods to call an RPC Server.
 // It implements API
 type rpcClient struct {
-	log     logrus.FieldLogger
+	log     logging.FieldLogger
 	timeout time.Duration
 	conn    io.ReadWriteCloser
 	client  *rpc.Client
@@ -86,10 +86,13 @@ type rpcClient struct {
 	// proxyTarget once routes ALL of them to the remote visor —
 	// no per-method wrapper code. Used by CLI's --rpc skynet://<pk>.
 	proxyTarget *cipher.PubKey
+
+	// rec, when set, records calls instead of sending them. See record.go.
+	rec *CallRecorder
 }
 
 // NewRPCClient creates a new API.
-func NewRPCClient(log logrus.FieldLogger, conn io.ReadWriteCloser, prefix string, timeout time.Duration) API {
+func NewRPCClient(log logging.FieldLogger, conn io.ReadWriteCloser, prefix string, timeout time.Duration) API {
 	if log == nil {
 		log = logging.MustGetLogger("visor_rpc_client")
 	}
@@ -117,7 +120,7 @@ func NewRPCClient(log logrus.FieldLogger, conn io.ReadWriteCloser, prefix string
 // SetMinHops, etc.) don't currently survive the TransportRPCCall
 // JSON-bytes wire format. No-arg query methods (the bulk of what
 // the CLI does) work directly.
-func NewProxyRPCClient(log logrus.FieldLogger, conn io.ReadWriteCloser, prefix string, timeout time.Duration, remotePK cipher.PubKey) API {
+func NewProxyRPCClient(log logging.FieldLogger, conn io.ReadWriteCloser, prefix string, timeout time.Duration, remotePK cipher.PubKey) API {
 	if log == nil {
 		log = logging.MustGetLogger("visor_rpc_client_proxy")
 	}
@@ -154,7 +157,10 @@ func (rc *rpcClient) Close() error {
 // typed visor.API method through the local visor without writing
 // 167 per-method wrappers: each typed method delegates to Call,
 // and Call routes based on proxyTarget.
-func (rc *rpcClient) Call(method string, args, reply interface{}) error {
+func (rc *rpcClient) Call(method string, args, reply any) error {
+	if rc.rec != nil {
+		return rc.rec.record(rc.prefix, method, args)
+	}
 	if rc.proxyTarget != nil {
 		return rc.callViaProxy(method, args, reply)
 	}
@@ -197,8 +203,7 @@ func (rc *rpcClient) noteCallCompleted(err error) {
 		rc.consecTimeouts.Store(0)
 		return
 	}
-	var srvErr rpc.ServerError
-	if errors.As(err, &srvErr) {
+	if _, ok := errors.AsType[rpc.ServerError](err); ok {
 		rc.consecTimeouts.Store(0)
 	}
 }
@@ -230,7 +235,7 @@ func (rc *rpcClient) noteCallTimeout() {
 // Summary, Health, Overview, etc.) work unconditionally. Methods
 // with structured args may not encode cleanly through the JSON
 // roundtrip — see the NewProxyRPCClient doc comment.
-func (rc *rpcClient) callViaProxy(method string, args, reply interface{}) error {
+func (rc *rpcClient) callViaProxy(method string, args, reply any) error {
 	argsBytes, err := json.Marshal(args)
 	if err != nil {
 		return fmt.Errorf("proxy rpc: marshal args for %s: %w", method, err)
@@ -445,6 +450,13 @@ func (rc *rpcClient) Apps() ([]*appserver.AppState, error) {
 	states := make([]*appserver.AppState, 0)
 	err := rc.Call("Apps", &struct{}{}, &states)
 	return states, err
+}
+
+// AppCatalog calls AppCatalog.
+func (rc *rpcClient) AppCatalog() ([]CatalogEntry, error) {
+	out := make([]CatalogEntry, 0)
+	err := rc.Call("AppCatalog", &struct{}{}, &out)
+	return out, err
 }
 
 // App calls App.
@@ -696,6 +708,13 @@ func (rc *rpcClient) AppHelp(appName string) (string, error) {
 		return "", err
 	}
 	return out, nil
+}
+
+// AppFlags implements API.
+func (rc *rpcClient) AppFlags(appName string) (AppFlags, error) {
+	var out AppFlags
+	err := rc.Call("AppFlags", &AppNameIn{AppName: appName}, &out)
+	return out, err
 }
 
 // LogsSince calls LogsSince
@@ -2074,6 +2093,13 @@ func (rc *rpcClient) VoiceCallAudio(callID string) (sent, recv []int16, err erro
 	return out.Sent, out.Recv, nil
 }
 
+// VoiceCallDevices implements API.
+func (rc *rpcClient) VoiceCallDevices(callID string) (VoiceDevices, error) {
+	var out VoiceDevices
+	err := rc.Call("VoiceCallDevices", &callID, &out)
+	return out, err
+}
+
 // VoiceMute implements API.
 func (rc *rpcClient) VoiceMute(callID string, mic, speaker bool) error {
 	return rc.Call("VoiceMute", &VoiceMuteReq{CallID: callID, Mic: mic, Speaker: speaker}, &struct{}{})
@@ -2278,6 +2304,13 @@ func (rc *rpcClient) RemoveAllHypervisors() (int, error) {
 	return out, err
 }
 
+// HypervisorNotice calls HypervisorNotice.
+func (rc *rpcClient) HypervisorNotice() (string, error) {
+	var out string
+	err := rc.Call("HypervisorNotice", &struct{}{}, &out)
+	return out, err
+}
+
 // SetHypervisorPassword changes the hypervisor UI admin password.
 func (rc *rpcClient) SetHypervisorPassword(oldPassword, newPassword string) error {
 	return rc.Call("SetHypervisorPassword", &HypervisorPasswordChangeIn{
@@ -2363,6 +2396,18 @@ func (rc *rpcClient) HVStartApp(pk cipher.PubKey, appName string) error {
 // HVStopApp stops an app on a remote visor.
 func (rc *rpcClient) HVStopApp(pk cipher.PubKey, appName string) error {
 	return rc.Call("HVStopApp", &HVAppArgs{PK: pk, AppName: appName}, &struct{}{})
+}
+
+// HVAppCatalog lists the apps a remote visor can run.
+func (rc *rpcClient) HVAppCatalog(pk cipher.PubKey) ([]CatalogEntry, error) {
+	var out []CatalogEntry
+	err := rc.Call("HVAppCatalog", &pk, &out)
+	return out, err
+}
+
+// HVAddApp adds an app entry to a remote visor.
+func (rc *rpcClient) HVAddApp(pk cipher.PubKey, appName, binaryName string) error {
+	return rc.Call("HVAddApp", &HVAddAppArgs{PK: pk, AppName: appName, BinaryName: binaryName}, &struct{}{})
 }
 
 // HVSetMinHops sets min_hops on a remote visor.
@@ -2594,6 +2639,11 @@ func (rc *rpcClient) MailDelete(folder, id string) error {
 	return rc.Call("MailDelete", &MailMessageRequest{Folder: folder, ID: id}, &struct{}{})
 }
 
+// MailRetry calls MailRetry.
+func (rc *rpcClient) MailRetry(id string) error {
+	return rc.Call("MailRetry", &id, &struct{}{})
+}
+
 // MailSetWhitelist calls MailSetWhitelist.
 func (rc *rpcClient) MailSetWhitelist(pks []cipher.PubKey) error {
 	return rc.Call("MailSetWhitelist", &pks, &struct{}{})
@@ -2707,4 +2757,47 @@ func (rc *rpcClient) NetworkEvent(ev NetworkEvent) error {
 		ev.MeteredText = strconv.FormatBool(*ev.Metered)
 	}
 	return rc.Call("NetworkEvent", &ev, &struct{}{})
+}
+
+// DmsgAsyncStatus calls DmsgAsyncStatus.
+func (rc *rpcClient) DmsgAsyncStatus() (*DmsgAsyncStatus, error) {
+	var out DmsgAsyncStatus
+	err := rc.Call("DmsgAsyncStatus", &struct{}{}, &out)
+	return &out, err
+}
+
+// DmsgAsyncSend calls DmsgAsyncSend.
+func (rc *rpcClient) DmsgAsyncSend(req DmsgAsyncSendRequest) (*DmsgAsyncSendResult, error) {
+	var out DmsgAsyncSendResult
+	err := rc.Call("DmsgAsyncSend", &req, &out)
+	return &out, err
+}
+
+// DmsgAsyncTake calls DmsgAsyncTake.
+func (rc *rpcClient) DmsgAsyncTake(ports []uint16) ([]dmsgasync.Message, error) {
+	var out []dmsgasync.Message
+	err := rc.Call("DmsgAsyncTake", &ports, &out)
+	return out, err
+}
+
+// DmsgAsyncSync calls DmsgAsyncSync.
+func (rc *rpcClient) DmsgAsyncSync() error {
+	return rc.Call("DmsgAsyncSync", &struct{}{}, &struct{}{})
+}
+
+// DmsgAsyncSettings calls DmsgAsyncSettings.
+func (rc *rpcClient) DmsgAsyncSettings() (*DmsgAsyncSettings, error) {
+	var out DmsgAsyncSettings
+	err := rc.Call("DmsgAsyncSettings", &struct{}{}, &out)
+	return &out, err
+}
+
+// DmsgAsyncSetSettings calls DmsgAsyncSetSettings.
+func (rc *rpcClient) DmsgAsyncSetSettings(kv map[string]string) error {
+	return rc.Call("DmsgAsyncSetSettings", &kv, &struct{}{})
+}
+
+// HVForgetVisor drops an offline visor from the hypervisor's remembered list.
+func (rc *rpcClient) HVForgetVisor(pk cipher.PubKey) error {
+	return rc.Call("HVForgetVisor", &pk, &struct{}{})
 }

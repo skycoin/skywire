@@ -8,7 +8,7 @@
         <div class="list-element">
           <div class="left-part">
             <div class="name">{{node.label}}</div>
-            <div class="version">{{node.version}}</div>
+            <div class="version" [matTooltip]="node.version">{{ node.version | versionLabel }}</div>
           </div>
           <div class="right-part">
             <app-button color="primary" (click)="openTerminal(node.key)">
@@ -29,7 +29,7 @@
         <div class="list-element">
           <div class="left-part">
             <div class="name">{{node.label}}</div>
-            <div class="version">{{node.version}}</div>
+            <div class="version" [matTooltip]="node.version">{{ node.version | versionLabel }}</div>
             @if (node.tag) {
               <div class="version">{{node.tag}}</div>
             }

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	kcp "github.com/0magnet/kcp-go/v5"
-	"github.com/0magnet/pfilter"
+	"github.com/AudriusButkevicius/pfilter"
 )
 
 // kcp-go v5.6 panicked building batch IO on a pfilter conn, which has

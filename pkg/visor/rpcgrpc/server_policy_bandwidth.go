@@ -35,6 +35,7 @@ package rpcgrpc
 import (
 	"context"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -62,7 +63,7 @@ const muxBwStandbyKeepalive = 3 * time.Second
 // the compiled WASM bundle when the name is a bundle preset, else falls through
 // to the Starlark preset registry; a "@*.wasm" path loads a WASM module; any
 // other value (@*.star / inline) loads the Starlark backend.
-func loadMuxBwPolicyEngine(raw string, logger func(string, ...interface{})) (policy.Engine, error) {
+func loadMuxBwPolicyEngine(raw string, logger func(string, ...any)) (policy.Engine, error) {
 	prov := policy.NopProvider()
 	if name, ok := strings.CutPrefix(raw, "preset:"); ok {
 		if wasmpresets.Has(name) {
@@ -152,9 +153,7 @@ func (c *muxBwController) routingContext() policy.RoutingContext {
 	// flag wins over the handler-derived mux_routes / min_hops entries. Nil map
 	// (the baseline / no --override) is a no-op, so every preset keeps its
 	// built-in defaults.
-	for k, v := range c.cfg.CliOverrides {
-		overrides[k] = v
-	}
+	maps.Copy(overrides, c.cfg.CliOverrides)
 	return policy.RoutingContext{
 		App:          c.cfg.PolicyApp,
 		PeerPK:       c.cfg.TargetPK.Hex(),
@@ -173,13 +172,7 @@ func (c *muxBwController) decideAtDial(ctx context.Context) {
 		c.s.log.Debugf("policy-bw: decide_route failed (%v); keeping operator flags", err)
 		return
 	}
-	mux := spec.Mux
-	if spec.ForwardMux > mux {
-		mux = spec.ForwardMux
-	}
-	if spec.ReverseMux > mux {
-		mux = spec.ReverseMux
-	}
+	mux := max(spec.ReverseMux, max(spec.ForwardMux, spec.Mux))
 	if mux > 0 {
 		c.cfg.Routes = mux
 	}
@@ -215,12 +208,10 @@ func (c *muxBwController) startPumps(pumpCtx context.Context, routes []*muxBwRou
 func (c *muxBwController) spawnPump(pumpCtx context.Context, rs *muxBwRouteState, pumpStart time.Time) {
 	legCtx, cancel := context.WithCancel(pumpCtx)
 	rs.pumpCancel = cancel
-	c.pumpWg.Add(1)
-	go func() {
-		defer c.pumpWg.Done()
+	c.pumpWg.Go(func() {
 		defer rs.activeFlag.Store(false)
 		c.pumpLeg(legCtx, rs, pumpStart)
-	}()
+	})
 }
 
 // pumpLeg is the policy-aware pump: an ACTIVE leg bulk-pumps echo bytes
@@ -388,7 +379,7 @@ func (c *muxBwController) applyRotation(pumpCtx context.Context, action policy.R
 
 	// Drops: cancel each leg's pump (its defer tears down the conn) and remove
 	// it from active so subsequent snapshots re-index. Never drop the last
-	// alive leg — mirrors route_group.go dropLegsByIndex: precompute the alive
+	// alive leg — mirrors the router's dropLegs: precompute the alive
 	// count and decrement per drop, and build a FRESH kept slice so the alive
 	// bookkeeping can't alias the compaction.
 	if len(action.DropLegs) > 0 {

@@ -1,0 +1,100 @@
+package ui2
+
+import (
+	"strings"
+
+	"github.com/skycoin/skywire/pkg/contacts"
+)
+
+// ContactsPage is the contacts tab. Fragments below replace parts of it.
+templ ContactsPage(l List) {
+	@VisorLayout(l.PK, "contacts") {
+		<div class="head">
+			<h1>{ T(ctx, "contacts.title") }</h1>
+			@Count(len(l.All), false)
+		</div>
+		<p class="small dim">{ T(ctx, "contacts.help") }</p>
+		<div id="panel">
+			@ListView(l)
+		</div>
+	}
+}
+
+// ListView is the panel in list mode: the bar and the rows.
+templ ListView(l List) {
+	@ErrorBox(l.Err)
+	<div class="bar">
+		<input
+			class="filter"
+			type="search"
+			name="q"
+			value={ l.Filter }
+			placeholder={ T(ctx, "contacts.filter") }
+			hx-get={ l.url("/rows") }
+			hx-trigger="input changed delay:200ms, search"
+			hx-target="#rows"
+			hx-swap="outerHTML"
+		/>
+		<button class="btn primary" hx-get={ l.url("/new") } hx-target="#panel">{ T(ctx, "contacts.add") }</button>
+		<span class="spacer"></span>
+		<form class="inline" hx-post={ l.url("/import") } hx-encoding="multipart/form-data" hx-trigger="change" hx-target="#panel">
+			<label class="btn">{ T(ctx, "contacts.import") }<input type="file" name="vcf" accept=".vcf,text/vcard" hidden/></label>
+		</form>
+		<a class="btn" href={ templ.URL("api/visors/" + l.PK + "/contacts/export") } download>{ T(ctx, "contacts.export") }</a>
+	</div>
+	@Rows(l)
+}
+
+// Rows is the table the filter swaps.
+templ Rows(l List) {
+	<div id="rows">
+		if len(l.All) == 0 {
+			<p class="dim">{ T(ctx, "contacts.empty") }</p>
+		} else if shown := l.Shown(); len(shown) == 0 {
+			<p class="dim">{ T(ctx, "contacts.no-match") }</p>
+		} else {
+			<table class="list">
+				<thead><tr><th>{ T(ctx, "contacts.name") }</th><th>{ T(ctx, "contacts.keys") }</th><th>{ T(ctx, "contacts.groups") }</th></tr></thead>
+				<tbody>
+					for _, c := range shown {
+						@contactRow(l, c)
+					}
+				</tbody>
+			</table>
+		}
+	</div>
+}
+
+templ contactRow(l List, c contacts.Contact) {
+	<tr class="row" hx-get={ l.url("/" + c.UID + "/edit") } hx-target="#panel" tabindex="0">
+		<td class="name" data-label={ T(ctx, "contacts.name") }>{ c.Name }</td>
+		<td class="mono small keys" data-label={ T(ctx, "contacts.keys") }>
+			for _, k := range c.Keys {
+				<div class="key" data-copy={ k.Hex() } title={ T(ctx, "contacts.copy") }>{ k.Hex() }</div>
+			}
+		</td>
+		<td class="small" data-label={ T(ctx, "contacts.groups") }>{ strings.Join(c.Groups, ", ") }</td>
+	</tr>
+}
+
+// FormView is the panel in edit mode.
+templ FormView(f Form) {
+	<form class="form" hx-post={ f.url("") } hx-target="#panel">
+		@ErrorBox(f.Err)
+		<input type="hidden" name="uid" value={ f.UID }/>
+		<label>{ T(ctx, "contacts.name") }<input name="name" value={ f.Name } required autofocus/></label>
+		<label>{ T(ctx, "contacts.keys") } <span class="dim">{ T(ctx, "contacts.one-per-line") }</span><textarea class="mono" name="keys" rows="3">{ f.Keys }</textarea></label>
+		<label>{ T(ctx, "contacts.mail") } <span class="dim">{ T(ctx, "contacts.one-per-line") }</span><textarea class="mono" name="mail" rows="2">{ f.Mail }</textarea></label>
+		<label>{ T(ctx, "contacts.payments") } <span class="dim">{ T(ctx, "contacts.payments-help") }</span><textarea class="mono" name="payments" rows="2" placeholder="skycoin:2jBbGx...">{ f.Payments }</textarea></label>
+		<label>{ T(ctx, "contacts.groups") } <span class="dim">{ T(ctx, "contacts.groups-help") }</span><input name="groups" value={ f.Groups }/></label>
+		<label>{ T(ctx, "contacts.notes") }<textarea name="notes" rows="4">{ f.Notes }</textarea></label>
+		<div class="bar">
+			<button class="btn primary" type="submit">{ T(ctx, "contacts.save") }</button>
+			<button class="btn" type="button" hx-get={ f.url("/panel") } hx-target="#panel">{ T(ctx, "contacts.cancel") }</button>
+			<span class="spacer"></span>
+			if f.UID != "" {
+				<button class="btn warn" type="button" hx-delete={ f.url("/" + f.UID) } hx-confirm={ T(ctx, "contacts.delete") + " " + f.Name + "?" } hx-target="#panel">{ T(ctx, "contacts.delete") }</button>
+			}
+		</div>
+	</form>
+}

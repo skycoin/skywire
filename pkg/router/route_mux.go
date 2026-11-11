@@ -16,7 +16,7 @@ import (
 )
 
 // LegStats is a snapshot of per-mux-leg traffic counters at a point
-// in time. One entry per active route in the rg's tps[] order.
+// in time. One entry per active route in the rg's legs order.
 //
 // Counters are cumulative since route-group creation (atomic uint64);
 // callers wanting rates take two snapshots and divide by elapsed time.
@@ -24,7 +24,7 @@ import (
 // the mux'd routes — the missing piece for verifying that adding more
 // routes actually aggregates throughput rather than just trading share.
 type LegStats struct {
-	// Index in the rg's tps[] slice. Stable for the rg's lifetime
+	// Index in the rg's legs slice. Stable for the rg's lifetime
 	// (transports are appended, never re-ordered) so the index is
 	// also a stable identifier for runtime add/remove operations.
 	Index int
@@ -189,8 +189,8 @@ type routeMux struct {
 	logger *logging.Logger
 
 	// Sequence numbering for outgoing packets
-	writeSeq uint32 // atomic: next outgoing sequence number
-	tpIndex  uint32 // atomic: round-robin fallback index for transport selection
+	writeSeq atomic.Uint32 // atomic: next outgoing sequence number
+	tpIndex  atomic.Uint32 // atomic: round-robin fallback index for transport selection
 
 	// ctrlSeq numbers the IN-BAND leg control frames (mux_control_frame.go),
 	// which ride the reserved top band of the sequence space and so must not
@@ -206,9 +206,9 @@ type routeMux struct {
 	// duplicate report from the receiver widens it (we retransmitted too eagerly),
 	// clean acks decay it back toward the static baseline. All atomic.
 	lastSendNano    atomic.Int64
-	tlpProbeCount   int32
+	tlpProbeCount   atomic.Int32
 	rackFactorMilli atomic.Int64
-	lastAckedContig uint32 // atomic: highest SACK lastContiguous seen (ack-progress edge for TLP reset)
+	lastAckedContig atomic.Uint32 // atomic: highest SACK lastContiguous seen (ack-progress edge for TLP reset)
 	// ackDelayMilli is an EWMA (×1000) of the measured send→ack delay of
 	// never-retransmitted frames (fed by retxBuf.onAckDelay). Under load it is
 	// the queue, not the wire, that dominates feedback delay: a saturated leg
@@ -339,7 +339,7 @@ type routeMux struct {
 	// mirrors the active/standby set on its send side — otherwise standby is a
 	// send-side-only decision and the bulk-sending peer stripes across every
 	// established leg, head-of-line-stalling the reorder frontier (the wide-mux
-	// download stall). See handleLegStatePacket / sendLegState in route_group.go.
+	// download stall). See handleLegStatePacket / sendLegStateByID.
 	legStateEnabled bool
 
 	// legRehomeEnabled is true when both peers advertised CapLegRehome. When set,
@@ -426,8 +426,8 @@ type routeMux struct {
 	fecRepairBytesRecv atomic.Uint64
 	fecReconstructs    atomic.Uint64
 
-	// Per-leg traffic counters parallel to the rg's tps[] / fwd[] /
-	// rvs[] slices. Mutated atomically. Read via Snapshot().
+	// Per-leg traffic counters parallel to the rg's legs slice.
+	// Mutated atomically. Read via Snapshot().
 	// legMu guards the slice itself (extended on AppendRoute), not
 	// the individual counters.
 	legMu sync.RWMutex

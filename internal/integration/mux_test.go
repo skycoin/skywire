@@ -1,5 +1,4 @@
 //go:build !no_ci
-// +build !no_ci
 
 package integration_test
 
@@ -174,7 +173,7 @@ func testMuxOverStcprTriangle(t *testing.T, env *TestEnv) {
 
 	const requestCount = 20
 	successCount := 0
-	for i := 0; i < requestCount; i++ {
+	for i := range requestCount {
 		resp, reqErr := proxyClient.Get("http://transport-discovery:9094/security/nonces")
 		if reqErr != nil {
 			t.Logf("Request %d failed: %v", i+1, reqErr)

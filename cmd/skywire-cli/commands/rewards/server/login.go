@@ -2,16 +2,18 @@
 package clirewardsserver
 
 import (
+	"cmp"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -57,7 +59,7 @@ var (
 	// Loaded from login_genesis.json on first use.
 	genesisSeed     []byte
 	genesisSeedOnce sync.Once
-	verifyAddrIndex uint32 // atomic counter for next verify address index
+	verifyAddrIndex atomic.Uint32 // atomic counter for next verify address index
 )
 
 func generateSessionID() string {
@@ -91,7 +93,7 @@ func loadGenesisSeed() {
 	}
 	genesisSeed = []byte(wallet.Meta.Seed)
 	// Start at index 1 — index 0 is the genesis address
-	atomic.StoreUint32(&verifyAddrIndex, 1)
+	verifyAddrIndex.Store(1)
 	cmdutil.Printf("Login chain: loaded genesis seed for verify address derivation\n")
 }
 
@@ -107,7 +109,7 @@ func generateVerifyAddress() string {
 		return skycoincipher.AddressFromPubKey(pk).String()
 	}
 
-	idx := atomic.AddUint32(&verifyAddrIndex, 1)
+	idx := verifyAddrIndex.Add(1)
 	// Derive address at this index from the genesis seed
 	seckeys, err := skycoincipher.GenerateDeterministicKeyPairs(genesisSeed, int(idx))
 	if err != nil || len(seckeys) < int(idx) {
@@ -151,6 +153,9 @@ func findRewardHistory(histDir, address string) []rewardHistoryEntry {
 		}
 		for i := uint32(0); i < n; i++ {
 			derived, err := rewardconfig.DeriveExternalAddressFromXpub(address, i)
+			if errors.Is(err, rewardconfig.ErrNoAddressAtIndex) {
+				continue
+			}
 			if err != nil {
 				break
 			}
@@ -178,7 +183,7 @@ func findRewardHistory(histDir, address string) []rewardHistoryEntry {
 		if err != nil {
 			continue
 		}
-		for _, line := range strings.Split(string(data), "\n") {
+		for line := range strings.SplitSeq(string(data), "\n") {
 			line = strings.TrimSpace(line)
 			if line == "" || strings.HasPrefix(line, "Skycoin Address") {
 				continue // skip header and empty lines
@@ -199,8 +204,8 @@ func findRewardHistory(histDir, address string) []rewardHistoryEntry {
 	}
 
 	// Sort by date descending (newest first)
-	sort.Slice(history, func(i, j int) bool {
-		return history[i].Date > history[j].Date
+	slices.SortFunc(history, func(a, b rewardHistoryEntry) int {
+		return cmp.Compare(b.Date, a.Date)
 	})
 
 	return history
@@ -407,10 +412,10 @@ func registerLoginRoutes(mux *http.ServeMux, wd string, loginEnabled bool) {
 				l := loginPageHeader("Login Error")
 				l += navlinks
 				l += "<h1>Wrong xpub key level</h1>"
-				l += "<p class='error'>The xpub key you provided is at the chain level (depth 4), "
-				l += "not the account level (depth 3) required for login verification.</p>"
-				l += "<p>The Skycoin web wallet shows the <strong>external chain</strong> xpub "
-				l += "(BIP44 path <code>m/44'/8000'/0'/0</code>). The login system needs the "
+				l += "<p class='error'>The xpub key you provided is not at the account level (depth 3), "
+				l += "which login verification and reward payouts need.</p>"
+				l += "<p>In the Skycoin desktop wallet or skycoin-web, copy the <strong>Account xPub</strong>, "
+				l += "not the xPub under External Chain (<code>m/44'/8000'/0'/0</code>). The login system needs the "
 				l += "<strong>account-level</strong> xpub (<code>m/44'/8000'/0'</code>) to derive "
 				l += "change chain addresses for verification.</p>"
 				l += "<h3>How to get the correct xpub</h3>"
@@ -425,7 +430,13 @@ func registerLoginRoutes(mux *http.ServeMux, wd string, loginEnabled bool) {
 				w.Write([]byte(l)) //nolint:errcheck,gosec
 				return
 			}
-			derived, err := rewardconfig.DeriveLoginAddressFromXpub(address, 0)
+			var derived string
+			var err error
+			for i := uint32(0); ; i++ {
+				if derived, err = rewardconfig.DeriveLoginAddressFromXpub(address, i); !errors.Is(err, rewardconfig.ErrNoAddressAtIndex) {
+					break
+				}
+			}
 			if err != nil {
 				http.Redirect(w, r, "/login?msg="+url.QueryEscape("Failed to derive login address from xpub: "+err.Error()), http.StatusFound)
 				return
@@ -690,13 +701,7 @@ func registerLoginRoutes(mux *http.ServeMux, wd string, loginEnabled bool) {
 		pk := r.PathValue("pk")
 
 		// Verify this PK belongs to the logged-in user's visors
-		authorized := false
-		for _, v := range sess.Visors {
-			if v == pk {
-				authorized = true
-				break
-			}
-		}
+		authorized := slices.Contains(sess.Visors, pk)
 		if !authorized {
 			httputil.WriteJSON(w, r, http.StatusForbidden, map[string]any{"error": "not authorized for this visor"})
 			return

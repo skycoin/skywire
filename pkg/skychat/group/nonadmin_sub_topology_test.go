@@ -21,7 +21,7 @@ package group
 
 import (
 	"reflect"
-	"sort"
+	"slices"
 	"testing"
 	"time"
 
@@ -33,7 +33,7 @@ func sortedPKHexes(set map[cipher.PubKey]struct{}) []string {
 	for pk := range set {
 		out = append(out, pk.Hex())
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
@@ -42,7 +42,7 @@ func sortedHexList(pks ...cipher.PubKey) []string {
 	for _, pk := range pks {
 		out = append(out, pk.Hex())
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 

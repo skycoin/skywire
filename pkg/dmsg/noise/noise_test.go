@@ -244,7 +244,7 @@ func TestSealOpenWithNonce(t *testing.T) {
 		ct  []byte
 	}
 	frames := make([]frame, 0, 64)
-	for i := 0; i < 64; i++ {
+	for i := range 64 {
 		pt := []byte(fmt.Sprintf("frame-payload-%d-xyzzy", i))
 		ct := nI.SealWithNonce(uint64(i), pt)
 		require.NotNil(t, ct)

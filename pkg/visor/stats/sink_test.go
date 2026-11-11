@@ -2,7 +2,7 @@ package stats
 
 import (
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -111,7 +111,7 @@ func (s *recordingSink) snapshot() (map[string][]byte, []string) {
 	for k := range s.dels {
 		dels = append(dels, k)
 	}
-	sort.Strings(dels)
+	slices.Sort(dels)
 	return puts, dels
 }
 
@@ -245,13 +245,7 @@ func TestSinkPrunedAtPublishWindowBoundary(t *testing.T) {
 		"tiers/dmsg/" + outWindow.Format("2006-01-02"),
 	}
 	for _, w := range wantDel {
-		found := false
-		for _, d := range dels {
-			if d == w {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(dels, w)
 		if !found {
 			t.Errorf("expected sink Delete on %q; got %v", w, dels)
 		}
@@ -545,7 +539,7 @@ func TestBusyHubHydratesAtMost16Leaves(t *testing.T) {
 
 	now := time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC)
 	const n = 800
-	for i := 0; i < n; i++ {
+	for i := range n {
 		id := uuid.New()
 		rec := &TransportRecord{
 			ID: id, Type: "stcpr", FirstSeen: now, LastSeen: now,
@@ -582,7 +576,7 @@ func keysOf(m map[string][]byte) []string {
 	for k := range m {
 		out = append(out, k)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 

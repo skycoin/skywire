@@ -19,7 +19,7 @@ const leafDate = "2026-10-20"
 func leafFixture(t testing.TB, n int) []byte {
 	const date = leafDate
 	recs := make([]TransportMetric, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		recs = append(recs, TransportMetric{
 			ID:      fmt.Sprintf("%08x-1234-5678-9abc-%012x", i, i),
 			Type:    []string{"stcpr", "sudph", "dmsg"}[i%3],

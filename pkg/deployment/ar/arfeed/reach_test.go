@@ -42,7 +42,7 @@ func TestVerdict(t *testing.T) {
 	require.Equal(t, Untested, (&Reach{Bound: []string{TypeWT}}).Verdict(TypeWT, "", now), "probe pending")
 
 	// sudph needs the live control connection and a compatible pair.
-	s := &Reach{ReachDecl: ReachDecl{NAT: NATPortRestricted}, Bound: []string{TypeSUDPH}, Live: true}
+	s := &Reach{NAT: NATPortRestricted, Bound: []string{TypeSUDPH}, Live: true}
 	require.Equal(t, Capable, s.Verdict(TypeSUDPH, NATFullCone, now))
 	require.Equal(t, Unreachable, s.Verdict(TypeSUDPH, NATSymmetric, now))
 	stale := &Reach{Bound: []string{TypeSUDPH}}
@@ -57,10 +57,10 @@ func TestVerdict(t *testing.T) {
 	require.Equal(t, Unreachable, s.Verdict(TypeSUDPH, NATSymmetric, now), "an old confirmation expires")
 
 	// Declared accepts gate: a visor that states it does not serve a type.
-	w := &Reach{ReachDecl: ReachDecl{NAT: NATFullCone, Accepts: []string{TypeSUDPH}}}
+	w := &Reach{NAT: NATFullCone, Accepts: []string{TypeSUDPH}}
 	require.Equal(t, Unreachable, w.Verdict(TypeWEBRTC, "", now))
 	w.Accepts = append(w.Accepts, TypeWEBRTC)
 	require.Equal(t, Capable, w.Verdict(TypeWEBRTC, NATRestricted, now))
-	require.Equal(t, Unreachable, (&Reach{ReachDecl: ReachDecl{NAT: NATSymmetric, Accepts: []string{TypeWEBRTC}}}).
+	require.Equal(t, Unreachable, (&Reach{NAT: NATSymmetric, Accepts: []string{TypeWEBRTC}}).
 		Verdict(TypeWEBRTC, NATSymmetric, now))
 }

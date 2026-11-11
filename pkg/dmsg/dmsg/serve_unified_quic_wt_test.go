@@ -48,7 +48,7 @@ func TestUnifiedQUICWTSessions(t *testing.T) {
 		require.NoError(t, srv.Close())
 		// Drain the serve goroutines best-effort: teardown latency (e.g. the WT
 		// h3 server unwinding) must not hang the suite past its deadline.
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			select {
 			case err := <-chSrv:
 				require.NoError(t, err)

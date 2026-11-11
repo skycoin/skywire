@@ -219,7 +219,7 @@ func DefaultDeployConfig() *DeployConfig {
 func PrintTemplate(env string) error {
 	cfg := DefaultDeployConfig()
 
-	var out interface{}
+	var out any
 	switch env {
 	case "prod":
 		out = cfg.Prod

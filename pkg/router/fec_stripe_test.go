@@ -1,7 +1,6 @@
 package router
 
 import (
-	"sync/atomic"
 	"testing"
 
 	"github.com/skycoin/skywire/pkg/transport"
@@ -23,7 +22,7 @@ func TestFECStripeCap(t *testing.T) {
 		t.Fatal("cap should be active (fecEnabled + 4 active legs)")
 	}
 	// Empty block: the raw pick has room, no reassignment.
-	if alt, ok := m.fecStripeReassign(tps, 0); ok || alt != 0 {
+	if alt, ok := m.fecStripeReassign(tpLegs(tps), 0); ok || alt != 0 {
 		t.Fatalf("empty block: got (%d,%v), want (0,false)", alt, ok)
 	}
 	// Fill leg 0 to R; it is now block-full.
@@ -33,21 +32,21 @@ func TestFECStripeCap(t *testing.T) {
 		t.Fatalf("leg0 count=%d, want %d", got, fecDefaultRDefault)
 	}
 	// Selecting leg 0 now reassigns to a leg with room.
-	if alt, ok := m.fecStripeReassign(tps, 0); !ok || alt == 0 {
+	if alt, ok := m.fecStripeReassign(tpLegs(tps), 0); !ok || alt == 0 {
 		t.Fatalf("full leg0 should reassign to another leg, got (%d,%v)", alt, ok)
 	}
 	// Fill every leg to R → reassignment keeps the original pick (never fail a send).
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		for m.fecStripeUsed[i] < fecDefaultRDefault {
 			m.fecStripeUse(i)
 		}
 	}
-	if alt, ok := m.fecStripeReassign(tps, 0); ok || alt != 0 {
+	if alt, ok := m.fecStripeReassign(tpLegs(tps), 0); ok || alt != 0 {
 		t.Fatalf("all legs block-full: got (%d,%v), want (0,false)", alt, ok)
 	}
 	// Advancing to the next block resets the per-leg counts → room again.
-	atomic.StoreUint32(&m.writeSeq, fecDefaultKDefault) // block 1
-	if alt, ok := m.fecStripeReassign(tps, 0); ok || alt != 0 {
+	m.writeSeq.Store(fecDefaultKDefault) // block 1
+	if alt, ok := m.fecStripeReassign(tpLegs(tps), 0); ok || alt != 0 {
 		t.Fatalf("new block: got (%d,%v), want (0,false)", alt, ok)
 	}
 	if got := m.fecStripeUsed[0]; got != 0 {
@@ -56,7 +55,7 @@ func TestFECStripeCap(t *testing.T) {
 	// FEC off → cap is inert: no reassignment, no counting.
 	m.fecEnabled = false
 	m.fecStripeUse(0)
-	if alt, ok := m.fecStripeReassign(tps, 3); ok || alt != 3 {
+	if alt, ok := m.fecStripeReassign(tpLegs(tps), 3); ok || alt != 3 {
 		t.Fatalf("fec off: got (%d,%v), want (3,false)", alt, ok)
 	}
 }
@@ -77,7 +76,7 @@ func TestFECStripeCapInertSingleLeg(t *testing.T) {
 	m.fecStripeUse(0)
 	m.fecStripeUse(0)
 	m.fecStripeUse(0)
-	if alt, ok := m.fecStripeReassign(tps, 0); ok || alt != 0 {
+	if alt, ok := m.fecStripeReassign(tpLegs(tps), 0); ok || alt != 0 {
 		t.Fatalf("single leg: got (%d,%v), want (0,false)", alt, ok)
 	}
 }

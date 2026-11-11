@@ -7,12 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -123,12 +123,7 @@ func TestAttachLocalRelay(t *testing.T) {
 	// The identity did NOT rotate: the acceptor sees the attaching client's
 	// own key, which is the entire point of attaching rather than proxying.
 	require.Eventually(t, func() bool {
-		for _, pk := range relay.RelaySessions() {
-			if pk == attachedPK {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(relay.RelaySessions(), attachedPK)
 	}, 10*time.Second, 50*time.Millisecond)
 }
 
@@ -231,9 +226,9 @@ func TestAttachedClientRestsInsteadOfHuntingServers(t *testing.T) {
 	// every other client in the test binary, and redirecting IT races with their
 	// serve goroutines.
 	logs := &syncBuffer{}
-	lr := logrus.New()
+	lr := logging.New()
 	lr.SetOutput(logs)
-	lr.SetLevel(logrus.DebugLevel)
+	lr.SetLevel(logging.DebugLevel)
 	attached.SetLogger(&logging.Logger{FieldLogger: lr})
 	defer attached.Close() //nolint:errcheck
 

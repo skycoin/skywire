@@ -29,7 +29,7 @@ import (
 
 var (
 	// Version is the CLI Version
-	Version = "0.27.1"
+	Version = "0.28.7"
 )
 
 const (
@@ -193,12 +193,14 @@ func NewCLI(cfg Config) (*cobra.Command, error) {
 		addressGenCmd(),
 		fiberAddressGenCmd(),
 		addressOutputsCmd(),
+		addressSpentCmd(),
 		blocksCmd(),
 		broadcastTxCmd(),
 		checkDBCmd(),
 		checkDBEncodingCmd(),
 		createRawTxnCmd(),
 		createRawTxnV2Cmd(),
+		createJointTxnCmd(),
 		signTxnCmd(),
 		decodeRawTxnCmd(),
 		encodeJSONTxnCmd(),
@@ -224,6 +226,7 @@ func NewCLI(cfg Config) (*cobra.Command, error) {
 		walletAddAddressesCmd(),
 		walletScanAddressesCmd(),
 		walletKeyExportCmd(),
+		walletRenameCmd(),
 		walletBalanceCmd(),
 		walletHisCmd(),
 		walletOutputsCmd(),

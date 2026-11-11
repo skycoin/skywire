@@ -6,7 +6,7 @@ package vpn
 import (
 	"errors"
 	"fmt"
-	"net"
+	"net/netip"
 
 	"github.com/skycoin/skywire/pkg/skydns"
 )
@@ -23,8 +23,8 @@ own, and the per-service /32 direct routes are the extension's excluded routes.
 
 // DefaultNetworkGateway is the unspecified address: there is no routing table to
 // read, and every route call below ignores its gateway.
-func DefaultNetworkGateway() (net.IP, error) {
-	return net.IPv4zero, nil
+func DefaultNetworkGateway() (netip.Addr, error) {
+	return netip.IPv4Unspecified(), nil
 }
 
 func setupClientSysPrivileges() (int, error) {

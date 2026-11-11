@@ -2,7 +2,7 @@
 //
 // Per-app ring buffer on top of the Broadcaster hook.
 //
-// The Broadcaster is already the single logrus hook the visor installs on its
+// The Broadcaster is already the single hook the visor installs on its
 // master logger, so its Fire sees every entry. In addition to fanning entries
 // out to live subscribers (the `--verbose` gRPC stream), it records the most
 // recent app-scoped entries into a small bounded ring keyed by app name. This
@@ -25,11 +25,9 @@ package logging
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
-
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -43,13 +41,13 @@ const (
 	ringPerApp = 200
 )
 
-// Record is a value-copy snapshot of a logrus entry captured into the ring.
-// The entry pointer itself must never be retained — logrus pools and reuses
+// Record is a value-copy snapshot of an entry captured into the ring.
+// The entry pointer itself must never be retained — the logger may reuse
 // Entry values after Fire returns — so the fields we care about are copied out
 // at capture time.
 type Record struct {
 	Time    time.Time
-	Level   logrus.Level
+	Level   Level
 	Module  string
 	Message string
 	Fields  map[string]string
@@ -67,7 +65,7 @@ type appRing struct {
 // record captures e into the per-app ring when it resolves to an app. Called
 // from Fire on the hot logging path, so it does the cheap app-resolution first
 // and only locks/copies when there is a bucket to write.
-func (b *Broadcaster) record(e *logrus.Entry) {
+func (b *Broadcaster) record(e *Entry) {
 	module := ""
 	if v, ok := e.Data[logModuleKey]; ok {
 		if m, ok := v.(string); ok {
@@ -132,7 +130,7 @@ func (b *Broadcaster) record(e *logrus.Entry) {
 // RecentByApp returns copies of the recent events and logs captured for app,
 // filtered to entries at least as severe as minLevel, oldest first. Returns
 // nil, nil when nothing has been captured for the app.
-func (b *Broadcaster) RecentByApp(app string, minLevel logrus.Level) (events, logs []Record) {
+func (b *Broadcaster) RecentByApp(app string, minLevel Level) (events, logs []Record) {
 	if b == nil || app == "" {
 		return nil, nil
 	}
@@ -148,7 +146,7 @@ func (b *Broadcaster) RecentByApp(app string, minLevel logrus.Level) (events, lo
 // RecentMerged returns events+logs for app merged into a single time-ordered
 // slice (oldest first), filtered by minLevel. This is the "reading the log"
 // view `cli proxy log` prints.
-func (b *Broadcaster) RecentMerged(app string, minLevel logrus.Level) []Record {
+func (b *Broadcaster) RecentMerged(app string, minLevel Level) []Record {
 	events, logs := b.RecentByApp(app, minLevel)
 	if len(events) == 0 && len(logs) == 0 {
 		return nil
@@ -156,17 +154,19 @@ func (b *Broadcaster) RecentMerged(app string, minLevel logrus.Level) []Record {
 	out := make([]Record, 0, len(events)+len(logs))
 	out = append(out, events...)
 	out = append(out, logs...)
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Time.Before(out[j].Time) })
+	slices.SortStableFunc(out, func(a, b Record) int {
+		return a.Time.Compare(b.Time)
+	})
 	return out
 }
 
-func filterByLevel(in []Record, minLevel logrus.Level) []Record {
+func filterByLevel(in []Record, minLevel Level) []Record {
 	if len(in) == 0 {
 		return nil
 	}
 	out := make([]Record, 0, len(in))
 	for _, r := range in {
-		// logrus levels descend from Panic(0) to Trace(6): "at least as
+		// Levels descend from Panic(0) to Trace(6): "at least as
 		// severe as minLevel" means a numerically smaller-or-equal level.
 		if r.Level <= minLevel {
 			out = append(out, r)
@@ -221,14 +221,14 @@ var recordFormatter = &TextFormatter{
 // matching the visor's text log format: [timestamp] LEVEL [module]: message
 // key=value…
 func (r Record) Format() string {
-	data := logrus.Fields{}
+	data := Fields{}
 	if r.Module != "" {
 		data[logModuleKey] = r.Module
 	}
 	for k, v := range r.Fields {
 		data[k] = v
 	}
-	entry := &logrus.Entry{
+	entry := &Entry{
 		Time:    r.Time,
 		Level:   r.Level,
 		Message: r.Message,
@@ -264,7 +264,7 @@ func appFromModule(module string) string {
 // visor's layers use different field names for the same thing (router rg-scoped
 // logs use app_name; proc-manager uses app/appName; launcher uses cmd), so any
 // of them names the app.
-func appFromFields(e *logrus.Entry) string {
+func appFromFields(e *Entry) string {
 	for _, k := range []string{"app_name", "app", "appName", "cmd"} {
 		if v, ok := e.Data[k]; ok {
 			if s, ok := v.(string); ok && s != "" {

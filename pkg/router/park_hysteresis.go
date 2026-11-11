@@ -101,44 +101,38 @@ func (rg *RouteGroup) clearAdaptivePark(tpID uuid.UUID) {
 func (rg *RouteGroup) legTransportAt(idx int) *transport.ManagedTransport {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	if idx < 0 || idx >= len(rg.tps) {
+	if idx < 0 || idx >= len(rg.legs) {
 		return nil
 	}
-	return rg.tps[idx]
+	return rg.legs[idx].tp
 }
 
-// promoteLegAdaptive re-admits leg idx to the active set on behalf of an
-// ADAPTIVE controller, mirrors the promotion to the peer (CapLegState) and emits
-// the lifecycle event with its reason — unless the leg's own adaptive park is
-// still inside legParkMinHold, in which case the promotion is refused and the
-// leg stays parked. Returns true when the leg was promoted.
+// promoteLegAdaptive re-admits the leg on transport id to the active set on
+// behalf of an ADAPTIVE controller, mirrors the promotion to the peer
+// (CapLegState) and emits the lifecycle event with its reason — unless the
+// leg's own adaptive park is still inside legParkMinHold, in which case the
+// promotion is refused and the leg stays parked. Returns true when the leg was
+// promoted. A leg that is gone, or is the primary, is not promoted.
 //
 // Every adaptive promoter goes through here: this is the single seam where the
 // park/promote flap is damped, and the single place an adaptive promotion
 // becomes visible in the mux event log (it was previously silent, which is why
 // the live flap showed only one half of the loop).
-func (rg *RouteGroup) promoteLegAdaptive(idx int, reason string) bool {
-	if rg.mux == nil || idx <= 0 {
+func (rg *RouteGroup) promoteLegAdaptive(id uuid.UUID, reason string) bool {
+	if rg.mux == nil || id == uuid.Nil {
 		return false
 	}
-	tp := rg.legTransportAt(idx)
-	var tpID uuid.UUID
-	if tp != nil {
-		tpID = tp.Entry.ID
-	}
-	if parkReason, held := rg.adaptiveParkHeld(tpID); held {
-		rg.logger.Debugf("park-hysteresis: leg %d stays parked (%s); %v hold not expired, refusing the adaptive re-admit (%s)",
-			idx, parkReason, LegParkMinHold(), reason)
+	if parkReason, held := rg.adaptiveParkHeld(id); held {
+		rg.logger.Debugf("park-hysteresis: leg on %s stays parked (%s); %v hold not expired, refusing the adaptive re-admit (%s)",
+			id, parkReason, LegParkMinHold(), reason)
 		return false
 	}
-	rg.mux.setLegStandby(idx, false)
-	rg.sendLegState(idx, false)
-	rg.clearAdaptivePark(tpID)
-	if tp != nil {
-		rg.noteLegEvent(MuxEventLegPromoted, reason, MuxByAdaptive, idx, rg.legCount(), tp, nil)
-	} else {
-		rg.noteMuxEvent(MuxEvent{Event: MuxEventLegPromoted, By: MuxByAdaptive, LegIndex: idx,
-			Legs: rg.legCount(), Reason: reason})
+	idx, tp, ok := rg.setLegStandbyByID(id, false)
+	if !ok {
+		return false
 	}
+	rg.sendLegStateByID(id, false)
+	rg.clearAdaptivePark(id)
+	rg.noteLegEvent(MuxEventLegPromoted, reason, MuxByAdaptive, idx, rg.legCount(), tp, nil)
 	return true
 }

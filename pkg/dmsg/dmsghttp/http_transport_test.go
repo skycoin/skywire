@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
@@ -59,7 +58,7 @@ func TestRewindBody(t *testing.T) {
 }
 
 func TestHTTPTransport_RoundTrip(t *testing.T) {
-	logging.SetLevel(logrus.WarnLevel)
+	logging.SetLevel(logging.WarnLevel)
 
 	const (
 		nSrvs       = 1
@@ -101,8 +100,7 @@ func TestHTTPTransport_RoundTrip(t *testing.T) {
 		require.NoError(t, err)
 		startHTTPServer(t, server0Results, lis)
 		addr := lis.Addr().String()
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 		// Arrange: create http clients (in which each http client has an underlying dmsg client).
 		// Configure timeouts to prevent hanging on errors.
 		httpC1 := http.Client{
@@ -127,7 +125,7 @@ func TestHTTPTransport_RoundTrip(t *testing.T) {
 		// - client1 sends "/index.html" requests.
 		// - client2 sends "/echo" requests.
 		// - client3 sends "/hash" requests.
-		for i := 0; i < nReqs; i++ {
+		for i := range nReqs {
 			go func() {
 				client1Results <- requestHTTP(&httpC1, http.MethodGet, "http://"+addr+endpointHTML, nil)
 			}()
@@ -144,7 +142,7 @@ func TestHTTPTransport_RoundTrip(t *testing.T) {
 		// Assert: ensure we get expected behavior from both the http client and server perspectives.
 		// Use a deadline to prevent hanging if a DMSG session fails.
 		deadline := time.After(60 * time.Second)
-		for i := 0; i < nReqs; i++ {
+		for i := range nReqs {
 			select {
 			case r := <-server0Results:
 				r.Assert(t, i)
@@ -176,7 +174,7 @@ func TestHTTPTransport_RoundTrip(t *testing.T) {
 func startDmsgEnv(t *testing.T, nSrvs, maxSessions int) disc.APIClient {
 	dc := disc.NewMock(0)
 
-	for i := 0; i < nSrvs; i++ {
+	for i := range nSrvs {
 		pk, sk := cipher.GenerateKeyPair()
 
 		conf := dmsg.ServerConfig{
@@ -236,7 +234,7 @@ func newDmsgClient(t *testing.T, dc disc.APIClient, minSessions int, name string
 // (TPD/AR/SD) receive uncompressed bodies even though the server can gzip,
 // driving dmsg-server write CPU + egress (Beta's post-#2980 residual).
 func TestHTTPTransport_TransparentGzip(t *testing.T) {
-	logging.SetLevel(logrus.WarnLevel)
+	logging.SetLevel(logging.WarnLevel)
 
 	const (
 		nSrvs       = 1
@@ -280,8 +278,7 @@ func TestHTTPTransport_TransparentGzip(t *testing.T) {
 	})
 
 	addr := lis.Addr().String()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	httpC := http.Client{
 		Transport: MakeHTTPTransport(ctx, newDmsgClient(t, dc, minSessions, "gzipcli")),
 		Timeout:   30 * time.Second,
@@ -338,7 +335,7 @@ func TestHTTPTransport_TransparentGzip(t *testing.T) {
 // one request and then dropped (the v1.3.93 self-probe did this every minute)
 // kept its stream reserved in the dmsg porter for the life of the process.
 func TestHTTPTransport_IdleStreamEvictedUnattended(t *testing.T) {
-	logging.SetLevel(logrus.WarnLevel)
+	logging.SetLevel(logging.WarnLevel)
 	old := idleEvictDelay
 	idleEvictDelay = 500 * time.Millisecond
 	t.Cleanup(func() { idleEvictDelay = old })

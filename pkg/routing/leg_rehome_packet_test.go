@@ -48,7 +48,7 @@ func TestLegRehomePacketRoundTrip(t *testing.T) {
 // acted on — the receiver drops it and both groups stay as they were.
 func TestLegRehomeFieldsRejectsTruncated(t *testing.T) {
 	full := MakeLegRehomePacket(1, 2, 3, 4, LegRehomeAck)
-	for n := 0; n < LegRehomeSize; n++ {
+	for n := range LegRehomeSize {
 		short := make(Packet, PacketHeaderSize+n)
 		copy(short, full[:PacketHeaderSize+n])
 		short[PacketPayloadSizeOffset] = byte(n >> 8) //nolint:gosec

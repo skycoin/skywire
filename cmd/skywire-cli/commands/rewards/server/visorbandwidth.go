@@ -2,6 +2,7 @@
 package clirewardsserver
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -9,7 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -277,7 +278,7 @@ func fillVisorBandwidthFromMetrics(out *visorBandwidthData, metrics []tpdstore.T
 	for d := range reported {
 		dates = append(dates, d)
 	}
-	sort.Strings(dates)
+	slices.Sort(dates)
 	out.Dates = dates
 
 	for i := range out.Visors {
@@ -397,7 +398,7 @@ func fillVisorBandwidth(tpdURL string, out *visorBandwidthData) error {
 	for d := range reported {
 		dates = append(dates, d)
 	}
-	sort.Strings(dates)
+	slices.Sort(dates)
 	out.Dates = dates
 
 	for i := range out.Visors {
@@ -454,11 +455,11 @@ func renderVisorBandwidthBody(data *visorBandwidthData) string {
 	// Order bands by measured bandwidth so the chart reads largest-first.
 	visors := make([]visorBWEntry, len(data.Visors))
 	copy(visors, data.Visors)
-	sort.Slice(visors, func(i, j int) bool {
-		if visors[i].Total != visors[j].Total {
-			return visors[i].Total > visors[j].Total
-		}
-		return visors[i].PK < visors[j].PK
+	slices.SortFunc(visors, func(a, b visorBWEntry) int {
+		return cmp.Or(
+			cmp.Compare(b.Total, a.Total),
+			cmp.Compare(a.PK, b.PK),
+		)
 	})
 
 	series := make([]chartSeries, 0, len(visors))

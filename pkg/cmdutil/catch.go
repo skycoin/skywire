@@ -6,16 +6,16 @@ import (
 	"os"
 	"strings"
 
-	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // Catch panics on any non-nil error.
-func Catch(v ...interface{}) {
+func Catch(v ...any) {
 	CatchWithMsg("", v...)
 }
 
 // CatchWithMsg panics on any non-nil error with the provided message (if any).
-func CatchWithMsg(msg string, v ...interface{}) {
+func CatchWithMsg(msg string, v ...any) {
 	for _, val := range v {
 		if err, ok := val.(error); ok && err != nil {
 			if msg == "" {
@@ -28,7 +28,7 @@ func CatchWithMsg(msg string, v ...interface{}) {
 }
 
 // CatchWithLog calls Fatal() on any non-nil error.
-func CatchWithLog(log logrus.FieldLogger, msg string, v ...interface{}) {
+func CatchWithLog(log logging.FieldLogger, msg string, v ...any) {
 	for _, val := range v {
 		if err, ok := val.(error); ok && err != nil {
 			log.WithError(err).Fatal(msg)

@@ -23,7 +23,7 @@ func TestAutoTpCooldown(t *testing.T) {
 
 	c.failed(pk, types.SUDPH, now)
 	require.True(t, c.blocked(pk, types.SUDPH, now.Add(3*time.Minute)), "a second failure waits longer")
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		c.failed(pk, types.SUDPH, now)
 	}
 	require.False(t, c.blocked(pk, types.SUDPH, now.Add(autoTpCooldownMax)), "never longer than the cap")

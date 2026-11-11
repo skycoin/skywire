@@ -27,8 +27,8 @@ import (
 func legTpIDs(rg *RouteGroup) []uuid.UUID {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	out := make([]uuid.UUID, 0, len(rg.tps))
-	for _, tp := range rg.tps {
+	out := make([]uuid.UUID, 0, len(rg.legs))
+	for _, tp := range legTransports(rg.legs) {
 		if tp != nil && !tp.IsClosed() {
 			out = append(out, tp.Entry.ID)
 		}
@@ -43,7 +43,7 @@ func wideEmuTunnel(t *testing.T, take, standby int) ([]*emuRig, *RouteGroup) {
 	rigs := shapeEmuRig(t, 1, standby)
 	active, pool := shapeSession0(rigs)
 	require.Len(t, active, 1)
-	for i := 0; i < take; i++ {
+	for i := range take {
 		require.NoError(t, rehomeChain(active[0], pool[i]), "take %d", i)
 	}
 	require.Equal(t, take+1, active[0].aliveLegCount(), "the tunnel must hold every chain it took")

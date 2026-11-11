@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"math/rand"
 	"net"
 	"net/http"
@@ -18,7 +19,6 @@ import (
 	"github.com/0magnet/bottle/vnet"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
@@ -63,6 +63,11 @@ type Hypervisor struct {
 	tpvizServer  *tpviz.Server
 	lanDmsg      *LANDmsgServer // embedded LAN DMSG server (nil if disabled)
 
+	// links holds goodbyes and call back outcomes, see visorState.
+	links linkTable
+	// dialBack replaces callBack in tests.
+	dialBack func(context.Context, cipher.PubKey) dialBackResult
+
 	// wsMux holds the finished router (as a muxRef) so /ws can replay each
 	// frame through the SAME handlers the HTTP surface uses — one API, two
 	// transports. Written once at the end of makeMux, read per request.
@@ -93,6 +98,11 @@ type Hypervisor struct {
 	attachedGraphMu   sync.Mutex
 	attachedGraphHash [32]byte
 	attachedGraphAt   time.Time
+
+	// knownMu guards knownWritten, the bytes of the last known visor file
+	// write (hypervisor_known_visors.go).
+	knownMu      sync.Mutex
+	knownWritten []byte
 }
 
 // cachedSummary is one entry in Hypervisor.summaryCache.
@@ -134,6 +144,7 @@ func NewHypervisor(config visorconfig.HypervisorConfig, visor *Visor, dmsgC *dms
 		logger:       mLogger.PackageLogger("hypervisor"),
 		summaryCache: make(map[cipher.PubKey]cachedSummary),
 	}
+	hv.loadKnownVisors()
 
 	// tpviz is constructed whenever a hypervisor has a local visor — the
 	// hvui's network-visualizer tab is always shown in the home top bar, so
@@ -550,6 +561,8 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 				hv.visor.remoteVisors[peerPK] = *visorConn
 				hv.remoteVisors[peerPK] = *visorConn
 				hv.mu.Unlock()
+				hv.linkUp(peerPK)
+				go hv.watchGoodbye(peerPK, visorConn.API)
 
 				// Warm-cache: see comment in the dmsg accept path
 				// below — same intent, same one-shot Summary.
@@ -609,6 +622,8 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 		hv.visor.remoteVisors[addr.PK] = *visorConn
 		hv.remoteVisors[addr.PK] = *visorConn
 		hv.mu.Unlock()
+		hv.linkUp(addr.PK)
+		go hv.watchGoodbye(addr.PK, visorConn.API)
 
 		// Eager-warm the summaryCache so the next UI poll renders
 		// this peer's row immediately instead of waiting for its
@@ -699,6 +714,8 @@ func (hv *Hypervisor) runBackgroundSummaryPoll(ctx context.Context) {
 			return
 		case <-ticker.C:
 			hv.pollAllForCache(ctx)
+			hv.checkLinks(ctx, time.Now())
+			hv.saveKnownVisors()
 		}
 	}
 }
@@ -822,7 +839,7 @@ func (hv *Hypervisor) logRequests(next http.Handler) http.Handler {
 		start := time.Now()
 		sw := &httputil.StatusWriter{ResponseWriter: w}
 		next.ServeHTTP(sw, r)
-		hv.logger.WithFields(logrus.Fields{
+		hv.logger.WithFields(logging.Fields{
 			"method":  r.Method,
 			"path":    r.URL.Path,
 			"status":  sw.Status(),
@@ -839,7 +856,7 @@ func (hv *Hypervisor) makeMux() *httputil.Router {
 	r.Use(httputil.RealIP)
 
 	if hv.visor != nil {
-		if hv.visor.MasterLogger().GetLevel() == logrus.DebugLevel || hv.visor.MasterLogger().GetLevel() == logrus.TraceLevel {
+		if hv.visor.MasterLogger().GetLevel() == logging.DebugLevel || hv.visor.MasterLogger().GetLevel() == logging.TraceLevel {
 			r.Use(hv.logRequests)
 			r.Use(httputil.Recoverer)
 		}
@@ -894,6 +911,9 @@ func (hv *Hypervisor) makeMux() *httputil.Router {
 				if hv.c.EnableAuth {
 					r.Use(hv.users.Authorize)
 				}
+				// Every write below needs a CSRF token or a same-origin browser, see
+				// csrfGuard. visorCtx still asks the routes it serves for the token.
+				r.Use(hv.csrfGuard)
 
 				r.Get("/user", hv.users.UserInfo())
 				r.Post("/change-password", hv.users.ChangePassword())
@@ -921,22 +941,27 @@ func (hv *Hypervisor) makeMux() *httputil.Router {
 				r.Get("/lan-dmsg-server", hv.getLANDmsgServer())
 				r.Get("/visors", hv.getVisors())
 				r.Get("/visors-summary", hv.getAllVisorsSummary())
+				r.Delete("/visors/{pk}/known", hv.deleteKnownVisor())
 				r.Get("/visors-tree-summary", hv.getVisorsTreeSummary())
 				r.Get("/network-view", hv.getNetworkView())
 				r.Get("/log", hv.getLog())
 				r.Get("/reward-rules", hv.getRewardRules())
+				r.Get("/reward-xpub-addresses", hv.getRewardXpubAddresses())
 				r.Get("/visors/{pk}", hv.getVisor())
 				r.Get("/visors/{pk}/summary", hv.getVisorSummary())
 				r.Get("/visors/{pk}/health", hv.getHealth())
 				r.Get("/visors/{pk}/uptime", hv.getUptime())
 				hv.mailRoutes(r)
+				hv.alertsRoutes(r)
 				hv.contactsRoutes(r)
 				r.Get("/visors/{pk}/apps", hv.getApps())
 				r.Post("/visors/{pk}/apps", hv.postApp())
+				r.Get("/visors/{pk}/apps/catalog", hv.getAppCatalog())
 				r.Get("/visors/{pk}/apps/{app}", hv.getApp())
 				r.Put("/visors/{pk}/apps/{app}", hv.putApp())
 				r.Delete("/visors/{pk}/apps/{app}", hv.deleteApp())
 				r.Get("/visors/{pk}/apps/{app}/help", hv.appHelp())
+				r.Get("/visors/{pk}/apps/{app}/flags", hv.appFlags())
 				r.Get("/visors/{pk}/router-settings", hv.getRouterSettings())
 				r.Put("/visors/{pk}/router-settings", hv.putRouterSettings())
 				r.Get("/visors/{pk}/apps/{app}/logs", hv.appLogsSince())
@@ -1257,6 +1282,9 @@ func (hv *Hypervisor) makeMux() *httputil.Router {
 		r.Get("/route-viz", hv.getRouteViz())
 		r.Get("/route-viz/", hv.getRouteViz())
 
+		// The server rendered htmx pages (pkg/visor/ui2), before the catch-all.
+		hv.ui2Routes(r)
+
 		// HV-served skycoin wallet: embedded /wallet/ static + node API proxied
 		// over the visor's dmsg client — no skycoin-web process/port, the native
 		// equivalent of the wasm visor's /wallet/. Mounted before the UI
@@ -1322,7 +1350,7 @@ func uiCacheControl(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
-func (hv *Hypervisor) log(r *http.Request) logrus.FieldLogger {
+func (hv *Hypervisor) log(r *http.Request) logging.FieldLogger {
 	return httputil.GetLogger(r)
 }
 
@@ -1402,6 +1430,10 @@ type httpCtx struct {
 
 	// Route
 	RtKey routing.RouteID
+
+	// rec records the calls for a managed visor that is offline, to be left on
+	// its inbox when the request succeeds. See hypervisor_park.go.
+	rec *visorapi.CallRecorder
 }
 type (
 	valuesFunc  func(w http.ResponseWriter, r *http.Request) (*httpCtx, bool)
@@ -1428,9 +1460,7 @@ func (tw *timeoutResponseWriter) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 func (tw *timeoutResponseWriter) copyTo(w http.ResponseWriter) {
-	for k, v := range tw.header {
-		w.Header()[k] = v
-	}
+	maps.Copy(w.Header(), tw.header)
 	w.WriteHeader(tw.statusCode)
 	w.Write(tw.body) //nolint:errcheck,gosec
 }

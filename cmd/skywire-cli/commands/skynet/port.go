@@ -121,7 +121,7 @@ Examples:
 		}
 		var wl []cipher.PubKey
 		if portWhitelist != "" {
-			for _, pkStr := range strings.Split(portWhitelist, ",") {
+			for pkStr := range strings.SplitSeq(portWhitelist, ",") {
 				pkStr = strings.TrimSpace(pkStr)
 				if pkStr == "" {
 					continue

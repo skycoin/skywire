@@ -6,6 +6,7 @@ import (
 	"hash/fnv"
 	"html"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -440,9 +441,9 @@ func (c *Chart) data(sb *strings.Builder) {
 }
 
 func (c *Chart) latest(s Series) string {
-	for j := len(s.Vals) - 1; j >= 0; j-- {
-		if !math.IsNaN(s.Vals[j]) {
-			return c.format(s.Vals[j])
+	for _, v := range slices.Backward(s.Vals) {
+		if !math.IsNaN(v) {
+			return c.format(v)
 		}
 	}
 	return ""

@@ -3,7 +3,7 @@ package idmanager
 
 import (
 	"math"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -53,7 +53,7 @@ func testManagerReserveNextIDSimpleCall(t *testing.T) {
 func testManagerReserveNextIDCallOnFullManager(t *testing.T) {
 	m := New()
 
-	for i := uint16(0); i < math.MaxUint16; i++ {
+	for i := range uint16(math.MaxUint16) {
 		m.values[i] = nil
 	}
 
@@ -70,14 +70,14 @@ func testManagerReserveNextIDConcurrentRun(t *testing.T) {
 
 	errs := make(chan error)
 
-	for i := 0; i < valuesToReserve; i++ {
+	for range valuesToReserve {
 		go func() {
 			_, _, err := m.ReserveNextID()
 			errs <- err
 		}()
 	}
 
-	for i := 0; i < valuesToReserve; i++ {
+	for range valuesToReserve {
 		require.NoError(t, <-errs)
 	}
 
@@ -150,7 +150,7 @@ func testManagerPopConcurrentRun(t *testing.T) {
 	const concurrency = 1000
 	errs := make(chan error, concurrency)
 
-	for i := uint16(0); i < uint16(concurrency); i++ {
+	for range uint16(concurrency) {
 		go func() {
 			_, err := m.Pop(1)
 			errs <- err
@@ -159,7 +159,7 @@ func testManagerPopConcurrentRun(t *testing.T) {
 
 	errsCount := 0
 
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		err := <-errs
 		if err != nil {
 			errsCount++
@@ -214,7 +214,7 @@ func testManagerAddConcurrentRun(t *testing.T) {
 	errs := make(chan error)
 
 	const concurrency = 1000
-	for i := 0; i < concurrency; i++ {
+	for i := range concurrency {
 		go func(v int) {
 			_, err := m.Add(id, v)
 			errs <- err
@@ -226,7 +226,7 @@ func testManagerAddConcurrentRun(t *testing.T) {
 
 	errsCount := 0
 
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		if err := <-errs; err != nil {
 			errsCount++
 		}
@@ -313,7 +313,7 @@ func testManagerSetConcurrentRun(t *testing.T) {
 	errs := make(chan error)
 	setV := make(chan int)
 
-	for i := 0; i < concurrency; i++ {
+	for i := range concurrency {
 		go func(v int) {
 			err := m.Set(nextID, v)
 			errs <- err
@@ -325,7 +325,7 @@ func testManagerSetConcurrentRun(t *testing.T) {
 
 	errsCount := 0
 
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		err := <-errs
 		if err != nil {
 			errsCount++
@@ -344,10 +344,10 @@ func testManagerSetConcurrentRun(t *testing.T) {
 	require.Equal(t, gotV, v)
 }
 
-type prepManagerWithValFunc func(v interface{}) (*Manager, uint16)
+type prepManagerWithValFunc func(v any) (*Manager, uint16)
 
 func TestManager_Get(t *testing.T) {
-	prepManagerWithValFunc := func(v interface{}) (*Manager, uint16) {
+	prepManagerWithValFunc := func(v any) (*Manager, uint16) {
 		m := New()
 
 		nextID, _, err := m.ReserveNextID()
@@ -390,13 +390,13 @@ func testManagerGetConcurrentRun(t *testing.T, prepManagerWithValFunc prepManage
 	const concurrency = 1000
 
 	type getRes struct {
-		v  interface{}
+		v  any
 		ok bool
 	}
 
 	res := make(chan getRes)
 
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		go func() {
 			val, ok := m.Get(id)
 			res <- getRes{
@@ -406,7 +406,7 @@ func testManagerGetConcurrentRun(t *testing.T, prepManagerWithValFunc prepManage
 		}()
 	}
 
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		r := <-res
 		require.True(t, r.ok)
 		require.Equal(t, r.v, value)
@@ -421,7 +421,7 @@ func TestManager_DoRange(t *testing.T) {
 	valsCount := 5
 
 	vals := make([]int, 0, valsCount)
-	for i := 0; i < valsCount; i++ {
+	for i := range valsCount {
 		vals = append(vals, i)
 	}
 
@@ -433,7 +433,7 @@ func TestManager_DoRange(t *testing.T) {
 	// run full range
 	gotVals := make([]int, 0, valsCount)
 
-	m.DoRange(func(_ uint16, v interface{}) bool {
+	m.DoRange(func(_ uint16, v any) bool {
 		val, ok := v.(int)
 		require.True(t, ok)
 
@@ -441,7 +441,7 @@ func TestManager_DoRange(t *testing.T) {
 
 		return true
 	})
-	sort.Ints(gotVals)
+	slices.Sort(gotVals)
 	require.Equal(t, gotVals, vals)
 
 	// run part range
@@ -449,7 +449,7 @@ func TestManager_DoRange(t *testing.T) {
 
 	gotValuesCount := 0
 
-	m.DoRange(func(_ uint16, v interface{}) bool {
+	m.DoRange(func(_ uint16, v any) bool {
 		if gotValuesCount == 1 {
 			return false
 		}

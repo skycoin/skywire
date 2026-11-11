@@ -115,7 +115,7 @@ func CXDSGet(t *testing.T, ds data.CXDS) {
 		})
 
 		t.Run("remove", func(t *testing.T) {
-			for i := 0; i < 2; i++ {
+			for range 2 {
 				if val, rc, err := ds.Get(key, -1); err != nil {
 					t.Error(err)
 				} else if rc != 0 {
@@ -244,7 +244,7 @@ func CXDSInc(t *testing.T, ds data.CXDS) {
 	})
 
 	t.Run("remove", func(t *testing.T) {
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			if rc, err := ds.Inc(key, -1); err != nil {
 				t.Error(err)
 			} else if rc != 0 {

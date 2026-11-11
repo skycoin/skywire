@@ -62,15 +62,14 @@ func TestNetworkMovedCoalesces(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	for i := 0; i < 50; i++ {
-		wg.Add(1)
-		go func() { defer wg.Done(); v.networkMoved("burst") }()
+	for range 50 {
+		wg.Go(func() { ; v.networkMoved("burst") })
 	}
 	wg.Wait()
 	require.Eventually(t, func() bool { return v.netMove.runs.Load() == 1 }, time.Second, time.Millisecond)
 
 	// Triggers during a run fold into exactly one more.
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		v.networkMoved("watcher")
 		v.networkMoved("android")
 	}
@@ -147,15 +146,14 @@ func TestWatcherFiresOnFingerprintChange(t *testing.T) {
 	v.netMove.refresh = func(r string) { got.Store(r) }
 	v.setNetworkIntervals(5*time.Millisecond, -1)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go v.watchNetwork(ctx)
 
 	time.Sleep(30 * time.Millisecond)
 	require.Zero(t, v.netMove.runs.Load(), "an unchanged network is not a move")
 
 	fp.Store("10.0.0.9")
-	require.Eventually(t, func() bool { return v.netMove.runs.Load() == 1 }, time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { return v.netMove.runs.Load() == 1 && got.Load() != nil }, time.Second, time.Millisecond)
 	require.Equal(t, "addresses changed", got.Load())
 
 	// Turning the watcher off takes effect live.

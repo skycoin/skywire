@@ -1,3 +1,5 @@
+//go:build cgo && unix
+
 package gioterm
 
 import (

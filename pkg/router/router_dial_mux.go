@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 
 	"github.com/google/uuid"
@@ -55,10 +56,7 @@ func (r *router) establishMuxRoutes(
 			revCount = eff
 		}
 	}
-	maxCount := fwdCount
-	if revCount > maxCount {
-		maxCount = revCount
-	}
+	maxCount := max(revCount, fwdCount)
 	// Cap the FOREGROUND initial dial. With the standby pool uncapped
 	// (adaptStandbyMax=512 → Mux ~513), planning+dialing every leg here — at
 	// connect time, Phase-2 in parallel — would be a setup-node dial storm that
@@ -79,7 +77,8 @@ func (r *router) establishMuxRoutes(
 	// alongside another DMSG-bearing route risks data looping through the same
 	// dmsg server with no way to detect it.
 	nrg.rg.mu.Lock()
-	for _, tp := range nrg.rg.tps {
+	for _, lg := range nrg.rg.legs {
+		tp := lg.tp
 		if tp != nil && tp.Entry.Type == tptypes.DMSG {
 			nrg.rg.mu.Unlock()
 			log.Debug("Skipping mux setup: primary route contains a DMSG transport")
@@ -286,13 +285,7 @@ func (r *router) establishMuxRoutes(
 		// told about a leg we will reject. excludeIDs seeds with the primary
 		// transport and accumulates each accepted plan's first hop below.
 		if len(muxFwd) > 0 {
-			dup := false
-			for _, ex := range excludeIDs {
-				if muxFwd[0].TpID == ex {
-					dup = true
-					break
-				}
-			}
+			dup := slices.Contains(excludeIDs, muxFwd[0].TpID)
 			if dup {
 				log.Debugf("Mux route %d/%d: planned leg reuses transport %s already in the group (route-finder fallback); skipping to avoid a half-provisioned group",
 					i+1, maxCount, muxFwd[0].TpID)
@@ -363,8 +356,8 @@ func (r *router) establishMuxRoutes(
 	// Phase 2 (parallel): fire all aux setup-node dials at once.
 	// Each dial blocks ~setup-timeout (15s); doing them in
 	// parallel collapses N × 15s into one window. Append happens
-	// inside the goroutine — appendRouteAsymmetric takes rg.mu
-	// internally, so concurrent appends serialize naturally.
+	// inside the goroutine — appendRouteAsymmetric adds each leg under
+	// one rg.mu hold, so concurrent appends cannot split a leg.
 	var wg sync.WaitGroup
 	for _, p := range plans {
 		wg.Add(1)
@@ -457,8 +450,9 @@ func (r *router) addOneAuxLeg(ctx context.Context, nrg *NoiseRouteGroup, opts *D
 	// Existing tp IDs to exclude (prevents picking the same
 	// transports the route group already uses).
 	nrg.rg.mu.Lock()
-	excludeIDs := make([]uuid.UUID, 0, len(nrg.rg.tps))
-	for _, tp := range nrg.rg.tps {
+	excludeIDs := make([]uuid.UUID, 0, len(nrg.rg.legs))
+	for _, lg := range nrg.rg.legs {
+		tp := lg.tp
 		if tp != nil {
 			excludeIDs = append(excludeIDs, tp.Entry.ID)
 		}
@@ -575,10 +569,8 @@ func (r *router) addOneAuxLeg(ctx context.Context, nrg *NoiseRouteGroup, opts *D
 	// before the setup-node dial, exactly as establishMuxRoutes/GrowMuxRoute
 	// already do on their planning paths.
 	if len(muxFwd) > 0 {
-		for _, ex := range excludeIDs {
-			if muxFwd[0].TpID == ex {
-				return fmt.Errorf("rotation add-leg: planned leg reuses transport %s already in the group (finder ignores ExcludeTransportIDs); skipping before dial", muxFwd[0].TpID)
-			}
+		if slices.Contains(excludeIDs, muxFwd[0].TpID) {
+			return fmt.Errorf("rotation add-leg: planned leg reuses transport %s already in the group (finder ignores ExcludeTransportIDs); skipping before dial", muxFwd[0].TpID)
 		}
 	}
 

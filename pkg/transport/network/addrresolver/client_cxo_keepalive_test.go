@@ -37,7 +37,7 @@ func TestBindSkipsUnchangedWhileCXOHealthy(t *testing.T) {
 	require.EqualValues(t, 2, posts.Load(), "unhealthy: every bind posts")
 
 	healthy.Store(true)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		require.NoError(t, c.BindQUIC(ctx, "30300"))
 	}
 	require.EqualValues(t, 2, posts.Load(), "healthy + unchanged: skipped")

@@ -21,11 +21,13 @@ import (
 	"fmt"
 	"image"
 	"io"
+	"io/fs"
 	"mime"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -113,13 +115,22 @@ func acceptInbound(from cipher.PubKey, offer xfer.Offer) (io.WriteCloser, bool) 
 	case offer.Group != "":
 		accept = isGroupMember(offer.Group, from) && !isChannelGroup(offer.Group)
 	default:
-		accept = isEstablishedPeer(from) && verdict == privacy.Allow
+		// Someone accepted or named is known whether or not a chat conn is open.
+		known := isEstablishedPeer(from) || privacyStore.Accepted(from.Hex()) || (contactStore != nil && contactStore.Name(from.Hex()) != "")
+		accept = known && verdict == privacy.Allow
 	}
 	// A file we explicitly requested (backfill) is accepted even from a peer we
 	// haven't otherwise established a chat with — we asked for it. This is also
 	// the only door a channel's files come through.
 	if !accept && isRequestedFile(offer.ID, from) {
 		accept = true
+	}
+	if !accept && offer.Group == "" {
+		// Not taken, but not lost either: a first contact's voice note, or a
+		// sender still waiting as a request, is shown and can be asked for.
+		appLog("skychat: holding file %q from %s until it is asked for", offer.Name, from)
+		holdInbound(from, offer, verdict == privacy.Request)
+		return xfer.Held, false
 	}
 	if !accept {
 		appLog("skychat: declining unrequested file %q from %s", offer.Name, from)
@@ -137,6 +148,34 @@ func acceptInbound(from cipher.PubKey, offer xfer.Offer) (io.WriteCloser, bool) 
 		return nil, false
 	}
 	return &namedFile{File: f, path: dst}, true
+}
+
+// fileStatusHeld marks a 1:1 file the receiver did not take but keeps a
+// reference to, so the user can ask its sender for it (/request-file).
+const fileStatusHeld = "held"
+
+// holdInbound shows and stores a file that was offered but not taken, as a
+// message naming it and its sender, so it arrives like a text would: in the
+// conversation, or in the sender's request while they wait to be accepted.
+func holdInbound(from cipher.PubKey, offer xfer.Offer, request bool) {
+	peer := from.Hex()
+	text := fmt.Sprintf("📎 %s (%s)", offer.Name, humanSize(offer.Size))
+	if hub != nil {
+		hub.publishEvent(chatEvent{
+			ID: offer.ID, TS: time.Now().UTC(), Channel: channelDM, Dir: "in", From: peer, Text: text,
+			FileID: offer.ID, FileName: offer.Name, FileSize: offer.Size, FileStatus: fileStatusHeld, Request: request,
+		})
+	}
+	persistMessage(history.Message{
+		Peer: peer, From: peer, Text: text, Timestamp: time.Now().UTC(), ID: offer.ID,
+		FileID: offer.ID, FileName: offer.Name, FileSize: offer.Size, FileStatus: fileStatusHeld,
+	})
+	desc := notifPreview("📎 " + fileKindLabel(offer.Name, offer.MIME) + ": " + offer.Name)
+	if request {
+		notifyOSInboundThread(peer, peer, "Message request", displayName(peer)+": "+desc)
+	} else {
+		notifyOSInboundThread(peer, peer, displayName(peer), desc)
+	}
 }
 
 // namedFile carries the save path alongside the handle so onDone can report it.
@@ -280,11 +319,14 @@ func onXferDone(dir xfer.Direction, peer cipher.PubKey, offer xfer.Offer, err er
 	// surfaces as a normal file event.
 	switch {
 	case wasRequested && err == nil:
+		fileURL := ""
+		if ev.FilePath != "" {
+			fileURL = "/files/" + filepath.Base(ev.FilePath)
+		}
+		if offer.Group == "" {
+			refileOffered(peer, offer.ID, fileURL)
+		}
 		if hub != nil {
-			fileURL := ""
-			if ev.FilePath != "" {
-				fileURL = "/files/" + filepath.Base(ev.FilePath)
-			}
 			if body, mErr := json.Marshal(map[string]any{
 				"channel":  "file-ready",
 				"file_id":  offer.ID,
@@ -457,6 +499,9 @@ func sendFileID(ctx context.Context, peer cipher.PubKey, group, path, id, name s
 	}
 	rc, err := mgr.SendFile(ctx, peer, offer, f)
 	if err != nil {
+		if errors.Is(err, xfer.ErrUnreachable) && group == "" && keepCopy && parkFileOffer(ctx, peer, offer) {
+			return offer.ID, errFileParked
+		}
 		// The body and its digest went out in full and only the receiver's
 		// verdict is missing: the file IS on the peer's disk, so reporting a
 		// failure here would be wrong (it showed up as "File send failed:
@@ -468,7 +513,7 @@ func sendFileID(ctx context.Context, peer cipher.PubKey, group, path, id, name s
 		}
 		return offer.ID, err
 	}
-	if !rc.OK {
+	if !rc.OK && rc.Err != xfer.HeldReason {
 		return offer.ID, fmt.Errorf("peer rejected transfer: %s", rc.Err)
 	}
 	return offer.ID, nil
@@ -481,12 +526,7 @@ func isGroupMember(groupID string, pk cipher.PubKey) bool {
 	if cxoGroupSess == nil || groupID == "" || groupID != cxoGroup {
 		return false
 	}
-	for _, p := range cxoGroupSess.PeerPKs() {
-		if p == pk {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(cxoGroupSess.PeerPKs(), pk)
 }
 
 // isChannelGroup reports whether groupID is a broadcast channel.
@@ -544,7 +584,6 @@ func sendFileToGroup(ctx context.Context, path string) (int, error) {
 	}
 	path = filepath.Join(dir, sentCopyName(xfer.Offer{ID: fileID, Name: name}))
 	for _, pk := range peers {
-		pk := pk
 		go func() {
 			sctx, cancel := context.WithTimeout(ctx, sendTimeout)
 			defer cancel()
@@ -673,6 +712,16 @@ func sendFileHandler(ctx context.Context) http.HandlerFunc {
 				return
 			}
 			id, serr := sendFileToPeer(sctx, pk, path)
+			if errors.Is(serr, errFileParked) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusAccepted)
+				resp := map[string]any{"id": id, "pk": pkHex, "parked": true}
+				if url := sentCopyURL(id, path); url != "" {
+					resp["file_url"] = url
+				}
+				_ = json.NewEncoder(w).Encode(resp) //nolint:errcheck
+				return
+			}
 			if serr != nil {
 				http.Error(w, serr.Error(), http.StatusBadGateway)
 				return
@@ -852,7 +901,7 @@ func downloadFileHandler(w http.ResponseWriter, r *http.Request) {
 		// before sealing existed.
 		http.ServeFile(w, r, full) //nolint:gosec
 		return
-	case os.IsNotExist(err):
+	case errors.Is(err, fs.ErrNotExist):
 		http.NotFound(w, r)
 		return
 	default:

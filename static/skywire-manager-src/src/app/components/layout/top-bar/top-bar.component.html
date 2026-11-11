@@ -226,8 +226,9 @@
           <!-- Mode badge (which backend + visor version), moved here from the
                left title so it sits top-RIGHT. Only on the home/start pages. -->
           @if (appMode.isStartTitle(titleParts)) {
-            <span class="mode-badge" [matTooltip]="appMode.localPk">{{ appMode.badge }}</span>
+            <span class="mode-badge" [matTooltip]="appMode.fullBadge + (appMode.localPk ? ' · ' + appMode.localPk : '')">{{ appMode.badge }}</span>
           }
+          <a class="palette-hint ui2-link" [href]="ui2Href" [matTooltip]="'ui2.try-tooltip' | translate">{{ 'ui2.try' | translate }}</a>
           <button type="button" class="palette-hint d-none d-lg-inline-flex" [matTooltip]="'palette.hint-tooltip' | translate" (click)="openPalette()">
             <mat-icon [inline]="true">search</mat-icon>{{ paletteMac ? '⌘ K' : 'Ctrl K' }}
           </button>

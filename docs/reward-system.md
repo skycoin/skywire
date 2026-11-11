@@ -13,8 +13,10 @@ This system replaces the [skywire whitelisting interface](https://whitelist.skyc
 Eligible skywire visors based on the criteria outlined in the [mainnet rules](https://github.com/skycoin/skywire/blob/develop/rewards/mainnet_rules.md) may receive rewards when the user sets a reward address; either from the hypervisor UI or from the CLI with:
 
 ```
-skywire-cli reward <skycoin address>
+skywire cli reward <account xpub>
 ```
+
+The reward address is the account xpub (depth 3) of a BIP44 wallet, and each payout goes to a fresh address derived from it. [guides/reward-xpub.md](guides/reward-xpub.md) shows how to create the wallet and find the right xpub.
 
 **NOTE: in order for the setting to persist updates for package-based linux installations, it is recommended to set the reward address in /etc/skywire.conf and run `skywire-autoconfig` to update the setting**
 

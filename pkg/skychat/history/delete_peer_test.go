@@ -1,5 +1,4 @@
 //go:build !js
-// +build !js
 
 // Package history delete_peer_test.go — DeletePeer across both backends, and
 // the store no longer naming a conversation it holds nothing of.

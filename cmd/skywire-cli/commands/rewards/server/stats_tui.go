@@ -108,10 +108,7 @@ func tuiRule(title string, width int) string {
 		width = len(t) + 4
 	}
 	const left = 2
-	right := width - len(t) - left
-	if right < 0 {
-		right = 0
-	}
+	right := max(width-len(t)-left, 0)
 	return aDim + "┌" + strings.Repeat("─", left) + aReset + aBold + aCyan + t + aReset +
 		aDim + strings.Repeat("─", right) + "┐" + aReset + "\n"
 }
@@ -136,10 +133,7 @@ func tuiXAxis(labels []string, plotWidth, leftPad int) string {
 			ticks[center] = '┬'
 		}
 		r := []rune(lb)
-		start := center - len(r)/2
-		if start < 0 {
-			start = 0
-		}
+		start := max(center-len(r)/2, 0)
 		if start+len(r) > plotWidth {
 			start = plotWidth - len(r)
 		}
@@ -158,10 +152,7 @@ func tuiBar(frac float64, width int, color string) string {
 	if frac < 0 {
 		frac = 0
 	}
-	filled := int(frac*float64(width) + 0.5)
-	if filled > width {
-		filled = width
-	}
+	filled := min(int(frac*float64(width)+0.5), width)
 	return color + strings.Repeat("█", filled) + aReset +
 		aDim + strings.Repeat("·", width-filled) + aReset
 }
@@ -213,10 +204,7 @@ func tuiWrap(s string) string {
 	}
 	var out strings.Builder
 	line := indent
-	room := tuiWidth - len([]rune(indent))
-	if room < 8 {
-		room = 8
-	}
+	room := max(tuiWidth-len([]rune(indent)), 8)
 	for _, w := range words {
 		// A token wider than the panel — a dmsg URL carrying a whole 66-rune
 		// public key is the usual one — has no space to break at, so word
@@ -267,7 +255,7 @@ func tuiPlot(title string, series []float64, labels []string, height int, precis
 		asciigraph.AxisColor(asciigraph.Gray),
 		asciigraph.LabelColor(asciigraph.Gray),
 	)
-	for _, ln := range strings.Split(g, "\n") {
+	for ln := range strings.SplitSeq(g, "\n") {
 		b.WriteString("  " + ln + "\n")
 	}
 	b.WriteString(tuiXAxis(labels, width-14, 8))

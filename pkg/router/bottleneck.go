@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -320,7 +320,7 @@ func groupLegsBySBDExcept(stats []sbdStats, blocked func(i, j int) bool) []int {
 			parent[ra] = rb
 		}
 	}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		for j := i + 1; j < n; j++ {
 			if blocked != nil && blocked(i, j) {
 				continue
@@ -330,7 +330,7 @@ func groupLegsBySBDExcept(stats []sbdStats, blocked func(i, j int) bool) []int {
 			}
 		}
 	}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		groups[i] = find(i)
 	}
 	return groups
@@ -395,7 +395,7 @@ func pickBottleneckDemotions(legs []bottleneckLeg) []int {
 			demote = append(demote, m.idx)
 		}
 	}
-	sort.Ints(demote)
+	slices.Sort(demote)
 	return demote
 }
 
@@ -552,10 +552,7 @@ func nextSBDBackoff(prev time.Duration) time.Duration {
 	if prev <= 0 {
 		return SBDBackoff()
 	}
-	d := prev * 2
-	if d > sbdBackoffMax {
-		d = sbdBackoffMax
-	}
+	d := min(prev*2, sbdBackoffMax)
 	return d
 }
 

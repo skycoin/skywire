@@ -18,19 +18,18 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
-	"time"
-
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/routing"
 )
@@ -47,7 +46,7 @@ type Host struct {
 	wl      Whitelist
 	rootDir string
 
-	connN int32
+	connN atomic.Int32
 }
 
 // NewHost creates a new dmsgscp Host with the given dmsg client,
@@ -121,25 +120,25 @@ func (h *Host) ServeListener(ctx context.Context, lis net.Listener) error {
 		log.WithError(lis.Close()).Debug("dmsgscp listener closed.")
 	}()
 
+	var backoff netutil.AcceptBackoff
 	for {
 		conn, err := lis.Accept()
 		if err != nil {
 			log := log.WithError(err)
-			// Same temporary-error treatment as pty.
-			if err, ok := err.(net.Error); ok && err.Temporary() { //nolint
-				log.Warn("dmsgscp: temporary accept error, continuing...")
-				time.Sleep(50 * time.Millisecond)
-				continue
-			}
 			if errors.Is(err, io.ErrClosedPipe) ||
 				errors.Is(err, dmsg.ErrEntityClosed) ||
 				errors.Is(err, net.ErrClosed) {
 				log.Debug("dmsgscp: cleanly stopped serving.")
 				return nil
 			}
+			if backoff.Retry(err) {
+				log.Warn("dmsgscp: temporary accept error, continuing...")
+				continue
+			}
 			log.Error("dmsgscp: permanent accept error.")
 			return err
 		}
+		backoff.Reset()
 
 		rPK, ok := remoteAddrToPK(conn.RemoteAddr())
 		if !ok {
@@ -162,11 +161,11 @@ func (h *Host) ServeListener(ctx context.Context, lis net.Listener) error {
 			continue
 		}
 
-		slog = slog.WithField("conn_id", atomic.AddInt32(&h.connN, 1))
+		slog = slog.WithField("conn_id", h.connN.Add(1))
 		slog.Debug("dmsgscp: stream accepted.")
-		go func(s net.Conn, l logrus.FieldLogger) {
+		go func(s net.Conn, l logging.FieldLogger) {
 			h.serve(ctx, l, s)
-			atomic.AddInt32(&h.connN, -1)
+			h.connN.Add(-1)
 		}(conn, slog)
 	}
 }
@@ -203,7 +202,7 @@ func remoteAddrToPK(addr net.Addr) (cipher.PubKey, bool) {
 
 // authorize mirrors the dmsgpty implementation byte-for-byte so the
 // audit story stays identical between the two daemons.
-func (h *Host) authorize(log logrus.FieldLogger, rPK cipher.PubKey) bool {
+func (h *Host) authorize(log logging.FieldLogger, rPK cipher.PubKey) bool {
 	ok, err := h.wl.Get(rPK)
 	if err != nil {
 		log.WithError(err).Error("dmsgscp: whitelist error.")
@@ -221,7 +220,7 @@ func (h *Host) authorize(log logrus.FieldLogger, rPK cipher.PubKey) bool {
 // or serveSink (host receives file from client), and tears the
 // stream down on exit. Any unexpected I/O failure is logged at debug
 // — the client side will surface its own error.
-func (h *Host) serve(ctx context.Context, log logrus.FieldLogger, conn net.Conn) {
+func (h *Host) serve(ctx context.Context, log logging.FieldLogger, conn net.Conn) {
 	defer func() {
 		if err := conn.Close(); err != nil {
 			log.WithError(err).Debug("dmsgscp: stream close error.")
@@ -267,7 +266,7 @@ func (h *Host) serve(ctx context.Context, log logrus.FieldLogger, conn net.Conn)
 //
 // Any failure path writes a fatal-prefix line so the client gets a
 // human-readable reason, then returns.
-func (h *Host) serveSource(_ context.Context, log logrus.FieldLogger, conn net.Conn, r *bufio.Reader, name string) {
+func (h *Host) serveSource(_ context.Context, log logging.FieldLogger, conn net.Conn, r *bufio.Reader, name string) {
 	safePath, err := ResolveSafePath(h.rootDir, name)
 	if err != nil {
 		log.WithError(err).WithField("name", name).Warn("dmsgscp: path resolution failed.")
@@ -337,7 +336,7 @@ func (h *Host) serveSource(_ context.Context, log logrus.FieldLogger, conn net.C
 // The `<name>` in the C-record is treated as the basename only — the
 // destination directory comes from the SINK path. This matches the
 // rcp/scp convention: the caller specifies the destination on dial.
-func (h *Host) serveSink(_ context.Context, log logrus.FieldLogger, conn net.Conn, r *bufio.Reader, name string) {
+func (h *Host) serveSink(_ context.Context, log logging.FieldLogger, conn net.Conn, r *bufio.Reader, name string) {
 	safePath, err := ResolveSafePath(h.rootDir, name)
 	if err != nil {
 		log.WithError(err).WithField("name", name).Warn("dmsgscp: path resolution failed.")
@@ -400,7 +399,7 @@ func (h *Host) serveSink(_ context.Context, log logrus.FieldLogger, conn net.Con
 			log.WithError(cerr).Debug("dmsgscp: file close error.")
 		}
 		if !success {
-			if rerr := os.Remove(safePath); rerr != nil && !os.IsNotExist(rerr) {
+			if rerr := os.Remove(safePath); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
 				log.WithError(rerr).Debug("dmsgscp: failed to remove partial upload.")
 			}
 		}
@@ -468,7 +467,7 @@ func parseRoleLine(line string) (role, path string, err error) {
 }
 
 // logger returns the field-logger used for all server-side log lines.
-func (h *Host) logger() logrus.FieldLogger {
+func (h *Host) logger() logging.FieldLogger {
 	if ml := h.dmsgC.MasterLogger(); ml != nil {
 		return ml.PackageLogger("dmsg_scp")
 	}

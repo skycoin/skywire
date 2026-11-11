@@ -65,7 +65,7 @@ func newHTTPSRSTestClient(t *testing.T, backendAddr string, originRoots *x509.Ce
 	proxyAddr := probe.Addr().String()
 	probe.Close()                                        //nolint:errcheck,gosec
 	go func() { _ = client.ListenAndServe(proxyAddr) }() //nolint:errcheck
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		if cc, err := net.Dial("tcp", proxyAddr); err == nil {
 			cc.Close() //nolint:errcheck,gosec
 			break

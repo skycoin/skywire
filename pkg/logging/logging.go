@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-
-	"github.com/sirupsen/logrus"
 )
 
 var log = NewMasterLogger()
@@ -23,33 +21,33 @@ const (
 	logPriorityCritical = "CRITICAL"
 )
 
-// LevelFromString returns a logrus.Level from a string identifier.
+// LevelFromString returns a Level from a string identifier.
 //
-// An unrecognized (or empty) identifier returns logrus.InfoLevel along with an
+// An unrecognized (or empty) identifier returns InfoLevel along with an
 // error naming the offending string. It used to fall back to DebugLevel, which
 // meant a missing or misspelled "log_level" silently ran a service at debug in
 // production for callers that logged the error and carried on.
-func LevelFromString(s string) (logrus.Level, error) {
+func LevelFromString(s string) (Level, error) {
 	switch strings.ToLower(s) {
 	case "debug":
-		return logrus.DebugLevel, nil
+		return DebugLevel, nil
 	case "info", "notice":
-		return logrus.InfoLevel, nil
+		return InfoLevel, nil
 	case "warn", "warning":
-		return logrus.WarnLevel, nil
+		return WarnLevel, nil
 	case "error":
-		return logrus.ErrorLevel, nil
+		return ErrorLevel, nil
 	case "fatal", "critical":
-		return logrus.FatalLevel, nil
+		return FatalLevel, nil
 	case "panic":
-		return logrus.PanicLevel, nil
+		return PanicLevel, nil
 	case "none", "off":
-		// logrus has nothing quieter than panic, logged just before a crash.
-		return logrus.PanicLevel, nil
+		// There is nothing quieter than panic, logged just before a crash.
+		return PanicLevel, nil
 	case "trace":
-		return logrus.TraceLevel, nil
+		return TraceLevel, nil
 	default:
-		return logrus.InfoLevel, fmt.Errorf("unrecognized log level %q; want one of debug, info, warn, error, fatal, panic, none, trace", s)
+		return InfoLevel, fmt.Errorf("unrecognized log level %q; want one of debug, info, warn, error, fatal, panic, none, trace", s)
 	}
 }
 
@@ -59,7 +57,7 @@ func MustGetLogger(module string) *Logger {
 }
 
 // AddHook adds a hook to the global logger
-func AddHook(hook logrus.Hook) {
+func AddHook(hook Hook) {
 	log.AddHook(hook)
 }
 
@@ -85,46 +83,46 @@ func DisableColors() {
 }
 
 // SetLevel sets the logger's minimum log level
-func SetLevel(level logrus.Level) {
+func SetLevel(level Level) {
 	log.SetLevel(level)
 }
 
 // GetLevel returns the logger level
-func GetLevel() logrus.Level {
+func GetLevel() Level {
 	return log.GetLevel()
 }
 
 // SetOutputTo sets the logger's output to an io.Writer
 func SetOutputTo(w io.Writer) {
-	log.Out = w
+	log.SetOutput(w)
 }
 
 // Disable disables the logger completely
 func Disable() {
-	log.Out = io.Discard
+	log.SetOutput(io.Discard)
 }
 
 // DebugEnabled reports whether the master logger emits at debug level or
-// below. Use it to skip building log fields on a hot path: logrus's
+// below. Use it to skip building log fields on a hot path:
 // WithField allocates a new Entry and copies the field map whether or not
 // the level is enabled, so an ungated WithField chain costs the same when
 // the line is never printed.
-func DebugEnabled() bool { return log.GetLevel() >= logrus.DebugLevel }
+func DebugEnabled() bool { return log.GetLevel() >= DebugLevel }
 
 // TraceEnabled reports whether the master logger emits at trace level.
 // Same rationale as DebugEnabled; trace carries the per-stream and
 // per-frame diagnostics that are useless in aggregate and expensive to
 // format at volume.
-func TraceEnabled() bool { return log.GetLevel() >= logrus.TraceLevel }
+func TraceEnabled() bool { return log.GetLevel() >= TraceLevel }
 
-// Trace emits msg at trace level through a logrus.FieldLogger, whose
+// Trace emits msg at trace level through a FieldLogger, whose
 // interface omits the Trace methods (see Logger.Tracef). Callers on a hot
 // path must guard it with TraceEnabled: reaching the entry allocates.
-func Trace(l logrus.FieldLogger, msg string) { l.WithFields(logrus.Fields{}).Trace(msg) }
+func Trace(l FieldLogger, msg string) { l.WithFields(Fields{}).Trace(msg) }
 
 // ScopedLogger returns a package-aware logger derived from the global master
 // logger whose minimum level is independent of it. See
 // MasterLogger.ScopedLogger.
-func ScopedLogger(module string, level logrus.Level) *Logger {
+func ScopedLogger(module string, level Level) *Logger {
 	return log.ScopedLogger(module, level)
 }

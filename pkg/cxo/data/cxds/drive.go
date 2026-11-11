@@ -8,7 +8,9 @@ package cxds
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"sync"
 	"time"
@@ -83,7 +85,7 @@ func NewDriveCXDSWithOptions(fileName string, opts DriveOptions) (ds data.CXDS, 
 	var created bool // true if the file does not exist
 
 	_, err = os.Stat(fileName)
-	created = os.IsNotExist(err)
+	created = errors.Is(err, fs.ErrNotExist)
 
 	// Probe-and-repair before the real open. RepairIfCorrupt returns
 	// nil when the file is absent, healthy, or successfully renamed
@@ -99,7 +101,7 @@ func NewDriveCXDSWithOptions(fileName string, opts DriveOptions) (ds data.CXDS, 
 		return nil, fmt.Errorf("cxds: integrity-check %s: %w", fileName, rErr)
 	}
 	if !created {
-		if _, statErr := os.Stat(fileName); os.IsNotExist(statErr) {
+		if _, statErr := os.Stat(fileName); errors.Is(statErr, fs.ErrNotExist) {
 			created = true
 		}
 	}

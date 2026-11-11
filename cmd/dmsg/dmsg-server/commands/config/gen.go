@@ -2,11 +2,10 @@
 package config
 
 import (
-	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgserver"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 var output string
@@ -24,7 +23,7 @@ var genConfigCmd = &cobra.Command{
 	Short: "Generate a config file",
 	Run: func(_ *cobra.Command, _ []string) {
 		mLog := logging.NewMasterLogger()
-		mLog.SetLevel(logrus.InfoLevel)
+		mLog.SetLevel(logging.InfoLevel)
 		logger := mLog.PackageLogger("dmsg-server config generator")
 		// generate config
 		conf := new(dmsgserver.Config)

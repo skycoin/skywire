@@ -91,7 +91,7 @@ func TestMustMarshalJSONNative_MatchesStdlib(t *testing.T) {
 			// reflect. Structural equality on the parsed shape is
 			// what actually matters: the visor's loader uses
 			// json.Unmarshal which is permissive on formatting.
-			var wantTree, gotTree interface{}
+			var wantTree, gotTree any
 			if err := json.Unmarshal(want, &wantTree); err != nil {
 				t.Fatalf("stdlib output not valid JSON: %v\n%s", err, want)
 			}
@@ -170,7 +170,7 @@ func TestMustMarshalJSONNative_ResolverBlocks(t *testing.T) {
 		t.Fatalf("stdlib MarshalIndent: %v", err)
 	}
 	got := MustMarshalJSONNative(v)
-	var wantTree, gotTree interface{}
+	var wantTree, gotTree any
 	if err := json.Unmarshal(want, &wantTree); err != nil {
 		t.Fatalf("stdlib output not valid JSON: %v\n%s", err, want)
 	}

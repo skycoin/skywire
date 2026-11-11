@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/0magnet/bbolt"
@@ -395,7 +395,7 @@ func (s *Store) listDates(top []byte, name string) ([]string, error) {
 			return nil
 		})
 	})
-	sort.Strings(dates)
+	slices.Sort(dates)
 	return dates, err
 }
 
@@ -425,7 +425,7 @@ func (s *Store) listNames(top []byte) ([]string, error) {
 			return nil
 		})
 	})
-	sort.Strings(names)
+	slices.Sort(names)
 	return names, err
 }
 

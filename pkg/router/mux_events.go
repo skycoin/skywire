@@ -356,14 +356,14 @@ func (rg *RouteGroup) noteTunnelEvent(kind, reason string) {
 	}
 	rg.mu.Lock()
 	var tp *transport.ManagedTransport
-	if len(rg.tps) > 0 {
-		tp = rg.tps[0]
+	if len(rg.legs) > 0 {
+		tp = rg.legs[0].tp
 	}
 	var hops []routing.Hop
 	if tp != nil {
 		hops = rg.legHopsLocked(tp.Entry.ID)
 	}
-	legs := len(rg.tps)
+	legs := len(rg.legs)
 	rg.mu.Unlock()
 	rg.noteLegEvent(kind, reason, MuxByAdaptive, 0, legs, tp, hops)
 }
@@ -432,7 +432,7 @@ func hopInfos(hops []routing.Hop) []RouteHopInfo {
 func (rg *RouteGroup) legCount() int {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	return len(rg.tps)
+	return len(rg.legs)
 }
 
 // activatePinnedLeg promotes the leg riding tpID out of warm standby and
@@ -443,30 +443,17 @@ func (rg *RouteGroup) legCount() int {
 // parked for every row of a bench, the latency band needing three legs to act.
 // No-op for the primary, an unknown transport, or a leg already active.
 func (rg *RouteGroup) activatePinnedLeg(tpID uuid.UUID) {
-	if rg.mux == nil {
-		return
-	}
-	rg.mu.Lock()
-	idx := -1
-	var tp *transport.ManagedTransport
-	for i, t := range rg.tps {
-		if t != nil && t.Entry.ID == tpID {
-			idx, tp = i, t
-			break
-		}
-	}
-	rg.mu.Unlock()
-	if idx <= 0 {
+	// Unconditional: the leg's standby slot may not exist yet (the slice grows
+	// lazily, see setLegStandby), so "not standby" here does not mean active.
+	idx, tp, ok := rg.setLegStandbyByID(tpID, false)
+	if !ok {
 		return
 	}
 	// The OPERATOR overrides an adaptive park outright: pinning or re-widening a
 	// leg is an explicit instruction, never something legParkMinHold may gate.
 	// Dropping the record also means the next adaptive park starts a fresh hold.
 	rg.clearAdaptivePark(tpID)
-	// Unconditional: the leg's standby slot may not exist yet (the slice grows
-	// lazily, see setLegStandby), so "not standby" here does not mean active.
-	rg.mux.setLegStandby(idx, false)
-	rg.sendLegState(idx, false)
+	rg.sendLegStateByID(tpID, false)
 	rg.noteLegEvent(MuxEventLegPromoted, "operator: pinned leg active", MuxByOperator, idx, rg.legCount(), tp, nil)
 }
 

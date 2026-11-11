@@ -3,14 +3,14 @@
 .loading-row {
   display: flex;
   align-items: center;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(var(--sw-fg-rgb), 0.85);
   padding: 24px 0;
 }
 
 .error-row {
   display: flex;
   align-items: center;
-  color: #f87171;
+  color: rgb(var(--sw-err-rgb));
   padding: 24px 0;
 }
 
@@ -19,14 +19,14 @@
 .info-row {
   display: flex;
   align-items: center;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(var(--sw-fg-rgb), 0.85);
   padding: 24px 0;
 }
 
 .summary-line {
   display: flex;
   align-items: center;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(var(--sw-fg-rgb), 0.9);
   font-size: 0.95em;
 
   mat-icon {
@@ -36,16 +36,16 @@
     margin-right: 6px;
 
     &.ok {
-      color: #4ade80;
+      color: rgb(var(--sw-ok-rgb));
     }
 
     &.warn {
-      color: #fbbf24;
+      color: rgb(var(--sw-warn-rgb));
     }
   }
 
   .last-updated {
-    color: rgba(255, 255, 255, 0.8);
+    color: rgba(var(--sw-fg-rgb), 0.8);
     font-size: 0.85em;
     margin-left: 8px;
   }
@@ -58,14 +58,14 @@
 .dim {
   // Secondary text. 0.55 then 0.72 both still read as "too dark" against the
   // bright white table headers — set to 0.85 for clear legibility.
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(var(--sw-fg-rgb), 0.85);
 }
 
 // Endpoint + IP are reference data operators copy/paste — they must be
 // clearly legible, not muted. The endpoint was previously a .dim <code> that
 // faded into the background; render it near-white.
 .endpoint {
-  color: rgba(255, 255, 255, 0.92);
+  color: rgba(var(--sw-fg-rgb), 0.92);
   word-break: break-all;
 }
 
@@ -75,27 +75,27 @@
 }
 
 .latency-fast {
-  color: #4ade80;
+  color: rgb(var(--sw-ok-rgb));
 }
 
 .latency-medium {
-  color: #fbbf24;
+  color: rgb(var(--sw-warn-rgb));
 }
 
 .latency-slow {
-  color: #f87171;
+  color: rgb(var(--sw-err-rgb));
 }
 
 .error-detail {
-  color: #f87171;
+  color: rgb(var(--sw-err-rgb));
   font-size: 0.8em;
   margin-top: 4px;
 }
 
 // Mobile card layout
 .mobile-card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(var(--sw-fg-rgb), 0.05);
+  border: 1px solid rgba(var(--sw-fg-rgb), 0.08);
   border-radius: 6px;
   padding: 12px;
   margin-bottom: 10px;
@@ -109,11 +109,11 @@
 
   .mobile-row {
     font-size: 0.85em;
-    color: rgba(255, 255, 255, 0.85);
+    color: rgba(var(--sw-fg-rgb), 0.85);
     padding: 2px 0;
 
     code {
-      color: rgba(255, 255, 255, 0.85);
+      color: rgba(var(--sw-fg-rgb), 0.85);
     }
   }
 }
@@ -128,13 +128,13 @@ code {
   .rsn-title {
     font-size: 1em;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.95);
+    color: rgba(var(--sw-fg-rgb), 0.95);
     margin: 0 0 10px;
   }
 
   .rsn-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(var(--sw-fg-rgb), 0.03);
+    border: 1px solid rgba(var(--sw-fg-rgb), 0.08);
     border-radius: 6px;
     padding: 10px 14px;
     margin-bottom: 10px;
@@ -153,13 +153,13 @@ code {
       border-radius: 50%;
       display: inline-block;
     }
-    .dot-green { background: #4caf50; }
-    .dot-red { background: #f44336; }
+    .dot-green { background: rgb(var(--sw-green-rgb)); }
+    .dot-red { background: rgb(var(--sw-red-alt-rgb)); }
 
     .rsn-pk {
       font-family: monospace;
       font-size: 11px;
-      color: rgba(255, 255, 255, 0.85);
+      color: rgba(var(--sw-fg-rgb), 0.85);
       word-break: break-all;
       flex: 1 1 auto;
       min-width: 0;
@@ -179,7 +179,7 @@ code {
 
     strong {
       margin-left: 6px;
-      color: rgba(255, 255, 255, 0.95);
+      color: rgba(var(--sw-fg-rgb), 0.95);
     }
   }
 
@@ -192,9 +192,9 @@ code {
     flex-wrap: wrap;
 
     .rsn-fail-pill {
-      background: rgba(229, 57, 53, 0.15);
-      border: 1px solid rgba(229, 57, 53, 0.35);
-      color: rgba(255, 200, 200, 0.95);
+      background: rgba(var(--sw-red-rgb), 0.15);
+      border: 1px solid rgba(var(--sw-red-rgb), 0.35);
+      color: rgba(var(--sw-blush-rgb), 0.95);
       padding: 1px 6px;
       border-radius: 3px;
     }
@@ -206,7 +206,7 @@ tr.drilled td {
   border-bottom: none;
 }
 tr.drill-row td {
-  background-color: rgba(0, 0, 0, 0.18);
+  background-color: rgba(var(--sw-shade-rgb), 0.18);
   padding: 0;
 }
 .drill-loading,
@@ -217,16 +217,16 @@ tr.drill-row td {
 .drill-loading {
   display: flex;
   align-items: center;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(var(--sw-fg-rgb), 0.85);
 }
 .drill-error {
-  color: #ff6b6b;
+  color: rgb(var(--sw-salmon-rgb));
 }
 .drill-body {
   margin: 0;
   font-family: monospace;
   font-size: 0.82em;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(var(--sw-fg-rgb), 0.85);
   white-space: pre-wrap;
   word-break: break-all;
   max-height: 320px;

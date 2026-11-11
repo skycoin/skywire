@@ -4,6 +4,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { Subscription, delay, mergeMap, of } from 'rxjs';
 
 import { StorageService } from './services/storage.service';
+import { ThemeService } from './services/theme.service';
 import { SnackbarService } from './services/snackbar.service';
 import { LanguageService } from './services/language.service';
 import { ApiService } from './services/api.service';
@@ -48,6 +49,8 @@ export class AppComponent {
     private apiService: ApiService,
     ngBridge: NgBridgeService,
     private changeDetectorRef: ChangeDetectorRef,
+    // Created here so the theme applies before any page renders.
+    _themeService: ThemeService,
   ) {
     AppComponent.currentInstance = this;
 

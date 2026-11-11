@@ -22,7 +22,7 @@ func TestBatchedPipe(t *testing.T) {
 	day := time.Now().UTC().AddDate(0, 0, -3)
 	const n = pipelineBatch*2 + 7
 	seed := s.client.Pipeline()
-	for i := 0; i < n; i++ {
+	for range n {
 		id := uuid.New().String()
 		seed.HSet(ctx, s.bandwidthDailyKey(id, day), a.Hex()+":sent", "700", b.Hex()+":sent", "300")
 		seed.Set(ctx, s.bandwidthEdgesKey(id), a.Hex()+","+b.Hex(), 0)

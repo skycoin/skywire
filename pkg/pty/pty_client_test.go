@@ -14,17 +14,20 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
-type echoPty struct{}
+// echoPty answers Read once release closes.
+type echoPty struct{ release chan struct{} }
 
-func (echoPty) Read(_ *int, out *[]byte) error {
+func (p echoPty) Read(_ *int, out *[]byte) error {
+	<-p.release
 	*out = []byte("late output")
 	return nil
 }
 
 func (echoPty) Ping(_, _ *struct{}) error { return nil }
 
-// TestPtyClientReadAfterClose reads from a closed client while the host still
-// answers. Read must not touch the reply the RPC client may be decoding into.
+// TestPtyClientReadAfterClose closes a client while a Read waits on the host,
+// then lets the host answer. Read must not touch the reply the RPC client
+// decodes late.
 // Run with -race.
 func TestPtyClientReadAfterClose(t *testing.T) {
 	// A real socket, not net.Pipe: the pipe's channels would order the reply
@@ -33,7 +36,8 @@ func TestPtyClientReadAfterClose(t *testing.T) {
 	require.NoError(t, err)
 	defer lis.Close() //nolint:errcheck
 	srv := rpc.NewServer()
-	require.NoError(t, srv.RegisterName(PtyRPCName, echoPty{}))
+	release := make(chan struct{})
+	require.NoError(t, srv.RegisterName(PtyRPCName, echoPty{release}))
 	go func() {
 		if sConn, err := lis.Accept(); err == nil {
 			srv.ServeConn(sConn)
@@ -47,10 +51,22 @@ func TestPtyClientReadAfterClose(t *testing.T) {
 		rpcC: rpc.NewClient(cConn),
 		done: make(chan struct{}),
 	}
+	type result struct {
+		n   int
+		err error
+	}
+	got := make(chan result, 1)
+	go func() {
+		n, err := sc.Read(make([]byte, 64))
+		got <- result{n, err}
+	}()
+	// Usually the Read is in flight by now. If not, it fails the same way.
+	time.Sleep(50 * time.Millisecond)
 	sc.close()
-	n, err := sc.Read(make([]byte, 64))
-	require.ErrorIs(t, err, io.ErrClosedPipe)
-	require.Zero(t, n)
+	r := <-got
+	require.ErrorIs(t, r.err, io.ErrClosedPipe)
+	require.Zero(t, r.n)
+	close(release)
 
 	// Any socket I/O here would order the late reply after Read, so wait
 	// quietly for it to be decoded.

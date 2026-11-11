@@ -5,7 +5,7 @@ import (
 	"context"
 	"net"
 
-	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // tunnelFill dials the active tunnels BEYOND the first one, in the background,
@@ -54,7 +54,7 @@ type tunnelFill struct {
 	// maybeRedial from racing this fill for the same active slot: until wire
 	// runs, the Client has no dial of its own to make.
 	wire func()
-	log  logrus.FieldLogger
+	log  logging.FieldLogger
 }
 
 // start runs the fill on its own goroutine and returns immediately. The caller
@@ -96,11 +96,11 @@ func (f tunnelFill) run() {
 
 // logf never returns nil, so a zero-value fill in a test logs nowhere instead of
 // panicking.
-func (f tunnelFill) logf() logrus.FieldLogger {
+func (f tunnelFill) logf() logging.FieldLogger {
 	if f.log != nil {
 		return f.log
 	}
-	l := logrus.New()
+	l := logging.New()
 	l.SetOutput(nopWriter{})
 	return l
 }

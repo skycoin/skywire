@@ -33,7 +33,6 @@ import (
 	"github.com/0magnet/bottle/vnet"
 	"github.com/armon/go-socks5"
 	"github.com/chen3feng/safecast"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -275,13 +274,11 @@ func Run(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, cfg Confi
 	// SOCKS5 tunnel — no intermediate HTTP bridge. Browser HTTP
 	// bytes flow straight through the DMSG stream.
 	if len(cfg.ResolveAddr) == 0 && cfg.ProxyPort != 0 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if err := serveSOCKS5Direct(ctx, log, dmsgC, cfg); err != nil && !errors.Is(err, context.Canceled) {
 				errCh <- err
 			}
-		}()
+		})
 	}
 
 	// --- Fixed-mapping mode (--resolve) ---
@@ -364,7 +361,7 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 		// rest of the visor's log format instead of the library's raw stdout
 		// default. Cap at Debug: a SOCKS proxy failing a *client-requested*
 		// dial is a routine, client-driven condition, not a visor error.
-		Logger:   logging.NewStdLoggerLevel(log, logrus.DebugLevel),
+		Logger:   logging.NewStdLoggerLevel(log, logging.DebugLevel),
 		Resolver: &dmsgResolver{cfg: cfg},
 		Dial: func(dialCtx context.Context, network, addr string) (conn net.Conn, dialErr error) {
 			defer func() {

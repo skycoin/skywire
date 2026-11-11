@@ -41,7 +41,7 @@ type policyTestEngine interface {
 // unconditionally, so testing a .wasm policy failed with "missing
 // decide_route function" (the wasm bytes don't parse as Starlark).
 func loadPolicyEngine(path string, src []byte, clock fixedClock) (policyTestEngine, error) {
-	logger := func(format string, args ...interface{}) {
+	logger := func(format string, args ...any) {
 		cmdutil.Eprintf("[policy log] "+format+"\n", args...)
 	}
 	if strings.EqualFold(filepath.Ext(path), ".wasm") {
@@ -99,10 +99,10 @@ func presetSummary(name string) string {
 	if !ok {
 		return ""
 	}
-	for _, line := range strings.Split(src, "\n") {
+	for line := range strings.SplitSeq(src, "\n") {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "#") {
-			if desc := strings.TrimSpace(strings.TrimPrefix(line, "#")); desc != "" {
+		if after, ok0 := strings.CutPrefix(line, "#"); ok0 {
+			if desc := strings.TrimSpace(after); desc != "" {
 				return desc
 			}
 			continue
@@ -297,7 +297,7 @@ deploying a complex policy to confirm it stays inside the
 		rctx := policy.RoutingContext{App: "bench", PeerPK: "synth"}
 		var candidates []policy.Candidate
 		// Warmup: discount JIT-class effects.
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			_, _ = eval.Decide(context.Background(), rctx, candidates) //nolint:errcheck
 		}
 		samples := make([]time.Duration, policyBenchIter)

@@ -83,7 +83,6 @@ func Test_checkPasswordFormat(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.err, checkPasswordFormat(tt.password))
 		})

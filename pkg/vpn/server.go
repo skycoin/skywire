@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"strings"
 	"sync"
 
@@ -329,10 +330,10 @@ func (s *Server) serveConn(conn net.Conn) {
 	}
 }
 
-func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, unsecureVPN func(), err error) {
+func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway netip.Addr, unsecureVPN func(), err error) {
 	var cHello ClientHello
 	if err := ReadJSON(conn, &cHello); err != nil {
-		return nil, nil, nil, fmt.Errorf("error reading client hello: %w", err)
+		return netip.Addr{}, netip.Addr{}, nil, fmt.Errorf("error reading client hello: %w", err)
 	}
 
 	// default value
@@ -344,20 +345,20 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, unsecureVP
 		if err := s.ipGen.Reserve(ip); err != nil {
 			// this happens only on malformed IP
 			s.sendServerErrHello(conn, HandshakeStatusBadRequest)
-			return nil, nil, nil, fmt.Errorf("error reserving IP %s: %w", ip.String(), err)
+			return netip.Addr{}, netip.Addr{}, nil, fmt.Errorf("error reserving IP %s: %w", ip.String(), err)
 		}
 	}
 
 	subnet, err := s.ipGen.Next()
 	if err != nil {
 		s.sendServerErrHello(conn, HandshakeNoFreeIPs)
-		return nil, nil, nil, fmt.Errorf("error getting free subnet IP: %w", err)
+		return netip.Addr{}, netip.Addr{}, nil, fmt.Errorf("error getting free subnet IP: %w", err)
 	}
 
 	subnetOctets, err := fetchIPv4Octets(subnet)
 	if err != nil {
 		s.sendServerErrHello(conn, HandshakeStatusInternalError)
-		return nil, nil, nil, fmt.Errorf("error breaking IP into octets: %w", err)
+		return netip.Addr{}, netip.Addr{}, nil, fmt.Errorf("error breaking IP into octets: %w", err)
 	}
 
 	// basically IP address comprised of `subnetOctets` items is the IP address of the subnet,
@@ -368,16 +369,16 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, unsecureVP
 	// - Client-side TUN gateway = subnet IP + 3
 	// - Client-site TUN IP = subnet IP + 4
 
-	sTUNIP := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+2)
-	sTUNGateway := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+1)
+	sTUNIP := netip.AddrFrom4([4]byte{subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3] + 2})
+	sTUNGateway := netip.AddrFrom4([4]byte{subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3] + 1})
 
-	cTUNIP := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+4)
-	cTUNGateway := net.IPv4(subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3]+3)
+	cTUNIP := netip.AddrFrom4([4]byte{subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3] + 4})
+	cTUNGateway := netip.AddrFrom4([4]byte{subnetOctets[0], subnetOctets[1], subnetOctets[2], subnetOctets[3] + 3})
 
 	if s.cfg.Secure {
 		if err := BlockIPToLocalNetwork(cTUNIP, sTUNIP); err != nil { //nolint
 			s.sendServerErrHello(conn, HandshakeStatusInternalError)
-			return nil, nil, nil,
+			return netip.Addr{}, netip.Addr{}, nil,
 				fmt.Errorf("error securing local network for IP %s: %w", cTUNIP, err)
 		}
 
@@ -396,7 +397,7 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway net.IP, unsecureVP
 
 	if err := WriteJSON(conn, &sHello); err != nil {
 		unsecureVPN()
-		return nil, nil, nil, fmt.Errorf("error finishing handshake: error sending server hello: %w", err)
+		return netip.Addr{}, netip.Addr{}, nil, fmt.Errorf("error finishing handshake: error sending server hello: %w", err)
 	}
 
 	return sTUNIP, sTUNGateway, unsecureVPN, nil

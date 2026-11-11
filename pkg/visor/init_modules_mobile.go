@@ -61,7 +61,7 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	// The wallet reaches a node named <pk>.dmsg through this resolver's SOCKS5
 	// listener, which the phone profile turns on for .dmsg names only.
 	m.embDmsgWeb = maker("embedded_dmsgweb", initEmbeddedDmsgWeb, &m.dmsgC)
-	m.launch = maker("launcher", initLauncher, &m.ebc, &m.disc, &m.dmsgC, &m.tr, &m.rt, &m.embDmsgWeb, &m.embSkynetWeb, &m.embResolvers, &m.skymail)
+	m.launch = maker("launcher", initLauncher, &m.ebc, &m.disc, &m.dmsgC, &m.tr, &m.rt, &m.embDmsgWeb, &m.embSkynetWeb, &m.embResolvers)
 	// cli carries remote management (dmsg visor-RPC) as well as the local
 	// RPC listener, which the phone profile switches off (cli_addr "").
 	m.cli = maker("cli", initCLI, &m.tr)
@@ -87,9 +87,6 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	m.pairingMod = maker("pairing", initPairing, &m.dmsgC)
 	m.groupingMod = maker("grouping", initGrouping, &m.dmsgC)
 	m.voiceMod = maker("voice", initVoice, &m.dmsgC)
-	// Skymail: the phone's own mailbox on dmsg port 25, which the Android and
-	// iOS mail screens read and send through.
-	m.skymail = maker("skymail", initSkymail, &m.dmsgC)
 
 	// Dropped. Remote shell and file copy (the phone profile removes pty);
 	// the dmsghttp log server and system survey; host telemetry (stats), the
@@ -128,10 +125,14 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	m.sdRegCXOMod = dropped("sd_reg_cxo")
 	m.embeddedServices = dropped("embedded_services")
 	m.ownKeyServices = dropped("own_key_services")
+	// Offline delivery and offline alerts are desktop features (see skymail's
+	// offline_mobile.go). Parking a send on a peer's inbox needs only dmsg.
+	m.dmsgAsyncMod = dropped("dmsg_async")
+	m.alertsMod = dropped("alerts")
 
 	m.vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &m.ebc, &m.ar, &m.disc,
 		&m.tr, &m.rt, &m.launch, &m.cli, &m.hvs, &m.pv, &m.trs, &m.stcpC, &m.stcprC, &m.quicC, &m.wsC, &m.wtC,
-		&m.skyFwd, &m.pi, &m.dmsgPi, &m.tpdco, &m.cxoUserFeedsMod, &m.pairingMod, &m.groupingMod, &m.voiceMod, &m.skymail, &m.netWatch)
+		&m.skyFwd, &m.pi, &m.dmsgPi, &m.tpdco, &m.cxoUserFeedsMod, &m.pairingMod, &m.groupingMod, &m.voiceMod, &m.netWatch)
 	// Hypervisor: the local API the app talks to (plus Fleet, opt-in).
 	m.hv = maker("hypervisor", initHypervisor, &m.vis)
 	return m

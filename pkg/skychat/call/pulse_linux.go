@@ -36,7 +36,7 @@ func NewMicSource(monitor bool, rate int) (Source, error) {
 	if rate <= 0 {
 		rate = sampleRate
 	}
-	c, err := pulse.NewClient()
+	c, err := newPulseClient()
 	if err != nil {
 		return nil, fmt.Errorf("voice: pulse connect: %w", err)
 	}
@@ -94,7 +94,7 @@ func NewSpeakerSink(rate int) (Sink, error) {
 	if rate <= 0 {
 		rate = sampleRate
 	}
-	c, err := pulse.NewClient()
+	c, err := newPulseClient()
 	if err != nil {
 		return nil, fmt.Errorf("voice: pulse connect: %w", err)
 	}

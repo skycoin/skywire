@@ -1,9 +1,10 @@
 import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { TranslateService } from '@ngx-translate/core';
 import { ActivatedRoute } from '@angular/router';
 import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
 import { Subscription, of } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { catchError, debounceTime } from 'rxjs/operators';
 
 import { NodeComponent } from '../node.component';
 import { LabeledElementTypes, StorageService } from 'src/app/services/storage.service';
@@ -11,6 +12,7 @@ import { NodeService } from 'src/app/services/node.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import { OperationError } from 'src/app/utils/operation-error';
 import { processServiceError } from 'src/app/utils/errors';
+import { needsAcceptRisk, rewardAddressValidator } from 'src/app/utils/reward-address';
 
 interface RewardDay {
   date: string;
@@ -18,6 +20,13 @@ interface RewardDay {
   share: number;
   sent: boolean;
   txid?: string;
+}
+
+// The first addresses an xpub derives, or why it derives none.
+interface XpubAddresses {
+  xpub: string;
+  addresses: string[];
+  error: string;
 }
 
 @Component({
@@ -34,6 +43,9 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
   // Set when the reward address has spent, so its public key is on chain.
   exposure: { spent: boolean; balance: string } | null = null;
   private exposureAddress = '';
+  // Where the rewards of the set xpub, and of an xpub typed in the form, go.
+  xpubAddresses: XpubAddresses | null = null;
+  formXpubAddresses: XpubAddresses | null = null;
 
   history: RewardDay[] = [];
   loading = false;
@@ -53,6 +65,10 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
   private saveRewardsSubscription!: Subscription;
   private rewardRulesSubscription!: Subscription;
   private exposureSub?: Subscription;
+  private xpubSub?: Subscription;
+  private formXpubSub?: Subscription;
+  private formChangesSub?: Subscription;
+  private riskSub?: Subscription;
 
   constructor(
     private http: HttpClient,
@@ -63,9 +79,22 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
     private snackbarService: SnackbarService,
     private formBuilder: UntypedFormBuilder,
     private changeDetectorRef: ChangeDetectorRef,
+    private translate: TranslateService,
   ) {
     this.rewardForm = this.formBuilder.group({
-      address: ['', Validators.compose([Validators.minLength(20), Validators.maxLength(112)])],
+      address: ['', Validators.compose([
+        Validators.minLength(20), Validators.maxLength(112), rewardAddressValidator(() => !!this.rewardForm?.get('acceptRisk')!.value),
+      ])],
+      acceptRisk: [false],
+    });
+    this.riskSub = this.rewardForm.get('acceptRisk')!.valueChanges.subscribe(() => {
+      this.rewardForm.get('address')!.updateValueAndValidity();
+      this.changeDetectorRef.markForCheck();
+    });
+    this.formChangesSub = this.rewardForm.get('address')!.valueChanges.pipe(debounceTime(300)).subscribe(value => {
+      this.formXpubSub?.unsubscribe();
+      this.formXpubSub = this.loadXpubAddresses((value || '').trim(), r => this.formXpubAddresses = r);
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -88,6 +117,33 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
     this.saveRewardsSubscription?.unsubscribe();
     this.rewardRulesSubscription?.unsubscribe();
     this.exposureSub?.unsubscribe();
+    this.xpubSub?.unsubscribe();
+    this.formXpubSub?.unsubscribe();
+    this.riskSub?.unsubscribe();
+    this.formChangesSub?.unsubscribe();
+  }
+
+  // Asks the hypervisor for the first addresses of xpub and passes them to set,
+  // or null when xpub is not an xpub.
+  private loadXpubAddresses(xpub: string, set: (r: XpubAddresses | null) => void): Subscription | undefined {
+    if (!xpub.startsWith('xpub')) {
+      set(null);
+      this.changeDetectorRef.markForCheck();
+
+      return undefined;
+    }
+
+    return this.nodeService.getRewardXpubAddresses(xpub).subscribe({
+      next: (r: any) => {
+        set({ xpub: xpub, addresses: r?.addresses || [], error: '' });
+        this.changeDetectorRef.markForCheck();
+      },
+      error: (err: OperationError) => {
+        err = processServiceError(err);
+        set({ xpub: xpub, addresses: [], error: err.originalServerErrorMsg || err.translatableErrorMsg });
+        this.changeDetectorRef.markForCheck();
+      },
+    });
   }
 
   // Asks the visor whether the reward address has sent coins before. Only runs when the address changes.
@@ -98,6 +154,8 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
     this.exposureAddress = this.rewardsAddress;
     this.exposure = null;
     this.exposureSub?.unsubscribe();
+    this.xpubSub?.unsubscribe();
+    this.xpubSub = this.loadXpubAddresses(this.rewardsAddress, r => this.xpubAddresses = r);
     if (!this.rewardsAddress || this.rewardsAddressIsXpub) {
       return;
     }
@@ -123,7 +181,7 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
       `api/rewards/skycoin-rewards/visor/${this.pk}?days=${this.days}`
     ).pipe(
       catchError(err => {
-        this.errorMsg = 'Failed to load reward data';
+        this.errorMsg = 'node.details.rewards-info.history.load-error';
 
         return of({ history: [] });
       })
@@ -143,7 +201,7 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
   formatDate(dateStr: string): string {
     const d = new Date(dateStr + 'T00:00:00');
 
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return d.toLocaleDateString(this.translate.getCurrentLang() || 'en', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
   statusClass(day: RewardDay): string {
@@ -156,10 +214,10 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
 
   statusText(day: RewardDay): string {
     if (!day.amount || day.amount === 0) {
- return 'No reward'; 
+ return 'node.details.rewards-info.history.status-none'; 
 }
 
-    return day.sent ? 'Sent' : 'Pending';
+    return day.sent ? 'node.details.rewards-info.history.status-sent' : 'node.details.rewards-info.history.status-pending';
   }
 
   /** True when the configured reward address is actually a BIP44
@@ -173,6 +231,7 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
     this.showRewardForm = !this.showRewardForm;
     if (this.showRewardForm) {
       this.rewardForm.get('address')!.setValue(this.rewardsAddress || '');
+      this.rewardForm.get('acceptRisk')!.setValue(false);
     }
   }
 
@@ -182,7 +241,7 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
 }
     const newAddr = (this.rewardForm.get('address')!.value || '').trim();
     const op = newAddr
-      ? this.nodeService.setRewardsAddress(this.pk, newAddr)
+      ? this.nodeService.setRewardsAddress(this.pk, newAddr, needsAcceptRisk(newAddr, this.rewardForm.get('acceptRisk')!.value))
       : this.nodeService.deleteRewardsAddress(this.pk);
     this.saveRewardsSubscription = op.subscribe({
       next: () => {

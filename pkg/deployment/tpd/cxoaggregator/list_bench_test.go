@@ -10,7 +10,7 @@ import (
 
 func benchLeaf(n int) []byte {
 	l := transportListLeaf{Version: "v"}
-	for i := 0; i < n; i++ {
+	for range n {
 		pk, _ := cipher.GenerateKeyPair()
 		l.Compact = append(l.Compact, transport.CompactEntry{Remote: pk, Type: "stcpr"})
 	}

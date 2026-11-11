@@ -61,19 +61,16 @@ func TestSOCKS5_MITMHandshakeAndSplice(t *testing.T) {
 		},
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_ = Run(ctx, logging.MustGetLogger("skynetweb-test"), dialer, Config{ //nolint:errcheck,gosec
 			ProxyPort:  proxyPort,
 			TLSMITM:    true,
 			TLSPort:    443,
 			LeafMinter: minter,
 		})
-	}()
+	})
 
 	if err := waitForListener(proxyPort); err != nil {
 		t.Fatal(err)
@@ -130,8 +127,7 @@ func TestSOCKS5_NonTLSPortStillSplices(t *testing.T) {
 		},
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go func() {
 		_ = Run(ctx, logging.MustGetLogger("skynetweb-test"), dialer, Config{ //nolint:errcheck,gosec
 			ProxyPort:  proxyPort,
@@ -214,8 +210,7 @@ func TestSOCKS5_MITMSelfLoopback(t *testing.T) {
 	}
 	proxyPort := pickFreePort(t)
 	selfPorts := make(chan uint16, 1)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go func() {
 		_ = Run(ctx, logging.MustGetLogger("skynetweb-test"), fakeDialer{}, Config{ //nolint:errcheck,gosec
 			ProxyPort:    proxyPort,

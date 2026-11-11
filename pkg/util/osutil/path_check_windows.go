@@ -1,5 +1,4 @@
 //go:build windows
-// +build windows
 
 // Package osutil pkg/util/osutil/path_check_windows.go c0-com-util
 package osutil

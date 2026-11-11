@@ -29,7 +29,7 @@ func seedSiblingRG(t *testing.T, r *router, lPK, rPK, midPK cipher.PubKey, rPort
 		Edges: [2]cipher.PubKey{lPK, midPK},
 	}
 	rg.mu.Lock()
-	rg.tps = []*transport.ManagedTransport{mt}
+	setTestLegs(rg, []*transport.ManagedTransport{mt}, nil, nil)
 	rg.mu.Unlock()
 
 	r.rgsNs[desc] = &NoiseRouteGroup{rg: rg, Conn: rg}

@@ -250,7 +250,7 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// without this the script's geo.*, transports.*, and peers.*
 	// stdlib calls would return zero values from policy.NopProvider.
 	{
-		policyLogger := func(format string, args ...interface{}) {
+		policyLogger := func(format string, args ...any) {
 			log.Infof(format, args...)
 		}
 		var provider *visorPolicyProvider

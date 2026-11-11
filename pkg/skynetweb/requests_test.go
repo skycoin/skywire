@@ -35,8 +35,7 @@ func (notingDialer) DialSkynet(ctx context.Context, _ cipher.PubKey, _ uint16, _
 func TestSOCKS5RecordsRequests(t *testing.T) {
 	requests := proxystatus.NewRequestLog(10)
 	proxyPort := pickFreePort(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go func() {
 		_ = Run(ctx, logging.MustGetLogger("skynetweb-test"), notingDialer{}, Config{ProxyPort: proxyPort, Requests: requests}) //nolint:errcheck,gosec
 	}()

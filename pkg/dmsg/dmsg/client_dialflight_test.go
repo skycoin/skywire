@@ -58,7 +58,7 @@ func TestEnsureAndObtainSession_CoalescesConcurrentDials(t *testing.T) {
 		got   = make([]ClientSession, callers)
 		errs  = make([]error, callers)
 	)
-	for i := 0; i < callers; i++ {
+	for i := range callers {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -70,7 +70,7 @@ func TestEnsureAndObtainSession_CoalescesConcurrentDials(t *testing.T) {
 	wg.Wait()
 
 	distinct := make(map[*SessionCommon]struct{}, callers)
-	for i := 0; i < callers; i++ {
+	for i := range callers {
 		require.NoError(t, errs[i], "caller %d", i)
 		distinct[got[i].SessionCommon] = struct{}{}
 	}

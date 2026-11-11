@@ -1,0 +1,102 @@
+@if (loading && groups.length === 0) {
+  <div class="cat-note">{{ 'apps.catalog.loading' | translate }}</div>
+}
+@if (error) {
+  <div class="cat-note cat-error">{{ error | translate }}</div>
+}
+
+@for (group of groups; track group.kind) {
+  <section class="cat-group">
+    <h3 class="cat-group-title">
+      {{ 'apps.catalog.kinds.' + group.kind | translate }}
+      <span class="cat-count">{{ group.entries.length }}</span>
+    </h3>
+    <div class="cat-grid">
+      @for (entry of group.entries; track entry.name) {
+        <div class="cat-card" [attr.data-app]="entry.name">
+          <div class="cat-card-header">
+            <span class="cat-name">{{ entry.name }}</span>
+            <span class="cat-kind">{{ 'apps.catalog.kind.' + entry.kind | translate }}</span>
+          </div>
+          @if (entry.description) {
+            <div class="cat-desc">{{ entry.description }}</div>
+          }
+
+          @if (entry.instances.length === 0) {
+            <div class="cat-empty">
+              <span class="cat-not-added">{{ 'apps.catalog.not-added' | translate }}</span>
+              <button mat-button class="cat-btn cat-add" [disabled]="busy.has('add:' + entry.name)" (click)="add(entry)">
+                <mat-icon [inline]="true">add</mat-icon>
+                {{ 'apps.catalog.add' | translate }}
+              </button>
+            </div>
+          }
+
+          @for (inst of entry.instances; track inst.name) {
+            <div class="cat-instance" [attr.data-instance]="inst.name">
+              <div class="cat-instance-row">
+                <span class="cat-instance-name">{{ inst.name }}</span>
+                <span class="cat-status" [ngClass]="statusClass(inst)" [title]="detail(inst)">
+                  {{ statusKey(inst) | translate }}
+                </span>
+              </div>
+              <div class="cat-instance-meta">
+                @if (inst.port) {
+                  <span>{{ 'apps.catalog.port' | translate }} {{ inst.port }}</span>
+                }
+                <span>{{ 'apps.catalog.autostart' | translate }}:
+                  {{ (autostart(inst) ? 'apps.catalog.on' : 'apps.catalog.off') | translate }}</span>
+              </div>
+              @if (extraDetail(inst)) {
+                <div class="cat-detail">{{ extraDetail(inst) }}</div>
+              }
+              <div class="cat-actions">
+                <button mat-button class="cat-btn cat-state" [disabled]="busy.has(inst.name)" (click)="toggleState(inst)">
+                  <mat-icon [inline]="true">{{ isRunning(inst) ? 'stop' : 'play_arrow' }}</mat-icon>
+                  {{ (isRunning(inst) ? 'apps.stop-app' : 'apps.start-app') | translate }}
+                </button>
+                @let autostartLabel = (autostart(inst) ? 'apps.apps-list.disable-autostart' : 'apps.apps-list.enable-autostart') | translate;
+                <button mat-icon-button class="cat-icon-btn cat-autostart" [class.on]="autostart(inst)" [disabled]="busy.has(inst.name)"
+                  (click)="toggleAutostart(inst)" [matTooltip]="autostartLabel" [attr.aria-label]="autostartLabel">
+                  <mat-icon>power_settings_new</mat-icon>
+                </button>
+                <button mat-icon-button class="cat-icon-btn cat-logs" (click)="viewLogs(inst)"
+                  [matTooltip]="'apps.view-logs' | translate" [attr.aria-label]="'apps.view-logs' | translate">
+                  <mat-icon>list</mat-icon>
+                </button>
+                @if (appFor(inst) && canChooseServer(entry)) {
+                  <button mat-icon-button class="cat-icon-btn cat-choose-server" (click)="chooseServer(inst)"
+                    [matTooltip]="'apps.catalog.choose-server' | translate" [attr.aria-label]="'apps.catalog.choose-server' | translate">
+                    <mat-icon>dns</mat-icon>
+                  </button>
+                }
+                @if (appFor(inst)) {
+                  <button mat-icon-button class="cat-icon-btn cat-settings" [class.on]="openSettings.has(inst.name)" (click)="toggleSettings(inst.name)"
+                    [matTooltip]="'apps.settings' | translate" [attr.aria-label]="'apps.settings' | translate"
+                    [attr.aria-expanded]="openSettings.has(inst.name)">
+                    <mat-icon>{{ openSettings.has(inst.name) ? 'expand_less' : 'settings' }}</mat-icon>
+                  </button>
+                }
+              </div>
+              @if (openSettings.has(inst.name) && appFor(inst)) {
+                <app-app-settings
+                  [app]="appFor(inst)!"
+                  [pickServer]="pickRequests.get(inst.name) || 0"
+                  (saved)="toggleSettings(inst.name); refresh()"
+                  (cancelled)="toggleSettings(inst.name)">
+                </app-app-settings>
+              }
+            </div>
+          }
+
+          @if (entry.multi_instance && entry.instances.length > 0) {
+            <button mat-button class="cat-btn cat-add-another" [disabled]="busy.has('add:' + entry.name)" (click)="add(entry, true)">
+              <mat-icon [inline]="true">add</mat-icon>
+              {{ 'apps.catalog.add-another' | translate }}
+            </button>
+          }
+        </div>
+      }
+    </div>
+  </section>
+}

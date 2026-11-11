@@ -1,5 +1,4 @@
 //go:build !no_ci
-// +build !no_ci
 
 // Package integration_test — pkg/../internal/integration/dmsgip_test.go: end-to-end
 // coverage for dmsgip (report a client's public IP as seen over the dmsg network).
@@ -30,7 +29,7 @@ import (
 
 // firstIPLine returns the first non-empty, whitespace-trimmed line of s.
 func firstIPLine(s string) string {
-	for _, ln := range strings.Split(s, "\n") {
+	for ln := range strings.SplitSeq(s, "\n") {
 		if t := strings.TrimSpace(ln); t != "" {
 			return t
 		}

@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -59,7 +60,7 @@ func fetchHistoryPeers(addr string) ([]string, error) {
 			out = append(out, p)
 		}
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out, nil
 }
 
@@ -258,8 +259,8 @@ func runGroupPollLoop(ctx context.Context, inCh chan<- groupTUIMsg, errCh chan<-
 			continue
 		}
 		for _, msg := range msgs {
-			if msg.TS.After(since) {
-				since = msg.TS
+			if msg.Arrived.After(since) {
+				since = msg.Arrived
 			}
 			select {
 			case <-ctx.Done():

@@ -18,8 +18,9 @@
 package clirewardsserver
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 
@@ -285,11 +286,11 @@ func renderSNFailuresANSI(s snStats, width int) string {
 		for r, v := range n.Snap.FailuresByReason {
 			rows = append(rows, reasonRow{string(r), v})
 		}
-		sort.Slice(rows, func(i, j int) bool {
-			if rows[i].n != rows[j].n {
-				return rows[i].n > rows[j].n
-			}
-			return rows[i].name < rows[j].name
+		slices.SortFunc(rows, func(a, b reasonRow) int {
+			return cmp.Or(
+				cmp.Compare(b.n, a.n),
+				cmp.Compare(a.name, b.name),
+			)
 		})
 		for _, r := range rows {
 			frac := float64(r.n) / float64(total)
@@ -334,7 +335,7 @@ func renderSNRouteLenANSI(s snStats, width int) string {
 				maxN = v
 			}
 		}
-		sort.Ints(hops)
+		slices.Sort(hops)
 		if maxN == 0 {
 			maxN = 1
 		}

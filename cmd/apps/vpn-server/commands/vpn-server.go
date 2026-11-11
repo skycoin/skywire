@@ -10,9 +10,9 @@ import (
 	"syscall"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/logging"
 
 	"github.com/0magnet/calvin"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -41,6 +41,7 @@ var (
 
 func init() {
 	launcher.RegisterApp("vpn-server", RunVPNServer)
+	launcher.RegisterAppFlags("vpn-server", RootCmd.Flags())
 	RootCmd.Flags().StringVar(&localPKStr, "pk", "", "local pubkey")
 	RootCmd.Flags().StringVar(&localSKStr, "sk", "", "local seckey")
 	RootCmd.Flags().StringVar(&whitelist, "whitelist", "", "comma-separated list of public keys allowed to connect (empty = allow all)")
@@ -134,7 +135,7 @@ func RunVPNServer(ctx context.Context, args []string) error {
 	// Parse whitelist
 	var whitelistPKs []cipher.PubKey
 	if whitelist != "" {
-		for _, pkStr := range strings.Split(whitelist, ",") {
+		for pkStr := range strings.SplitSeq(whitelist, ",") {
 			pkStr = strings.TrimSpace(pkStr)
 			if pkStr == "" {
 				continue
@@ -192,13 +193,13 @@ func RunVPNServer(ctx context.Context, args []string) error {
 	return nil
 }
 
-func setAppErr(appCl *app.Client, log logrus.FieldLogger, err error) {
+func setAppErr(appCl *app.Client, log logging.FieldLogger, err error) {
 	if appErr := appCl.SetError(err.Error()); appErr != nil {
 		log.WithError(appErr).WithField("original_error", err).Warn("Failed to set error")
 	}
 }
 
-func setAppStatus(appCl *app.Client, log logrus.FieldLogger, status appserver.AppDetailedStatus) {
+func setAppStatus(appCl *app.Client, log logging.FieldLogger, status appserver.AppDetailedStatus) {
 	if err := appCl.SetDetailedStatus(string(status)); err != nil {
 		log.WithError(err).WithField("status", status).Warn("Failed to set status")
 	}
@@ -209,7 +210,7 @@ func Execute() {
 	cmdutil.RunRoot(RootCmd)
 }
 
-func setAppPort(appCl *app.Client, log logrus.FieldLogger, port routing.Port) {
+func setAppPort(appCl *app.Client, log logging.FieldLogger, port routing.Port) {
 	if err := appCl.SetAppPort(port); err != nil {
 		log.WithError(err).WithField("port", port).Warn("Failed to set port")
 	}

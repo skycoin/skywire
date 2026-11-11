@@ -3,7 +3,7 @@ package router
 
 import (
 	"math"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 
@@ -159,13 +159,10 @@ func (st *sackTracker) GenerateSACK() (lastContiguous uint32, words []uint64) {
 		return lastContiguous, nil
 	}
 	span := st.highest - lastContiguous // number of sequences above the contiguous point
-	nWords := int((span + 63) / 64)
-	if nWords > sackMaxWords {
-		nWords = sackMaxWords
-	}
+	nWords := min(int((span+63)/64), sackMaxWords)
 	words = make([]uint64, nWords)
-	for w := 0; w < nWords; w++ {
-		for i := uint32(0); i < 64; i++ {
+	for w := range nWords {
+		for i := range uint32(64) {
 			seq := lastContiguous + 1 + uint32(w)*64 + i
 			if st.received[seq] {
 				words[w] |= 1 << i
@@ -200,7 +197,7 @@ type retxEntry struct {
 	// window (measured live: a whole-window flush duplicated 33.8MB against
 	// 14.7MB of payload on one leg of a 20MB transfer). The tag is the
 	// transport identity, NOT the leg index: indices shift whenever
-	// pruneDeadTransports compacts tps[] after a leg drop, and an index tag
+	// pruneDeadTransports compacts legs after a leg drop, and an index tag
 	// went stale exactly then — the flush missed genuinely stranded sequences
 	// and the receiver's no-skip frontier wedged into a retransmit storm.
 	tpID uuid.UUID
@@ -368,7 +365,7 @@ func (rb *retxBuffer) HeldSeqsOnTps(tps map[uuid.UUID]bool) []uint32 {
 			seqs = append(seqs, seq)
 		}
 	}
-	sort.Slice(seqs, func(i, j int) bool { return seqs[i] < seqs[j] })
+	slices.Sort(seqs)
 	return seqs
 }
 
@@ -468,7 +465,7 @@ func (rb *retxBuffer) ProcessSACKWith(lastContiguous uint32, words []uint64, thr
 	now := time.Now()
 	for w, word := range words {
 		base := lastContiguous + 1 + uint32(w)*64
-		for i := uint32(0); i < 64; i++ {
+		for i := range uint32(64) {
 			checkSeq := base + i
 			if word&(1<<i) != 0 {
 				if e, ok := rb.entries[checkSeq]; ok {
@@ -609,7 +606,7 @@ func (rb *retxBuffer) Seqs() []uint32 {
 	for s := range rb.entries {
 		out = append(out, s)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	slices.Sort(out)
 	return out
 }
 

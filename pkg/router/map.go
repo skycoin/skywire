@@ -52,7 +52,7 @@ func dialHopWithRetry(ctx context.Context, pk cipher.PubKey, dial func(context.C
 		client *Client
 		err    error
 	)
-	for attempt := 0; attempt < dialHopAttempts; attempt++ {
+	for attempt := range dialHopAttempts {
 		if attempt > 0 {
 			select {
 			case <-time.After(time.Duration(attempt) * time.Second):
@@ -159,7 +159,7 @@ func MakeMap(ctx context.Context, dialer network.Dialer, pks []cipher.PubKey) (M
 // successfully dialed clients. This prevents goroutine leaks when MakeMap returns
 // early due to timeout or error.
 func drainResults(results <-chan dialResult, remaining int) {
-	for i := 0; i < remaining; i++ {
+	for range remaining {
 		res := <-results
 		if res.client != nil {
 			res.client.Close() //nolint:errcheck,gosec
@@ -237,7 +237,7 @@ func MakePooledMap(ctx context.Context, pool *ClientPool, pks []cipher.PubKey) (
 			}
 			remaining := len(pks) - received
 			go func() {
-				for i := 0; i < remaining; i++ {
+				for range remaining {
 					res := <-results
 					if res.client != nil {
 						pool.Discard(res.client)

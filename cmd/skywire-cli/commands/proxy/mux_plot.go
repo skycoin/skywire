@@ -9,7 +9,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"sort"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -590,7 +590,7 @@ func frame(tracks map[int]*legTrack) string {
 	for i := range tracks {
 		idxs = append(idxs, i)
 	}
-	sort.Ints(idxs)
+	slices.Sort(idxs)
 	if len(idxs) == 0 {
 		return ""
 	}

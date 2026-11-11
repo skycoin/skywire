@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // maxMemLogs bounds the in-memory ring so a long-lived browser app can't grow
@@ -82,8 +82,8 @@ func (m *memLogStore) LogsSince(t time.Time) ([]string, error) {
 	return out, nil
 }
 
-// Fire implements logrus.Hook.
-func (m *memLogStore) Fire(entry *log.Entry) error {
+// Fire implements logging.Hook.
+func (m *memLogStore) Fire(entry *logging.Entry) error {
 	s, err := entry.String()
 	if err != nil {
 		return err
@@ -100,8 +100,8 @@ func (m *memLogStore) Fire(entry *log.Entry) error {
 	return nil
 }
 
-// Levels implements logrus.Hook.
-func (m *memLogStore) Levels() []log.Level { return log.AllLevels }
+// Levels implements logging.Hook.
+func (m *memLogStore) Levels() []logging.Level { return logging.AllLevels }
 
 // Flush implements LogStore.
 func (m *memLogStore) Flush() error { return nil }

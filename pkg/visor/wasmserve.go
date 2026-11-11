@@ -31,6 +31,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -68,6 +69,10 @@ type WasmServeConfig struct {
 	// /skywire.wasm. Empty means the module kept beside the binary, or in the
 	// user cache directory (execwasm.DefaultPath), fetched when there is none.
 	ExecWasmPath string
+	// ExecWasmTinyGoPath serves a TinyGo build of the same module at
+	// /skywire-tinygo.wasm, which the desk loads when opened with ?wasm=tinygo.
+	// It needs TinyGo's loader, wasmhv.WasmExecTinyGoJS. Empty means none.
+	ExecWasmTinyGoPath string
 	// module returns the refresher for that module, nil to serve it as it is,
 	// as a standalone `hv serve` does.
 	module func() *wasmModuleRefresher
@@ -238,6 +243,11 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		cfg.refresher().ready(r.Context())
 		serveExecWasm(w, r, execWasmPath)
 	})
+	if cfg.ExecWasmTinyGoPath != "" {
+		mux.HandleFunc("/skywire-tinygo.wasm", func(w http.ResponseWriter, r *http.Request) {
+			serveExecWasm(w, r, cfg.ExecWasmTinyGoPath)
+		})
+	}
 	// The desk — the ONE page, served AT THE ROOT below: the tab as a Linux
 	// host. The page spawns no visor of its own; the terminal runs `skywire
 	// autoconfig` which starts the FULL binary's visor in the foreground, a second terminal
@@ -245,7 +255,7 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	// loopback the nested browser opens it maximized on top. A visor the
 	// operator stopped stays stopped across reloads (desk-boot's session).
 	serveBytes("/desk-boot.js", "text/javascript", wasmhv.DeskBootJS())
-	deskPage := withLinks(deskShellHTML(wasmDeskScripts(wasmBrowseOriginScripts(cfg, browseScheme, bport, suffix)), deskWasmBootOpts(cfg.DeskHelpTerminal, cfg.DeskDocsPort)), cfg.Links)
+	deskPage := withLinks(deskShellHTML(wasmDeskScripts(wasmBrowseOriginScripts(cfg, browseScheme, bport, suffix)), deskWasmBootOpts(cfg.DeskHelpTerminal, cfg.DeskDocsPort, cfg.ExecWasmTinyGoPath != "")), cfg.Links)
 	if cfg.Harness {
 		// --harness injects ctl-bridge.js (its presence IS the harness
 		// signal). On the desk it registers the tab and mirrors the foreground visor
@@ -588,10 +598,8 @@ func wasmLocalhostTLSCert() (tls.Certificate, error) {
 		// *.mesh.localhost SAN (real-origin browse origins B share this one cert
 		// with the visor origin V); otherwise fall through and regenerate.
 		if leaf, e := x509.ParseCertificate(c.Certificate[0]); e == nil && time.Now().Before(leaf.NotAfter) {
-			for _, n := range leaf.DNSNames {
-				if n == "*.mesh.localhost" {
-					return c, nil
-				}
+			if slices.Contains(leaf.DNSNames, "*.mesh.localhost") {
+				return c, nil
 			}
 		}
 	}
@@ -703,16 +711,23 @@ func randomHex(n int) (string, error) {
 // The visor is worth that cost. A terminal whose sole content is the output of
 // `skywire --help`, printed once and then exited, is not — and the docs are a
 // server that most sessions never open. Both stay available on request.
-func deskWasmBootOpts(helpTerminal bool, docsPort int) string {
+//
+// With tinyGo, opening the page with ?wasm=tinygo loads /skywire-tinygo.wasm
+// instead. The Go module stays the default.
+func deskWasmBootOpts(helpTerminal bool, docsPort int, tinyGo bool) string {
+	wasmURL := `'/skywire.wasm'`
+	if tinyGo {
+		wasmURL = `new URLSearchParams(location.search).get('wasm') === 'tinygo' ? '/skywire-tinygo.wasm' : '/skywire.wasm'`
+	}
 	return fmt.Sprintf(`{
   persistDB: 'skywire-desk',
-  wasmURL: '/skywire.wasm',
+  wasmURL: %s,
   wasmExecURL: '/wasm_exec.js',
   autostartVisor: true,
   helpTerminal: %t,
   docsPort: %d,
   hvWindow: true,
-}`, helpTerminal, docsPort)
+}`, wasmURL, helpTerminal, docsPort)
 }
 
 // wasmDeskScripts is the script include list of the wasm-served desk: the Go

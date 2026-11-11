@@ -22,7 +22,7 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -135,10 +135,7 @@ func objectSum(n uint64) string {
 	buf := make([]byte, chunkBytes)
 	h := sha256.New()
 	for off := uint64(0); off < n; off += chunkBytes {
-		m := uint64(chunkBytes)
-		if n-off < m {
-			m = n - off
-		}
+		m := min(n-off, uint64(chunkBytes))
 		pattern(buf[:m], n, off)
 		h.Write(buf[:m]) //nolint:errcheck,gosec // hash.Hash never errors
 	}
@@ -189,10 +186,7 @@ func serveFixed(w http.ResponseWriter, r *http.Request, nStr string) {
 	buf := make([]byte, chunk)
 	fl, _ := w.(http.Flusher)
 	for off := start - start%chunk; off <= end; off += chunk {
-		m := uint64(chunk)
-		if n-off < m {
-			m = n - off
-		}
+		m := min(n-off, uint64(chunk))
 		pattern(buf[:m], n, off)
 		lo, hi := uint64(0), m
 		if off < start {
@@ -431,10 +425,9 @@ func uploadDrain(r *http.Request) bool {
 	if r.Body == nil {
 		return true
 	}
-	limit := int64(windowBytes()) //nolint:gosec // G115: windowBytes is bounded by the flag
-	if limit < 1<<20 {
-		limit = 1 << 20
-	}
+	limit := max(
+		//nolint:gosec // G115: windowBytes is bounded by the flag
+		int64(windowBytes()), 1<<20)
 	n, _ := io.CopyN(io.Discard, r.Body, limit+1) //nolint:errcheck // a read error is a dead conn either way
 	return n <= limit
 }
@@ -449,7 +442,7 @@ func uploadWhole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{"bytes": n, "sha256": hex.EncodeToString(h.Sum(nil))}) //nolint:errcheck
+	_ = json.NewEncoder(w).Encode(map[string]any{"bytes": n, "sha256": hex.EncodeToString(h.Sum(nil))}) //nolint:errcheck
 }
 
 // uploadAdvertise is the opt-in signal. X-Chunked-Upload is the ONLY
@@ -622,10 +615,7 @@ func uploadChunk(w http.ResponseWriter, r *http.Request, id, cr string) {
 // log.
 func (s *uploadSession) readChunk(body io.Reader, buf []byte) error {
 	for off := 0; off < len(buf); {
-		end := off + uploadReadStep
-		if end > len(buf) {
-			end = len(buf)
-		}
+		end := min(off+uploadReadStep, len(buf))
 		n, err := io.ReadFull(body, buf[off:end])
 		off += n
 		if n > 0 {
@@ -752,11 +742,11 @@ func uploadAck(w http.ResponseWriter, code int, id, cr string, acked, total uint
 	if sum != "" {
 		w.Header().Set("X-Sha256", sum)
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"bytes": total, "sha256": sum}) //nolint:errcheck
+		_ = json.NewEncoder(w).Encode(map[string]any{"bytes": total, "sha256": sum}) //nolint:errcheck
 		return
 	}
 	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{"received": acked, "total": total}) //nolint:errcheck
+	_ = json.NewEncoder(w).Encode(map[string]any{"received": acked, "total": total}) //nolint:errcheck
 }
 
 // uploadSweep drops the sessions that no longer earn their memory and
@@ -804,7 +794,9 @@ func uploadSweep(keep string) int {
 		live++
 	}
 	if len(sealed) > uploadSealedMemo {
-		sort.Slice(sealed, func(i, j int) bool { return sealed[i].last.Before(sealed[j].last) })
+		slices.SortFunc(sealed, func(a, b sealedSession) int {
+			return a.last.Compare(b.last)
+		})
 		for _, e := range sealed[:len(sealed)-uploadSealedMemo] {
 			if e.id == keep {
 				continue

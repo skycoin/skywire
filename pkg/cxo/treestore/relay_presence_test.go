@@ -48,19 +48,19 @@ import (
 
 type presenceProbe struct {
 	name           string
-	disconnects    int64
-	unsubs         int64
+	disconnects    atomic.Int64
+	unsubs         atomic.Int64
 	firstDisconnAt atomic.Value // time.Time
 }
 
 func (p *presenceProbe) onDisconnect(_ *node.Conn, _ error) {
-	if atomic.AddInt64(&p.disconnects, 1) == 1 {
+	if p.disconnects.Add(1) == 1 {
 		p.firstDisconnAt.Store(time.Now())
 	}
 }
 
 func (p *presenceProbe) onUnsub(_ *node.Conn, _ skycipher.PubKey) {
-	atomic.AddInt64(&p.unsubs, 1)
+	p.unsubs.Add(1)
 }
 
 // newInstrumentedNode builds a dmsg-enabled CXO node bound to sk, with
@@ -145,8 +145,8 @@ func TestRelayPresenceNotTransitive(t *testing.T) {
 	require.True(t, waitVal(a2Sub, "k", "v1", 15*time.Second), "control: direct subscriber must receive V's root")
 	require.True(t, waitVal(aSub, "k", "v1", 15*time.Second), "relay must forward V's root to A")
 
-	require.Equal(t, int64(0), atomic.LoadInt64(&aProbe.disconnects))
-	require.Equal(t, int64(0), atomic.LoadInt64(&a2Probe.disconnects))
+	require.Equal(t, int64(0), aProbe.disconnects.Load())
+	require.Equal(t, int64(0), a2Probe.disconnects.Load())
 
 	// ---- Kill V (publisher offline). ----
 	killAt := time.Now()
@@ -155,11 +155,11 @@ func TestRelayPresenceNotTransitive(t *testing.T) {
 
 	// The direct edge MUST notice V's disappearance (its conn drops). This is
 	// the load-bearing control: if it ever fails, close detection itself broke.
-	require.Eventually(t, func() bool { return atomic.LoadInt64(&a2Probe.disconnects) > 0 },
+	require.Eventually(t, func() bool { return a2Probe.disconnects.Load() > 0 },
 		15*time.Second, 200*time.Millisecond,
 		"direct subscriber A2 never observed V's disconnect")
 	// The relay's own edge to V also drops — R learns V is gone.
-	require.Eventually(t, func() bool { return atomic.LoadInt64(&rProbe.disconnects) > 0 },
+	require.Eventually(t, func() bool { return rProbe.disconnects.Load() > 0 },
 		15*time.Second, 200*time.Millisecond,
 		"relay R never observed V's disconnect")
 
@@ -168,7 +168,7 @@ func TestRelayPresenceNotTransitive(t *testing.T) {
 	// presence, this assertion flips and the RFC's uptime design must be
 	// revisited.
 	require.Never(t, func() bool {
-		return atomic.LoadInt64(&aProbe.disconnects) > 0 || atomic.LoadInt64(&aProbe.unsubs) > 0
+		return aProbe.disconnects.Load() > 0 || aProbe.unsubs.Load() > 0
 	}, 8*time.Second, 500*time.Millisecond,
 		"presence propagated through the relay to A — CXO relay semantics changed; revisit the uptime design")
 
@@ -177,8 +177,8 @@ func TestRelayPresenceNotTransitive(t *testing.T) {
 		when = v.Sub(killAt).Round(time.Millisecond).String()
 	}
 	t.Logf("presence after V killed: A2(direct) disc=%d | R(relay edge) disc=%d (+%s) | A(behind relay) disc=%d unsub=%d",
-		atomic.LoadInt64(&a2Probe.disconnects), atomic.LoadInt64(&rProbe.disconnects), when,
-		atomic.LoadInt64(&aProbe.disconnects), atomic.LoadInt64(&aProbe.unsubs))
+		a2Probe.disconnects.Load(), rProbe.disconnects.Load(), when,
+		aProbe.disconnects.Load(), aProbe.unsubs.Load())
 }
 
 func waitVal(s *Subscriber, path, want string, d time.Duration) bool {

@@ -25,7 +25,7 @@ func TestLostSessionBudget(t *testing.T) {
 
 	// A drop is retried up to lostSessionMaxRetries times.
 	ce.noteLostSession(srv)
-	for i := 0; i < lostSessionMaxRetries; i++ {
+	for i := range lostSessionMaxRetries {
 		pk, ok := ce.takeLostSession()
 		require.True(t, ok, "attempt %d should still have budget", i)
 		require.Equal(t, srv, pk)

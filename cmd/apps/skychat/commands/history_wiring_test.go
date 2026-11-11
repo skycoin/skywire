@@ -21,9 +21,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skychat/history"
 )
 
@@ -33,7 +32,7 @@ import (
 func withChatLog(t *testing.T) {
 	t.Helper()
 	prev := chatLog
-	l := logrus.New()
+	l := logging.New()
 	l.SetOutput(io.Discard)
 	chatLog = l
 	t.Cleanup(func() { chatLog = prev })

@@ -1,5 +1,4 @@
 //go:build darwin
-// +build darwin
 
 // Package visorconfig pkg/visor/visorconfig/values_darwin.go c3-vis-core
 package visorconfig
@@ -25,10 +24,8 @@ func UserConfig() skyenv.PkgConfig {
 	usrConfig := skyenv.PkgConfig{
 		LauncherBinPath: "/Applications/Skywire.app/Contents/MacOS",
 		LocalPath:       HomePath() + "/.skywire/local",
-		Hypervisor: skyenv.Hypervisor{
-			DbPath:     HomePath() + "/.skywire/users.db",
-			EnableAuth: true,
-		},
+		DbPath:          HomePath() + "/.skywire/users.db",
+		EnableAuth:      true,
 	}
 	return usrConfig
 }

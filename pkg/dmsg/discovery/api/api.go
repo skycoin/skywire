@@ -7,12 +7,11 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -70,7 +69,7 @@ type API struct {
 	// propagates DelEntry removals into the DHT so stale targets don't
 	// accumulate past their HTTP-discovery lifetime.
 	dhtMirror interface {
-		Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
+		Mirror(subjectPK cipher.PubKey, entry any, seq uint64)
 		Delete(subjectPK cipher.PubKey)
 	}
 
@@ -136,7 +135,7 @@ const maxBodyBytes = 1 << 20
 // New returns a new API object, which can be started as a server.
 // clientEntryTTL is the Redis expiration applied to client entries;
 // 0 disables expiration (legacy behavior).
-func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, enableLoadTesting, enableMetrics bool, dmsgAddr, authPassphrase string, clientEntryTTL time.Duration) *API {
+func New(log logging.FieldLogger, db store.Storer, m metrics.Metrics, testMode, enableLoadTesting, enableMetrics bool, dmsgAddr, authPassphrase string, clientEntryTTL time.Duration) *API {
 	if log == nil {
 		log = logging.MustGetLogger("dmsg_disc")
 	}
@@ -185,6 +184,8 @@ func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, e
 	}
 	r.Use(httputil.SetLoggerMiddleware(log))
 
+	r.Get("/dmsg-discovery/inbox/{pk}", api.getInbox())
+	r.Post("/dmsg-discovery/inbox/{pk}", api.setInbox())
 	r.Get("/dmsg-discovery/entry/{pk}", api.getEntry())
 	r.Post("/dmsg-discovery/entry/", api.setEntry())
 	r.Post("/dmsg-discovery/entry/{pk}", api.setEntry())
@@ -208,7 +209,7 @@ func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, e
 // SetDHTMirror sets a mirror that publishes entries to the DHT on every
 // successful SetEntry and removes them from the DHT on DelEntry.
 func (a *API) SetDHTMirror(m interface {
-	Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
+	Mirror(subjectPK cipher.PubKey, entry any, seq uint64)
 	Delete(subjectPK cipher.PubKey)
 }) {
 	a.dhtMirror = m
@@ -235,7 +236,7 @@ func (a *API) SetClientsByServerCXOPublisher(p *ClientsByServerCXOPublisher) {
 // and replay each as a fresh SetEntry (oldEntry=nil so the heartbeat
 // skip in PublishSetEntry doesn't elide the Put). Best-effort —
 // per-entry errors don't abort the warm.
-func (a *API) WarmCXOFromStore(ctx context.Context, log logrus.FieldLogger) {
+func (a *API) WarmCXOFromStore(ctx context.Context, log logging.FieldLogger) {
 	if a == nil || a.cxoPublisher == nil {
 		return
 	}
@@ -261,7 +262,7 @@ func (a *API) WarmCXOFromStore(ctx context.Context, log logrus.FieldLogger) {
 // BackfillDHTMirror iterates all existing entries in the store and
 // mirrors them to the DHT. This ensures the DHT has the full dataset
 // on startup, not just entries updated since the last restart.
-func (a *API) BackfillDHTMirror(ctx context.Context, log logrus.FieldLogger) {
+func (a *API) BackfillDHTMirror(ctx context.Context, log logging.FieldLogger) {
 	if a.dhtMirror == nil {
 		return
 	}
@@ -289,7 +290,7 @@ func (a *API) BackfillDHTMirror(ctx context.Context, log logrus.FieldLogger) {
 	log.WithField("count", mirrored).Info("DHT backfill complete")
 }
 
-func (a *API) log(r *http.Request) logrus.FieldLogger {
+func (a *API) log(r *http.Request) logging.FieldLogger {
 	return httputil.GetLogger(r)
 }
 
@@ -307,7 +308,7 @@ func (a *API) logServerRegistration(r *http.Request, entry *disc.Entry, prevSeq 
 }
 
 // RunBackgroundTasks is goroutine which runs in background periodic tasks of dmsg-discovery.
-func (a *API) RunBackgroundTasks(ctx context.Context, log logrus.FieldLogger) {
+func (a *API) RunBackgroundTasks(ctx context.Context, log logging.FieldLogger) {
 	ticker := time.NewTicker(time.Second * 10)
 	defer ticker.Stop()
 	a.updateInternalState(ctx, log)
@@ -322,7 +323,7 @@ func (a *API) RunBackgroundTasks(ctx context.Context, log logrus.FieldLogger) {
 }
 
 // AllServers is used to get all the available servers registered to the dmsg-discovery.
-func (a *API) AllServers(ctx context.Context, _ logrus.FieldLogger) (entries []*disc.Entry, err error) {
+func (a *API) AllServers(ctx context.Context, _ logging.FieldLogger) (entries []*disc.Entry, err error) {
 	entries, err = a.db.AllServers(ctx)
 	if err != nil {
 		return entries, err
@@ -443,12 +444,12 @@ func (a *API) deregisterEntry() func(w http.ResponseWriter, r *http.Request) {
 		for _, key := range keys {
 			err := a.db.DelEntry(r.Context(), key)
 			if err != nil {
-				log.WithFields(logrus.Fields{"PK": key.Hex(), "Step": "Delete Entry"}).Error("Deregistration process interrupt.")
+				log.WithFields(logging.Fields{"PK": key.Hex(), "Step": "Delete Entry"}).Error("Deregistration process interrupt.")
 				a.handleError(w, r, err)
 				return
 			}
 		}
-		log.WithFields(logrus.Fields{"Number of Keys": len(keys), "Keys": keys}).Info("Deregistration process completed.")
+		log.WithFields(logging.Fields{"Number of Keys": len(keys), "Keys": keys}).Info("Deregistration process completed.")
 		httputil.WriteJSON(w, r, http.StatusOK, nil)
 	}
 }
@@ -833,11 +834,8 @@ func (a *API) clientsByServer() http.HandlerFunc {
 			if entry.Client == nil {
 				continue
 			}
-			for _, delegatedPK := range entry.Client.DelegatedServers {
-				if delegatedPK == serverPK {
-					result = append(result, entry.Static.Hex())
-					break
-				}
+			if slices.Contains(entry.Client.DelegatedServers, serverPK) {
+				result = append(result, entry.Static.Hex())
 			}
 		}
 
@@ -861,7 +859,7 @@ func (a *API) getUptimes(w http.ResponseWriter, r *http.Request) {
 
 	if visorsParam != "" {
 		want := make(map[string]struct{})
-		for _, pk := range strings.Split(visorsParam, ";") {
+		for pk := range strings.SplitSeq(visorsParam, ";") {
 			pk = strings.TrimSpace(pk)
 			if pk != "" {
 				want[pk] = struct{}{}
@@ -956,7 +954,7 @@ func isLoopbackAddr(addr string) (bool, error) {
 	return ip.IsLoopback(), nil
 }
 
-func (a *API) updateInternalState(ctx context.Context, logger logrus.FieldLogger) {
+func (a *API) updateInternalState(ctx context.Context, logger logging.FieldLogger) {
 	err := a.db.RemoveOldServerEntries(ctx)
 	if err != nil {
 		logger.WithError(err).Errorf("failed to check and remove servers entries")

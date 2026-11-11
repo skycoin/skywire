@@ -35,7 +35,7 @@ Fetched over the CXO->DmsgHTTP->DMSG chain (honors --no-cxo/--no-rpc/--no-dmsg).
 		if fetchErr != nil {
 			internal.PrintFatalError(cmd.Flags(), fetchErr)
 		}
-		var v interface{}
+		var v any
 		if json.Unmarshal(body, &v) == nil {
 			pretty, _ := json.MarshalIndent(v, "", "  ") //nolint:errcheck
 			internal.PrintOutput(cmd.Flags(), v, string(pretty)+"\n")

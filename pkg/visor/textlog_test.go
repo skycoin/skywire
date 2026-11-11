@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,12 +20,11 @@ import (
 func TestTextLogHook_LevelsShareOneWriter(t *testing.T) {
 	path := filepath.Join(logTestDir(t), "skywire.log")
 
-	hook, err := newTextLogHook(path)
-	require.NoError(t, err)
+	hook := newTextLogHook(path)
 
-	log := logrus.New()
+	log := logging.New()
 	log.SetOutput(io.Discard) // the hook is what is under test
-	log.SetLevel(logrus.TraceLevel)
+	log.SetLevel(logging.TraceLevel)
 	log.AddHook(hook)
 
 	log.Info("before rotation")
@@ -33,7 +32,7 @@ func TestTextLogHook_LevelsShareOneWriter(t *testing.T) {
 	// MaxSize is 1 MB; push well past it with DEBUG alone, which is what wins
 	// the rotation race in a running visor.
 	filler := strings.Repeat("x", 1024)
-	for i := 0; i < 1400; i++ {
+	for range 1400 {
 		log.Debug(filler)
 	}
 

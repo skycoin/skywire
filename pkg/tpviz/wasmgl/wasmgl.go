@@ -62,7 +62,7 @@ type glView struct {
 // immediately — it does NOT block — so the caller owns the program's lifetime:
 // cmd/netview, built into pkg/tpviz/netview, parks forever after calling this.
 func Register() {
-	api := map[string]interface{}{
+	api := map[string]any{
 		"init":            js.FuncOf(jsInit),
 		"setData":         js.FuncOf(jsSetData),
 		"setPhysics":      js.FuncOf(jsSetPhysics),
@@ -123,7 +123,7 @@ func colors(v js.Value) []float32 {
 	}
 	n := v.Length()
 	out := make([]float32, 0, n*4)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		c := cosmos.GetRgbaColor(v.Index(i).String())
 		out = append(out, c[0], c[1], c[2], c[3])
 	}
@@ -141,7 +141,7 @@ func (v *glView) emit(kind string, index int, x, y float64) {
 // jsInit creates the graph inside the given container element. It returns
 // false when the container is not in the DOM yet, which is how the caller
 // learns to retry after the view has been shown.
-func jsInit(_ js.Value, args []js.Value) interface{} {
+func jsInit(_ js.Value, args []js.Value) any {
 	if view != nil {
 		return true
 	}
@@ -237,7 +237,7 @@ func jsInit(_ js.Value, args []js.Value) interface{} {
 //	linkWidths  Float32Array  width per link
 //	grouped     bool          fixed positions, simulation off
 //	boundaries  object[]      {x, y, r, color, label} group circles
-func jsSetData(_ js.Value, args []js.Value) interface{} {
+func jsSetData(_ js.Value, args []js.Value) any {
 	v := view
 	if v == nil {
 		return false
@@ -276,14 +276,14 @@ func jsSetData(_ js.Value, args []js.Value) interface{} {
 	v.overlay.setBoundaries(p.Get("boundaries"))
 
 	pointColors := colors(p.Get("pointColors"))
-	sample := []interface{}{}
+	sample := []any{}
 	for i := 0; i < 3 && i*4+3 < len(pointColors); i++ {
-		sample = append(sample, []interface{}{
+		sample = append(sample, []any{
 			float64(pointColors[i*4]), float64(pointColors[i*4+1]),
 			float64(pointColors[i*4+2]), float64(pointColors[i*4+3]),
 		})
 	}
-	lastStats = map[string]interface{}{
+	lastStats = map[string]any{
 		"loaded":      true,
 		"points":      len(positions) / 2,
 		"colorFloats": len(pointColors),
@@ -298,12 +298,12 @@ func jsSetData(_ js.Value, args []js.Value) interface{} {
 
 // lastStats records what the most recent setData actually handed the engine,
 // so the view can be inspected from the console without guessing.
-var lastStats map[string]interface{}
+var lastStats map[string]any
 
 // jsStats reports the shape of the data currently loaded.
-func jsStats(js.Value, []js.Value) interface{} {
+func jsStats(js.Value, []js.Value) any {
 	if lastStats == nil {
-		return js.ValueOf(map[string]interface{}{"loaded": false})
+		return js.ValueOf(map[string]any{"loaded": false})
 	}
 	return js.ValueOf(lastStats)
 }
@@ -311,7 +311,7 @@ func jsStats(js.Value, []js.Value) interface{} {
 // jsFitIndices frames a subset of the points. tpviz frames the connected
 // subset when there is one, so that the ring of isolated visors it keeps for
 // parity with the flat view does not shrink the main cluster.
-func jsFitIndices(_ js.Value, args []js.Value) interface{} {
+func jsFitIndices(_ js.Value, args []js.Value) any {
 	v := view
 	if v == nil {
 		return nil
@@ -329,7 +329,7 @@ func jsFitIndices(_ js.Value, args []js.Value) interface{} {
 	return nil
 }
 
-func jsSetPhysics(_ js.Value, args []js.Value) interface{} {
+func jsSetPhysics(_ js.Value, args []js.Value) any {
 	v := view
 	if v == nil {
 		return nil
@@ -343,21 +343,21 @@ func jsSetPhysics(_ js.Value, args []js.Value) interface{} {
 	return nil
 }
 
-func jsFit(js.Value, []js.Value) interface{} {
+func jsFit(js.Value, []js.Value) any {
 	if view != nil {
 		view.graph.FitView(400, 0.1)
 	}
 	return nil
 }
 
-func jsZoomBy(_ js.Value, args []js.Value) interface{} {
+func jsZoomBy(_ js.Value, args []js.Value) any {
 	if view != nil {
 		view.graph.SetZoomLevel(view.graph.GetZoomLevel()*arg(args, 0).Float(), 200)
 	}
 	return nil
 }
 
-func jsFocusIndex(_ js.Value, args []js.Value) interface{} {
+func jsFocusIndex(_ js.Value, args []js.Value) any {
 	v := view
 	if v == nil {
 		return nil
@@ -371,7 +371,7 @@ func jsFocusIndex(_ js.Value, args []js.Value) interface{} {
 	return nil
 }
 
-func jsSelect(_ js.Value, args []js.Value) interface{} {
+func jsSelect(_ js.Value, args []js.Value) any {
 	v := view
 	if v == nil {
 		return nil
@@ -384,7 +384,7 @@ func jsSelect(_ js.Value, args []js.Value) interface{} {
 	return nil
 }
 
-func jsPause(js.Value, []js.Value) interface{} {
+func jsPause(js.Value, []js.Value) any {
 	if view != nil {
 		view.graph.Pause()
 		view.overlay.stop()
@@ -392,7 +392,7 @@ func jsPause(js.Value, []js.Value) interface{} {
 	return nil
 }
 
-func jsResume(js.Value, []js.Value) interface{} {
+func jsResume(js.Value, []js.Value) any {
 	if view != nil {
 		view.graph.Unpause()
 		view.overlay.start()
@@ -402,7 +402,7 @@ func jsResume(js.Value, []js.Value) interface{} {
 
 // jsTeardown destroys the graph and releases every JS function this module
 // installed, so switching views repeatedly does not leak them.
-func jsTeardown(js.Value, []js.Value) interface{} {
+func jsTeardown(js.Value, []js.Value) any {
 	v := view
 	if v == nil {
 		return nil

@@ -109,7 +109,7 @@ func dayLeaves(t *testing.T, window []tpdstore.TransportMetric, dates []string) 
 
 func metricsWindowFixture(dates []string) []tpdstore.TransportMetric {
 	out := make([]tpdstore.TransportMetric, 0, 12)
-	for i := 0; i < 12; i++ {
+	for i := range 12 {
 		var daily []tpdstore.DailyEdgeBandwidth
 		for d, date := range dates {
 			if (d+i)%3 == 0 {
@@ -217,7 +217,7 @@ func TestAssembleTransportMetricDaysIsDeterministic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		again, _, err := readTransportMetricsCXO(snap, 9)
 		if err != nil {
 			t.Fatal(err)

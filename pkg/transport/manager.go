@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1457,11 +1458,8 @@ func (tm *Manager) GetTransportsByLabels(labels ...Label) []*ManagedTransport {
 	defer tm.mx.RUnlock()
 	var trs []*ManagedTransport
 	for _, tr := range tm.tps {
-		for _, label := range labels {
-			if tr.Entry.Label == label {
-				trs = append(trs, tr)
-				break
-			}
+		if slices.Contains(labels, tr.Entry.Label) {
+			trs = append(trs, tr)
 		}
 	}
 	return trs
@@ -1794,12 +1792,7 @@ func (tp *ManagedTransport) SameNetwork(self net.IP, localIPs []net.IP) bool {
 	if self != nil && peer.Equal(self) {
 		return true
 	}
-	for _, l := range localIPs {
-		if peer.Equal(l) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(localIPs, peer.Equal)
 }
 
 // isSameLANEndpoint reports whether peer is on the local network relative to the

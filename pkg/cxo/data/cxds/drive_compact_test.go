@@ -37,13 +37,13 @@ func TestStartupGCCompact_DropsDeadKeepsLive(t *testing.T) {
 	require.NoError(t, err)
 
 	var live, dead [][]byte
-	for i := 0; i < 3; i++ { // live: rc=1
+	for i := range 3 { // live: rc=1
 		v := mkVal(byte('L' + i))
 		_, err := ds.Set(cipher.SumSHA256(v), v, 1)
 		require.NoError(t, err)
 		live = append(live, v)
 	}
-	for i := 0; i < 3; i++ { // dead: Set rc=1 then Inc -1 -> rc=0 (retained by CXDS)
+	for i := range 3 { // dead: Set rc=1 then Inc -1 -> rc=0 (retained by CXDS)
 		v := mkVal(byte('D' + i))
 		k := cipher.SumSHA256(v)
 		_, err := ds.Set(k, v, 1)
@@ -90,7 +90,7 @@ func TestStartupGCCompact_SkipsMostlyLive(t *testing.T) {
 	ds, err := NewDriveCXDS(fn)
 	require.NoError(t, err)
 	var live [][]byte
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		v := mkVal(byte('a' + i))
 		_, err := ds.Set(cipher.SumSHA256(v), v, 1)
 		require.NoError(t, err)
@@ -121,7 +121,7 @@ func TestStartupGCCompact_ReclaimsFreedPages(t *testing.T) {
 	require.NoError(t, err)
 	// Phase 1: grow the file with 600 live objects.
 	var keep, drop [][]byte
-	for i := 0; i < 600; i++ {
+	for i := range 600 {
 		v := mkVal(byte(i % 251))
 		v[0], v[1] = byte(uint(i)>>8&0xff), byte(uint(i)&0xff) // distinct objects
 		_, err := ds.Set(cipher.SumSHA256(v), v, 1)
@@ -174,7 +174,7 @@ func TestStartupGCCompact_IgnoresPreCriteriaMemo(t *testing.T) {
 	ds, err := NewDriveCXDS(fn)
 	require.NoError(t, err)
 	var drop [][]byte
-	for i := 0; i < 600; i++ {
+	for i := range 600 {
 		v := mkVal(byte(i % 251))
 		v[0], v[1] = byte(uint(i)>>8&0xff), byte(uint(i)&0xff)
 		_, err := ds.Set(cipher.SumSHA256(v), v, 1)
@@ -203,10 +203,7 @@ func TestStartupGCCompact_IgnoresPreCriteriaMemo(t *testing.T) {
 		}
 		// FileInfo.Size is non-negative for a regular file; the guard makes that
 		// explicit rather than leaving a signed-to-unsigned conversion to trust.
-		size := before.Size()
-		if size < 0 {
-			size = 0
-		}
+		size := max(before.Size(), 0)
 		return putUint64Meta(m, []byte("gc_checked_size"), uint64(size))
 	}))
 	require.NoError(t, db.Close())
@@ -236,13 +233,13 @@ func TestStartupGCCompact_CopiesInBatches(t *testing.T) {
 	require.NoError(t, err)
 
 	var live, dead [][]byte
-	for i := 0; i < 7; i++ { // live: rc=1
+	for i := range 7 { // live: rc=1
 		v := mkVal(byte('a' + i))
 		_, err := ds.Set(cipher.SumSHA256(v), v, 1)
 		require.NoError(t, err)
 		live = append(live, v)
 	}
-	for i := 0; i < 5; i++ { // dead: rc=0 (5 of 12 objects = 42% dead, past the gate)
+	for i := range 5 { // dead: rc=0 (5 of 12 objects = 42% dead, past the gate)
 		v := mkVal(byte('A' + i))
 		k := cipher.SumSHA256(v)
 		_, err := ds.Set(k, v, 1)

@@ -27,14 +27,14 @@ import (
 	"io"
 	"net"
 	"net/smtp"
-	"sort"
+	"net/textproto"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 const (
@@ -101,6 +101,9 @@ type Config struct {
 	// RemotePort is the peer routing port to dial. Defaults to 25
 	// (matching the SMTP convention) when zero.
 	RemotePort uint16
+	// Require, when set, is an EHLO keyword the peer must offer. Relay
+	// fails with a 554 before MAIL FROM when it does not.
+	Require string
 }
 
 func (c Config) withDefaults() Config {
@@ -137,7 +140,7 @@ func (c Config) Validate() error {
 // its recipients' PK label, over the network its suffix names. With
 // cfg.Dialers set, each suffix there is accepted and dialed with its
 // own dialer; otherwise cfg.Suffix is, with dialer.
-func Serve(ctx context.Context, lis net.Listener, dialer Dialer, cfg Config, log logrus.FieldLogger) error {
+func Serve(ctx context.Context, lis net.Listener, dialer Dialer, cfg Config, log logging.FieldLogger) error {
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
@@ -153,7 +156,7 @@ func Serve(ctx context.Context, lis net.Listener, dialer Dialer, cfg Config, log
 	for s := range dialers {
 		suffixes = append(suffixes, s)
 	}
-	sort.Strings(suffixes)
+	slices.Sort(suffixes)
 	h := &relayHandler{dialers: dialers, suffixes: suffixes, cfg: cfg, log: orDefaultLog(log)}
 	return ServeHandler(ctx, lis, h, cfg.HeloName, log)
 }
@@ -166,7 +169,7 @@ type relayHandler struct {
 	dialers  map[string]Dialer
 	suffixes []string
 	cfg      Config
-	log      logrus.FieldLogger
+	log      logging.FieldLogger
 }
 
 // parse finds the suffix rcpt ends in and parses it under that suffix.
@@ -314,7 +317,7 @@ func ParseRecipient(addr, suffix, mode string) (cipher.PubKey, string, bool, err
 // Errors are surfaced verbatim so the calling SMTP session can
 // translate them to an appropriate 4xx/5xx for the upstream
 // Postfix.
-func Relay(ctx context.Context, dialer Dialer, cfg Config, from string, rcpts []Recipient, body []byte, log logrus.FieldLogger) error {
+func Relay(ctx context.Context, dialer Dialer, cfg Config, from string, rcpts []Recipient, body []byte, log logging.FieldLogger) error {
 	if len(rcpts) == 0 {
 		return errors.New("no recipients")
 	}
@@ -336,6 +339,11 @@ func Relay(ctx context.Context, dialer Dialer, cfg Config, from string, rcpts []
 
 	if err := cl.Hello(cfg.HeloName); err != nil {
 		return fmt.Errorf("HELO: %w", err)
+	}
+	if cfg.Require != "" {
+		if ok, _ := cl.Extension(cfg.Require); !ok {
+			return &textproto.Error{Code: 554, Msg: "peer does not offer " + cfg.Require}
+		}
 	}
 	if err := cl.Mail(from); err != nil {
 		return fmt.Errorf("MAIL FROM: %w", err)
@@ -420,11 +428,11 @@ func readDATA(br *bufio.Reader, limit int64) ([]byte, error) {
 // sizeParam returns the RFC 1870 SIZE= value of a MAIL FROM argument,
 // or -1 when the client declared none.
 func sizeParam(arg string) int64 {
-	end := strings.Index(arg, ">")
-	if end < 0 {
+	_, after, ok := strings.Cut(arg, ">")
+	if !ok {
 		return -1
 	}
-	for _, p := range strings.Fields(arg[end+1:]) {
+	for p := range strings.FieldsSeq(after) {
 		if k, v, ok := strings.Cut(p, "="); ok && strings.EqualFold(k, "SIZE") {
 			if n, err := strconv.ParseInt(v, 10, 64); err == nil {
 				return n

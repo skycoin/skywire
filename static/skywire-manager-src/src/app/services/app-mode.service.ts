@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { ApiService } from './api.service';
+import { versionLabel } from '../pipes/version-label.pipe';
 
 /**
  * AppModeService surfaces WHICH backend the UI is talking to (so the user can
@@ -114,9 +115,18 @@ export class AppModeService {
    * did.
    */
   get badge(): string {
+    return this.badgeWith(versionLabel(this.version));
+  }
+
+  /** The badge with the version exactly as the visor reports it. */
+  get fullBadge(): string {
+    return this.badgeWith(this.version);
+  }
+
+  private badgeWith(version: string): string {
     const parts = [this.mode];
-    if (this.version) {
-      parts.push(this.version);
+    if (version) {
+      parts.push(version);
     }
     if (this.harness) {
       parts.push('harness');

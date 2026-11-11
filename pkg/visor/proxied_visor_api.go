@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -104,6 +105,28 @@ func (p *proxiedVisorAPI) Apps() ([]*appserver.AppState, error) {
 		return nil, ErrProxyNotSupported
 	}
 	return s.Overview.Apps, nil
+}
+
+// App reads one app from the summary, which the app routes need before acting.
+func (p *proxiedVisorAPI) App(appName string) (*appserver.AppState, error) {
+	apps, err := p.Apps()
+	if err != nil {
+		return nil, err
+	}
+	for _, a := range apps {
+		if a.Name == appName {
+			return a, nil
+		}
+	}
+	return nil, fmt.Errorf("app %q not found on %s", appName, p.targetPK)
+}
+
+func (p *proxiedVisorAPI) AppCatalog() ([]visorapi.CatalogEntry, error) {
+	return p.hvAPI.HVAppCatalog(p.targetPK)
+}
+
+func (p *proxiedVisorAPI) AddApp(appName, binaryName string) error {
+	return p.hvAPI.HVAddApp(p.targetPK, appName, binaryName)
 }
 
 func (p *proxiedVisorAPI) Transports(_ []string, _ []cipher.PubKey, _ bool) ([]*visorapi.TransportSummary, error) {
@@ -350,7 +373,7 @@ func hexToBytes(s string) ([]byte, error) {
 		return nil, errors.New("odd-length hex")
 	}
 	out := make([]byte, len(s)/2)
-	for i := 0; i < len(out); i++ {
+	for i := range out {
 		hi, err := hexNibble(s[2*i])
 		if err != nil {
 			return nil, err
@@ -386,4 +409,8 @@ var _ json.RawMessage
 // RewardAddressExposure is chain data, so the hypervisor's own visor answers it.
 func (p *proxiedVisorAPI) RewardAddressExposure(addr string) (rewardconfig.AddressExposure, error) {
 	return p.hvAPI.RewardAddressExposure(addr)
+}
+
+func (p *proxiedVisorAPI) SetSingleRewardAddress(addr string) (string, error) {
+	return p.hvAPI.HVSetSingleRewardAddress(p.targetPK, addr)
 }

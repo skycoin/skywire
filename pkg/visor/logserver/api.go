@@ -3,6 +3,7 @@ package logserver
 
 import (
 	"bufio"
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -14,7 +15,7 @@ import (
 	"net/http/pprof"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -287,11 +288,11 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 	//   any filter param   → plain-text streaming filtered mode
 	//
 	// Served at /skywire.log (matching the on-disk filename written by
-	// visor.go's lumberjackrus hook) with /visor.log kept as an alias so
+	// visor.go's log file hook) with /visor.log kept as an alias so
 	// older links and tooling keep working — both routes share this handler.
 	serveVisorLog := func(w http.ResponseWriter, req *http.Request) {
 		// The visor writes its rotating log to LocalPath/log/skywire.log
-		// (visor.go, via lumberjackrus). The endpoint previously looked at
+		// (visor.go, via lumberjack). The endpoint previously looked at
 		// LocalPath/visor.log — wrong subdir AND filename — so it always 404'd
 		// even with file logging enabled.
 		logFile := filepath.Join(localPath, "log", "skywire.log")
@@ -969,7 +970,7 @@ func (api *API) sitesFor(req *http.Request) []string {
 	for s := range seen {
 		out = append(out, s)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
@@ -1095,7 +1096,9 @@ func (api *API) vhostList() []*Vhost {
 			out = append(out, v)
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	slices.SortFunc(out, func(a, b *Vhost) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
 	return out
 }
 

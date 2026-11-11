@@ -3,7 +3,7 @@
 // Backgrounds for the tables used in the app.
 $responsive-table-colors: (
   // Background, background:hover, font color
-  translucid: (transparent, map.get($theme-colors,translucid-hover), map.get($theme-colors,white), map.get($theme-colors,translucid-hover-hard)),
+  translucid: (transparent, rgba(var(--sw-shade-rgb), 0.2), var(--sw-text), rgba(var(--sw-shade-rgb), 0.4)),
 );
 
 // Create styles for the tables. One per background color.
@@ -15,13 +15,14 @@ $responsive-table-colors: (
     margin-right: auto;
     border-collapse: separate !important;
     width: 100%;
-    word-break: break-all;
+    // Words wrap whole; only a token wider than its cell (a key) breaks.
+    overflow-wrap: anywhere;
     color: list.nth($colors, 3) !important;
 
     td, th {
       color: list.nth($colors, 3) !important;
       padding: 12px 10px;
-      border-bottom: 1px solid $separator;
+      border-bottom: 1px solid rgba(var(--sw-fg-rgb), 0.15);
     }
 
     th {
@@ -83,7 +84,7 @@ $responsive-table-colors: (
       font-size: 16px;
       margin-right: 5px;
       padding: 0 !important;
-      color: white !important;
+      color: var(--sw-text) !important;
       min-width: 0 !important;
 
       &:last-child {
@@ -137,7 +138,7 @@ $responsive-table-colors: (
       }
 
       svg {
-        color: white !important;
+        color: var(--sw-text) !important;
       }
     }
 
@@ -168,7 +169,7 @@ $responsive-table-colors: (
         }
 
         .long-content {
-          word-break: break-all;
+          overflow-wrap: anywhere;
         }
       }
 
@@ -219,6 +220,7 @@ $responsive-table-colors: (
 
   .title {
     margin-right: auto;
+    min-width: 0;
     font-size: $font-size-base;
     font-weight: bold;
 

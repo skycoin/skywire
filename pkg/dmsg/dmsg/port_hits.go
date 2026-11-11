@@ -2,7 +2,8 @@
 package dmsg
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"sync"
 	"time"
 
@@ -104,6 +105,8 @@ func (t *portHitTracker) snapshot() []PortHit {
 		out = append(out, *h)
 	}
 	t.mu.Unlock()
-	sort.Slice(out, func(i, j int) bool { return out[i].seq > out[j].seq })
+	slices.SortFunc(out, func(a, b PortHit) int {
+		return cmp.Compare(b.seq, a.seq)
+	})
 	return out
 }

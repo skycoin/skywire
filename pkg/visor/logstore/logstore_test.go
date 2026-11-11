@@ -5,16 +5,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/stretchr/testify/require"
 )
 
 // fire pushes one log entry through the hook with the given message.
-func fire(t *testing.T, hook logrus.Hook, msg string) {
+func fire(t *testing.T, hook logging.Hook, msg string) {
 	t.Helper()
-	e := logrus.NewEntry(logrus.New())
+	e := logging.NewEntry(logging.New())
 	e.Message = msg
-	e.Level = logrus.InfoLevel
+	e.Level = logging.InfoLevel
 	require.NoError(t, hook.Fire(e))
 }
 
@@ -24,9 +24,9 @@ func TestMakeStoreAndLevels(t *testing.T) {
 	require.NotNil(t, hook)
 	// Info and above only: the hook JSON-encodes every accepted entry under a
 	// process-wide mutex, so the debug firehose must not reach it by default.
-	require.Equal(t, logrus.AllLevels[:logrus.InfoLevel+1], hook.Levels())
-	require.NotContains(t, hook.Levels(), logrus.DebugLevel)
-	require.NotContains(t, hook.Levels(), logrus.TraceLevel)
+	require.Equal(t, logging.AllLevels[:logging.InfoLevel+1], hook.Levels())
+	require.NotContains(t, hook.Levels(), logging.DebugLevel)
+	require.NotContains(t, hook.Levels(), logging.TraceLevel)
 }
 
 // The hook must be a genuine no-op below its level — logrus consults Levels()
@@ -35,8 +35,8 @@ func TestMakeStoreAndLevels(t *testing.T) {
 func TestHookLevelGatesFire(t *testing.T) {
 	store, hook := MakeStore(10)
 
-	l := logrus.New()
-	l.SetLevel(logrus.DebugLevel)
+	l := logging.New()
+	l.SetLevel(logging.DebugLevel)
 	l.SetOutput(io.Discard)
 	l.AddHook(hook)
 
@@ -50,11 +50,11 @@ func TestHookLevelGatesFire(t *testing.T) {
 
 // An operator can still opt back in to capturing debug in the buffer.
 func TestMakeStoreLevelOptIn(t *testing.T) {
-	store, hook := MakeStoreLevel(10, logrus.DebugLevel)
-	require.Contains(t, hook.Levels(), logrus.DebugLevel)
+	store, hook := MakeStoreLevel(10, logging.DebugLevel)
+	require.Contains(t, hook.Levels(), logging.DebugLevel)
 
-	l := logrus.New()
-	l.SetLevel(logrus.DebugLevel)
+	l := logging.New()
+	l.SetLevel(logging.DebugLevel)
 	l.SetOutput(io.Discard)
 	l.AddHook(hook)
 

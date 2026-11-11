@@ -27,7 +27,7 @@ import (
 func withAppLog(t *testing.T) {
 	t.Helper()
 	prev := appLog
-	appLog = func(string, ...interface{}) {}
+	appLog = func(string, ...any) {}
 	t.Cleanup(func() { appLog = prev })
 }
 

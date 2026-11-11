@@ -173,7 +173,7 @@ func isUpgradeRequest(req *http.Request) bool {
 		return false
 	}
 	for _, tok := range req.Header.Values("Connection") {
-		for _, part := range strings.Split(tok, ",") {
+		for part := range strings.SplitSeq(tok, ",") {
 			if strings.EqualFold(strings.TrimSpace(part), "upgrade") {
 				return true
 			}

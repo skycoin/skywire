@@ -12,9 +12,9 @@ type networkStats struct {
 	totalBandwidthSent     atomic.Uint64
 	totalBandwidthReceived atomic.Uint64
 	bandwidthReceived      atomic.Uint64
-	latency                uint32
-	uploadSpeed            uint32
-	downloadSpeed          uint32
+	latency                atomic.Uint32
+	uploadSpeed            atomic.Uint32
+	downloadSpeed          atomic.Uint32
 
 	bandwidthReceivedRecStartMu sync.Mutex
 	bandwidthReceivedRecStart   time.Time
@@ -27,29 +27,29 @@ func newNetworkStats() *networkStats {
 }
 
 func (s *networkStats) SetLatency(latency uint32) {
-	atomic.StoreUint32(&s.latency, latency)
+	s.latency.Store(latency)
 }
 
 func (s *networkStats) Latency() time.Duration {
-	latencyMs := atomic.LoadUint32(&s.latency)
+	latencyMs := s.latency.Load()
 	// the latency is store in uint32 of millisecond but time.Duration takes nanosecond
 	return time.Duration(latencyMs * uint32(time.Millisecond.Nanoseconds())) //nolint: gosec
 }
 
 func (s *networkStats) SetUploadSpeed(speed uint32) {
-	atomic.StoreUint32(&s.uploadSpeed, speed)
+	s.uploadSpeed.Store(speed)
 }
 
 func (s *networkStats) UploadSpeed() uint32 {
-	return atomic.LoadUint32(&s.uploadSpeed)
+	return s.uploadSpeed.Load()
 }
 
 func (s *networkStats) SetDownloadSpeed(speed uint32) {
-	atomic.StoreUint32(&s.downloadSpeed, speed)
+	s.downloadSpeed.Store(speed)
 }
 
 func (s *networkStats) DownloadSpeed() uint32 {
-	return atomic.LoadUint32(&s.downloadSpeed)
+	return s.downloadSpeed.Load()
 }
 
 func (s *networkStats) BandwidthSent() uint64 {

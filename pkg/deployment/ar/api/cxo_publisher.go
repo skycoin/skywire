@@ -40,8 +40,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/deployment/ar/arfeed"
@@ -107,7 +105,7 @@ type BindingsCXOPublisher struct {
 	done  chan struct{}
 	wg    sync.WaitGroup
 
-	dropped uint64 // atomic; bumped when marks overflows
+	dropped atomic.Uint64 // atomic; bumped when marks overflows
 
 	// state is the live per-peer record set, and pending the marks awaiting a
 	// re-resolve. Both are owned exclusively by the worker goroutine (run), so
@@ -127,7 +125,7 @@ type BindingsCXOPublisher struct {
 // Returns nil plus an error if the underlying treestore publisher cannot be
 // created; callers log and continue without it, HTTP staying the source of
 // truth.
-func StartBindingsCXOPublisher(dmsgC *dmsg.Client, sk cipher.SecKey, st store.Store, logger logrus.FieldLogger) (*BindingsCXOPublisher, error) {
+func StartBindingsCXOPublisher(dmsgC *dmsg.Client, sk cipher.SecKey, st store.Store, logger logging.FieldLogger) (*BindingsCXOPublisher, error) {
 	log := logging.MustGetLogger("ar-cxo-bindings-pub")
 
 	pub, err := treestore.NewWithDMSG(dmsgC, sk, treestore.PubConfig{
@@ -181,7 +179,7 @@ func (p *BindingsCXOPublisher) Dropped() uint64 {
 	if p == nil {
 		return 0
 	}
-	return atomic.LoadUint64(&p.dropped)
+	return p.dropped.Load()
 }
 
 // LastError returns the most recent publish error, or nil.
@@ -219,7 +217,7 @@ func (p *BindingsCXOPublisher) MarkDirty(t types.Type, pk cipher.PubKey) {
 	case p.marks <- dirtyMark{pk: pk, t: types.NormalizeType(t)}:
 	case <-p.done:
 	default:
-		dropped := atomic.AddUint64(&p.dropped, 1)
+		dropped := p.dropped.Add(1)
 		if dropped&(dropped-1) == 0 {
 			p.log.WithField("dropped_total", dropped).
 				Warn("CXO bindings mark queue full; dropping (peer recovers on the next resync)")
@@ -235,7 +233,7 @@ func (p *BindingsCXOPublisher) run() {
 	// array from the very first Root — that density is what lets a reader
 	// address a bucket by computed index instead of searching for it.
 	paths := make(map[string]struct{}, arfeed.BucketCount)
-	for i := 0; i < arfeed.BucketCount; i++ {
+	for i := range arfeed.BucketCount {
 		paths[arfeed.BucketPathAt(i)] = struct{}{}
 	}
 	p.encodeBuckets(paths)

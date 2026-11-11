@@ -12,6 +12,7 @@ import (
 	"context"
 	"os"
 	"runtime/metrics"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -212,10 +213,8 @@ func (v *Visor) inboundGate(remote cipher.PubKey, label transport.Label) bool {
 	if label != transport.LabelAutomatic || (!v.pressure.busy.Load() && !v.meter.lean.Load()) {
 		return true
 	}
-	for _, hv := range v.conf.Hypervisors {
-		if hv == remote {
-			return true
-		}
+	if slices.Contains(v.conf.Hypervisors, remote) {
+		return true
 	}
 	if hv := v.hvInstance; hv != nil {
 		hv.mu.RLock()

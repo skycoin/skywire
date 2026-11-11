@@ -1,5 +1,4 @@
 //go:build !no_ci
-// +build !no_ci
 
 // Package store pkg/discovery/store/redis_test.go
 package store
@@ -142,4 +141,18 @@ func TestRedisCountEntries(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, numberOfServers, int64(1))
 	assert.Equal(t, numberOfClients, int64(1))
+}
+
+func TestRedisStoreInbox(t *testing.T) {
+	ctx := t.Context()
+	redis, err := newRedis(ctx, redisURL, redisPassword, 0, 0, log)
+	require.NoError(t, err)
+	pk, _ := cipher.GenerateKeyPair()
+
+	_, err = redis.Inbox(ctx, pk)
+	require.ErrorIs(t, err, disc.ErrKeyNotFound)
+	require.NoError(t, redis.SetInbox(ctx, pk, []byte(`{"seq":1}`), time.Minute))
+	got, err := redis.Inbox(ctx, pk)
+	require.NoError(t, err)
+	assert.Equal(t, []byte(`{"seq":1}`), got)
 }

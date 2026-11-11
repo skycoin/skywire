@@ -2,6 +2,8 @@
 package idxdb
 
 import (
+	"cmp"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -122,7 +124,7 @@ func (f *memoryFeeds) Iterate(iterateFunc data.IterateFeedsFunc) (err error) {
 		pks = append(pks, pk)
 	}
 	sort.Slice(pks, func(i, j int) bool {
-		for k := 0; k < len(pks[i]); k++ {
+		for k := range len(pks[i]) {
 			if pks[i][k] != pks[j][k] {
 				return pks[i][k] < pks[j][k]
 			}
@@ -200,7 +202,7 @@ func (h *memoryHeads) Iterate(iterateFunc data.IterateHeadsFunc) (err error) {
 	for n := range h.feed.heads {
 		nonces = append(nonces, n)
 	}
-	sort.Slice(nonces, func(i, j int) bool { return nonces[i] < nonces[j] })
+	slices.Sort(nonces)
 	for _, n := range nonces {
 		if _, ok := h.feed.heads[n]; !ok {
 			continue
@@ -241,9 +243,11 @@ func (r *memoryRoots) walk(desc bool, iterateFunc data.IterateRootsFunc) (err er
 		seqs = append(seqs, s)
 	}
 	if desc {
-		sort.Slice(seqs, func(i, j int) bool { return seqs[i] > seqs[j] })
+		slices.SortFunc(seqs, func(a, b uint64) int {
+			return cmp.Compare(b, a)
+		})
 	} else {
-		sort.Slice(seqs, func(i, j int) bool { return seqs[i] < seqs[j] })
+		slices.Sort(seqs)
 	}
 	for _, s := range seqs {
 		stored, ok := r.head.roots[s]

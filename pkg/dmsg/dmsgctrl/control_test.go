@@ -27,7 +27,7 @@ func TestControl_Ping(t *testing.T) {
 		_ = ctrlA.Close() //nolint:errcheck
 	}()
 
-	for i := 0; i < times; i++ {
+	for i := range times {
 		// Ping A → B (ctrlA sends ping, ctrlB's serve goroutine responds with pong).
 		durA, errA := ctrlA.Ping(context.TODO())
 		require.NoError(t, errA, "ping A failed on iteration %d", i)

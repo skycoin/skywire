@@ -64,7 +64,7 @@ func TestStoreGetMissing(t *testing.T) {
 
 func TestStoreList(t *testing.T) {
 	s := newTestStore(t)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		if err := s.Put(sampleRecord(t)); err != nil {
 			t.Fatal(err)
 		}

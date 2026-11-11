@@ -55,3 +55,47 @@ func TestServiceWorkerNeverAnswersDataWithTheShell(t *testing.T) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
+
+// pushHarness fires a push and a click at the worker and prints what it
+// showed and opened.
+const pushHarness = `
+const listeners = {};
+const shown = [];
+globalThis.self = {
+	location: { origin: 'https://hv.test' },
+	addEventListener: (t, f) => { listeners[t] = f; },
+	registration: { scope: 'https://hv.test/', showNotification: (title, o) => { shown.push(title + '|' + o.body + '|' + o.tag); return Promise.resolve(); } },
+	clients: { matchAll: () => Promise.resolve([]), openWindow: (u) => { shown.push('open ' + u); return Promise.resolve(); } },
+};
+` + "%SW%" + `
+(async () => {
+	const waits = [];
+	const data = { json: () => ({ title: 'visor a is offline', body: 'A visor you watch went offline.', tag: 'skywire-02aa' }) };
+	listeners.push({ data, waitUntil: (p) => waits.push(p) });
+	listeners.notificationclick({ notification: { close: () => {} }, waitUntil: (p) => waits.push(p) });
+	await Promise.all(waits);
+	console.log(shown.join('\n'));
+})();
+`
+
+// TestServiceWorkerShowsPushedAlerts: the root worker carries the push
+// handler, so a page under a desk gets alert notifications from it.
+func TestServiceWorkerShowsPushedAlerts(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node is not installed")
+	}
+	script := filepath.Join(t.TempDir(), "sw.js")
+	sw := string(ServiceWorkerFor("test", nil))
+	if err := os.WriteFile(script, []byte(strings.Replace(pushHarness, "%SW%", sw, 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(node, script).CombinedOutput() //nolint:gosec
+	if err != nil {
+		t.Fatalf("node: %v\n%s", err, out)
+	}
+	want := "visor a is offline|A visor you watch went offline.|skywire-02aa\nopen https://hv.test/"
+	if got := strings.TrimSpace(string(out)); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}

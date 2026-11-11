@@ -1,0 +1,229 @@
+// Package visor pkg/visor/dmsg_async_test.go c3-vis-core
+package visor
+
+import (
+	"context"
+	"path/filepath"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgasync"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgtest"
+	"github.com/skycoin/skywire/pkg/logging"
+	skychatgroup "github.com/skycoin/skywire/pkg/skychat/group"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+)
+
+func asyncVisor(t *testing.T, ctx context.Context, c *dmsg.Client, conf *visorconfig.DmsgAsyncConfig, hvs ...cipher.PubKey) *Visor {
+	t.Helper()
+	v := &Visor{
+		ctx:   ctx,
+		dmsgC: c,
+		conf: &visorconfig.V1{
+			Common:    &visorconfig.Common{PK: c.LocalPK(), SK: c.LocalSK()},
+			LocalPath: filepath.Join(t.TempDir(), "local"),
+			DmsgAsync: conf,
+		},
+		initLock: new(sync.RWMutex),
+	}
+	v.conf.Hypervisors = hvs
+	v.conf.SetLogger(logging.NewMasterLogger())
+	require.NoError(t, initDmsgAsync(ctx, v, logging.MustGetLogger("dmsg-async-test")))
+	return v
+}
+
+// A hypervisor holds for a visor it is configured to accept. The visor
+// registers with it, a sender that has the visor's record leaves a message,
+// and the visor takes it, or its in-visor handler gets it on sync.
+func TestDmsgAsyncVisor(t *testing.T) {
+	env := dmsgtest.NewEnv(t, 10*time.Second)
+	require.NoError(t, env.Startup(0, 1, 3, &dmsg.Config{MinSessions: 1}))
+	t.Cleanup(env.Shutdown)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	cs := env.AllClients()
+	hostC, rcptC, senderC := cs[0], cs[1], cs[2]
+
+	on := true
+	off := false
+	host := asyncVisor(t, ctx, hostC, &visorconfig.DmsgAsyncConfig{Host: visorconfig.DmsgAsyncHostConfig{
+		Enable: &on,
+		Hosted: []cipher.PubKey{rcptC.LocalPK()},
+	}})
+	rcpt := asyncVisor(t, ctx, rcptC, &visorconfig.DmsgAsyncConfig{Inbox: visorconfig.DmsgAsyncInboxConfig{
+		Publish: &off,
+		Allow:   []cipher.PubKey{senderC.LocalPK()},
+	}}, hostC.LocalPK())
+	sender := asyncVisor(t, ctx, senderC, nil)
+
+	require.NoError(t, rcpt.DmsgAsyncSync())
+	st, err := rcpt.DmsgAsyncStatus()
+	require.NoError(t, err)
+	require.True(t, st.Inbox.Enabled)
+	require.NotNil(t, st.Inbox.Record)
+	require.Len(t, st.Inbox.Hosts, 1)
+	require.Empty(t, st.Inbox.Hosts[0].Error)
+	require.False(t, st.Inbox.Hosts[0].Registered.IsZero())
+
+	hst, err := host.DmsgAsyncStatus()
+	require.NoError(t, err)
+	require.NotNil(t, hst.Host)
+	require.Equal(t, []cipher.PubKey{rcptC.LocalPK()}, hst.Host.Registered)
+
+	// The sender has the record already, as a contact would.
+	sender.async.mu.Lock()
+	sender.async.cache[rcptC.LocalPK()] = cachedRecord{rec: *st.Inbox.Record, at: time.Now()}
+	sender.async.mu.Unlock()
+
+	res, err := sender.DmsgAsyncSend(visorapi.DmsgAsyncSendRequest{To: rcptC.LocalPK(), Port: 1, Payload: []byte("hi")})
+	require.NoError(t, err)
+	require.Equal(t, hostC.LocalPK(), res.Host)
+
+	msgs, err := rcpt.DmsgAsyncTake([]uint16{1})
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.Equal(t, senderC.LocalPK(), msgs[0].From)
+	require.Equal(t, []byte("hi"), msgs[0].Payload)
+
+	got := make(chan dmsgasync.Message, 1)
+	rcpt.AsyncHandle(2, func(m dmsgasync.Message) error {
+		got <- m
+		return nil
+	})
+	_, err = rcpt.DmsgAsyncTake([]uint16{2})
+	require.Error(t, err, "take refuses a port the visor handles")
+	_, err = sender.DmsgAsyncSend(visorapi.DmsgAsyncSendRequest{To: rcptC.LocalPK(), Port: 2, Payload: []byte("to the handler")})
+	require.NoError(t, err)
+	require.NoError(t, rcpt.DmsgAsyncSync())
+	select {
+	case m := <-got:
+		require.Equal(t, []byte("to the handler"), m.Payload)
+	default:
+		t.Fatal("the handler did not get the message")
+	}
+
+	// The host leaving a message for a visor it holds for deposits on its
+	// own store, which dmsg cannot loop back to. The recipient's allow list
+	// does not name the host, so it is refused.
+	host.async.mu.Lock()
+	host.async.cache[rcptC.LocalPK()] = cachedRecord{rec: *st.Inbox.Record, at: time.Now()}
+	host.async.mu.Unlock()
+	_, err = host.DmsgAsyncSend(visorapi.DmsgAsyncSendRequest{To: rcptC.LocalPK(), Port: 1, Payload: []byte("x")})
+	require.ErrorIs(t, err, dmsgasync.ErrNotAllowed)
+}
+
+// With the default policy the host can leave a message for a visor it holds
+// for, on its own store.
+func TestDmsgAsyncHostSendsToItsVisor(t *testing.T) {
+	env := dmsgtest.NewEnv(t, 10*time.Second)
+	require.NoError(t, env.Startup(0, 1, 2, &dmsg.Config{MinSessions: 1}))
+	t.Cleanup(env.Shutdown)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	cs := env.AllClients()
+	hostC, rcptC := cs[0], cs[1]
+	on, off := true, false
+	host := asyncVisor(t, ctx, hostC, &visorconfig.DmsgAsyncConfig{Host: visorconfig.DmsgAsyncHostConfig{
+		Enable: &on, Store: dmsgasync.StoreMemory, Hosted: []cipher.PubKey{rcptC.LocalPK()},
+	}})
+	rcpt := asyncVisor(t, ctx, rcptC, &visorconfig.DmsgAsyncConfig{Inbox: visorconfig.DmsgAsyncInboxConfig{Publish: &off}}, hostC.LocalPK())
+	require.NoError(t, rcpt.DmsgAsyncSync())
+	// No cache and no discovery: the host knows the record from the registration.
+	res, err := host.DmsgAsyncSend(visorapi.DmsgAsyncSendRequest{To: rcptC.LocalPK(), Port: 1, Payload: []byte("from your hypervisor")})
+	require.NoError(t, err)
+	require.Equal(t, hostC.LocalPK(), res.Host)
+
+	msgs, err := rcpt.DmsgAsyncTake([]uint16{1})
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.Equal(t, hostC.LocalPK(), msgs[0].From)
+}
+
+// A host that does not answer is left out of the record, so senders only see
+// hosts that took the registration, and its error shows in the status.
+func TestDmsgAsyncRecordNamesOnlyRegisteredHosts(t *testing.T) {
+	env := dmsgtest.NewEnv(t, 10*time.Second)
+	require.NoError(t, env.Startup(0, 1, 2, &dmsg.Config{MinSessions: 1}))
+	t.Cleanup(env.Shutdown)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	cs := env.AllClients()
+	hostC, rcptC := cs[0], cs[1]
+	on, off := true, false
+	asyncVisor(t, ctx, hostC, &visorconfig.DmsgAsyncConfig{Host: visorconfig.DmsgAsyncHostConfig{
+		Enable: &on, Store: dmsgasync.StoreMemory, Hosted: []cipher.PubKey{rcptC.LocalPK()},
+	}})
+	gone, _ := cipher.GenerateKeyPair()
+	rcpt := asyncVisor(t, ctx, rcptC, &visorconfig.DmsgAsyncConfig{Inbox: visorconfig.DmsgAsyncInboxConfig{Publish: &off}}, gone, hostC.LocalPK())
+	require.NoError(t, rcpt.DmsgAsyncSync())
+
+	st, err := rcpt.DmsgAsyncStatus()
+	require.NoError(t, err)
+	require.Equal(t, []cipher.PubKey{hostC.LocalPK()}, st.Inbox.Record.Hosts)
+	require.NoError(t, st.Inbox.Record.Verify(time.Now()))
+	require.Len(t, st.Inbox.Hosts, 2)
+	for _, h := range st.Inbox.Hosts {
+		if h.PK == gone {
+			require.NotEmpty(t, h.Error)
+		} else {
+			require.Empty(t, h.Error)
+		}
+	}
+}
+
+// A group frame parked by one visor reaches the other's handler with the
+// sender's key, and only the recipient can open it.
+func TestGroupParkWiring(t *testing.T) {
+	env := dmsgtest.NewEnv(t, 10*time.Second)
+	require.NoError(t, env.Startup(0, 1, 3, &dmsg.Config{MinSessions: 1}))
+	t.Cleanup(env.Shutdown)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	cs := env.AllClients()
+	hostC, rcptC, senderC := cs[0], cs[1], cs[2]
+	on, off := true, false
+	_ = asyncVisor(t, ctx, hostC, &visorconfig.DmsgAsyncConfig{Host: visorconfig.DmsgAsyncHostConfig{
+		Enable: &on, Store: dmsgasync.StoreMemory, Hosted: []cipher.PubKey{rcptC.LocalPK()},
+	}})
+	rcpt := asyncVisor(t, ctx, rcptC, &visorconfig.DmsgAsyncConfig{Inbox: visorconfig.DmsgAsyncInboxConfig{Publish: &off}}, hostC.LocalPK())
+	sender := asyncVisor(t, ctx, senderC, nil)
+	require.NoError(t, rcpt.DmsgAsyncSync())
+	st, err := rcpt.DmsgAsyncStatus()
+	require.NoError(t, err)
+	sender.async.mu.Lock()
+	sender.async.cache[rcptC.LocalPK()] = cachedRecord{rec: *st.Inbox.Record, at: time.Now()}
+	sender.async.mu.Unlock()
+
+	require.NoError(t, sender.groupParker(rcptC.LocalPK(), []byte(`{"kind":"x"}`)))
+
+	held, err := rcpt.asyncPeek([]uint16{skychatgroup.ParkPort})
+	require.NoError(t, err)
+	require.Len(t, held, 1)
+	require.NotContains(t, string(held[0].Payload), `"kind"`, "the host must hold it sealed")
+
+	// The inbox loop's first cycle may still be running, and it fetches every
+	// port with a handler, so set the handler only after the peek.
+	type frame struct {
+		from    cipher.PubKey
+		payload []byte
+	}
+	got := make(chan frame, 1)
+	rcpt.AsyncHandle(skychatgroup.ParkPort, rcpt.groupParkHandler(func(from cipher.PubKey, p []byte, _ time.Time) error {
+		got <- frame{from, p}
+		return nil
+	}))
+	require.NoError(t, rcpt.DmsgAsyncSync())
+	select {
+	case f := <-got:
+		require.Equal(t, senderC.LocalPK(), f.from)
+		require.Equal(t, `{"kind":"x"}`, string(f.payload))
+	default:
+		t.Fatal("the handler did not get the frame")
+	}
+}

@@ -23,6 +23,7 @@
 package router
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -284,10 +285,8 @@ func pathPrefersPK(path []routing.Hop) bool {
 		if i == len(path)-1 {
 			break
 		}
-		for _, pk := range want {
-			if h.To == pk {
-				return true
-			}
+		if slices.Contains(want, h.To) {
+			return true
 		}
 	}
 	return false

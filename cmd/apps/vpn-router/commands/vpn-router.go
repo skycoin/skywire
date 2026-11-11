@@ -11,9 +11,9 @@ import (
 	"syscall"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/logging"
 
 	"github.com/0magnet/calvin"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -91,6 +91,7 @@ func registerFlags(fs *pflag.FlagSet) {
 
 func init() {
 	launcher.RegisterApp(skyenv.VPNRouterName, RunVPNRouter)
+	launcher.RegisterAppFlags(skyenv.VPNRouterName, RootCmd.Flags())
 	registerFlags(RootCmd.Flags())
 }
 
@@ -194,7 +195,7 @@ func RunVPNRouter(ctx context.Context, args []string) error {
 // cancels. Used when the binary is invoked directly (no PROC_CONFIG), e.g. for
 // on-host operation or hardware testing.
 func runStandalone(ctx context.Context) error {
-	logger := logrus.New()
+	logger := logging.New()
 	logger.SetOutput(cmdutil.Stderr())
 
 	// The mesh gateway (full or standalone) dials the mesh through the visor's
@@ -285,13 +286,13 @@ func buildRouterConfig(dialer meshgw.MeshDial) (vpn.RouterConfig, error) {
 	return cfg, nil
 }
 
-func setAppErr(appCl *app.Client, logg logrus.FieldLogger, err error) {
+func setAppErr(appCl *app.Client, logg logging.FieldLogger, err error) {
 	if appErr := appCl.SetError(err.Error()); appErr != nil {
 		logg.WithError(appErr).WithField("original_error", err).Warn("Failed to set error")
 	}
 }
 
-func setAppStatus(appCl *app.Client, logg logrus.FieldLogger, status appserver.AppDetailedStatus) {
+func setAppStatus(appCl *app.Client, logg logging.FieldLogger, status appserver.AppDetailedStatus) {
 	if err := appCl.SetDetailedStatus(string(status)); err != nil {
 		logg.WithError(err).WithField("status", status).Warn("Failed to set status")
 	}

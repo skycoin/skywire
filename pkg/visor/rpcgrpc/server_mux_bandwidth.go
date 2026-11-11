@@ -27,9 +27,11 @@
 package rpcgrpc
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -432,11 +434,9 @@ func (s *PingServer) StreamMuxBandwidth(req *MuxBandwidthRequest, stream PingSer
 		idleCtx, idleCancel := context.WithTimeout(ctx, cfg.IdleBaselineDuration)
 		idleStart := time.Now()
 		idleWg := &sync.WaitGroup{}
-		idleWg.Add(1)
-		go func() {
-			defer idleWg.Done()
+		idleWg.Go(func() {
 			s.muxBwProbeLoop(idleCtx, &cfg, probeRoute.index, idleStart, &idleProbesMu, &idleProbeSamples, emit)
-		}()
+		})
 		idleWg.Wait()
 		idleCancel()
 	}
@@ -462,11 +462,9 @@ func (s *PingServer) StreamMuxBandwidth(req *MuxBandwidthRequest, stream PingSer
 		// add/drop/promote/demote leg actions. It replaces both the baseline
 		// pump-spawn and the baseline sampler.
 		ctrl.startPumps(pumpCtx, routes, pumpStart, pumpWg)
-		pumpWg.Add(1)
-		go func() {
-			defer pumpWg.Done()
+		pumpWg.Go(func() {
 			ctrl.controlLoop(pumpCtx, pumpStart)
-		}()
+		})
 	} else {
 		for _, r := range routes {
 			if !r.established.Load() {
@@ -481,11 +479,9 @@ func (s *PingServer) StreamMuxBandwidth(req *MuxBandwidthRequest, stream PingSer
 		}
 
 		// Sampler.
-		pumpWg.Add(1)
-		go func() {
-			defer pumpWg.Done()
+		pumpWg.Go(func() {
 			s.muxBwSamplerLoop(pumpCtx, &cfg, routes, pumpStart, &peakSend, &peakRecv, emit)
-		}()
+		})
 	}
 
 	// Probe (optional) — rides the dedicated probe route, NOT a pump conn,
@@ -682,11 +678,11 @@ func (s *PingServer) muxBwPlanDisjointRoutes(
 
 	// Cheapest (fastest transports) first; break ties toward fewer hops. Stable
 	// so equal-cost routes keep BFS order (shortest-first) as the sub-tie-break.
-	sort.SliceStable(candidates, func(i, j int) bool {
-		if candidates[i].cost != candidates[j].cost {
-			return candidates[i].cost < candidates[j].cost
-		}
-		return candidates[i].hops < candidates[j].hops
+	slices.SortStableFunc(candidates, func(a, b muxBwCandidate) int {
+		return cmp.Or(
+			cmp.Compare(a.cost, b.cost),
+			cmp.Compare(a.hops, b.hops),
+		)
 	})
 
 	plans := make([]muxBwRoutePlan, 0, count)

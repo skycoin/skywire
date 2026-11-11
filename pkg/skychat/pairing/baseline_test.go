@@ -139,7 +139,7 @@ func newPairTestRig(t *testing.T) *pairTestRig {
 func connectWithRetry(t *testing.T, p *Pair) {
 	t.Helper()
 	var lastErr error
-	for attempt := 0; attempt < 10; attempt++ {
+	for attempt := range 10 {
 		if err := p.Connect(context.Background()); err == nil {
 			return
 		} else {

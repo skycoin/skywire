@@ -4,7 +4,6 @@ package cmdutil
 import (
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 
@@ -18,7 +17,7 @@ func TestLevelFromStringFallsBackToInfo(t *testing.T) {
 		lvl, _, err := LevelFromString(s)
 		require.Errorf(t, err, "level %q must not parse", s)
 		require.ErrorIs(t, err, ErrInvalidLogString)
-		require.Equalf(t, logrus.InfoLevel, lvl, "level %q must fall back to info", s)
+		require.Equalf(t, logging.InfoLevel, lvl, "level %q must fall back to info", s)
 		require.Containsf(t, err.Error(), s, "error must name the offending string %q", s)
 	}
 

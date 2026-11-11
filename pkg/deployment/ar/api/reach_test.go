@@ -80,7 +80,7 @@ func eventually(t *testing.T, cond func() bool) {
 func TestReachBookProbesStcprOnce(t *testing.T) {
 	b, fp := newTestBook(t, map[string]bool{"203.0.113.7:7777": true})
 	pk, _ := cipher.GenerateKeyPair()
-	data := addrresolver.VisorData{RemoteAddr: "203.0.113.7", LocalAddresses: addrresolver.LocalAddresses{Port: "7777"}}
+	data := addrresolver.VisorData{RemoteAddr: "203.0.113.7", Port: "7777"}
 
 	b.noteBind(types.STCPR, pk, data)
 	require.Equal(t, "203.0.113.7:7777", waitProbe(t, fp))
@@ -90,7 +90,7 @@ func TestReachBookProbesStcprOnce(t *testing.T) {
 	})
 
 	// Keepalive refreshes of the same binding do not probe again.
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		b.noteBind(types.STCPR, pk, data)
 	}
 	select {
@@ -104,7 +104,7 @@ func TestReachBookProbesStcprOnce(t *testing.T) {
 func TestReachBookClosedOnlyAfterRepeatedMisses(t *testing.T) {
 	b, fp := newTestBook(t, nil) // nothing answers
 	pk, _ := cipher.GenerateKeyPair()
-	data := addrresolver.VisorData{RemoteAddr: "203.0.113.8", LocalAddresses: addrresolver.LocalAddresses{Port: "30178"}}
+	data := addrresolver.VisorData{RemoteAddr: "203.0.113.8", Port: "30178"}
 
 	b.noteBind(types.QUIC, pk, data)
 	waitProbe(t, fp)
@@ -134,11 +134,11 @@ func TestReachBookClosedOnlyAfterRepeatedMisses(t *testing.T) {
 func TestReachBookMovedAddressVoidsVerdict(t *testing.T) {
 	b, fp := newTestBook(t, map[string]bool{"203.0.113.9:7777": true})
 	pk, _ := cipher.GenerateKeyPair()
-	b.noteBind(types.STCPR, pk, addrresolver.VisorData{RemoteAddr: "203.0.113.9", LocalAddresses: addrresolver.LocalAddresses{Port: "7777"}})
+	b.noteBind(types.STCPR, pk, addrresolver.VisorData{RemoteAddr: "203.0.113.9", Port: "7777"})
 	waitProbe(t, fp)
 	eventually(t, func() bool { return len(record(b, pk).Open) == 1 })
 
-	b.noteBind(types.STCPR, pk, addrresolver.VisorData{RemoteAddr: "203.0.113.10", LocalAddresses: addrresolver.LocalAddresses{Port: "7777"}})
+	b.noteBind(types.STCPR, pk, addrresolver.VisorData{RemoteAddr: "203.0.113.10", Port: "7777"})
 	require.Equal(t, "203.0.113.10:7777", waitProbe(t, fp))
 	eventually(t, func() bool {
 		b.mu.Lock()

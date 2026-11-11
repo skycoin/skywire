@@ -6,11 +6,12 @@
 package visor
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"sync"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -77,7 +78,9 @@ func (fp *ForwardedPorts) List() []visorapi.ForwardedPort {
 	for _, p := range fp.ports {
 		out = append(out, *p)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Port < out[j].Port })
+	slices.SortFunc(out, func(a, b visorapi.ForwardedPort) int {
+		return cmp.Compare(a.Port, b.Port)
+	})
 	return out
 }
 
@@ -91,7 +94,9 @@ func (fp *ForwardedPorts) LandingPagePorts() []visorapi.ForwardedPort {
 			out = append(out, *p)
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Port < out[j].Port })
+	slices.SortFunc(out, func(a, b visorapi.ForwardedPort) int {
+		return cmp.Compare(a.Port, b.Port)
+	})
 	return out
 }
 
@@ -123,12 +128,7 @@ func (fp *ForwardedPorts) IsWhitelisted(port int, pk cipher.PubKey) bool {
 	if len(p.Whitelist) == 0 {
 		return true // open to all
 	}
-	for _, wl := range p.Whitelist {
-		if wl == pk {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(p.Whitelist, pk)
 }
 
 // AllSkynetPorts returns port numbers that are forwarded over skynet.
@@ -142,7 +142,7 @@ func (fp *ForwardedPorts) AllSkynetPorts() []int {
 			out = append(out, port)
 		}
 	}
-	sort.Ints(out)
+	slices.Sort(out)
 	return out
 }
 
@@ -161,7 +161,9 @@ func (fp *ForwardedPorts) LandingPageEntries() []logserver.ForwardedPortEntry {
 			})
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Port < out[j].Port })
+	slices.SortFunc(out, func(a, b logserver.ForwardedPortEntry) int {
+		return cmp.Compare(a.Port, b.Port)
+	})
 	return out
 }
 

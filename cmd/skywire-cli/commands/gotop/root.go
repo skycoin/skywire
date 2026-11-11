@@ -4,6 +4,7 @@
 package cligotop
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -11,7 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -800,8 +801,8 @@ func displayStatsText(stats *rpcgrpc.SystemStats) {
 		cmdutil.Printf("  %-7s %-20s %7s %7s %10s %-10s\n", "PID", "NAME", "CPU%", "MEM%", "RSS", "USER")
 		// Sort by CPU
 		procs := stats.Processes
-		sort.Slice(procs, func(i, j int) bool {
-			return procs[i].CpuPercent > procs[j].CpuPercent
+		slices.SortFunc(procs, func(a, b *rpcgrpc.ProcessStat) int {
+			return cmp.Compare(b.CpuPercent, a.CpuPercent)
 		})
 		for _, p := range procs {
 			cmdutil.Printf("  %-7d %-20s %7.1f %7.1f %10s %-10s\n",

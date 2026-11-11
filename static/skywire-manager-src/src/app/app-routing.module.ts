@@ -153,6 +153,11 @@ const routes: Routes = [
             component: AppsComponent
           },
           {
+            path: 'apps/catalog',
+            component: AppsComponent,
+            data: { sub: 'catalog' },
+          },
+          {
             path: 'resources',
             component: NodeResourcesComponent
           },

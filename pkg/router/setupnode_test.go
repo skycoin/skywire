@@ -6,18 +6,18 @@ package router
 import (
 	"context"
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
 )
@@ -52,7 +52,7 @@ func TestCreateRouteGroup(t *testing.T) {
 			initPK := routerPKs[0]
 
 			// arrange: routers
-			routers := make(map[cipher.PubKey]interface{}, routerCount)
+			routers := make(map[cipher.PubKey]any, routerCount)
 			for _, pk := range routerPKs {
 				routers[pk] = newMockRouterGateway(pk)
 			}
@@ -295,7 +295,7 @@ func TestBroadcastIntermediaryRules(t *testing.T) {
 			workingPKs := randPKs(tc.workingRouters)
 			failingPKs := randPKs(tc.failingRouters)
 
-			gateways := make(map[cipher.PubKey]interface{}, tc.workingRouters+tc.failingRouters)
+			gateways := make(map[cipher.PubKey]any, tc.workingRouters+tc.failingRouters)
 			for _, pk := range workingPKs {
 				gateways[pk] = &mockGatewayForReserver{}
 			}
@@ -310,7 +310,7 @@ func TestBroadcastIntermediaryRules(t *testing.T) {
 			defer cancel()
 
 			// act
-			err := BroadcastIntermediaryRules(ctx, logrus.New(), rtIDR, rules, nil)
+			err := BroadcastIntermediaryRules(ctx, logging.New(), rtIDR, rules, nil)
 
 			// assert
 			if tc.failingRouters > 0 {

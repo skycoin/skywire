@@ -73,9 +73,9 @@ type shareSession struct {
 	stack  atomic.Pointer[netstackTUN]
 }
 
-func newShareSession(ip net.IP, send func([]byte) (int, error)) *shareSession {
+func newShareSession(ip netip.Addr, send func([]byte) (int, error)) *shareSession {
 	s := &shareSession{send: send}
-	copy(s.ip[:], ip.To4())
+	s.ip = ip.Unmap().As4()
 	return s
 }
 

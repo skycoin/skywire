@@ -1,5 +1,4 @@
 //go:build !js
-// +build !js
 
 // Package history store_bolt_test.go
 package history
@@ -33,7 +32,7 @@ func TestBoltStore_AppendAndListByPeer(t *testing.T) {
 	s := newTestStore(t, DefaultLimits())
 
 	peer := "03abc" + strings.Repeat("0", 61)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if err := s.Append(Message{
 			Peer:      peer,
 			Text:      fmt.Sprintf("msg-%d", i),
@@ -78,7 +77,7 @@ func TestBoltStore_RateLimit(t *testing.T) {
 	s := newTestStore(t, lim)
 
 	peer := "rate-peer"
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if err := s.Append(Message{Peer: peer, Text: "ok"}); err != nil {
 			t.Fatalf("Append %d: %v", i, err)
 		}
@@ -101,7 +100,7 @@ func TestBoltStore_PerPeerCap(t *testing.T) {
 	s := newTestStore(t, lim)
 
 	peer := "cap-peer"
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if err := s.Append(Message{
 			Peer:      peer,
 			Text:      fmt.Sprintf("m%d", i),

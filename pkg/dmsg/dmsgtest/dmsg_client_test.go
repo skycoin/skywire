@@ -5,12 +5,11 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math/rand"
+	"math/rand/v2"
 	"net"
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -20,7 +19,7 @@ import (
 )
 
 func TestClient_RemoteClients(t *testing.T) {
-	logging.SetLevel(logrus.ErrorLevel)
+	logging.SetLevel(logging.ErrorLevel)
 
 	// duration to wait before the resultant state is checked after an action
 	const waitDuration = time.Millisecond * 100
@@ -62,7 +61,6 @@ func TestClient_RemoteClients(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		tc := tc
 		testName := fmt.Sprintf("%d:s%d_d%d",
 			i, tc.initSrvs, len(tc.changes))
 
@@ -78,7 +76,6 @@ func TestClient_RemoteClients(t *testing.T) {
 			// arrange: emulate remote clients
 			rcs := env.AllClients()
 			for _, rc := range rcs {
-				rc := rc
 				listenAndDiscard(t, rc, port)
 			}
 
@@ -184,7 +181,7 @@ func continuousRandomWrite(t *testing.T, conn net.Conn) {
 			close(errCh)
 		}()
 		for {
-			b := cipher.RandByte(rand.Intn(maxLen)) // nolint:gosec
+			b := cipher.RandByte(rand.IntN(maxLen)) // nolint:gosec
 			if _, err := conn.Write(b); err != nil {
 				return
 			}

@@ -2,11 +2,13 @@
 package cliroute
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"math"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -436,8 +438,8 @@ func routeCapacityTPS(src, dst cipher.PubKey, entries []*transport.Entry) (route
 	for t := range relayTypes {
 		types = append(types, t)
 	}
-	sort.Slice(types, func(i, j int) bool {
-		return tptypes.TypePreference(tptypes.Type(types[i])) < tptypes.TypePreference(tptypes.Type(types[j]))
+	slices.SortFunc(types, func(a, b string) int {
+		return cmp.Compare(tptypes.TypePreference(tptypes.Type(a)), tptypes.TypePreference(tptypes.Type(b)))
 	})
 	var mix strings.Builder
 	for i, t := range types {

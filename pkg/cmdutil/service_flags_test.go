@@ -46,7 +46,6 @@ func TestServiceFlags_Init(t *testing.T) {
 		}
 
 		for i, tc := range testCases {
-			i, tc := i, tc
 			t.Run(fmt.Sprintf("%d:%s", i, tc.tag), func(t *testing.T) {
 				defer func() {
 					if tc.err == nil {

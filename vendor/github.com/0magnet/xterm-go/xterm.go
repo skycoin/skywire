@@ -1265,9 +1265,14 @@ func ensureStylesheet() {
 	stylesheetInstalled = true
 	css := `
 .xterm { position: relative; user-select: none; padding: 2px; }
+/* The helper's caret is never seen, but the browser blinks it all the same
+   while the terminal has focus, and in Chrome each blink rebuilt the page's
+   whole compositor layer tree: every 600 ms, 30-50 ms on a large page. A
+   caret that does not animate is never repainted. */
 .xterm .xterm-helper-textarea {
   position: absolute; opacity: 0; left: -9999em; top: 0;
   width: 0; height: 0; z-index: -5; white-space: nowrap; overflow: hidden; resize: none;
+  caret-animation: manual; caret-color: transparent;
 }
 .xterm .xterm-viewport { position: absolute; top: 0; right: 0; bottom: 0; left: 0; overflow-y: scroll; cursor: default; }
 /* The viewport scrolls, so it carries the browser's default scrollbar: a light

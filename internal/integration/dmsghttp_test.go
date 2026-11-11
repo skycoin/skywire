@@ -1,5 +1,4 @@
 //go:build !no_ci
-// +build !no_ci
 
 // Package integration_test — pkg/../internal/integration/dmsghttp_test.go: end-to-end
 // coverage for dmsghttp (the HTTP-over-dmsg client/server library,

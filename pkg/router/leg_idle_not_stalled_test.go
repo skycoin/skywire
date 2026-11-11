@@ -73,12 +73,12 @@ func TestPeerLegStateIsAnEvent(t *testing.T) {
 	rg.mux.legStateEnabled = true
 
 	rg.mu.Lock()
-	rid := rg.rvs[1].KeyRouteID()
+	rid := rg.legs[1].rvs.KeyRouteID()
 	rg.mu.Unlock()
 
 	require.NoError(t, rg.handleLegStatePacket(routing.MakeLegStatePacket(rid, true)))
 	require.True(t, rg.mux.isLegStandby(1), "the peer's park is mirrored onto this side's mux")
-	require.True(t, rg.legParkedByPeer(1), "the park is recorded as PEER-originated")
+	require.True(t, peerParkedAt(rg, 1), "the park is recorded as PEER-originated")
 
 	parks := legEventsBy(rg, MuxEventLegParked, MuxByPeer)
 	require.Len(t, parks, 1, "the adopted park posts exactly one event")
@@ -92,7 +92,7 @@ func TestPeerLegStateIsAnEvent(t *testing.T) {
 
 	require.NoError(t, rg.handleLegStatePacket(routing.MakeLegStatePacket(rid, false)))
 	require.False(t, rg.mux.isLegStandby(1), "the peer's promote is mirrored too")
-	require.False(t, rg.legParkedByPeer(1), "a peer promote clears the peer-origin record")
+	require.False(t, peerParkedAt(rg, 1), "a peer promote clears the peer-origin record")
 
 	promotes := legEventsBy(rg, MuxEventLegPromoted, MuxByPeer)
 	require.Len(t, promotes, 1, "the adopted promote posts its own event")

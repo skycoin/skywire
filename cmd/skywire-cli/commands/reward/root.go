@@ -3,6 +3,7 @@ package clireward
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -34,6 +35,7 @@ var (
 	isAll                bool
 	bulkPKsCSV           string
 	bulkAllVisors        bool
+	acceptRisk           bool
 	readFlagTxt          string
 	cHiddenFlags         []string
 )
@@ -60,6 +62,8 @@ func init() {
 		"comma-separated visor PKs (via hypervisor) to set reward address on")
 	rewardCmd.Flags().BoolVar(&bulkAllVisors, "all-visors", false,
 		"apply reward address to every visor connected to this hypervisor (requires running hypervisor)")
+	rewardCmd.Flags().BoolVar(&acceptRisk, "accept-risk", false,
+		"set a single address instead of an xpub. It stops earning rewards once it sends coins")
 	rewardCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
 	for _, j := range cHiddenFlags {
 		rewardCmd.Flags().MarkHidden(j) //nolint:errcheck,gosec
@@ -98,8 +102,14 @@ const longtext = `
 	  reward rules      display the mainnet reward eligibility rules
 
 	Sets the reward account xpub for the visor: a BIP44 account-level
-	xpub, so each reward goes to a fresh address. A single skycoin
-	address is no longer accepted; one set earlier still works.
+	xpub, so each reward goes to a fresh address.
+
+	A single skycoin address is accepted only with --accept-risk, and is
+	refused if it has already sent coins. It stops earning rewards from
+	the first reward day after it sends coins, so send from it only after
+	switching to an xpub. This opt-in is temporary, until hardware wallets
+	can export an account xpub.
+
 	The address is written to the root of the default 'local' directory
 	specified in the visor's config.
 
@@ -169,7 +179,7 @@ func longText() string {
 			if err == nil {
 				isRewarded = true
 				defaultRewardAddress = fmt.Sprintf("%s\n", rwdAdd)
-				return "\n    skycoin reward address set to:\n    " + strings.TrimSpace(rwdAdd) + "\n"
+				return "\n    skycoin reward address set to:\n    " + strings.TrimSpace(rwdAdd) + "\n" + rewardAddressesText(rwdAdd)
 			}
 		}
 	}
@@ -252,7 +262,7 @@ var rewardCmd = &cobra.Command{
 				rwdAdd, err := client.GetRewardAddress()
 				if err == nil && rwdAdd != "" {
 					out := fmt.Sprintf("%s\n", rwdAdd)
-					internal.PrintOutput(cmd.Flags(), out, out)
+					internal.PrintOutput(cmd.Flags(), out, out+rewardAddressesText(rwdAdd))
 					warnIfExposed(client, rwdAdd)
 					cmdutil.Exit(0)
 				}
@@ -264,7 +274,7 @@ var rewardCmd = &cobra.Command{
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error reading file. err=%v", err))
 			}
 			out := fmt.Sprintf("%s\n", dat)
-			internal.PrintOutput(cmd.Flags(), out, out)
+			internal.PrintOutput(cmd.Flags(), out, out+rewardAddressesText(string(dat)))
 			cmdutil.Exit(0)
 		}
 		//set reward address from first argument
@@ -280,7 +290,7 @@ var rewardCmd = &cobra.Command{
 				rwdAdd, err := client.GetRewardAddress()
 				if err == nil && rwdAdd != "" {
 					out := fmt.Sprintf("%s\n", rwdAdd)
-					internal.PrintOutput(cmd.Flags(), out, out)
+					internal.PrintOutput(cmd.Flags(), out, out+rewardAddressesText(rwdAdd))
 					warnIfExposed(client, rwdAdd)
 					cmdutil.Exit(0)
 				}
@@ -288,7 +298,7 @@ var rewardCmd = &cobra.Command{
 			// Fallback to file
 			if dat, err := os.ReadFile(output); err == nil { //nolint:gosec
 				out := fmt.Sprintf("%s\n", dat)
-				internal.PrintOutput(cmd.Flags(), out, out)
+				internal.PrintOutput(cmd.Flags(), out, out+rewardAddressesText(string(dat)))
 				cmdutil.Exit(0)
 			}
 			cmdutil.Println("No reward address set. Use: skywire cli reward <address|xpub>")
@@ -300,13 +310,11 @@ var rewardCmd = &cobra.Command{
 		//remove any newline from rewardAddress string
 		rewardAddress = strings.TrimSuffix(rewardAddress, "\n")
 		//validate the skycoin address or xpub key
-		canonical, err := rewardconfig.ValidateRewardXpub(rewardAddress)
+		canonical, isXpub, err := rewardconfig.ValidateRewardSetting(rewardAddress, acceptRisk)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		if warning := rewardconfig.CheckXpubDepth(canonical); warning != "" {
-			cmdutil.Eprintf("\n%s\n\n", warning)
-		}
+		single := !isXpub
 
 		// Bulk path: apply this address to multiple visors via the
 		// hypervisor's HVSetRewardAddress RPC. Triggered by --pks
@@ -326,28 +334,33 @@ var rewardCmd = &cobra.Command{
 				internal.PrintFatalError(cmd.Flags(),
 					fmt.Errorf("bulk reward: no target PKs (check --pks list / --all-visors hypervisor state)"))
 			}
-			warnIfExposed(client, canonical)
-			applyBulkRewardAddress(cmd.Flags(), client, pks, canonical)
+			applyBulkRewardAddress(cmd.Flags(), client, pks, canonical, single)
 			return
 		}
 
 		//using the rpc of the running visor avoids needing sudo permissions
 		if clienterr != nil {
+			if single {
+				internal.Catch(cmd.Flags(), checkUnspentOffline(canonical))
+			}
 			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(canonical), 0600))
 			readRewardFile(cmd.Flags())
 			return
 		}
 
 		if clienterr == nil {
-			rwdAdd, err := client.SetRewardAddress(canonical)
+			set := client.SetRewardAddress
+			if single {
+				set = client.SetSingleRewardAddress
+			}
+			rwdAdd, err := set(canonical)
 			if err != nil {
-				internal.PrintError(cmd.Flags(), fmt.Errorf("Failed to connect: %v", err))
-				return
+				internal.PrintFatalError(cmd.Flags(), err)
 			}
 			// also write to the local file so -r works without visor running
 			os.WriteFile(output, []byte(rwdAdd), 0600) //nolint:errcheck,gosec
 			out := fmt.Sprintf("Reward address:\n  %s\n", rwdAdd)
-			internal.PrintOutput(cmd.Flags(), out, out)
+			internal.PrintOutput(cmd.Flags(), out, out+rewardAddressesText(rwdAdd))
 			warnIfExposed(client, rwdAdd)
 		} else {
 			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(canonical), 0600))
@@ -370,7 +383,7 @@ func collectBulkPKs(client visorapi.API, csv string, allVisors bool) ([]string, 
 		pks = append(pks, s)
 	}
 	if csv != "" {
-		for _, p := range strings.Split(csv, ",") {
+		for p := range strings.SplitSeq(csv, ",") {
 			add(p)
 		}
 	}
@@ -390,7 +403,11 @@ func collectBulkPKs(client visorapi.API, csv string, allVisors bool) ([]string, 
 // Per-visor result is printed (PK + outcome) and failures are recorded
 // but don't abort the loop — operators usually want the rest of the
 // fleet updated even if one visor is unreachable.
-func applyBulkRewardAddress(flags *pflag.FlagSet, client visorapi.API, pks []string, addr string) {
+func applyBulkRewardAddress(flags *pflag.FlagSet, client visorapi.API, pks []string, addr string, single bool) {
+	setFn := client.HVSetRewardAddress
+	if single {
+		setFn = client.HVSetSingleRewardAddress
+	}
 	type result struct {
 		PK  string `json:"pk"`
 		Set string `json:"set,omitempty"`
@@ -405,7 +422,7 @@ func applyBulkRewardAddress(flags *pflag.FlagSet, client visorapi.API, pks []str
 			failures++
 			continue
 		}
-		set, err := client.HVSetRewardAddress(pk, addr)
+		set, err := setFn(pk, addr)
 		if err != nil {
 			results = append(results, result{PK: pkStr, Err: err.Error()})
 			failures++
@@ -424,7 +441,7 @@ func applyBulkRewardAddress(flags *pflag.FlagSet, client visorapi.API, pks []str
 			humanLines = append(humanLines, fmt.Sprintf("  %s  OK    %s", r.PK, r.Set))
 		}
 	}
-	humanOut := strings.Join(humanLines, "\n") + "\n"
+	humanOut := strings.Join(humanLines, "\n") + "\n" + rewardAddressesText(addr)
 	internal.PrintOutput(flags, results, humanOut)
 }
 
@@ -436,10 +453,11 @@ func readRewardFile(cmdFlags *pflag.FlagSet) {
 		internal.PrintFatalError(cmdFlags, fmt.Errorf("Error reading file. err=%v", err))
 	}
 	output := fmt.Sprintf("Reward address file:\n  %s\nreward address:\n  %s\n", output, dat)
-	internal.PrintOutput(cmdFlags, output, output)
+	internal.PrintOutput(cmdFlags, output, output+rewardAddressesText(string(dat)))
 }
 
-// warnIfExposed prints a warning when addr has spent, which put its public key on chain.
+// warnIfExposed prints a warning when the single address addr has sent coins,
+// which stops it earning rewards and put its public key on chain.
 func warnIfExposed(client visorapi.API, addr string) {
 	addr = strings.TrimSpace(addr)
 	if _, isXpub, err := rewardconfig.ValidateRewardAddress(addr); err != nil || isXpub {
@@ -460,4 +478,43 @@ func warnIfExposed(client visorapi.API, addr string) {
 	if w := e.Warning(); w != "" {
 		cmdutil.Eprintf("\n%s\n\n", w)
 	}
+}
+
+// checkUnspentOffline refuses a single address that has sent coins when no
+// visor is running to check it, asking the skycoin node directly.
+func checkUnspentOffline(addr string) error {
+	node := strings.TrimSpace(os.Getenv("SKYCOINNODE"))
+	if node == "" {
+		node = "https://node.skycoin.com"
+	}
+	e, err := rewardconfig.FetchAddressExposure(&http.Client{Timeout: 30 * time.Second}, node, addr)
+	if err != nil {
+		return fmt.Errorf("could not check whether %s has sent coins, so it was not set: %w", addr, err)
+	}
+	if e.Spent {
+		return fmt.Errorf("%s: %w", addr, rewardconfig.ErrAddressSpent)
+	}
+	return nil
+}
+
+// shownRewardAddresses is how many derived addresses are listed under an xpub.
+const shownRewardAddresses = 5
+
+// rewardAddressesText lists the first addresses an xpub derives, so they can be
+// matched against the wallet's own address list. For a single address it is the risk of one.
+func rewardAddressesText(addr string) string {
+	addr = strings.TrimSpace(addr)
+	_, isXpub, err := rewardconfig.ValidateRewardAddress(addr)
+	if err != nil {
+		return ""
+	}
+	if !isXpub {
+		return "\n" + rewardconfig.SingleAddressRisk + "\n"
+	}
+	addrs, err := rewardconfig.RewardAddresses(addr, shownRewardAddresses)
+	if err != nil {
+		return fmt.Sprintf("\nWARNING: %v\n", err)
+	}
+	return "\nRewards go to these addresses of the xpub, each day to the next one not used yet.\n" +
+		"They should match the first addresses of your wallet:\n  " + strings.Join(addrs, "\n  ") + "\n  ...\n"
 }

@@ -32,7 +32,7 @@ import (
 // the boot path rather than adding throughput.
 var keypairPool = func() chan noise.DHKey {
 	ch := make(chan noise.DHKey, keypairPoolSize)
-	for i := 0; i < keypairGenerators; i++ {
+	for range keypairGenerators {
 		go func() {
 			for {
 				ch <- generateDHKey()

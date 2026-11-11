@@ -9,6 +9,7 @@ package treestore
 
 import (
 	"errors"
+	"slices"
 	"strings"
 )
 
@@ -30,10 +31,8 @@ func SplitPath(path string) ([]string, error) {
 		return nil, nil
 	}
 	segs := strings.Split(path, "/")
-	for _, s := range segs {
-		if s == "" {
-			return nil, ErrInvalidPath
-		}
+	if slices.Contains(segs, "") {
+		return nil, ErrInvalidPath
 	}
 	return segs, nil
 }

@@ -50,7 +50,7 @@ func CountSlots(bm []byte) int {
 		return 0
 	}
 	n := 0
-	for i := 0; i < BitmapSize; i++ {
+	for i := range BitmapSize {
 		b := bm[i]
 		for b != 0 {
 			n += int(b & 1)

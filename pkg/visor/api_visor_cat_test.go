@@ -24,11 +24,9 @@ func TestSpliceBidirectional(t *testing.T) {
 	wantBtoA := []byte("b-to-a")
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_ = splice(a1, b1) //nolint:errcheck
-	}()
+	})
 
 	// Driver: write to a2 → splice copies to b1 → readable from b2.
 	gotB := make([]byte, len(wantAtoB))
@@ -54,7 +52,7 @@ func TestSpliceBidirectional(t *testing.T) {
 		t.Fatalf("write b2: %v", err)
 	}
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		select {
 		case <-done:
 		case <-time.After(2 * time.Second):

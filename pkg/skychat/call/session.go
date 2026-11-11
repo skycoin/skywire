@@ -420,14 +420,12 @@ func (s *Session) sendLoop(ctx context.Context) {
 			continue
 		}
 		pkt := &rtp.Packet{
-			Header: rtp.Header{
-				Version:        2,
-				PayloadType:    rtpPayloadType,
-				SequenceNumber: seq,
-				Timestamp:      ts,
-				SSRC:           s.ssrc,
-			},
-			Payload: payload,
+			Version:        2,
+			PayloadType:    rtpPayloadType,
+			SequenceNumber: seq,
+			Timestamp:      ts,
+			SSRC:           s.ssrc,
+			Payload:        payload,
 		}
 		raw, err := pkt.Marshal()
 		if err != nil {

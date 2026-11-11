@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -87,7 +87,7 @@ func caddySites(ctx context.Context, url string) ([]string, error) {
 	for h := range seen {
 		out = append(out, h)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out, nil
 }
 

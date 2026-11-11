@@ -6,17 +6,16 @@ import (
 	"net"
 	"sync"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/idmanager"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // Listener is a listener for app server connections.
 // Implements `net.Listener`.
 type Listener struct {
-	log       logrus.FieldLogger
+	log       logging.FieldLogger
 	id        uint16
 	rpc       appserver.RPCIngressClient
 	addr      appnet.Addr
@@ -83,7 +82,7 @@ func (l *Listener) Close() error {
 
 		var conns []net.Conn
 
-		l.cm.DoRange(func(_ uint16, v interface{}) bool {
+		l.cm.DoRange(func(_ uint16, v any) bool {
 			conn, err := idmanager.AssertConn(v)
 			if err != nil {
 				l.log.Error(err)

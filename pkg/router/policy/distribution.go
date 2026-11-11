@@ -78,11 +78,11 @@ func ParseDistribution(s string) (router.DistributionConfig, error) {
 // Accepts whitespace around the colon. Returns ok=false when
 // there's no colon.
 func splitDescriptor(s string) (name, body string, ok bool) {
-	colon := strings.IndexByte(s, ':')
-	if colon < 0 {
+	before, after, ok := strings.Cut(s, ":")
+	if !ok {
 		return "", "", false
 	}
-	return strings.TrimSpace(s[:colon]), strings.TrimSpace(s[colon+1:]), true
+	return strings.TrimSpace(before), strings.TrimSpace(after), true
 }
 
 // parseWeighted parses a comma-separated weight list.

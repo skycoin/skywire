@@ -236,10 +236,10 @@ func detectLinuxTrustStore() (anchorsDir string, updateCmd []string, err error) 
 }
 
 func osReleaseField(content, key string) string {
-	for _, line := range strings.Split(content, "\n") {
+	for line := range strings.SplitSeq(content, "\n") {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, key+"=") {
-			return strings.Trim(strings.TrimPrefix(line, key+"="), `"`)
+		if after, ok := strings.CutPrefix(line, key+"="); ok {
+			return strings.Trim(after, `"`)
 		}
 	}
 	return ""

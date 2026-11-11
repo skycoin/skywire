@@ -15,7 +15,7 @@ package presets
 import (
 	"embed"
 	"io/fs"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -55,6 +55,6 @@ func Names() []string {
 	for n := range registry {
 		names = append(names, n)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return names
 }

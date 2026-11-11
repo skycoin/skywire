@@ -5,7 +5,7 @@ package vpn
 
 import (
 	"errors"
-	"net"
+	"net/netip"
 )
 
 var (
@@ -29,13 +29,13 @@ func SetIPTablesForwardAcceptPolicy() error {
 
 // AllowIPToLocalNetwork allows all the packets coming from `source`
 // to private IP ranges.
-func AllowIPToLocalNetwork(_, _ net.IP) error {
+func AllowIPToLocalNetwork(_, _ netip.Addr) error {
 	return errServerMethodsNotSupported
 }
 
 // BlockIPToLocalNetwork blocks all the packets coming from `source`
 // to private IP ranges.
-func BlockIPToLocalNetwork(_, _ net.IP) error {
+func BlockIPToLocalNetwork(_, _ netip.Addr) error {
 	return errServerMethodsNotSupported
 }
 

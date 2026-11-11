@@ -149,7 +149,7 @@ func TestDispatchLeafListPaths(t *testing.T) {
 
 // TestParseTelemetryShardPath pins the shard-leaf path grammar.
 func TestParseTelemetryShardPath(t *testing.T) {
-	for sh := uint8(0); sh < telemetrywire.ShardCount; sh++ {
+	for sh := range uint8(telemetrywire.ShardCount) {
 		got, ok := parseTelemetryShardPath(telemetrywire.LeafPath(sh))
 		if !ok || got != sh {
 			t.Errorf("parseTelemetryShardPath(%q) = %d,%v; want %d,true", telemetrywire.LeafPath(sh), got, ok, sh)

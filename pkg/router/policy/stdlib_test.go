@@ -162,7 +162,7 @@ def decide_route(ctx, candidates):
     return None
 `
 	eval, err := NewEvaluator("log.star", src,
-		WithLogger(func(format string, args ...interface{}) {
+		WithLogger(func(format string, args ...any) {
 			captured = append(captured, format)
 		}))
 	if err != nil {

@@ -1,5 +1,10 @@
 ## Mac Installer
 
+The release workflow no longer uses this installer. It builds a plain
+`pkgbuild` package in `.github/workflows/release.yml` that installs only
+`/usr/local/bin/skywire` (see [docs/guides/install.md](../../docs/guides/install.md#macos)).
+The rest of this page describes the older Skywire.app installer.
+
 ### Sort of Questions
 - Q: *What is the equivalent of the systemd service used for controlling the running process?*  
   A:  No systemd service there. User just should run app from menu or desktop shortcut.

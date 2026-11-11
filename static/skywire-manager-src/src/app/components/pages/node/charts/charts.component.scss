@@ -20,7 +20,7 @@
     width: 100%;
 
     span {
-      color: variables.$white;
+      color: var(--sw-text);
 
       &.text {
         font-size: variables.$font-size-smaller;

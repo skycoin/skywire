@@ -33,11 +33,12 @@ import (
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 
-	// The four client apps register their in-process run functions with the
-	// launcher at import time (launcher.RegisterApp), so a config entry with
-	// an empty `binary` runs them inside the core, as on Android.
+	// The client apps and the mailbox register their in-process run functions
+	// with the launcher at import time (launcher.RegisterApp), so a config
+	// entry with an empty `binary` runs them inside the core, as on Android.
 	_ "github.com/skycoin/skywire/cmd/apps/skychat/commands"
 	_ "github.com/skycoin/skywire/cmd/apps/skydex-client/commands"
+	_ "github.com/skycoin/skywire/cmd/apps/skymail/commands"
 	_ "github.com/skycoin/skywire/cmd/apps/skysocks-client/commands"
 	_ "github.com/skycoin/skywire/cmd/apps/vpn-client/commands"
 )

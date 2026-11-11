@@ -1,8 +1,9 @@
 package charts
 
 import (
+	"cmp"
 	"math"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 )
@@ -66,8 +67,8 @@ func (f *Frame) Values(key string, missingZero bool) []float64 {
 
 // Latest is key's value in the newest sample that carries it.
 func (f *Frame) Latest(key string) (float64, bool) {
-	for i := len(f.rows) - 1; i >= 0; i-- {
-		if v, ok := f.rows[i][key]; ok {
+	for _, v := range slices.Backward(f.rows) {
+		if v, ok := v[key]; ok {
 			return v, true
 		}
 	}
@@ -89,11 +90,11 @@ func (f *Frame) Keys(prefix string) []string {
 		seen[k], _ = f.Latest(k)
 		keys = append(keys, k)
 	}
-	sort.Slice(keys, func(i, j int) bool {
-		if seen[keys[i]] != seen[keys[j]] {
-			return seen[keys[i]] > seen[keys[j]]
-		}
-		return keys[i] < keys[j]
+	slices.SortFunc(keys, func(a, b string) int {
+		return cmp.Or(
+			cmp.Compare(seen[b], seen[a]),
+			cmp.Compare(a, b),
+		)
 	})
 	return keys
 }

@@ -7,10 +7,11 @@ package dist
 
 import (
 	"bytes"
+	"cmp"
 	"compress/gzip"
 	"errors"
 	"io"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -48,7 +49,9 @@ func Platforms() []Platform {
 		}
 		out = append(out, Platform{OS: goos, Arch: arch, File: name, Size: int64(len(b))})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].File < out[j].File })
+	slices.SortFunc(out, func(a, b Platform) int {
+		return cmp.Compare(a.File, b.File)
+	})
 	return out
 }
 

@@ -34,9 +34,10 @@
 package clirewardsserver
 
 import (
+	"cmp"
 	"fmt"
 	"math"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/bitfield/script"
@@ -92,7 +93,9 @@ func gatherArchStats() archStats {
 	}
 	// Biggest first: the disc is drawn clockwise from twelve o'clock and
 	// a reader follows it in that order.
-	sort.SliceStable(items, func(i, j int) bool { return items[i].Count > items[j].Count })
+	slices.SortStableFunc(items, func(a, b PieChartItem) int {
+		return cmp.Compare(b.Count, a.Count)
+	})
 	a.Items = items
 	a.Src = fmt.Sprintf("source: operator surveys (node-info.json go_arch), %d visors — "+
 		"NOT the TPD visor count; TPD carries no architecture field", a.Total)
@@ -128,10 +131,10 @@ func archPieDisc(items []PieChartItem, total int) ([]string, []int) {
 	cx := float64(archPieCols-1) / 2
 	cy := float64(archPieRows-1) / 2
 	rows := make([]string, 0, archPieRows)
-	for r := 0; r < archPieRows; r++ {
+	for r := range archPieRows {
 		var line strings.Builder
 		lastColor := ""
-		for c := 0; c < archPieCols; c++ {
+		for c := range archPieCols {
 			x := (float64(c) - cx) / cx
 			y := (float64(r) - cy) / cy
 			if x*x+y*y > 1.0 {
@@ -200,11 +203,8 @@ func renderArchPanelANSI(a archStats) string {
 
 	var b strings.Builder
 	b.WriteString(tuiRule(title+" — share of surveyed visors", width))
-	rows := len(disc)
-	if len(legend) > rows {
-		rows = len(legend)
-	}
-	for i := 0; i < rows; i++ {
+	rows := max(len(legend), len(disc))
+	for i := range rows {
 		left := strings.Repeat(" ", archPieCols)
 		if i < len(disc) {
 			left = disc[i]

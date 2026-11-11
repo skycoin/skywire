@@ -1,5 +1,4 @@
 //go:build linux
-// +build linux
 
 // Package visorconfig pkg/visor/visorconfig/values_linux.go c3-vis-core
 package visorconfig
@@ -22,10 +21,8 @@ func UserConfig() skyenv.PkgConfig {
 	usrConfig := skyenv.PkgConfig{
 		LauncherBinPath: "/opt/skywire/apps",
 		LocalPath:       HomePath() + "/.skywire/local",
-		Hypervisor: skyenv.Hypervisor{
-			DbPath:     HomePath() + "/.skywire/users.db",
-			EnableAuth: true,
-		},
+		DbPath:          HomePath() + "/.skywire/users.db",
+		EnableAuth:      true,
 	}
 	return usrConfig
 }

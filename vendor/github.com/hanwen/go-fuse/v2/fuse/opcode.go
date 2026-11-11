@@ -11,6 +11,8 @@ import (
 	"runtime"
 	"syscall"
 	"unsafe"
+
+	"github.com/hanwen/go-fuse/v2/internal/iov"
 )
 
 const (
@@ -87,17 +89,7 @@ const (
 ////////////////////////////////////////////////////////////////
 
 func doInit(server *protocolServer, req *request) {
-	var input *InitIn
-	if len(req.inputBuf) < int(unsafe.Sizeof(InitIn{})) {
-		// Kernels predating protocol 7.36 send a 16-byte INIT
-		// payload; zero-extend it so the full struct can be
-		// read safely.
-		var extended InitIn
-		copy(unsafe.Slice((*byte)(unsafe.Pointer(&extended)), unsafe.Sizeof(extended)), req.inputBuf)
-		input = &extended
-	} else {
-		input = (*InitIn)(req.inData())
-	}
+	input := (*InitIn)(req.inData())
 	if input.Major != _FUSE_KERNEL_VERSION {
 		log.Printf("Major versions does not match. Given %d, want %d\n", input.Major, _FUSE_KERNEL_VERSION)
 		req.status = EIO
@@ -110,7 +102,7 @@ func doInit(server *protocolServer, req *request) {
 	}
 
 	kernelFlags := input.Flags64()
-	server.kernelSettings = *input
+	server.conn.in = *input
 	kernelFlags &= (CAP_ASYNC_READ | CAP_BIG_WRITES | CAP_FILE_OPS |
 		CAP_READDIRPLUS | CAP_NO_OPEN_SUPPORT | CAP_PARALLEL_DIROPS | CAP_MAX_PAGES | CAP_RENAME_SWAP | CAP_PASSTHROUGH | CAP_ALLOW_IDMAP |
 		server.opts.ExtraCapabilities)
@@ -163,12 +155,37 @@ func doInit(server *protocolServer, req *request) {
 		out.Minor = input.Minor
 	}
 
+	want := *out
+	in := *input
+	server.fileSystem.Init(&in, out)
+	if server.opts.InitHandler != nil {
+		server.opts.InitHandler(&in, out)
+	}
+
+	// The file system may tune the reply, but not beyond what the
+	// kernel offered and our buffers can hold.
+	out.Major = want.Major
+	out.Minor = want.Minor
+	out.setFlags(out.Flags64() & input.Flags64())
+	if out.MaxWrite == 0 || out.MaxWrite > want.MaxWrite {
+		out.MaxWrite = want.MaxWrite
+	}
+	if out.MaxPages == 0 || out.MaxPages > want.MaxPages {
+		out.MaxPages = want.MaxPages
+	}
+
+	conn := server.conn
+	conn.out = *out
+	conn.notify = conn.notify.gate(input)
+	conn.backing = conn.backing.gate(input)
+	server.fileSystem.OnConnect(conn)
+
 	req.status = OK
 }
 
 func doOpen(server *protocolServer, req *request) {
 	out := (*OpenOut)(req.outData())
-	status := server.fileSystem.Open(req.cancel, (*OpenIn)(req.inData()), out)
+	status := server.fileSystem.Open(req.ctx, (*OpenIn)(req.inData()), out)
 	req.status = status
 	if status != OK {
 		return
@@ -177,15 +194,23 @@ func doOpen(server *protocolServer, req *request) {
 
 func doCreate(server *protocolServer, req *request) {
 	out := (*CreateOut)(req.outData())
-	status := server.fileSystem.Create(req.cancel, (*CreateIn)(req.inData()), req.filename(), out)
+	status := server.fileSystem.Create(req.ctx, (*CreateIn)(req.inData()), req.filename(), out)
+	req.status = status
+}
+
+// doTmpfile answers a request for a file with no name. The kernel sends the name of the anonymous dentry it made
+// for it, which is "/" and means nothing, so it is not passed on.
+func doTmpfile(server *protocolServer, req *request) {
+	out := (*CreateOut)(req.outData())
+	status := server.fileSystem.Tmpfile(req.ctx, (*CreateIn)(req.inData()), out)
 	req.status = status
 }
 
 func doReadDir(server *protocolServer, req *request) {
 	in := (*ReadIn)(req.inData())
 	out := NewDirEntryList(req.outPayload, uint64(in.Offset))
-	code := server.fileSystem.ReadDir(req.cancel, in, out)
-	req.outPayload = out.bytes()
+	code := server.fileSystem.ReadDir(req.ctx, in, out)
+	req.outPayload = out.Bytes()
 	req.status = code
 }
 
@@ -193,65 +218,53 @@ func doReadDirPlus(server *protocolServer, req *request) {
 	in := (*ReadIn)(req.inData())
 	out := NewDirEntryList(req.outPayload, uint64(in.Offset))
 
-	code := server.fileSystem.ReadDirPlus(req.cancel, in, out)
-	req.outPayload = out.bytes()
+	code := server.fileSystem.ReadDirPlus(req.ctx, in, out)
+	req.outPayload = out.Bytes()
 	req.status = code
 }
 
 func doOpenDir(server *protocolServer, req *request) {
 	out := (*OpenOut)(req.outData())
-	status := server.fileSystem.OpenDir(req.cancel, (*OpenIn)(req.inData()), out)
+	status := server.fileSystem.OpenDir(req.ctx, (*OpenIn)(req.inData()), out)
 	req.status = status
 }
 
 func doSetattr(server *protocolServer, req *request) {
 	out := (*AttrOut)(req.outData())
-	req.status = server.fileSystem.SetAttr(req.cancel, (*SetAttrIn)(req.inData()), out)
+	req.status = server.fileSystem.SetAttr(req.ctx, (*SetAttrIn)(req.inData()), out)
 }
 
 func doWrite(server *protocolServer, req *request) {
-	n, status := server.fileSystem.Write(req.cancel, (*WriteIn)(req.inData()), req.inPayload)
+	in := (*WriteIn)(req.inData())
 	o := (*WriteOut)(req.outData())
-	o.Size = n
-	req.status = status
+	data := req.inPayloadIov
+	if data == nil {
+		req.inPayloadOne[0] = req.inPayload
+		data = req.inPayloadOne[:]
+	}
+	o.Size, req.status = server.fileSystem.Writev(req.ctx, in, data)
+	if req.status != ENOSYS {
+		return
+	}
+	if len(data) == 1 {
+		o.Size, req.status = server.fileSystem.Write(req.ctx, in, data[0])
+		return
+	}
+	server.writevCopyOnce.Do(func() {
+		server.opts.Logger.Printf("Writev not implemented; copying split WRITE data")
+	})
+	buf := server.buffers.AllocBuffer(uint32(iov.Len(data)))
+	defer server.buffers.FreeBuffer(buf)
+	iov.CopyFrom(buf, data, 0)
+	o.Size, req.status = server.fileSystem.Write(req.ctx, in, buf)
 }
 
 func doNotifyReply(server *protocolServer, req *request) {
-	reply := (*NotifyRetrieveIn)(req.inData())
-	server.retrieveMu.Lock()
-	reading := server.retrieveTab[reply.Unique]
-	delete(server.retrieveTab, reply.Unique)
-	server.retrieveMu.Unlock()
-
-	badf := func(format string, argv ...any) {
-		server.opts.Logger.Printf("notify reply: "+format, argv...)
-	}
-
-	if reading == nil {
-		badf("unexpected unique - ignoring")
+	if server.conn.notify.notifier == nil {
+		server.opts.Logger.Printf("notify reply: no notifier - ignoring")
 		return
 	}
-
-	reading.n = 0
-	reading.st = EIO
-	defer close(reading.ready)
-
-	if reading.nodeid != reply.NodeId {
-		badf("inode mismatch: expected %s, got %s", reading.nodeid, reply.NodeId)
-		return
-	}
-
-	if reading.offset != reply.Offset {
-		badf("offset mismatch: expected @%d, got @%d", reading.offset, reply.Offset)
-		return
-	}
-
-	if len(reading.dest) < len(req.inPayload) {
-		badf("too much data: requested %db, got %db (will use only %db)", len(reading.dest), len(req.inPayload), len(reading.dest))
-	}
-
-	reading.n = copy(reading.dest, req.inPayload)
-	reading.st = OK
+	server.conn.notify.notifier.deliverReply((*NotifyRetrieveIn)(req.inData()), req.inPayload)
 }
 
 const _SECURITY_CAPABILITY = "security.capability"
@@ -277,9 +290,9 @@ func doGetXAttr(server *protocolServer, req *request) {
 	var n uint32
 	switch req.inHeader().Opcode {
 	case _OP_GETXATTR:
-		n, req.status = server.fileSystem.GetXAttr(req.cancel, req.inHeader(), req.filename(), req.outPayload)
+		n, req.status = server.fileSystem.GetXAttr(req.ctx, req.inHeader(), req.filename(), req.outPayload)
 	case _OP_LISTXATTR:
-		n, req.status = server.fileSystem.ListXAttr(req.cancel, req.inHeader(), req.outPayload)
+		n, req.status = server.fileSystem.ListXAttr(req.ctx, req.inHeader(), req.outPayload)
 	default:
 		req.status = ENOSYS
 	}
@@ -305,7 +318,7 @@ func doGetXAttr(server *protocolServer, req *request) {
 
 func doGetAttr(server *protocolServer, req *request) {
 	out := (*AttrOut)(req.outData())
-	s := server.fileSystem.GetAttr(req.cancel, (*GetAttrIn)(req.inData()), out)
+	s := server.fileSystem.GetAttr(req.ctx, (*GetAttrIn)(req.inData()), out)
 	req.status = s
 }
 
@@ -344,61 +357,61 @@ func doBatchForget(server *protocolServer, req *request) {
 }
 
 func doReadlink(server *protocolServer, req *request) {
-	req.outPayload, req.status = server.fileSystem.Readlink(req.cancel, req.inHeader())
+	req.outPayload, req.status = server.fileSystem.Readlink(req.ctx, req.inHeader())
 }
 
 func doLookup(server *protocolServer, req *request) {
 	out := (*EntryOut)(req.outData())
-	req.status = server.fileSystem.Lookup(req.cancel, req.inHeader(), req.filename(), out)
+	req.status = server.fileSystem.Lookup(req.ctx, req.inHeader(), req.filename(), out)
 }
 
 func doMknod(server *protocolServer, req *request) {
 	out := (*EntryOut)(req.outData())
 
-	req.status = server.fileSystem.Mknod(req.cancel, (*MknodIn)(req.inData()), req.filename(), out)
+	req.status = server.fileSystem.Mknod(req.ctx, (*MknodIn)(req.inData()), req.filename(), out)
 }
 
 func doMkdir(server *protocolServer, req *request) {
 	out := (*EntryOut)(req.outData())
-	req.status = server.fileSystem.Mkdir(req.cancel, (*MkdirIn)(req.inData()), req.filename(), out)
+	req.status = server.fileSystem.Mkdir(req.ctx, (*MkdirIn)(req.inData()), req.filename(), out)
 }
 
 func doUnlink(server *protocolServer, req *request) {
-	req.status = server.fileSystem.Unlink(req.cancel, req.inHeader(), req.filename())
+	req.status = server.fileSystem.Unlink(req.ctx, req.inHeader(), req.filename())
 }
 
 func doRmdir(server *protocolServer, req *request) {
-	req.status = server.fileSystem.Rmdir(req.cancel, req.inHeader(), req.filename())
+	req.status = server.fileSystem.Rmdir(req.ctx, req.inHeader(), req.filename())
 }
 
 func doLink(server *protocolServer, req *request) {
 	out := (*EntryOut)(req.outData())
-	req.status = server.fileSystem.Link(req.cancel, (*LinkIn)(req.inData()), req.filename(), out)
+	req.status = server.fileSystem.Link(req.ctx, (*LinkIn)(req.inData()), req.filename(), out)
 }
 
 func doRead(server *protocolServer, req *request) {
 	in := (*ReadIn)(req.inData())
-	req.readResult, req.status = server.fileSystem.Read(req.cancel, in, req.outPayload)
+	req.readResult, req.status = server.fileSystem.Read(req.ctx, in, req.outPayload)
 }
 
 func doFlush(server *protocolServer, req *request) {
-	req.status = server.fileSystem.Flush(req.cancel, (*FlushIn)(req.inData()))
+	req.status = server.fileSystem.Flush(req.ctx, (*FlushIn)(req.inData()))
 }
 
 func doRelease(server *protocolServer, req *request) {
-	server.fileSystem.Release(req.cancel, (*ReleaseIn)(req.inData()))
+	server.fileSystem.Release(req.ctx, (*ReleaseIn)(req.inData()))
 }
 
 func doFsync(server *protocolServer, req *request) {
-	req.status = server.fileSystem.Fsync(req.cancel, (*FsyncIn)(req.inData()))
+	req.status = server.fileSystem.Fsync(req.ctx, (*FsyncIn)(req.inData()))
 }
 
 func doReleaseDir(server *protocolServer, req *request) {
-	server.fileSystem.ReleaseDir((*ReleaseIn)(req.inData()))
+	server.fileSystem.ReleaseDir(req.ctx, (*ReleaseIn)(req.inData()))
 }
 
 func doFsyncDir(server *protocolServer, req *request) {
-	req.status = server.fileSystem.FsyncDir(req.cancel, (*FsyncIn)(req.inData()))
+	req.status = server.fileSystem.FsyncDir(req.ctx, (*FsyncIn)(req.inData()))
 }
 
 func doSetXAttr(server *protocolServer, req *request) {
@@ -411,7 +424,7 @@ func doSetXAttr(server *protocolServer, req *request) {
 		req.status = EINVAL
 		return
 	}
-	req.status = server.fileSystem.SetXAttr(req.cancel, (*SetXAttrIn)(req.inData()), string(req.inPayload[:i]), req.inPayload[i+1:])
+	req.status = server.fileSystem.SetXAttr(req.ctx, (*SetXAttrIn)(req.inData()), string(req.inPayload[:i]), req.inPayload[i+1:])
 }
 
 func doRemoveXAttr(server *protocolServer, req *request) {
@@ -419,42 +432,35 @@ func doRemoveXAttr(server *protocolServer, req *request) {
 		req.status = ENOSYS
 		return
 	}
-	req.status = server.fileSystem.RemoveXAttr(req.cancel, req.inHeader(), req.filename())
+	req.status = server.fileSystem.RemoveXAttr(req.ctx, req.inHeader(), req.filename())
 }
 
 func doAccess(server *protocolServer, req *request) {
-	req.status = server.fileSystem.Access(req.cancel, (*AccessIn)(req.inData()))
+	req.status = server.fileSystem.Access(req.ctx, (*AccessIn)(req.inData()))
 }
 
 func doSymlink(server *protocolServer, req *request) {
 	out := (*EntryOut)(req.outData())
-	n1, n2 := req.filenames()
-
-	req.status = server.fileSystem.Symlink(req.cancel, req.inHeader(), n2, n1, out)
+	n1, n2, code := req.filenames()
+	if !code.Ok() {
+		req.status = code
+		return
+	}
+	req.status = server.fileSystem.Symlink(req.ctx, req.inHeader(), n2, n1, out)
 }
 
 func doRename(server *protocolServer, req *request) {
-	if server.kernelSettings.supportsRenameSwap() {
-		doRename2(server, req)
+	n1, n2, code := req.filenames()
+	if !code.Ok() {
+		req.status = code
 		return
 	}
-	in1 := (*Rename1In)(req.inData())
-	in := RenameIn{
-		InHeader: in1.InHeader,
-		Newdir:   in1.Newdir,
-	}
-	n1, n2 := req.filenames()
-	req.status = server.fileSystem.Rename(req.cancel, &in, n1, n2)
-}
-
-func doRename2(server *protocolServer, req *request) {
-	n1, n2 := req.filenames()
-	req.status = server.fileSystem.Rename(req.cancel, (*RenameIn)(req.inData()), n1, n2)
+	req.status = server.fileSystem.Rename(req.ctx, (*RenameIn)(req.inData()), n1, n2)
 }
 
 func doStatFs(server *protocolServer, req *request) {
 	out := (*StatfsOut)(req.outData())
-	req.status = server.fileSystem.StatFs(req.cancel, req.inHeader(), out)
+	req.status = server.fileSystem.StatFs(req.ctx, req.inHeader(), out)
 	if req.status == ENOSYS && runtime.GOOS == "darwin" {
 		// OSX FUSE requires Statfs to be implemented for the
 		// mount to succeed.
@@ -464,7 +470,7 @@ func doStatFs(server *protocolServer, req *request) {
 }
 
 func doIoctl(server *protocolServer, req *request) {
-	req.status = server.fileSystem.Ioctl(req.cancel, (*IoctlIn)(req.inData()), req.inPayload, (*IoctlOut)(req.outData()),
+	req.status = server.fileSystem.Ioctl(req.ctx, (*IoctlIn)(req.inData()), req.inPayload, (*IoctlOut)(req.outData()),
 		req.outPayload)
 }
 
@@ -477,32 +483,32 @@ func doDestroy(server *protocolServer, req *request) {
 }
 
 func doFallocate(server *protocolServer, req *request) {
-	req.status = server.fileSystem.Fallocate(req.cancel, (*FallocateIn)(req.inData()))
+	req.status = server.fileSystem.Fallocate(req.ctx, (*FallocateIn)(req.inData()))
 }
 
 func doGetLk(server *protocolServer, req *request) {
-	req.status = server.fileSystem.GetLk(req.cancel, (*LkIn)(req.inData()), (*LkOut)(req.outData()))
+	req.status = server.fileSystem.GetLk(req.ctx, (*LkIn)(req.inData()), (*LkOut)(req.outData()))
 }
 
 func doSetLk(server *protocolServer, req *request) {
-	req.status = server.fileSystem.SetLk(req.cancel, (*LkIn)(req.inData()))
+	req.status = server.fileSystem.SetLk(req.ctx, (*LkIn)(req.inData()))
 }
 
 func doSetLkw(server *protocolServer, req *request) {
-	req.status = server.fileSystem.SetLkw(req.cancel, (*LkIn)(req.inData()))
+	req.status = server.fileSystem.SetLkw(req.ctx, (*LkIn)(req.inData()))
 }
 
 func doLseek(server *protocolServer, req *request) {
 	in := (*LseekIn)(req.inData())
 	out := (*LseekOut)(req.outData())
-	req.status = server.fileSystem.Lseek(req.cancel, in, out)
+	req.status = server.fileSystem.Lseek(req.ctx, in, out)
 }
 
 func doCopyFileRange(server *protocolServer, req *request) {
 	in := (*CopyFileRangeIn)(req.inData())
 	out := (*WriteOut)(req.outData())
 
-	out.Size, req.status = server.fileSystem.CopyFileRange(req.cancel, in)
+	out.Size, req.status = server.fileSystem.CopyFileRange(req.ctx, in)
 }
 
 func doInterrupt(server *protocolServer, req *request) {
@@ -632,6 +638,7 @@ func init() {
 		_OP_WRITE:           doWrite,
 		_OP_OPENDIR:         doOpenDir,
 		_OP_CREATE:          doCreate,
+		_OP_TMPFILE:         doTmpfile,
 		_OP_SETATTR:         doSetattr,
 		_OP_GETXATTR:        doGetXAttr,
 		_OP_LISTXATTR:       doGetXAttr,
@@ -667,7 +674,7 @@ func init() {
 		_OP_NOTIFY_REPLY:    doNotifyReply,
 		_OP_FALLOCATE:       doFallocate,
 		_OP_READDIRPLUS:     doReadDirPlus,
-		_OP_RENAME2:         doRename2,
+		_OP_RENAME2:         doRename,
 		_OP_INTERRUPT:       doInterrupt,
 		_OP_COPY_FILE_RANGE: doCopyFileRange,
 		_OP_LSEEK:           doLseek,
@@ -680,6 +687,7 @@ func init() {
 		_OP_BMAP:                  _BmapOut{},
 		_OP_COPY_FILE_RANGE:       WriteOut{},
 		_OP_CREATE:                CreateOut{},
+		_OP_TMPFILE:               CreateOut{},
 		_OP_GETATTR:               AttrOut{},
 		_OP_GETLK:                 LkOut{},
 		_OP_GETXATTR:              GetXAttrOut{},
@@ -717,6 +725,7 @@ func init() {
 		_OP_BMAP:               _BmapIn{},
 		_OP_COPY_FILE_RANGE:    CopyFileRangeIn{},
 		_OP_CREATE:             CreateIn{},
+		_OP_TMPFILE:            CreateIn{},
 		_OP_FALLOCATE:          FallocateIn{},
 		_OP_FLUSH:              FlushIn{},
 		_OP_FORGET:             ForgetIn{},
@@ -743,7 +752,7 @@ func init() {
 		_OP_RELEASE:            ReleaseIn{},
 		_OP_RELEASEDIR:         ReleaseIn{},
 		_OP_RENAME2:            RenameIn{},
-		_OP_RENAME:             Rename1In{},
+		_OP_RENAME:             RenameIn{},
 		_OP_SETATTR:            SetAttrIn{},
 		_OP_SETLK:              LkIn{},
 		_OP_SETLKW:             LkIn{},
@@ -757,7 +766,10 @@ func init() {
 
 	// File name args.
 	for op, count := range map[uint32]int{
-		_OP_CREATE:      1,
+		_OP_CREATE: 1,
+		// TMPFILE goes through the same kernel code as CREATE, so it carries a name as well: the name of the
+		// anonymous dentry the kernel makes for the file, which is always "/" and names nothing.
+		_OP_TMPFILE:     1,
 		_OP_SETXATTR:    1,
 		_OP_GETXATTR:    1,
 		_OP_LINK:        1,
@@ -782,6 +794,9 @@ func checkFixedBufferSize() {
 	for code, h := range operationHandlers {
 		if h.OutputSize > unsafe.Sizeof(r.outDataInline) {
 			log.Panicf("request output buffer too small: code %v, sz %d %v", code, h.OutputSize, h)
+		}
+		if h.InputSize > unsafe.Sizeof(r.smallInputBuf) {
+			log.Panicf("request input buffer too small: code %v, sz %d %v", code, h.InputSize, h)
 		}
 		if maxInputSize < h.InputSize {
 			maxInputSize = h.InputSize

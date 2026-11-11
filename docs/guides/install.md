@@ -61,6 +61,43 @@ Install as a package on Debian or Arch Linux: [Package Installation Guide](https
 
 [Binary Releases](https://github.com/skycoin/skywire/releases) for many platforms and architectures are provided if none of the other installation methods are preferred.
 
+### macOS
+
+Each release has a package and a tarball for Apple silicon and for Intel Macs.
+
+```
+skywire-<version>-darwin-arm64.pkg
+skywire-<version>-darwin-arm64.tar.xz
+skywire-<version>-darwin-amd64.pkg
+skywire-<version>-darwin-amd64.tar.xz
+```
+
+The `.pkg` installs one file, `/usr/local/bin/skywire`. It has no app bundle
+and runs no install scripts. There is currently no menu bar or Applications
+integration, so skywire is used from Terminal. See
+[configuration.md](configuration.md) and [visor.md](visor.md) to set up and run
+a visor.
+
+The binary carries the linker's ad hoc signature, but the `.pkg` is not signed
+or notarized. Gatekeeper therefore blocks a double clicked `.pkg`. Allow it in
+System Settings, Privacy & Security, with "Open Anyway", or install it from
+Terminal.
+
+```
+sudo installer -pkg skywire-<version>-darwin-arm64.pkg -target /
+```
+
+A tarball downloaded with a browser is quarantined. Unpack it and clear the
+flag before running the binary.
+
+```
+tar -xf skywire-<version>-darwin-arm64.tar.xz
+xattr -d com.apple.quarantine ./skywire
+```
+
+These steps are standard macOS behaviour for unsigned downloads. The project
+has not tested them on a Mac for this guide.
+
 ## Linux Packages
 
 All Linux packages provide a virtually identical installation, helper scripts, and systemd services regardless of the linux distro.

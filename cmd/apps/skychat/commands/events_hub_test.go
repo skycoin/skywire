@@ -20,7 +20,7 @@ func drainSeqs(ch <-chan chatEvent) []uint64 {
 
 func TestHub_RecordEvent_AssignsMonotonicSeq(t *testing.T) {
 	h := newSSEHub()
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		h.recordEvent(chatEvent{ID: fmt.Sprintf("id%d", i), Channel: channelDM, Text: "x"})
 	}
 	if h.seq != 3 {
@@ -30,7 +30,7 @@ func TestHub_RecordEvent_AssignsMonotonicSeq(t *testing.T) {
 
 func TestHub_SubscribeEvents_ReplaysSinceCursor(t *testing.T) {
 	h := newSSEHub()
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		h.recordEvent(chatEvent{ID: fmt.Sprintf("id%d", i), Channel: channelDM})
 	}
 	// since=2 → replay seq 3,4 only

@@ -92,7 +92,7 @@ func (v *Visor) VoiceDecline(callID string) error {
 }
 
 // VoiceSetBlocked replaces the callers whose calls never ring here: they hear
-// an ordinary ring that goes unanswered. See call.Manager.SetBlocked.
+// a short ring and then a decline. See call.Manager.SetBlocked.
 func (v *Visor) VoiceSetBlocked(peers []cipher.PubKey) error {
 	if v.voice == nil {
 		return ErrVoiceDisabled
@@ -191,6 +191,18 @@ func (v *Visor) VoiceCallAudio(callID string) (sent, recv []int16, err error) {
 		return nil, nil, ErrVoiceDisabled
 	}
 	return v.voice.CallAudio(callID)
+}
+
+// VoiceCallDevices reports whether an active call has a real mic and speaker.
+func (v *Visor) VoiceCallDevices(callID string) (visorapi.VoiceDevices, error) {
+	if v.voice == nil {
+		return visorapi.VoiceDevices{}, ErrVoiceDisabled
+	}
+	d, err := v.voice.CallDevices(callID)
+	if err != nil {
+		return visorapi.VoiceDevices{}, err
+	}
+	return visorapi.VoiceDevices{Mic: d.Mic, Speaker: d.Speaker, MicErr: d.MicErr, SpeakerErr: d.SpeakerErr}, nil
 }
 
 // VoiceMute toggles the mic (send) and speaker (playback) mute of an active

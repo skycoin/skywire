@@ -32,7 +32,7 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 func TestSortEdges(t *testing.T) {
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		keyA, _ := cipher.GenerateKeyPair()
 		keyB, _ := cipher.GenerateKeyPair()
 		require.Equal(t, transport.SortEdges(keyA, keyB), transport.SortEdges(keyB, keyA))
@@ -41,7 +41,7 @@ func TestSortEdges(t *testing.T) {
 
 func TestMakeTransportID(t *testing.T) {
 	t.Run("id_is_stable", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			keyA, _ := cipher.GenerateKeyPair()
 			keyB, _ := cipher.GenerateKeyPair()
 			idAB := transport.MakeTransportID(keyA, keyB, "type")

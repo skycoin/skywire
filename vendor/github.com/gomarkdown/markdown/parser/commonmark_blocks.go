@@ -32,6 +32,10 @@ func (p *Parser) commonMarkBlocks(data []byte) (loose bool) {
 		}
 		blank = false
 		p.tip = parent
+		if n := p.commonMarkHook(data); n > 0 {
+			data = data[n:]
+			continue
+		}
 		n := p.commonMarkBlock(data)
 		if n <= 0 {
 			panic("CommonMark block parser made no progress")
@@ -94,8 +98,13 @@ func commonMarkDedentFrom(data []byte, startColumn, width int) []byte {
 			i++
 		}
 	}
-	if column > startColumn+width {
-		return append(bytes.Repeat([]byte{' '}, column-startColumn-width), data[i:]...)
+	if extra := column - startColumn - width; extra > 0 {
+		// spaces before data[i] can stay as they are, which saves copying the
+		// rest of the line; only part of a tab has to become spaces
+		if extra <= i && bytes.Count(data[i-extra:i], []byte{' '}) == extra {
+			return data[i-extra:]
+		}
+		return append(bytes.Repeat([]byte{' '}, extra), data[i:]...)
 	}
 	return data[i:]
 }
@@ -288,7 +297,7 @@ func (p *Parser) commonMarkBlock(data []byte) int {
 		return p.commonMarkCode(data)
 	}
 	if level, content := commonMarkHeading(line); level > 0 {
-		p.AddBlock(&ast.Heading{Level: level, Container: ast.Container{Content: content}})
+		p.commonMarkAddHeading(level, content)
 		return end
 	}
 	if marker, count, indent, info := commonMarkFence(line); marker != 0 {
@@ -307,7 +316,61 @@ func (p *Parser) commonMarkBlock(data []byte) int {
 	if m, ok := commonMarkListPrefix(line); ok {
 		return p.commonMarkList(data, m)
 	}
+	if n := p.commonMarkTable(data); n > 0 {
+		return n
+	}
 	return p.commonMarkParagraph(data)
+}
+
+// commonMarkHook runs Opts.ParserHook at the start of a block, like the
+// historical parser does, and returns how much of data it consumed.
+func (p *Parser) commonMarkHook(data []byte) int {
+	if !p.commonMarkHooks || p.Opts.ParserHook == nil {
+		return 0
+	}
+	node, blockData, consumed := p.Opts.ParserHook(data)
+	if consumed <= 0 {
+		return 0
+	}
+	if node != nil {
+		p.AddBlock(node)
+		if blockData != nil {
+			p.Block(blockData)
+			p.Finalize(node)
+		}
+	}
+	return consumed
+}
+
+func (p *Parser) commonMarkAddHeading(level int, content []byte) {
+	heading := &ast.Heading{Level: level, Container: ast.Container{Content: content}}
+	if p.commonMarkExtensions&AutoHeadingIDs != 0 {
+		heading.HeadingID = sanitizeHeadingID(string(content))
+		p.allHeadingsWithAutoID = append(p.allHeadingsWithAutoID, heading)
+	}
+	p.AddBlock(heading)
+}
+
+// commonMarkTableStart reports whether data starts with the header and
+// delimiter rows of a table.
+func (p *Parser) commonMarkTableStart(data []byte) bool {
+	if p.commonMarkExtensions&Tables == 0 {
+		return false
+	}
+	line, _ := commonMarkLine(data)
+	if commonMarkIndent(line) > 3 || bytes.IndexByte(line, '|') < 0 {
+		return false
+	}
+	size, _, _ := p.tableHeader(data[skipHSpace(data, 0):], false)
+	return size > 0
+}
+
+func (p *Parser) commonMarkTable(data []byte) int {
+	if !p.commonMarkTableStart(data) {
+		return 0
+	}
+	indent := skipHSpace(data, 0)
+	return indent + p.table(data[indent:])
 }
 
 func (p *Parser) commonMarkCode(data []byte) int {
@@ -358,30 +421,61 @@ func (p *Parser) commonMarkFencedCode(data []byte, i int, marker byte, count, in
 
 func (p *Parser) commonMarkParagraph(data []byte) int {
 	i := 0
-	// Definitions are accepted only at the beginning of a paragraph.
-	if n := p.commonMarkReference(data); n > 0 {
-		return n
+	// Definitions are accepted only at the beginning of a paragraph. The lines
+	// after them still belong to that paragraph, so only a block that can
+	// interrupt a paragraph may start there.
+	for {
+		n := p.commonMarkReference(data[i:])
+		if n == 0 {
+			break
+		}
+		i += n
+		if i >= len(data) {
+			return i
+		}
+		if line, _ := commonMarkLine(data[i:]); commonMarkBlank(line) || commonMarkInterrupts(line) {
+			return i
+		}
 	}
+	start := i
+	// While no line is indented, the paragraph is data[start:i] as is and
+	// work stays empty. The first indented line copies the lines so far.
 	var work bytes.Buffer
+	copied := false
 	for i < len(data) {
 		line, end := commonMarkLine(data[i:])
 		if commonMarkBlank(line) {
 			break
 		}
-		if i > 0 {
+		if i > start {
 			if level := commonMarkSetext(line); level > 0 && !p.commonMarkLazy(data[i:]) {
-				p.AddBlock(&ast.Heading{Level: level, Container: ast.Container{Content: bytes.Trim(work.Bytes(), " \t\n")}})
+				content := data[start:i]
+				if copied {
+					content = work.Bytes()
+				}
+				p.commonMarkAddHeading(level, bytes.Trim(content, " \t\n"))
 				return i + end
 			}
-			if commonMarkInterrupts(line) {
+			if commonMarkInterrupts(line) || p.commonMarkTableStart(data[i:]) {
 				break
 			}
 		}
-		work.Write(bytes.TrimLeft(line, " \t"))
-		work.WriteByte('\n')
+		if trimmed := bytes.TrimLeft(line, " \t"); copied || len(trimmed) < len(line) {
+			if !copied {
+				copied = true
+				work.Write(data[start:i])
+			}
+			work.Write(trimmed)
+			work.WriteByte('\n')
+		}
 		i += end
 	}
-	p.renderParagraph(work.Bytes())
+	if copied {
+		p.renderParagraph(work.Bytes())
+	} else {
+		// The full slice expression keeps appends off the bytes after it.
+		p.renderParagraph(data[start:i:i])
+	}
 	return i
 }
 
@@ -449,12 +543,32 @@ type commonMarkContinuation struct {
 }
 
 func (s *commonMarkContinuation) feed(line []byte) {
-	for {
+	// Removing prefixes only changes the start of the line. A thematic break
+	// has spaces and one kind of marker, so while what's left still has a byte
+	// that is neither a space nor the last marker, it isn't one. This way a
+	// line of many nested list markers isn't scanned again for each of them.
+	nonThematic := 0 // length of the line suffix that starts at such a byte
+	var marker byte
+	for i := len(line) - 1; i >= 0; i-- {
+		c := line[i]
+		if c == ' ' || c == '\t' {
+			continue
+		}
+		if marker == 0 && (c == '-' || c == '*' || c == '_') {
+			marker = c
+		}
+		if c != marker {
+			nonThematic = len(line) - i
+			break
+		}
+	}
+	// content nested deeper than maxNesting is not parsed
+	for depth := 0; depth < maxNesting; depth++ {
 		if prefix := commonMarkQuotePrefix(line); prefix > 0 {
 			line = commonMarkQuoteContent(line, prefix)
 			continue
 		}
-		if m, ok := commonMarkListPrefix(line); ok && !commonMarkThematic(line) {
+		if m, ok := commonMarkListPrefix(line); ok && (nonThematic > 0 && len(line) >= nonThematic || !commonMarkThematic(line)) {
 			line = m.content
 			continue
 		}

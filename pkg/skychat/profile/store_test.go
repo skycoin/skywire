@@ -2,6 +2,8 @@
 package profile
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -117,7 +119,7 @@ func TestClearRemovesFileAndCache(t *testing.T) {
 	if !p.IsZero() {
 		t.Fatalf("cleared store still reports %+v", p)
 	}
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
+	if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("file still present after Clear (stat err = %v)", err)
 	}
 	// Idempotent: clearing twice is what a user pressing the button twice

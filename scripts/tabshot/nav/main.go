@@ -28,9 +28,9 @@ func main() {
 		os.Exit(1)
 	}
 	defer c.Close(websocket.StatusNormalClosure, "") //nolint:errcheck
-	b, err := json.Marshal(map[string]interface{}{
+	b, err := json.Marshal(map[string]any{
 		"id": 1, "method": "Page.navigate",
-		"params": map[string]interface{}{"url": os.Args[2]},
+		"params": map[string]any{"url": os.Args[2]},
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "marshal:", err)

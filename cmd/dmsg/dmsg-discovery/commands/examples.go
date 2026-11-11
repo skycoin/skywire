@@ -2,9 +2,10 @@
 package commands
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 
 	"github.com/tidwall/pretty"
 
@@ -14,7 +15,7 @@ import (
 )
 
 // exampleJSON marshals v to indented JSON with color, returning empty string on error
-func exampleJSON(v interface{}) string {
+func exampleJSON(v any) string {
 	b, err := json.MarshalIndent(v, "    ", "  ")
 	if err != nil {
 		return ""
@@ -50,14 +51,11 @@ func generateExamples() string {
 	if len(dmsg.Prod.DmsgServers) > 0 {
 		sorted := make([]disc.Entry, len(dmsg.Prod.DmsgServers))
 		copy(sorted, dmsg.Prod.DmsgServers)
-		sort.Slice(sorted, func(i, j int) bool {
-			return sorted[i].Static.Hex() < sorted[j].Static.Hex()
+		slices.SortFunc(sorted, func(a, b disc.Entry) int {
+			return cmp.Compare(a.Static.Hex(), b.Static.Hex())
 		})
-		limit := 2
-		if len(sorted) < limit {
-			limit = len(sorted)
-		}
-		for i := 0; i < limit; i++ {
+		limit := min(len(sorted), 2)
+		for i := range limit {
 			serverEntries = append(serverEntries, sorted[i])
 			serverPKs = append(serverPKs, sorted[i].Static.Hex())
 		}
@@ -72,8 +70,8 @@ func generateExamples() string {
 	if len(serverPKs) > 0 {
 		dmsgAddrPK = serverPKs[0]
 	}
-	healthExample := map[string]interface{}{
-		"build_info": map[string]interface{}{
+	healthExample := map[string]any{
+		"build_info": map[string]any{
 			"version": version,
 			"commit":  commit,
 			"date":    date,
@@ -88,26 +86,26 @@ func generateExamples() string {
 	if len(delegatedServers) == 0 {
 		delegatedServers = []string{"03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"}
 	}
-	clientEntryExample := map[string]interface{}{
+	clientEntryExample := map[string]any{
 		"version":   "1.0",
 		"sequence":  1,
 		"timestamp": 1705315200,
 		"static":    exClientPK,
-		"client": map[string]interface{}{
+		"client": map[string]any{
 			"delegated_servers": delegatedServers,
 		},
 	}
 
 	// POST response - disc.HTTPMessage
-	entrySetExample := map[string]interface{}{
+	entrySetExample := map[string]any{
 		"code":    200,
 		"message": "wrote a new entry",
 	}
-	entryUpdatedExample := map[string]interface{}{
+	entryUpdatedExample := map[string]any{
 		"code":    200,
 		"message": "wrote new entry iteration",
 	}
-	entryDeletedExample := map[string]interface{}{
+	entryDeletedExample := map[string]any{
 		"code":    200,
 		"message": "deleted entry",
 	}
@@ -124,8 +122,8 @@ func generateExamples() string {
 	clientsForServerExample := []string{exClientPK, exClientPK2}
 
 	// Use real server entries if available, otherwise use fallback
-	var serverEntryForExample interface{}
-	var serverEntriesForList []interface{}
+	var serverEntryForExample any
+	var serverEntriesForList []any
 	if len(serverEntries) > 0 {
 		serverEntryForExample = serverEntries[0]
 		for _, entry := range serverEntries {
@@ -133,24 +131,24 @@ func generateExamples() string {
 		}
 	} else {
 		// Fallback server entry
-		serverEntryForExample = map[string]interface{}{
+		serverEntryForExample = map[string]any{
 			"version":   "1.0",
 			"sequence":  1,
 			"timestamp": 1705315200,
 			"static":    "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e",
-			"server": map[string]interface{}{
+			"server": map[string]any{
 				"address":           "192.168.1.100:8081",
 				"available_streams": 100,
 				"max_streams":       200,
 				"server_type":       "official",
 			},
 		}
-		serverEntriesForList = []interface{}{serverEntryForExample}
+		serverEntriesForList = []any{serverEntryForExample}
 	}
 
 	// Arrays for list endpoints
-	entriesExample := append([]interface{}{clientEntryExample}, serverEntriesForList...)
-	visorEntriesExample := []interface{}{clientEntryExample}
+	entriesExample := append([]any{clientEntryExample}, serverEntriesForList...)
+	visorEntriesExample := []any{clientEntryExample}
 
 	return fmt.Sprintf(`
 Response Examples:

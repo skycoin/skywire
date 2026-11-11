@@ -30,6 +30,7 @@ var (
 	genMinHops                 int
 	arTransportLimit           int
 	noDirectTransports         bool
+	noDmsgServerTransports     bool
 	ptyRPCExec                 bool
 	sk                         cipher.SecKey
 	output                     string
@@ -210,6 +211,7 @@ var (
 	// app), so this is orthogonal to SKYCOIND. Driven by ${COIN_NODES[@]}.
 	coinNodes                string
 	rewardSkyAddr            string
+	alertEmail               string
 	hvHTTPAddr               string
 	stunServers              string
 	shutdownTimeout          string

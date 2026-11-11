@@ -19,6 +19,7 @@ package api
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"math"
@@ -26,8 +27,6 @@ import (
 	"sort"
 	"sync"
 	"time"
-
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
@@ -94,7 +93,7 @@ type RoutingCXOPublisher struct {
 
 // StartRoutingCXOPublisher starts the routing feed on DmsgTPDRoutingCXOPort,
 // configured by cfg.
-func StartRoutingCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, cfg RoutingFeedConfig, logger logrus.FieldLogger) (*RoutingCXOPublisher, error) {
+func StartRoutingCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, cfg RoutingFeedConfig, logger logging.FieldLogger) (*RoutingCXOPublisher, error) {
 	if cfg.Every <= 0 {
 		cfg.Every = DefaultRoutingPublishEvery
 	}
@@ -275,7 +274,9 @@ func (r *RoutingCXOPublisher) changedShards(lists map[string][]allTransportsWire
 		}
 		ops = append(ops, treestore.PutOp{Path: path, Value: body})
 	}
-	sort.Slice(ops, func(i, j int) bool { return ops[i].Path < ops[j].Path })
+	slices.SortFunc(ops, func(a, b treestore.PutOp) int {
+		return cmp.Compare(a.Path, b.Path)
+	})
 	return ops, nil
 }
 

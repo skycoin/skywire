@@ -9,9 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 func TestFrameRoundTrip(t *testing.T) {
@@ -109,8 +108,8 @@ func TestClientFramesDatagramsOntoStream(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	logger := logrus.New()
-	logger.SetLevel(logrus.PanicLevel)
+	logger := logging.New()
+	logger.SetLevel(logging.PanicLevel)
 	done := make(chan error, 1)
 	go func() { done <- RunClient(ctx, cfg, pd, logger) }()
 

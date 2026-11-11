@@ -11,6 +11,7 @@ package api
 import (
 	"context"
 	"net"
+	"slices"
 	"sync"
 	"time"
 
@@ -50,10 +51,8 @@ func (api *API) samePublicIP() (func(a, b string) bool, bool) {
 	}
 	return func(a, b string) bool {
 		for _, x := range idx[a] {
-			for _, y := range idx[b] {
-				if x == y {
-					return true
-				}
+			if slices.Contains(idx[b], x) {
+				return true
 			}
 		}
 		return false
@@ -102,10 +101,8 @@ func bindingIPs(b *arfeed.PeerBindings) []string {
 			return
 		}
 		s := ip.String()
-		for _, have := range out {
-			if have == s {
-				return
-			}
+		if slices.Contains(out, s) {
+			return
 		}
 		out = append(out, s)
 	}

@@ -90,6 +90,7 @@ export class NodeService {
         node.offlineSince = response.offline_since;
         node.lastSeenAt = response.last_seen_at;
         node.isStale = !!response.offline_since;
+        node.linkState = response.state;
         node.localPk = response.overview.local_pk;
         node.hostname = response.overview.hostname;
         node.version = response.overview.build_info.version;
@@ -341,6 +342,7 @@ return {
       node.offlineSince = response.offline_since;
       node.lastSeenAt = response.last_seen_at;
       node.isStale = !!response.offline_since;
+      node.linkState = response.state;
       node.localPk = response.overview ? response.overview.local_pk : '';
       node.hostname = response.overview ? response.overview.hostname : undefined;
       node.version = response.overview && response.overview.build_info ? response.overview.build_info.version : '';
@@ -448,6 +450,19 @@ return {
         });
       }
 
+      // Apps, for the services and apps columns and the running app filter.
+      node.apps = ((response.overview && response.overview.apps) || []).map((app: any) => {
+        return {
+          name: app.name,
+          autostart: app.auto_start,
+          port: app.port,
+          status: app.status,
+          detailedStatus: app.detailed_status,
+          args: app.args,
+          otp: app.otp,
+        };
+      });
+
       out.push(node);
     });
 
@@ -505,6 +520,7 @@ return {
     node.rewardsAddress = response.reward_address;
     node.rewardEligible = response.reward_eligible;
     node.rewardIneligibleReason = response.reward_ineligible_reason;
+    node.connectivity = response.connectivity?.state;
 
     // Hypervisor relationships. `hypervisors` are the PKs the
     // visor was configured to report to (from skywire-config);
@@ -694,12 +710,14 @@ return {
   }
 
   /**
-   * Sets the rewards address of the node.
+   * Sets the rewards address of the node. acceptRisk opts in to a single address
+   * instead of an account xpub.
    */
-  setRewardsAddress(nodeKey: string, address: string) {
-    const data = {
-      reward_address: address,
-    };
+  setRewardsAddress(nodeKey: string, address: string, acceptRisk = false) {
+    const data: { reward_address: string; accept_risk?: boolean } = { reward_address: address };
+    if (acceptRisk) {
+      data.accept_risk = true;
+    }
 
     return this.apiService.put(`visors/${nodeKey}/reward`, data);
   }
@@ -763,6 +781,13 @@ return {
    */
   getRewardRules() {
     return this.apiService.get(`reward-rules`, new RequestOptions({ responseType: ResponseTypes.Text }));
+  }
+
+  /**
+   * Gets the first addresses an account xpub derives, which are where its rewards go.
+   */
+  getRewardXpubAddresses(xpub: string) {
+    return this.apiService.get(`reward-xpub-addresses?xpub=${encodeURIComponent(xpub)}`);
   }
 
   /**

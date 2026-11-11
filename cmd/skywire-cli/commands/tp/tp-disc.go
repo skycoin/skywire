@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"text/tabwriter"
 
@@ -353,7 +353,7 @@ func printVisorTransportSummary(cmd *cobra.Command, baseURL, pkStr string) {
 	for t := range byType {
 		typeNames = append(typeNames, t)
 	}
-	sort.Strings(typeNames)
+	slices.Sort(typeNames)
 	for _, t := range typeNames {
 		fmt.Fprintf(&b, "  %-10s %d\n", t, byType[t])
 	}
@@ -398,7 +398,7 @@ func collectKeysByType(entries []*transport.Entry, tpType string, filter cipher.
 	for pk := range set {
 		pks = append(pks, pk.Hex())
 	}
-	sort.Strings(pks)
+	slices.Sort(pks)
 	return pks
 }
 

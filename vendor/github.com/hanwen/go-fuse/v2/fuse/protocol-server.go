@@ -6,32 +6,45 @@ package fuse
 
 import (
 	"sync"
-	"syscall"
+	"unsafe"
+
+	"github.com/hanwen/go-fuse/v2/internal/iov"
 )
 
 // protocolServer bridges from the FUSE datatypes to a RawFileSystem
 type protocolServer struct {
 	fileSystem RawFileSystem
 
-	writev func([][]byte) (int, syscall.Errno)
+	// Before INIT, notify and backing are as supplied by the
+	// transport; afterwards, they are gated by the kernel version
+	// and possibly wrapped by RawFileSystem.OnConnect.
+	conn *Conn
 
 	interruptMu    sync.Mutex
 	reqInflight    []*request
 	connectionDead bool
 
-	kernelSettings InitIn
+	// If set, handleRequest does not flatten withReadv results
+	// with Bytes(), but leaves them in req.readResult, so
+	// ProtocolServer.HandleRequest can Readv them straight into
+	// the reply iov.
+	useReadv bool
 
 	opts *MountOptions
 
-	// in-flight notify-retrieve queries
-	retrieveMu   sync.Mutex
-	retrieveNext uint64
-	retrieveTab  map[uint64]*retrieveCacheRequest // notifyUnique -> retrieve request
+	// Pools for []byte
+	buffers bufferPool
+
+	writevCopyOnce sync.Once
 }
 
 func (ms *protocolServer) handleRequest(h *operationHandler, req *request) {
+	req.ctx = newRequestContext(req)
 	ms.addInflight(req)
-	defer ms.dropInflight(req)
+	defer func() {
+		ms.dropInflight(req)
+		req.finish()
+	}()
 
 	if req.status.Ok() && ms.opts.Debug {
 		ms.opts.Logger.Println(req.InputDebug())
@@ -43,10 +56,12 @@ func (ms *protocolServer) handleRequest(h *operationHandler, req *request) {
 			ms.opts.Logger.Printf("Unimplemented opcode %v", operationName(c))
 		}
 		req.status = ENOSYS
+	} else if !req.status.Ok() {
+		// Reply with the error from parsing the request.
 	} else if req.inHeader().NodeId == pollHackInode ||
 		req.inHeader().NodeId == FUSE_ROOT_ID && h.FileNames > 0 && req.filename() == pollHackName {
 		doPollHackLookup(ms, req)
-	} else if req.status.Ok() {
+	} else {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
@@ -82,7 +97,15 @@ func (ms *protocolServer) handleRequest(h *operationHandler, req *request) {
 		return
 	}
 	if req.readResult != nil && ms.opts.DisableSplice {
-		req.outPayload, req.status = req.readResult.Bytes(req.outPayload)
+		_, vectored := req.readResult.(withSlice)
+		_, readv := req.readResult.(withReadv)
+		if !vectored && !(readv && ms.useReadv) {
+			req.outPayload, req.status = req.readResult.Bytes(req.outPayload)
+			req.readResult.Done()
+			req.readResult = nil
+		}
+	}
+	if req.status > OK && req.readResult != nil {
 		req.readResult.Done()
 		req.readResult = nil
 	}
@@ -119,9 +142,8 @@ func (ms *protocolServer) interruptRequest(unique uint64) Status {
 
 	// This is slow, but this operation is rare.
 	for _, inflight := range ms.reqInflight {
-		if unique == inflight.inHeader().Unique && !inflight.interrupted {
-			close(inflight.cancel)
-			inflight.interrupted = true
+		if unique == inflight.inHeader().Unique && !inflight.ctx.canceled.Load() {
+			inflight.ctx.interrupt()
 			return OK
 		}
 	}
@@ -134,10 +156,7 @@ func (ms *protocolServer) cancelAll() {
 	defer ms.interruptMu.Unlock()
 	ms.connectionDead = true
 	for _, req := range ms.reqInflight {
-		if !req.interrupted {
-			close(req.cancel)
-			req.interrupted = true
-		}
+		req.ctx.interrupt()
 	}
 	// Leave ms.reqInflight alone, or dropInflight will barf.
 }
@@ -162,113 +181,133 @@ func NewProtocolServer(fs RawFileSystem, opts *MountOptions) *ProtocolServer {
 
 	return &ProtocolServer{
 		protocolServer: protocolServer{
-			fileSystem:  fs,
-			retrieveTab: make(map[uint64]*retrieveCacheRequest),
-			opts:        &optsCopy,
+			fileSystem: fs,
+			opts:       &optsCopy,
+			useReadv:   true,
+			conn: &Conn{
+				notify:  enosysNotify(),
+				backing: enosysBacking(),
+			},
 		},
 	}
 }
 
-func iovLen(iov [][]byte) int {
-	var r int
-	for _, e := range iov {
-		r += len(e)
-	}
-	return r
-}
-
 // HandleRequest parses the iov in `in`, calls into the raw
-// filesystem, and puts the result in `out`. The shapes of the
-// input/output IOVs should follow conventions used by virtiofs.
-// The return value is the number of bytes written.
+// filesystem, and puts the result in `out`. The iovs are treated
+// as byte streams. The return value is the number of bytes written.
 //
 // EXPERIMENTAL: not subject to API stability.
 func (ps *ProtocolServer) HandleRequest(in [][]byte, out [][]byte) (int, Status) {
-	// for virtiofs, we get
-	//
-	// 2026/04/17 13:34:40 in: 40 32
-	// 2026/04/17 13:34:40 out: 16 16 4096
-	//
-	// ie. the iov looks like {header , variable size, payload},
-	// for both input and output.
-	//
-	// Our input data types have the InHeader embedded in the FooIn
-	// types, so we can never fully avoid copying.
-	inTogether := make([]byte, iovLen(in[:min(2, len(in))]))
-	copy(inTogether, in[0])
-	if len(in) > 1 {
-		copy(inTogether[len(in[0]):], in[1])
-	}
-	h, inSize, outSize, outPayloadSize, errno := parseRequest(inTogether, &ps.kernelSettings)
-	if errno != 0 {
-		return 0, errno
-	}
-	req := request{
-		cancel:        make(chan struct{}),
-		inputBuf:      inTogether[:inSize],
-		suppressReply: h.SuppressReply,
-	}
+	req := &requestAlloc{}
 
-	if len(in) > 2 {
-		req.inPayload = in[2]
-	} else {
-		req.inPayload = inTogether[inSize:]
+	total := iov.Len(in)
+	n := iov.CopyFrom(req.smallInputBuf[:min(total, len(req.smallInputBuf))], in, 0)
+	if n < int(unsafe.Sizeof(InHeader{})) {
+		ps.opts.Logger.Printf("request too short: %v", iov.Lens(in))
+		return 0, EIO
 	}
-
-	startOut := out
-	if !h.SuppressReply {
-		// validate the shape of the output iov. If we fail any of this, it's probably a programming error on our side, but
-		// since we can't trust the guest, be paranoid and return EIO instead.
-		if len(out) > 0 && len(out[0]) == int(sizeOfOutHeader) {
-			req.outHeaderBuf = out[0]
-			out = out[1:]
+	h, inSize, outSize, outPayloadSize, code := parseRequest(req.smallInputBuf[:n], ps.conn.out.Flags64())
+	if !code.Ok() && code != ENOSYS {
+		ps.opts.Logger.Printf("parseRequest: %v", code)
+	}
+	req.inputBuf = req.smallInputBuf[:n]
+	req.status = code
+	if code.Ok() {
+		req.inputBuf = req.inputBuf[:inSize]
+		payloadLen := total - inSize
+		if b, ok := iov.Slice(in, inSize, payloadLen); ok {
+			req.inPayload = b
+		} else if req.inHeader().Opcode == _OP_WRITE {
+			req.inPayloadIov = iov.Subslice(in, inSize, payloadLen)
 		} else {
-			ps.opts.Logger.Printf("op %v: got %v, out iov should start with 16 bytes", h.Name, iovLens(startOut))
-			return 0, EIO
+			// IOCTL data comes in one element per page. Other
+			// payloads (names, xattr values, BATCH_FORGET
+			// entries, extensions) are only split if they
+			// cross a guest memory region boundary.
+			req.inPayload = make([]byte, payloadLen)
+			iov.CopyFrom(req.inPayload, in, inSize)
 		}
-
-		if outSize > 0 {
-			if len(out) > 0 && len(out[0]) == outSize {
-				req.outDataBuf = out[0]
-				out = out[1:]
-			} else {
-				ps.opts.Logger.Printf("op %v: got %v, outData iov should have %d bytes", h.Name, iovLens(startOut), outSize)
-				return 0, EIO
-			}
-		}
-
-		if len(out) > 0 {
-			if len(out[0]) < outPayloadSize {
-				ps.opts.Logger.Printf("op %s: got %v, payload iov should have %d bytes", h.Name, iovLens(startOut), outPayloadSize)
-				return 0, EIO
-			}
-			req.outPayload = out[0]
-			out = out[1:]
-		} else if outPayloadSize != 0 {
-			ps.opts.Logger.Printf("op %s: got %v, payload iov should have %d bytes", h.Name, iovLens(startOut), outPayloadSize)
-			return 0, EIO
+		req.extendInput(int(h.InputSize))
+		req.status = req.splitExt(&req.extInline)
+		if !req.status.Ok() {
+			ps.opts.Logger.Printf("op %s: bad request extension: %v", h.Name, req.status)
 		}
 	}
 
-	beforePayload := req.outPayload
-	ps.protocolServer.handleRequest(h, &req)
-	if len(req.outPayload) > 0 && len(beforePayload) > 0 &&
-		&beforePayload[0] != &req.outPayload[0] {
-		n := copy(beforePayload, req.outPayload)
-		req.outPayload = beforePayload[:n]
+	req.outHeaderBuf = req.outHeaderInline[:]
+	req.outDataBuf = req.outDataInline[:outSize]
+	clear(req.outHeaderBuf)
+	clear(req.outDataBuf)
+
+	var direct []byte
+	suppressReply := h != nil && h.SuppressReply
+	if !suppressReply && req.status.Ok() {
+		need := int(sizeOfOutHeader) + outSize + outPayloadSize
+		if iov.Len(out) < need {
+			ps.opts.Logger.Printf("op %v: got out iov %v, need %d bytes", h.Name, iov.Lens(out), need)
+			return 0, EIO
+		}
+		if outPayloadSize > 0 {
+			if b, ok := iov.Slice(out, int(sizeOfOutHeader)+outSize, outPayloadSize); ok {
+				direct = b
+				req.outPayload = b
+			} else {
+				req.outPayload = ps.buffers.AllocBuffer(uint32(outPayloadSize))
+				defer ps.buffers.FreeBuffer(req.outPayload)
+			}
+		}
+	}
+
+	ps.protocolServer.handleRequest(h, &req.request)
+	if req.suppressReply {
+		return 0, OK
 	}
 
 	// Per the virtio spec, vring_used_elem.len should hold the
 	// number of bytes the device wrote to the descriptor
 	// chain. Returning more  inflates the live-migration dirty-page
 	// log and violates the spec.
-	return int(sizeOfOutHeader) + len(req.outDataBuf) + len(req.outPayload), 0
+	w := iov.Writer{Dst: out}
+	if req.readResult != nil {
+		// The size is only known after the read, so redo the header.
+		payloadOff := int(sizeOfOutHeader) + len(req.outDataBuf)
+		dst := iov.Subslice(out, payloadOff, req.readResult.Size())
+		n, code := readIntoIov(req.readResult, dst)
+		req.readResult.Done()
+		req.readResult = nil
+		if !code.Ok() {
+			req.status = code
+			n = 0
+		}
+		req.serializeHeader(n)
+		w.Write(req.outHeaderBuf)
+		w.Write(req.outDataBuf)
+		w.Skip(n)
+		return w.Written, OK
+	}
+
+	w.Write(req.outHeaderBuf)
+	w.Write(req.outDataBuf)
+	if len(req.outPayload) > 0 && len(direct) > 0 && &req.outPayload[0] == &direct[0] {
+		// The filesystem filled the out iov in place; count
+		// the bytes without copying.
+		w.Skip(len(req.outPayload))
+	} else {
+		w.Write(req.outPayload)
+	}
+	return w.Written, OK
 }
 
-func iovLens(in [][]byte) []int {
-	var lens []int
-	for _, b := range in {
-		lens = append(lens, len(b))
+func readIntoIov(rr ReadResult, dst [][]byte) (int, Status) {
+	switch r := rr.(type) {
+	case withReadv:
+		return r.Readv(dst)
+	case withSlice:
+		slices, code := r.Slices()
+		if !code.Ok() {
+			return 0, code
+		}
+		return iov.CopyTo(dst, slices...), OK
 	}
-	return lens
+	return 0, EIO
 }

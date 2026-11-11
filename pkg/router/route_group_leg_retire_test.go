@@ -30,8 +30,8 @@ func TestPruneLegByConsumeRule(t *testing.T) {
 	require.True(t, ok, "a non-last leg must be prunable")
 
 	rg.mu.Lock()
-	remaining := len(rg.tps)
-	fwdN, rvsN := len(rg.fwd), len(rg.rvs)
+	remaining := len(rg.legs)
+	fwdN, rvsN := len(testFwd(rg)), len(testRvs(rg))
 	after := rg.rt.Count()
 	rg.mu.Unlock()
 
@@ -58,7 +58,7 @@ func TestPruneLegByConsumeRuleLastLegFallsBack(t *testing.T) {
 	require.False(t, ok, "the last leg must not be prunable — caller does a full close")
 
 	rg.mu.Lock()
-	remaining := len(rg.tps)
+	remaining := len(rg.legs)
 	rg.mu.Unlock()
 	require.Equal(t, 1, remaining, "last leg preserved")
 	require.False(t, rg.isClosed())
@@ -74,7 +74,71 @@ func TestPruneLegByConsumeRuleUnknownRuleNoop(t *testing.T) {
 	require.False(t, ok)
 
 	rg.mu.Lock()
-	remaining := len(rg.tps)
+	remaining := len(rg.legs)
 	rg.mu.Unlock()
 	require.Equal(t, 3, remaining, "unknown rule must not prune any leg")
+}
+
+// legChangeRecorder counts the leg-change hook's calls.
+type legChangeRecorder struct{ changes []LegChange }
+
+func (r *legChangeRecorder) OnLegChange(_ DialInfo, _ []LegInfo, c LegChange) DistributionConfig {
+	r.changes = append(r.changes, c)
+	return DistributionConfig{}
+}
+
+// TestRetireReverseOnlyRuleTouchesNoLeg retires a reverse-only rule. The rule
+// goes, and no leg, leg event or hook call is involved.
+func TestRetireReverseOnlyRuleTouchesNoLeg(t *testing.T) {
+	rg, _, _ := createMuxRouteGroup(t, 2)
+	rg.muxEvents = &muxEventRing{}
+	hook := &legChangeRecorder{}
+	rg.SetLegChangeHook(hook, DialInfo{})
+	const revOnlyID = routing.RouteID(300)
+	revOnly := routing.ConsumeRule(DefaultRouteKeepAlive, revOnlyID, rg.desc.SrcPK(), rg.desc.DstPK(), 2, 1)
+	require.NoError(t, rg.rt.SaveRule(revOnly))
+	rg.appendReverseLeg(revOnly)
+	rg.mux.setLegStandby(1, true)
+
+	require.True(t, rg.pruneLegByConsumeRule(revOnlyID), "the group stays")
+
+	_, err := rg.rt.Rule(revOnlyID)
+	require.Error(t, err, "the retired rule must be deleted")
+	rg.mu.Lock()
+	require.Empty(t, rg.rvsOnly)
+	require.Len(t, rg.legs, 2)
+	rg.mu.Unlock()
+	require.True(t, rg.mux.isLegStandby(1), "the mux must not be touched")
+	require.Zero(t, countEvents(rg, MuxEventLegRemoved), "no leg was removed")
+	require.Empty(t, hook.changes, "no leg changed")
+}
+
+// TestRetireReverseOnlyRuleOnSingleLegGroup checks the same retire does not
+// close a group that holds one leg.
+func TestRetireReverseOnlyRuleOnSingleLegGroup(t *testing.T) {
+	rg, _, _ := createMuxRouteGroup(t, 1)
+	const revOnlyID = routing.RouteID(300)
+	revOnly := routing.ConsumeRule(DefaultRouteKeepAlive, revOnlyID, rg.desc.SrcPK(), rg.desc.DstPK(), 2, 1)
+	require.NoError(t, rg.rt.SaveRule(revOnly))
+	rg.appendReverseLeg(revOnly)
+
+	require.True(t, rg.pruneLegByConsumeRule(revOnlyID), "the caller closes the group on false")
+}
+
+// TestRetireOneOfTwoLegsKeepsGroup retires the paired leg of a group whose
+// other leg is forward-only. One of two legs went, so the group stays.
+func TestRetireOneOfTwoLegsKeepsGroup(t *testing.T) {
+	rg, mts, _ := createMuxRouteGroup(t, 2)
+	rg.mu.Lock()
+	fwdOnlyRvs := rg.legs[1].rvs.KeyRouteID()
+	rg.legs[1].rvs = nil
+	rg.mu.Unlock()
+	rg.rt.DelRules([]routing.RouteID{fwdOnlyRvs})
+
+	require.True(t, rg.pruneLegByConsumeRule(routing.RouteID(0+100)), "the caller closes the group on false")
+
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+	require.Len(t, rg.legs, 1)
+	require.Equal(t, mts[1].Entry.ID, rg.legs[0].tp.Entry.ID)
 }

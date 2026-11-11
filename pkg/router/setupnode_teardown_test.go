@@ -8,11 +8,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -46,7 +46,7 @@ func (g *delRulesRecorder) DelRules(routeIDs []routing.RouteID, ok *bool) error 
 
 func newRecorderReserver(t *testing.T, n int) (IDReserver, RulesMap, map[cipher.PubKey]*delRulesRecorder) {
 	pks := randPKs(n)
-	gateways := make(map[cipher.PubKey]interface{}, len(pks))
+	gateways := make(map[cipher.PubKey]any, len(pks))
 	recorders := make(map[cipher.PubKey]*delRulesRecorder, len(pks))
 	for _, pk := range pks {
 		g := &delRulesRecorder{}
@@ -65,8 +65,8 @@ func TestInstalledRulesTeardownDeletesEverythingInstalled(t *testing.T) {
 	installed := newInstalledRules()
 	ctx := context.Background()
 
-	require.NoError(t, BroadcastIntermediaryRules(ctx, logrus.New(), rtIDR, rules, installed))
-	installed.teardown(ctx, logrus.New(), rtIDR)
+	require.NoError(t, BroadcastIntermediaryRules(ctx, logging.New(), rtIDR, rules, installed))
+	installed.teardown(ctx, logging.New(), rtIDR)
 
 	for pk, g := range recorders {
 		g.mu.Lock()
@@ -84,7 +84,7 @@ func TestInstalledRulesNoTeardownOnSuccess(t *testing.T) {
 	rtIDR, rules, recorders := newRecorderReserver(t, 2)
 	installed := newInstalledRules()
 
-	require.NoError(t, BroadcastIntermediaryRules(context.Background(), logrus.New(), rtIDR, rules, installed))
+	require.NoError(t, BroadcastIntermediaryRules(context.Background(), logging.New(), rtIDR, rules, installed))
 	// success path: teardown is intentionally NOT called.
 
 	for pk, g := range recorders {

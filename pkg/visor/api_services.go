@@ -4,17 +4,16 @@ package visor
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -166,9 +165,9 @@ func doHealthProbe(client *http.Client, name, baseURL, transport string) visorap
 		return entry
 	}
 
-	var health map[string]interface{}
+	var health map[string]any
 	if json.Unmarshal(body, &health) == nil {
-		if bi, ok := health["build_info"].(map[string]interface{}); ok {
+		if bi, ok := health["build_info"].(map[string]any); ok {
 			if ver, ok := bi["version"].(string); ok {
 				entry.Version = ver
 			}
@@ -206,8 +205,8 @@ func (v *Visor) dmsgServerHealth(httpClient *http.Client) []visorapi.ServiceHeal
 	if err != nil || len(servers) == 0 {
 		return nil
 	}
-	sort.Slice(servers, func(i, j int) bool {
-		return servers[i].PK.String() < servers[j].PK.String()
+	slices.SortFunc(servers, func(a, b visorapi.DMSGServerInfo) int {
+		return cmp.Compare(a.PK.String(), b.PK.String())
 	})
 
 	// Map each server PK to its public ip:port from the dmsg-discovery
@@ -385,7 +384,7 @@ func (v *Visor) servicesFromDmsg(serviceType, version, country string) ([]servic
 	}
 	log := logging.MustGetLogger("servicedisc")
 	vLog := logging.NewMasterLogger()
-	vLog.SetLevel(logrus.InfoLevel)
+	vLog.SetLevel(logging.InfoLevel)
 	sdClient := servicedisc.NewClient(log, vLog, servicedisc.Config{
 		Type:          serviceType,
 		PK:            v.conf.PK,
@@ -584,7 +583,9 @@ func (v *Visor) ManagedVisors() []cipher.PubKey {
 	for _, conn := range v.remoteVisors {
 		out = append(out, conn.Addr.PK)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Hex() < out[j].Hex() })
+	slices.SortFunc(out, func(a, b cipher.PubKey) int {
+		return cmp.Compare(a.Hex(), b.Hex())
+	})
 	return out
 }
 
@@ -597,7 +598,9 @@ func (v *Visor) ConfiguredHypervisors() []cipher.PubKey {
 	}
 	out := make([]cipher.PubKey, 0, len(v.conf.Hypervisors))
 	out = append(out, v.conf.Hypervisors...)
-	sort.Slice(out, func(i, j int) bool { return out[i].Hex() < out[j].Hex() })
+	slices.SortFunc(out, func(a, b cipher.PubKey) int {
+		return cmp.Compare(a.Hex(), b.Hex())
+	})
 	return out
 }
 

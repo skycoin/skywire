@@ -175,7 +175,7 @@ func TestFastestLegLatency(t *testing.T) {
 		m.markLegReady(1)
 		m.markLegReady(2)
 		tps := []*transport.ManagedTransport{mockTP(200), mockTP(50), mockTP(300)}
-		if got := m.fastestLegLatency(tps); got != 50 {
+		if got := m.fastestLegLatency(tpLegs(tps)); got != 50 {
 			t.Errorf("fastestLegLatency = %v, want 50", got)
 		}
 	})
@@ -186,7 +186,7 @@ func TestFastestLegLatency(t *testing.T) {
 		m.markLegReady(2)
 		m.setLegStandby(1, true) // fastest but parked
 		tps := []*transport.ManagedTransport{mockTP(200), mockTP(50), mockTP(300)}
-		if got := m.fastestLegLatency(tps); got != 200 {
+		if got := m.fastestLegLatency(tpLegs(tps)); got != 200 {
 			t.Errorf("fastestLegLatency = %v, want 200 (standby 50 skipped)", got)
 		}
 	})
@@ -194,7 +194,7 @@ func TestFastestLegLatency(t *testing.T) {
 		m := &routeMux{}
 		m.growLegs(2) // leg 1 never marked ready
 		tps := []*transport.ManagedTransport{mockTP(200), mockTP(20)}
-		if got := m.fastestLegLatency(tps); got != 200 {
+		if got := m.fastestLegLatency(tpLegs(tps)); got != 200 {
 			t.Errorf("fastestLegLatency = %v, want 200 (leg1 not ready)", got)
 		}
 	})
@@ -203,7 +203,7 @@ func TestFastestLegLatency(t *testing.T) {
 		m.growLegs(2)
 		m.markLegReady(1)
 		tps := []*transport.ManagedTransport{mockTP(0), mockTP(0)}
-		if got := m.fastestLegLatency(tps); got != 0 {
+		if got := m.fastestLegLatency(tpLegs(tps)); got != 0 {
 			t.Errorf("fastestLegLatency = %v, want 0", got)
 		}
 	})

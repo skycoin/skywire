@@ -239,7 +239,7 @@
   .disconnect-button {
     display: inline-block;
     background: linear-gradient(#940000, #7b0000) no-repeat !important;
-    box-shadow: 5px 5px 7px 0 rgba(0, 0, 0, 0.5);
+    box-shadow: 5px 5px 7px 0 rgba(var(--sw-shade-rgb), 0.5);
     width: 350px + 2px;
     font-size: 24px;
     display: inline-block;
@@ -254,7 +254,7 @@
 
     &:active {
       transform: scale(0.98);
-      box-shadow: 0px 0px 7px 0 rgba(0, 0, 0, 0.5);
+      box-shadow: 0px 0px 7px 0 rgba(var(--sw-shade-rgb), 0.5);
     }
 
     .disconnect-button-container {
@@ -564,7 +564,7 @@
 
     .route-option-label {
       .experimental {
-        color: #ffb74d;
+        color: rgb(var(--sw-amber-rgb));
         font-size: 10px;
         text-transform: uppercase;
         margin-left: 5px;
@@ -573,8 +573,8 @@
 
     input {
       width: 60px;
-      background: rgba(255, 255, 255, 0.07);
-      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(var(--sw-fg-rgb), 0.07);
+      border: 1px solid rgba(var(--sw-fg-rgb), 0.2);
       border-radius: 4px;
       color: white;
       padding: 3px 6px;

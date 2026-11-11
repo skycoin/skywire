@@ -10,12 +10,14 @@ import (
 	rpc "github.com/0magnet/gobrpc"
 	"github.com/google/uuid"
 
+	"github.com/skycoin/skywire/pkg/alerts"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/contacts"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgasync"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/router"
@@ -111,6 +113,66 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 			return rpcReply, rpcRcvr.AddTransport(rpcArg, rpcReply)
 		}, nil
 	})
+	rpcSrv.HandleCall(rpcName+".AlertsLANProbe", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(string)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.AlertsLANProbe(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".AlertsPushAdd", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(alerts.PushSubscription)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(alerts.PushSubscription)
+			return rpcReply, rpcRcvr.AlertsPushAdd(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".AlertsPushRemove", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(string)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(int)
+			return rpcReply, rpcRcvr.AlertsPushRemove(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".AlertsSet", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(alerts.Settings)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.AlertsSet(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".AlertsStatus", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(struct{})
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(alerts.Status)
+			return rpcReply, rpcRcvr.AlertsStatus(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".AlertsTest", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(struct{})
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new([]alerts.Result)
+			return rpcReply, rpcRcvr.AlertsTest(rpcArg, rpcReply)
+		}, nil
+	})
 	rpcSrv.HandleCall(rpcName+".App", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
@@ -121,6 +183,16 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 			return rpcReply, rpcRcvr.App(rpcArg, rpcReply)
 		}, nil
 	})
+	rpcSrv.HandleCall(rpcName+".AppCatalog", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(struct{})
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new([]visorapi.CatalogEntry)
+			return rpcReply, rpcRcvr.AppCatalog(rpcArg, rpcReply)
+		}, nil
+	})
 	rpcSrv.HandleCall(rpcName+".AppDirectStreams", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
@@ -129,6 +201,16 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 		return func() (any, error) {
 			rpcReply := new([]transport.VStreamInfo)
 			return rpcReply, rpcRcvr.AppDirectStreams(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".AppFlags", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(visorapi.AppNameIn)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(visorapi.AppFlags)
+			return rpcReply, rpcRcvr.AppFlags(rpcArg, rpcReply)
 		}, nil
 	})
 	rpcSrv.HandleCall(rpcName+".AppHelp", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
@@ -439,6 +521,66 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 		return func() (any, error) {
 			rpcReply := new([]*transport.Entry)
 			return rpcReply, rpcRcvr.DiscoverTransportsByPK(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".DmsgAsyncSend", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(visorapi.DmsgAsyncSendRequest)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(visorapi.DmsgAsyncSendResult)
+			return rpcReply, rpcRcvr.DmsgAsyncSend(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".DmsgAsyncSetSettings", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(map[string]string)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.DmsgAsyncSetSettings(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".DmsgAsyncSettings", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(struct{})
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(visorapi.DmsgAsyncSettings)
+			return rpcReply, rpcRcvr.DmsgAsyncSettings(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".DmsgAsyncStatus", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(struct{})
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(visorapi.DmsgAsyncStatus)
+			return rpcReply, rpcRcvr.DmsgAsyncStatus(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".DmsgAsyncSync", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(struct{})
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.DmsgAsyncSync(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".DmsgAsyncTake", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new([]uint16)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new([]dmsgasync.Message)
+			return rpcReply, rpcRcvr.DmsgAsyncTake(rpcArg, rpcReply)
 		}, nil
 	})
 	rpcSrv.HandleCall(rpcName+".DmsgBandwidthTest", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
@@ -1281,6 +1423,16 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 			return rpcReply, rpcRcvr.GrowMuxRoute(rpcArg, rpcReply)
 		}, nil
 	})
+	rpcSrv.HandleCall(rpcName+".HVAddApp", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(visorapi.HVAddAppArgs)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.HVAddApp(rpcArg, rpcReply)
+		}, nil
+	})
 	rpcSrv.HandleCall(rpcName+".HVAddTransport", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.HVAddTransportArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
@@ -1289,6 +1441,16 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 		return func() (any, error) {
 			rpcReply := new(visorapi.TransportSummary)
 			return rpcReply, rpcRcvr.HVAddTransport(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".HVAppCatalog", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(cipher.PubKey)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new([]visorapi.CatalogEntry)
+			return rpcReply, rpcRcvr.HVAppCatalog(rpcArg, rpcReply)
 		}, nil
 	})
 	rpcSrv.HandleCall(rpcName+".HVDeregisterTCPPort", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
@@ -1329,6 +1491,16 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 		return func() (any, error) {
 			rpcReply := new(visorapi.EmbeddedProxiesStatus)
 			return rpcReply, rpcRcvr.HVEmbeddedProxies(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".HVForgetVisor", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(cipher.PubKey)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.HVForgetVisor(rpcArg, rpcReply)
 		}, nil
 	})
 	rpcSrv.HandleCall(rpcName+".HVListDirectVisors", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
@@ -1531,6 +1703,16 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 			return rpcReply, rpcRcvr.HVSetRewardAddress(rpcArg, rpcReply)
 		}, nil
 	})
+	rpcSrv.HandleCall(rpcName+".HVSetSingleRewardAddress", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(visorapi.HVRewardArgs)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(string)
+			return rpcReply, rpcRcvr.HVSetSingleRewardAddress(rpcArg, rpcReply)
+		}, nil
+	})
 	rpcSrv.HandleCall(rpcName+".HVShutdown", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
@@ -1649,6 +1831,16 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 		return func() (any, error) {
 			rpcReply := new(visorapi.HostStatsInfo)
 			return rpcReply, rpcRcvr.HostStats(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".HypervisorNotice", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(struct{})
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(string)
+			return rpcReply, rpcRcvr.HypervisorNotice(rpcArg, rpcReply)
 		}, nil
 	})
 	rpcSrv.HandleCall(rpcName+".IsDMSGClientReady", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
@@ -1849,6 +2041,16 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 		return func() (any, error) {
 			rpcReply := new(skymail.Rendered)
 			return rpcReply, rpcRcvr.MailRead(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".MailRetry", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(string)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.MailRetry(rpcArg, rpcReply)
 		}, nil
 	})
 	rpcSrv.HandleCall(rpcName+".MailSend", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
@@ -2871,6 +3073,16 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 			return rpcReply, rpcRcvr.SetSTCPAddr(rpcArg, rpcReply)
 		}, nil
 	})
+	rpcSrv.HandleCall(rpcName+".SetSingleRewardAddress", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		var rpcArg string
+		if err := rpcDec.Decode(&rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(string)
+			return rpcReply, rpcRcvr.SetSingleRewardAddress(rpcArg, rpcReply)
+		}, nil
+	})
 	rpcSrv.HandleCall(rpcName+".SetSkychatPassword", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.SkychatPasswordChangeIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {
@@ -3399,6 +3611,16 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 		return func() (any, error) {
 			rpcReply := new(visorapi.VoiceAudioSnapshot)
 			return rpcReply, rpcRcvr.VoiceCallAudio(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".VoiceCallDevices", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(string)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(visorapi.VoiceDevices)
+			return rpcReply, rpcRcvr.VoiceCallDevices(rpcArg, rpcReply)
 		}, nil
 	})
 	rpcSrv.HandleCall(rpcName+".VoiceDecline", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {

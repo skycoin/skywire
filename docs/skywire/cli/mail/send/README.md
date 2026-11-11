@@ -2,14 +2,16 @@
 
 [← skywire cli mail](../README.md)
 
-Send mail now to skywire addresses.
+Send mail to skywire addresses.
 
 Recipients are user@<base32-pk>.skynet or .dmsg, or
 user@<host>.<base32-pk>.skynet for a mailbox behind a Postfix bridge.
 `skywire cli visor pk dnslabel` gives the base32 form of a PK.
 
-Delivery happens now: a recipient whose visor is offline gets an error
-and nothing is queued. The body is read from stdin unless -m is given.
+Delivery is tried now. Mail for a visor that is offline waits in the
+Outbox (`skywire cli mail outbox`) and is retried from this visor. A
+refusal, such as a whitelist that leaves you out, fails at once. The
+body is read from stdin unless -m is given.
 
 Examples:
   skywire cli mail send bob@<base32-pk>.skynet -s hello -m "hi bob"

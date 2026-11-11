@@ -134,7 +134,7 @@ func peerAddrs(m signalMsg) []string {
 	case "candidate":
 		cands = []string{m.Candidate}
 	case "offer", "answer":
-		for _, l := range strings.Split(m.SDP, "\n") {
+		for l := range strings.SplitSeq(m.SDP, "\n") {
 			if strings.HasPrefix(l, "a=candidate:") {
 				cands = append(cands, strings.TrimPrefix(l, "a="))
 			}

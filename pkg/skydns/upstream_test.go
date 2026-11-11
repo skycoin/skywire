@@ -136,7 +136,7 @@ func ask(t *testing.T, u *Upstream) (*dns.Msg, error) {
 func TestUpstreamReusesOneTLSConnection(t *testing.T) {
 	f := newResolverFixture(t, true, 0)
 	u := f.upstream(true)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		resp, err := ask(t, u)
 		if err != nil || len(resp.Answer) != 1 {
 			t.Fatalf("query %d: %v %v", i, resp, err)

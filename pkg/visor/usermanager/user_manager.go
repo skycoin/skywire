@@ -84,6 +84,18 @@ func (s *UserManager) UserExists() http.HandlerFunc {
 	}
 }
 
+// HasUser reports whether the admin account exists, as UserExists does.
+func (s *UserManager) HasUser() bool {
+	user, err := s.db.User("admin")
+	return err == nil && user != nil
+}
+
+// HasSession reports whether r carries a live session.
+func (s *UserManager) HasSession(r *http.Request) bool {
+	_, _, ok := s.session(r)
+	return ok
+}
+
 // Login returns a HandlerFunc for login operations.
 func (s *UserManager) Login() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

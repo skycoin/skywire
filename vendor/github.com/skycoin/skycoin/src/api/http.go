@@ -77,7 +77,10 @@ type Config struct {
 	Username           string
 	Password           string
 	// WebWallet, when set, is the wallet GUI, served at the site root.
-	WebWallet    http.Handler
+	WebWallet http.Handler
+	// UI2, when set, builds the server rendered wallet served at /ui2/ around
+	// a client of this API.
+	UI2          func(*Client) http.Handler
 	ShutdownChan chan struct{} // when closed, triggers daemon shutdown
 }
 
@@ -96,6 +99,8 @@ type HealthConfig struct {
 	PQBlocks coin.PQBlockRule
 	// PQAddressForkSeq is the first block that may hold post-quantum addresses
 	PQAddressForkSeq uint64
+	// MultiSigner is the multi-signer block rule this node enforces
+	MultiSigner coin.MultiSignerRule
 }
 
 type muxConfig struct {
@@ -110,6 +115,7 @@ type muxConfig struct {
 	health             HealthConfig
 	shutdownChan       chan struct{}
 	webWallet          http.Handler
+	ui2                func(*Client) http.Handler
 }
 
 // HTTPResponse represents the http response struct
@@ -206,6 +212,7 @@ func create(host string, c Config, gateway Gatewayer) *Server {
 		password:           c.Password,
 		shutdownChan:       c.ShutdownChan,
 		webWallet:          c.WebWallet,
+		ui2:                c.UI2,
 	}
 
 	srvMux := newServerMux(mc, gateway)
@@ -479,14 +486,14 @@ func newServerMux(c muxConfig, gateway Gatewayer) *http.ServeMux {
 	webHandlerV1("/blockchain/progress", blockchainProgressHandler(gateway), map[string][]string{
 		http.MethodGet: {EndpointsRead, EndpointsStatus},
 	})
-	webHandlerV1("/block", blockHandler(gateway), map[string][]string{
+	webHandlerV1("/block", blockHandler(gateway, c.health.MultiSigner), map[string][]string{
 		http.MethodGet: {EndpointsRead},
 	})
-	webHandlerV1("/blocks", blocksHandler(gateway), map[string][]string{
+	webHandlerV1("/blocks", blocksHandler(gateway, c.health.MultiSigner), map[string][]string{
 		http.MethodGet:  {EndpointsRead},
 		http.MethodPost: {EndpointsRead},
 	})
-	webHandlerV1("/last_blocks", lastBlocksHandler(gateway), map[string][]string{
+	webHandlerV1("/last_blocks", lastBlocksHandler(gateway, c.health.MultiSigner), map[string][]string{
 		http.MethodGet: {EndpointsRead},
 	})
 
@@ -599,6 +606,10 @@ func newServerMux(c muxConfig, gateway Gatewayer) *http.ServeMux {
 		http.MethodPost:   {EndpointsStorage},
 		http.MethodDelete: {EndpointsStorage},
 	})
+
+	if c.ui2 != nil {
+		mountUI2(mux, c, c.ui2)
+	}
 
 	return mux
 }

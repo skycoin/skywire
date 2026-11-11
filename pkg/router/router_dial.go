@@ -1220,10 +1220,7 @@ func (r *router) PingRoute(
 // suspect. The number they chose belongs in the message, because it is the
 // one thing they can change.
 func noRouteErr(fwdMinHops, revMinHops uint16, dst cipher.PubKey) error {
-	minHops := fwdMinHops
-	if revMinHops > minHops {
-		minHops = revMinHops
-	}
+	minHops := max(revMinHops, fwdMinHops)
 	if minHops <= 1 {
 		return ErrNoRouteFound
 	}
@@ -1388,15 +1385,6 @@ func setupAttemptTimeout(ctx context.Context) time.Duration {
 		return routeSetupDialTimeout
 	}
 	remaining := time.Until(deadline)
-	t := remaining / 2
-	if t < routeSetupAttemptFloor {
-		t = routeSetupAttemptFloor
-	}
-	if t > remaining {
-		t = remaining
-	}
-	if t > routeSetupDialTimeout {
-		t = routeSetupDialTimeout
-	}
+	t := min(min(max(remaining/2, routeSetupAttemptFloor), remaining), routeSetupDialTimeout)
 	return t
 }

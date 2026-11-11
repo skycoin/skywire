@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -70,7 +69,7 @@ type VisorAPI interface {
 	// SubscribeLogs returns a channel of logrus entries matching the
 	// filter; cancel() unsubscribes and returns the dropped count.
 	// Both may be nil (visor without a broadcaster wired up).
-	SubscribeLogs(f logging.Filter, capacity int) (<-chan *logrus.Entry, func() uint64)
+	SubscribeLogs(f logging.Filter, capacity int) (<-chan *logging.Entry, func() uint64)
 	// SubscribeGroupMessages returns a channel of inbound group
 	// messages converted into GroupMessageData (rpcgrpc's wire-friendly
 	// mirror of visor.GroupMessage to avoid the visor → rpcgrpc import
@@ -783,7 +782,7 @@ func (s *PingServer) StreamAppLogs(req *AppLogStreamRequest, stream PingService_
 	level, err := logging.LevelFromString(req.MinLevel)
 	if err != nil {
 		// Default to debug — verbose mode is the use case.
-		level = logrus.DebugLevel
+		level = logging.DebugLevel
 	}
 
 	filter := logging.Filter{
@@ -834,10 +833,10 @@ func (s *PingServer) StreamAppLogs(req *AppLogStreamRequest, stream PingService_
 	}
 }
 
-// toAppLogEntry converts a logrus.Entry to the wire AppLogEntry. The
+// toAppLogEntry converts a logging.Entry to the wire AppLogEntry. The
 // _module field, when present, is hoisted into Module; remaining
 // fields land in Fields as strings (best-effort fmt.Sprint).
-func toAppLogEntry(e *logrus.Entry) *AppLogEntry {
+func toAppLogEntry(e *logging.Entry) *AppLogEntry {
 	module := ""
 	fields := make(map[string]string, len(e.Data))
 	for k, v := range e.Data {
@@ -886,10 +885,7 @@ func (s *PingServer) StreamCalcRoutes(req *CalcRoutesRequest, stream PingService
 	if maxHops <= 0 {
 		maxHops = 5
 	}
-	minHops := int(req.MinHops)
-	if minHops < 0 {
-		minHops = 0
-	}
+	minHops := max(int(req.MinHops), 0)
 
 	// Fetch the transport graph. Only TPD is wired here — DHT-source
 	// support can land separately if the offline-DHT path is needed
@@ -1256,8 +1252,8 @@ func (s *PingServer) StreamGroupMessages(req *GroupMessagesRequest, stream PingS
 		// Two-source backlog:
 		//   inbox    — in-memory ring (~256 messages, every group),
 		//              bounded by groupInboxCap; long disconnects roll past.
-		//   history  — durable bbolt sink (per-group buckets), opt-in via
-		//              the operator's GroupHistoryDB config. nil/empty
+		//   history  — durable bbolt sink (per-group buckets), on unless
+		//              GroupHistoryDB is "off". nil/empty
 		//              when persistence is off.
 		//
 		// Strategy: query both, merge by TimestampNs, dedup against

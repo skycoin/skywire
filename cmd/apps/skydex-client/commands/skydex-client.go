@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/logging/logrusbridge"
 
 	"github.com/0magnet/calvin"
 	skydexclient "github.com/skycoin/skycoin/cmd/skydex-client/commands"
@@ -71,6 +72,7 @@ var (
 
 func init() {
 	launcher.RegisterApp(skyenv.SkydexClientName, RunSkydexClient)
+	launcher.RegisterAppFlags(skyenv.SkydexClientName, RootCmd.Flags())
 	RootCmd.Flags().StringVar(&uiAddr, "addr", skyenv.SkydexClientAddr, "address to serve the trading UI on")
 	RootCmd.Flags().Uint16Var(&port, "port", 0, "routing port for communication between app and visor")
 	RootCmd.Flags().StringVar(&marketPK, "market-pk", "", "default skydex-market public key (pre-filled in the UI; not auto-connected)")
@@ -234,7 +236,7 @@ func RunSkydexClient(ctx context.Context, args []string) error {
 
 	cfg := skydexclient.Config{UIAddr: engineAddr, DefaultPK: marketPK}
 	errCh := make(chan error, 1)
-	go func() { errCh <- skydexclient.Run(ctx, cfg, dialer, appCl.Log()) }()
+	go func() { errCh <- skydexclient.Run(ctx, cfg, dialer, logrusbridge.New(appCl.Log())) }()
 
 	termCh := make(chan os.Signal, 1)
 	signal.Notify(termCh, os.Interrupt)

@@ -18,13 +18,13 @@ import (
 	"time"
 
 	"github.com/bitfield/script"
-	"github.com/sirupsen/logrus"
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
 	"github.com/wlynxg/anet"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/alerts"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
@@ -193,6 +193,7 @@ func init() {
 	skyenvIntVar(genConfigCmd.Flags(), &genMinHops, "min-hops", "${MINHOPS:-1}", "minimum route hops (1 = allow direct 1-hop routes, >=2 = force multihop through intermediaries for sender privacy)")
 	skyenvIntVar(genConfigCmd.Flags(), &arTransportLimit, "ar-transport-limit", "${ARTRANSPORTLIMIT:-0}", "address-resolver registration: 0 = stay registered, N>0 = deregister after N transports, N<0 = never register (inbound-invisible)")
 	skyenvBoolVar(genConfigCmd.Flags(), &noDirectTransports, "no-direct-transports", "${NODIRECTTRANSPORTS:-false}", "never create direct p2p transports; dmsg (relay) is still allowed")
+	skyenvBoolVar(genConfigCmd.Flags(), &noDmsgServerTransports, "no-dmsg-server-transports", "${NODMSGSERVERTRANSPORTS:-false}", "do not keep a transport to each dmsg server the visor holds a session with")
 	skyenvBoolVar(genConfigCmd.Flags(), &ptyRPCExec, "pty-rpc-exec", "${PTYRPCEXEC:-false}", "allow visor-RPC-initiated dmsgpty exec (control/jump node opt-in; off = closes a local privilege-escalation vector)")
 
 	// Routing flags
@@ -437,6 +438,7 @@ func init() {
 
 	// Reward address
 	skyenvStringVar(genConfigCmd.Flags(), &rewardSkyAddr, "rewardaddr", "${REWARDSKYADDR}", "reward account xpub (BIP44, account level)")
+	skyenvStringVar(genConfigCmd.Flags(), &alertEmail, "alert-email", "${ALERTEMAIL}", "email address(es), comma separated, to alert when a watched visor goes offline")
 
 	// Path and environment flags
 	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", skyenv.OS, "(linux / mac / win) paths")
@@ -961,7 +963,7 @@ func fetchServiceConfigDmsg(log *logging.Logger) bool {
 
 	dmsgLog := log
 	if isStdout {
-		silentLogger := logrus.New()
+		silentLogger := logging.New()
 		silentLogger.SetOutput(io.Discard)
 		dmsgLog = &logging.Logger{FieldLogger: silentLogger}
 	}
@@ -1194,6 +1196,9 @@ func mergeExistingApps(log *logging.Logger) {
 			if name == skyenv.SkycoinWebName && skycoinWebElectrum != "" {
 				conf.Launcher.Apps[i].Args = setFlag(prev.Args, "--btc-electrum-url", skycoinWebElectrum)
 			}
+			if name == skyenv.SkychatName && skychatAddr != skyenv.SkychatAddr {
+				conf.Launcher.Apps[i].Args = setFlag(prev.Args, "--addr", skychatAddr)
+			}
 		}
 		// The same for skydns: its CA and autostart come from skywire.conf when set.
 		if name == skyenv.SkyDNSName {
@@ -1408,11 +1413,13 @@ func configureDMSG() {
 func configureTransports() {
 	tpLogPath := skyenv.LocalPath + "/" + skyenv.TpLogStore
 	hypervisorAutoconnect := skyenv.HypervisorAutoconnect
+	dmsgServerTransports := !noDmsgServerTransports
 	conf.Transport = &visorconfig.Transport{
 		Discovery:             services.TransportDiscovery, //utilenv.TpDiscAddr,
 		AddressResolver:       services.AddressResolver,    //utilenv.AddressResolverAddr,
 		PublicAutoconnect:     skyenv.PublicAutoconnect,
 		HypervisorAutoconnect: &hypervisorAutoconnect,
+		DmsgServerTransports:  &dmsgServerTransports,
 		TransportSetupPKs:     services.TransportSetupPKs,
 		LogStore: &visorconfig.LogStore{
 			// "file" (the retired on-disk CSV store) is now a no-op that only warns
@@ -1590,9 +1597,20 @@ func configureLauncher(log *logging.Logger) {
 		// An existing REWARDSKYADDR still applies, so a regen never drops an
 		// operator's address, but a new one should be an xpub.
 		if !isXpub {
-			log.Warn(rewardconfig.ErrSingleAddress)
+			log.Warn(rewardconfig.SingleAddressRisk)
 		}
 		conf.RewardAddress = canonical
+	}
+	if alertEmail != "" {
+		conf.Alerts = &alerts.Settings{}
+		for _, a := range strings.Split(alertEmail, ",") {
+			if a = strings.TrimSpace(a); a != "" {
+				conf.Alerts.EmailTo = append(conf.Alerts.EmailTo, a)
+			}
+		}
+		if err := conf.Alerts.Validate(); err != nil {
+			log.WithError(err).Fatal("Invalid alert email")
+		}
 	}
 
 	dmsgptyAddr := pty.DefaultCLIAddr()
@@ -1797,7 +1815,7 @@ func configureWSPeers(log *logging.Logger) {
 	if strings.TrimSpace(wsPeers) == "" {
 		return
 	}
-	for _, spec := range strings.Split(wsPeers, ",") {
+	for spec := range strings.SplitSeq(wsPeers, ",") {
 		spec = strings.TrimSpace(spec)
 		if spec == "" {
 			continue
@@ -1832,8 +1850,8 @@ func configureHypervisor(log *logging.Logger) {
 	// Manipulate Hypervisor PKs
 	conf.Hypervisors = make([]cipher.PubKey, 0)
 	if hypervisorPKs != "" {
-		keys := strings.Split(hypervisorPKs, ",")
-		for _, key := range keys {
+		keys := strings.SplitSeq(hypervisorPKs, ",")
+		for key := range keys {
 			if key != "" {
 				keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(key))
 				if err != nil {
@@ -1899,8 +1917,8 @@ func configureHypervisor(log *logging.Logger) {
 	// Manipulate dmsgpty whitelist PKs
 	conf.Pty.Whitelist = make([]cipher.PubKey, 0)
 	if dmsgptyWlPKs != "" {
-		keys := strings.Split(dmsgptyWlPKs, ",")
-		for _, key := range keys {
+		keys := strings.SplitSeq(dmsgptyWlPKs, ",")
+		for key := range keys {
 			if key != "" {
 				keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(key))
 				if err != nil {
@@ -2129,7 +2147,7 @@ func parseDaemonInstance(raw string) (string, string, error) {
 // tokens. scriptExecArray's bash-array expansion lands here.
 func splitCSV(s string) []string {
 	out := []string{}
-	for _, t := range strings.Split(s, ",") {
+	for t := range strings.SplitSeq(s, ",") {
 		t = strings.TrimSpace(t)
 		if t != "" {
 			out = append(out, t)
@@ -2218,7 +2236,7 @@ func skycoinWebFlags(external bool) (flags []string) {
 		// wallet's defaultCoinNode; here as an http URL the proxy resolves).
 		nodeURLs = "http://039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1.dmsg:6420"
 	}
-	for _, u := range strings.Split(nodeURLs, ",") {
+	for u := range strings.SplitSeq(nodeURLs, ",") {
 		if u = strings.TrimSpace(u); u != "" {
 			flags = append(flags, "--node-url", u)
 		}
@@ -2577,13 +2595,7 @@ func configureApps(log *logging.Logger) {
 				// reconnect in-process (serving the status page during the gap)
 				// instead of exiting on total collapse and paying a full proc
 				// restart + re-dial per RestartOnFailure cycle.
-				hasReconnect := false
-				for _, a := range conf.Launcher.Apps[i].Args {
-					if a == "--reconnect" {
-						hasReconnect = true
-						break
-					}
-				}
+				hasReconnect := slices.Contains(conf.Launcher.Apps[i].Args, "--reconnect")
 				if !hasReconnect {
 					conf.Launcher.Apps[i].Args = append(conf.Launcher.Apps[i].Args, "--reconnect")
 				}
@@ -2898,15 +2910,16 @@ func getInterfaceNames() string { //nolint Note: pending implementation for conf
 var (
 	// Boolean flags: the line the flag turns on.
 	flagToEnv = map[string]string{
-		"pkg":                  "PKGENV=true",
-		"ishv":                 "ISHYPERVISOR=true",
-		"dmsghttp":             "DMSGHTTP=true",
-		"public":               "VISORISPUBLIC=true",
-		"servevpn":             "VPNSERVER=true",
-		"autoconn":             "DISABLEPUBLICAUTOCONN=true",
-		"publicip":             "DISPLAYNODEIP=true",
-		"no-direct-transports": "NODIRECTTRANSPORTS=true",
-		"pty-rpc-exec":         "PTYRPCEXEC=true",
+		"pkg":                       "PKGENV=true",
+		"ishv":                      "ISHYPERVISOR=true",
+		"dmsghttp":                  "DMSGHTTP=true",
+		"public":                    "VISORISPUBLIC=true",
+		"servevpn":                  "VPNSERVER=true",
+		"autoconn":                  "DISABLEPUBLICAUTOCONN=true",
+		"publicip":                  "DISPLAYNODEIP=true",
+		"no-direct-transports":      "NODIRECTTRANSPORTS=true",
+		"no-dmsg-server-transports": "NODMSGSERVERTRANSPORTS=true",
+		"pty-rpc-exec":              "PTYRPCEXEC=true",
 		// The resolving proxies. Missing from this map, `config gen --dmsgweb`
 		// left DMSGWEB commented in the conf it emitted, so a later run from
 		// that conf produced a config with no dmsg_web block at all. The proxy
@@ -2926,11 +2939,12 @@ var (
 	}
 	// String flags: KEY='value' lines.
 	valueFlagToEnv = map[string]string{
-		"cliaddr":    "CLIADDR",
-		"loglvl":     "LOGLVL",
-		"hvaddr":     "HVHTTPADDR",
-		"timeout":    "SHUTDOWNTIMEOUT",
-		"rewardaddr": "REWARDSKYADDR",
+		"cliaddr":     "CLIADDR",
+		"loglvl":      "LOGLVL",
+		"hvaddr":      "HVHTTPADDR",
+		"timeout":     "SHUTDOWNTIMEOUT",
+		"rewardaddr":  "REWARDSKYADDR",
+		"alert-email": "ALERTEMAIL",
 		// The resolvers' string knobs, for the same reason as the two bools
 		// above: an upstream or a bind address that cannot round-trip is a
 		// chain that comes back up pointing somewhere else, or nowhere.

@@ -2,7 +2,7 @@
 package deskhost
 
 import (
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -22,9 +22,9 @@ func TestDeskTourTextMatchesWiring(t *testing.T) {
 	for id := range tourApps {
 		wired = append(wired, id)
 	}
-	sort.Strings(wired)
+	slices.Sort(wired)
 	sorted := append([]string(nil), ids...)
-	sort.Strings(sorted)
+	slices.Sort(sorted)
 	require.Equal(t, wired, sorted, "the ## ids in desk-tour.md and the keys of tourApps differ")
 }
 

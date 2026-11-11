@@ -8,7 +8,7 @@ package cliroute
 import (
 	"fmt"
 	"io"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -183,7 +183,7 @@ func (s Settings) Human(w io.Writer) error {
 	for n := range s.Knobs {
 		names = append(names, n)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	for _, n := range names {
 		if _, err := fmt.Fprintf(w, "%s: %s\n", n, s.Knobs[n]); err != nil {
 			return err
@@ -193,13 +193,13 @@ func (s Settings) Human(w io.Writer) error {
 	for a := range s.AppKnobs {
 		apps = append(apps, a)
 	}
-	sort.Strings(apps)
+	slices.Sort(apps)
 	for _, a := range apps {
 		keys := make([]string, 0, len(s.AppKnobs[a]))
 		for n := range s.AppKnobs[a] {
 			keys = append(keys, n)
 		}
-		sort.Strings(keys)
+		slices.Sort(keys)
 		for _, n := range keys {
 			if _, err := fmt.Fprintf(w, "app[%s] %s: %s\n", a, n, s.AppKnobs[a][n]); err != nil {
 				return err

@@ -18,7 +18,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/logging"
@@ -31,13 +30,13 @@ import (
 func poolArbiterRig(t *testing.T, n int) (g *emuRig, pool []*emuRig) {
 	t.Helper()
 	ml := logging.NewMasterLogger()
-	ml.SetLevel(logrus.PanicLevel)
+	ml.SetLevel(logging.PanicLevel)
 	shared := newEmuShared(ml)
 	g = newEmuRig(t, emuOpts{
 		Legs:      []emuLegSpec{symmetric("active-2MBs-120ms", 2*emuMB, 120*time.Millisecond, 2*emuMB)},
 		LegRehome: true, SrcPort: 1, DstPort: 2, RidBase: 0, Shared: shared,
 	})
-	for i := 0; i < n; i++ {
+	for i := range n {
 		// Distinct latencies so the arbiter's ranking has something to rank:
 		// the FIRST pooled tunnel is the fastest and must be the one taken.
 		rtt := time.Duration(130+10*i) * time.Millisecond
@@ -129,7 +128,7 @@ func TestEmuPoolArbiterTakesOneLegAndKeepsTheStandbyTunnelsSingleLeg(t *testing.
 	// still read as loaded; the synthetic clock advances past pool.leg_release
 	// once the latch has dropped, which is exactly the router loop's sequence.
 	future := time.Now()
-	for i := 0; i < 40; i++ {
+	for range 40 {
 		future = future.Add(10 * time.Second)
 		poolArbiterStep(g.A.rg, standby, future, nil)
 		if a, _ := g.AddedLegs(); a == 1 {

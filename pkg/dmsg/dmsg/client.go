@@ -2,15 +2,15 @@
 package dmsg
 
 import (
+	"cmp"
 	"context"
-	crand "crypto/rand"
-	"encoding/binary"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
-	"math/rand"
+	"math/rand/v2"
 	"net"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -727,7 +727,6 @@ serve:
 		// starting clients still don't stampede the same server. A missing/zero
 		// AvailableSessions falls back to weight 1 (uniform), matching the old
 		// behavior for discoveries that don't populate the field.
-		seedRng := rand.New(rand.NewSource(cryptoSeed())) //nolint:gosec // G404: seed is from crypto/rand; math/rand is fine for weighting
 		type weightedEntry struct {
 			entry *disc.Entry
 			key   float64
@@ -738,13 +737,15 @@ serve:
 			if entry.Server != nil && entry.Server.AvailableSessions > 0 {
 				w = float64(entry.Server.AvailableSessions)
 			}
-			u := seedRng.Float64()
+			u := rand.Float64() //nolint:gosec // weighting, not cryptography; v2 seeds it per process
 			if u <= 0 {
 				u = math.SmallestNonzeroFloat64
 			}
 			weighted[i] = weightedEntry{entry: entry, key: math.Pow(u, 1.0/w)}
 		}
-		sort.SliceStable(weighted, func(i, j int) bool { return weighted[i].key > weighted[j].key })
+		slices.SortStableFunc(weighted, func(a, b weightedEntry) int {
+			return cmp.Compare(b.key, a.key)
+		})
 		for i := range weighted {
 			entries[i] = weighted[i].entry
 		}
@@ -959,17 +960,6 @@ func (ce *Client) discoverServers(ctx context.Context, all bool) (entries []*dis
 	return entries, err
 }
 
-// cryptoSeed returns a math/rand seed sourced from crypto/rand, falling back to
-// the wall clock if the CSPRNG read fails. Used to seed the per-client server
-// ordering so simultaneously starting clients pick independent orders.
-func cryptoSeed() int64 {
-	var seed int64
-	if err := binary.Read(crand.Reader, binary.BigEndian, &seed); err != nil {
-		seed = time.Now().UnixNano()
-	}
-	return seed
-}
-
 // Close closes the dmsg client entity and waits for background goroutines to finish.
 func (ce *Client) Close() error {
 	if ce == nil {
@@ -1164,12 +1154,7 @@ func (ce *Client) serveWait() {
 }
 
 func hasPK(pks []cipher.PubKey, pk cipher.PubKey) bool {
-	for _, oldPK := range pks {
-		if oldPK == pk {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(pks, pk)
 }
 
 // Per-destination dial-failure backoff bounds (see Client.dialFail).
@@ -1850,13 +1835,11 @@ func (ce *Client) reapOrphanPorts() {
 	// Snapshot the live session set.
 	live := make(map[cipher.PubKey]*SessionCommon)
 	ce.sessionsMx.Lock()
-	for pk, sc := range ce.sessions {
-		live[pk] = sc
-	}
+	maps.Copy(live, ce.sessions)
 	ce.sessionsMx.Unlock()
 
 	var toFree []*Stream
-	ce.porter.RangePortValues(func(_ uint16, v interface{}) bool {
+	ce.porter.RangePortValues(func(_ uint16, v any) bool {
 		s, ok := v.(*Stream)
 		if !ok || s == nil || s.ses == nil || s.ses.SessionCommon == nil {
 			return true

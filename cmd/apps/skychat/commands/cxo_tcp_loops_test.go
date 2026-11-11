@@ -57,13 +57,15 @@ func withCXOEnv(t *testing.T) {
 	t.Setenv("DMSGCURL_SK", "") // resolveTCPIdentity reads it
 
 	cxoMu.Lock()
-	cxoPub, cxoSubs, cxoGroupSess, cxoSeq = nil, nil, nil, 0
+	cxoPub, cxoSubs, cxoGroupSess = nil, nil, nil
+	cxoSeq.Store(0)
 	cxoMu.Unlock()
 
 	t.Cleanup(func() {
 		cxoMu.Lock()
 		pub, subs, sess := cxoPub, cxoSubs, cxoGroupSess
-		cxoPub, cxoSubs, cxoGroupSess, cxoSeq = nil, nil, nil, 0
+		cxoPub, cxoSubs, cxoGroupSess = nil, nil, nil
+		cxoSeq.Store(0)
 		cxoMu.Unlock()
 		for _, s := range subs {
 			_ = s.Close() //nolint:errcheck
@@ -153,7 +155,7 @@ func TestPublishCXO_WritesUniqueOrderedPaths(t *testing.T) {
 
 	shape := regexp.MustCompile(`^msgs/\d{19}-\d{6}$`)
 	var paths []string
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		p, perr := publishCXO("body " + string(rune('a'+i)))
 		if perr != nil {
 			t.Fatalf("publishCXO: %v", perr)
@@ -295,8 +297,7 @@ func TestStartCXOTCP_SubscribesAndSurfacesPeerMessages(t *testing.T) {
 		}
 	}()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	if err := startCXOTCP(ctx); err != nil {
 		t.Fatalf("startCXOTCP: %v", err)
 	}
@@ -387,8 +388,7 @@ func TestStartCXOGroup_OpensSessionAndRoutesSends(t *testing.T) {
 		"tcp://" + peerPK.Hex() + "@127.0.0.1:" + "65001", // never dialed successfully; that's fine
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	if err := startCXOTCP(ctx); err != nil {
 		t.Fatalf("startCXOTCP → startCXOGroup: %v", err)
 	}

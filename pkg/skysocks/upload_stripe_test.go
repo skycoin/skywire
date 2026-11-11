@@ -267,7 +267,7 @@ func (s *stubSink) handler() http.HandlerFunc {
 			h := sha256.New()
 			n, _ := io.Copy(h, r.Body) //nolint:errcheck
 			w.Header().Set("X-Sha256", hex.EncodeToString(h.Sum(nil)))
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{"bytes": n, "sha256": hex.EncodeToString(h.Sum(nil))}) //nolint:errcheck
+			_ = json.NewEncoder(w).Encode(map[string]any{"bytes": n, "sha256": hex.EncodeToString(h.Sum(nil))}) //nolint:errcheck
 			return
 		}
 		var start, end, total int64
@@ -334,10 +334,10 @@ func (s *stubSink) handler() http.HandlerFunc {
 		w.Header().Set("X-Upload-Received", strconv.FormatInt(prefix, 10))
 		if done {
 			w.Header().Set("X-Sha256", sum)
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{"bytes": total, "sha256": sum}) //nolint:errcheck
+			_ = json.NewEncoder(w).Encode(map[string]any{"bytes": total, "sha256": sum}) //nolint:errcheck
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"received": prefix, "total": total}) //nolint:errcheck
+		_ = json.NewEncoder(w).Encode(map[string]any{"received": prefix, "total": total}) //nolint:errcheck
 	}
 }
 
@@ -498,7 +498,7 @@ func TestGenericPostIsReplayedWhenItsTunnelDies(t *testing.T) {
 			http.Error(w, "short body", http.StatusBadRequest)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"bytes": n, "sha256": hex.EncodeToString(h.Sum(nil))}) //nolint:errcheck
+		_ = json.NewEncoder(w).Encode(map[string]any{"bytes": n, "sha256": hex.EncodeToString(h.Sum(nil))}) //nolint:errcheck
 	}))
 	defer backend.Close()
 
@@ -588,8 +588,8 @@ func TestUploadToNonOptInOriginIsUnchanged(t *testing.T) {
 			return
 		}
 		h := sha256.New()
-		n, _ := io.Copy(h, r.Body)                                                                                  //nolint:errcheck
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"bytes": n, "sha256": hex.EncodeToString(h.Sum(nil))}) //nolint:errcheck
+		n, _ := io.Copy(h, r.Body)                                                                          //nolint:errcheck
+		_ = json.NewEncoder(w).Encode(map[string]any{"bytes": n, "sha256": hex.EncodeToString(h.Sum(nil))}) //nolint:errcheck
 	}))
 	defer backend.Close()
 

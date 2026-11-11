@@ -16,6 +16,7 @@ package commands
 
 import (
 	"encoding/json"
+	"maps"
 	"net/http"
 	"sync"
 	"time"
@@ -176,11 +177,7 @@ func bookNames() map[string]string {
 // own nicknames so a nickname still wins. The export keeps only nicknames.
 func shownNames() map[string]string {
 	out := make(map[string]string)
-	for pk, name := range bookNames() {
-		out[pk] = name
-	}
-	for pk, name := range contactNames() {
-		out[pk] = name
-	}
+	maps.Copy(out, bookNames())
+	maps.Copy(out, contactNames())
 	return out
 }

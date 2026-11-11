@@ -82,8 +82,7 @@ func createTestRouteGroupWithBlockingTransport(t *testing.T) (*RouteGroup, *bloc
 	}
 
 	rg.mu.Lock()
-	rg.tps = []*transport.ManagedTransport{mt}
-	rg.fwd = []routing.Rule{fwdRule}
+	setTestLegs(rg, []*transport.ManagedTransport{mt}, []routing.Rule{fwdRule}, nil)
 	rg.mu.Unlock()
 
 	return rg, conn
@@ -136,11 +135,9 @@ func TestGCDoesNotDeadlockOnStuckClose(t *testing.T) {
 	rg, conn := createTestRouteGroupWithBlockingTransport(t)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		rg.Close() //nolint:errcheck,gosec
-	}()
+	})
 
 	// Wait for write to actually block
 	<-conn.writeCh

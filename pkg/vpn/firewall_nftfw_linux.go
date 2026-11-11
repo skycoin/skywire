@@ -1,5 +1,4 @@
 //go:build linux && nftfw
-// +build linux,nftfw
 
 // Package vpn pkg/vpn/firewall_nftfw_linux.go c4-app-vpn
 //
@@ -12,18 +11,17 @@ package vpn
 import (
 	"net"
 
-	"github.com/sirupsen/logrus"
-
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/vpn/netctl"
 )
 
 type nftFirewall struct {
-	log logrus.FieldLogger
+	log logging.FieldLogger
 	fw  *netctl.NFTFirewall
 }
 
 // newFirewall builds the skywire nftables table + base chains.
-func newFirewall(log logrus.FieldLogger) (firewall, error) {
+func newFirewall(log logging.FieldLogger) (firewall, error) {
 	fw, err := netctl.NewNFTFirewall()
 	if err != nil {
 		return nil, err

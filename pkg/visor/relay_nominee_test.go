@@ -2,8 +2,9 @@
 package visor
 
 import (
+	"cmp"
 	"path/filepath"
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -27,7 +28,7 @@ func TestHubRelayNominees(t *testing.T) {
 	cache := NewDmsgServersCache(filepath.Join(t.TempDir(), "dmsg_servers.json"))
 
 	var hubs []cipher.PubKey
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		pk, _ := cipher.GenerateKeyPair()
 		hubs = append(hubs, pk)
 		require.NoError(t, cache.Set(hubEntry(pk)))
@@ -49,7 +50,9 @@ func TestHubRelayNominees(t *testing.T) {
 	}
 	require.Equal(t, got, v.hubRelayNominees(make(map[cipher.PubKey]struct{})), "stable across calls")
 	sorted := append([]cipher.PubKey(nil), got...)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Hex() < sorted[j].Hex() })
+	slices.SortFunc(sorted, func(a, b cipher.PubKey) int {
+		return cmp.Compare(a.Hex(), b.Hex())
+	})
 	require.Equal(t, sorted, got, "deterministic order")
 }
 

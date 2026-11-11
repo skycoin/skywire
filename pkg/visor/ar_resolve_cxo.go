@@ -15,6 +15,7 @@ package visor
 
 import (
 	"context"
+	"maps"
 	"sync"
 	"time"
 
@@ -85,9 +86,7 @@ func (idx *arBindingsIndex) lookup(mgr *CXOSubscriptionManager, version time.Tim
 			if err != nil {
 				return true
 			}
-			for k, b := range peers {
-				built[k] = b
-			}
+			maps.Copy(built, peers)
 			return true
 		})
 		idx.index, idx.builtAt = built, version

@@ -71,6 +71,16 @@ func (r *RPC) Apps(_ *struct{}, reply *[]*appserver.AppState) (err error) {
 	return err
 }
 
+// AppCatalog lists every app the visor can run, merged with its configured instances.
+func (r *RPC) AppCatalog(_ *struct{}, reply *[]visorapi.CatalogEntry) (err error) {
+	defer rpcutil.LogCall(r.log, "AppCatalog", nil)(reply, &err)
+
+	entries, err := r.visor.AppCatalog()
+	*reply = entries
+
+	return err
+}
+
 // StartApp start App with provided name.
 func (r *RPC) StartApp(in *visorapi.StartAppIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "StartApp", in)(nil, &err)
@@ -156,6 +166,14 @@ func (r *RPC) SetAppEnvFull(in *visorapi.SetAppEnvFullIn, _ *struct{}) (err erro
 func (r *RPC) SetAppLauncherMode(in *visorapi.SetAppLauncherModeIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetAppLauncherMode", in)(nil, &err)
 	return r.visor.SetAppLauncherMode(in.AppName, in.Mode)
+}
+
+// AppFlags describes the flags an app accepts and the values its args set.
+func (r *RPC) AppFlags(in *visorapi.AppNameIn, reply *visorapi.AppFlags) (err error) {
+	defer rpcutil.LogCall(r.log, "AppFlags", in)(reply, &err)
+	out, err := r.visor.AppFlags(in.AppName)
+	*reply = out
+	return err
 }
 
 // AppHelp returns the captured `<binary> --help` output for an app.

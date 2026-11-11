@@ -14,6 +14,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/skycoin/skywire/pkg/alerts"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -89,6 +91,14 @@ func populateEntryFromSummary(entry *visorapi.HVVisorEntry, summary *visorapi.Su
 	// returns — the hypervisors it answers to, which only it knows. Lifting it
 	// onto the entry is what puts it in `hv ls`.
 	entry.Hypervisors = summary.Overview.Hypervisors
+	entry.DMSGServers = summary.DMSGServers
+	entry.PublicAutoconnect = summary.PublicAutoconnect
+	entry.IsPublic = summary.IsPublic
+	for _, a := range summary.Overview.Apps {
+		if a != nil && a.Status == appserver.AppStatusRunning {
+			entry.RunningApps = append(entry.RunningApps, a.Name)
+		}
+	}
 	if summary.Health != nil {
 		entry.ServicesHealth = summary.Health.ServicesHealth
 	}
@@ -133,6 +143,11 @@ func (v *Visor) HVListDirectVisors() ([]visorapi.HVVisorEntry, error) {
 		}(i, e.pk, e.conn.API)
 	}
 	wg.Wait()
+	skip := map[cipher.PubKey]bool{v.conf.PK: true}
+	for _, e := range remotes {
+		skip[e.pk] = true
+	}
+	results = append(results, hv.offlineKnownEntries(skip)...)
 
 	// Build the local entry first so we can use its PublicIP as the
 	// "LAN-adjacent" sort key for the remote entries.
@@ -187,6 +202,11 @@ func (v *Visor) HVListVisors() ([]visorapi.HVVisorEntry, error) {
 		}(i, e.pk, e.conn.API)
 	}
 	wg.Wait()
+	skip := map[cipher.PubKey]bool{v.conf.PK: true}
+	for _, e := range remotes {
+		skip[e.pk] = true
+	}
+	results = append(results, hv.offlineKnownEntries(skip)...)
 
 	// Build the local entry; PublicIP anchors LAN-adjacency in the final
 	// sort. We append rather than prepend here — the single sortHVVisor-
@@ -307,8 +327,10 @@ func hvVisorEntryFor(hv *Hypervisor, pk cipher.PubKey, api visorapi.API, log *lo
 			// Online ONLY when we actually got a Summary back —
 			// hardcoded Online=true previously rendered ghost rows.
 			entry.Online = true
+			entry.State = alerts.StateOnline
 			populateEntryFromSummary(&entry, r.summary)
 			now := time.Now().UTC()
+			entry.LastSeenAt = &now
 			cached := *r.summary
 			hv.summaryCacheMx.Lock()
 			hv.summaryCache[pk] = cachedSummary{sum: &cached, seenAt: now}
@@ -330,9 +352,13 @@ func hvVisorEntryFor(hv *Hypervisor, pk cipher.PubKey, api visorapi.API, log *lo
 	hv.summaryCacheMx.RUnlock()
 	if ok && cached.sum != nil {
 		populateEntryFromSummary(&entry, cached.sum)
-		entry.Online = false
+		seen := cached.seenAt
+		entry.LastSeenAt = &seen
 		entry.Error = entry.Error + " (cached " + time.Since(cached.seenAt).Truncate(time.Second).String() + " ago)"
 	}
+	// The failed call alone does not decide the state, visorState does.
+	entry.State = hv.visorState(pk, time.Now())
+	entry.Online = entry.State == alerts.StateOnline
 	return entry
 }
 
@@ -632,6 +658,30 @@ func (v *Visor) HVStopApp(pk cipher.PubKey, appName string) error {
 	return sub.HVStopApp(pk, appName)
 }
 
+// HVAppCatalog lists the apps the visor identified by pk can run.
+func (v *Visor) HVAppCatalog(pk cipher.PubKey) ([]visorapi.CatalogEntry, error) {
+	direct, sub, err := v.hvDispatch(pk)
+	if err != nil {
+		return nil, err
+	}
+	if direct != nil {
+		return direct.AppCatalog()
+	}
+	return sub.HVAppCatalog(pk)
+}
+
+// HVAddApp adds an app entry to the visor identified by pk.
+func (v *Visor) HVAddApp(pk cipher.PubKey, appName, binaryName string) error {
+	direct, sub, err := v.hvDispatch(pk)
+	if err != nil {
+		return err
+	}
+	if direct != nil {
+		return direct.AddApp(appName, binaryName)
+	}
+	return sub.HVAddApp(pk, appName, binaryName)
+}
+
 // HVSetMinHops sets the routing min_hops on the visor identified by pk.
 func (v *Visor) HVSetMinHops(pk cipher.PubKey, hops uint16) error {
 	direct, sub, err := v.hvDispatch(pk)
@@ -927,4 +977,16 @@ func (v *Visor) HVUpdateForwardedPort(pk cipher.PubKey, p visorapi.ForwardedPort
 		return direct.UpdateForwardedPort(p)
 	}
 	return sub.HVUpdateForwardedPort(pk, p)
+}
+
+// HVSetSingleRewardAddress sets a single reward address, with the opt-in, on the visor identified by pk.
+func (v *Visor) HVSetSingleRewardAddress(pk cipher.PubKey, addr string) (string, error) {
+	direct, sub, err := v.hvDispatch(pk)
+	if err != nil {
+		return "", err
+	}
+	if direct != nil {
+		return direct.SetSingleRewardAddress(addr)
+	}
+	return sub.HVSetSingleRewardAddress(pk, addr)
 }

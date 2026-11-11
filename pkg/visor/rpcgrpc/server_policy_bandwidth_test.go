@@ -24,7 +24,7 @@ func newTestController(n int) (*muxBwController, *[]*MuxLegLifecycle) {
 			}
 		},
 	}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		rs := &muxBwRouteState{index: i, intermediatePK: string(rune('A' + i))}
 		rs.activeFlag.Store(true)
 		rs.pumpCancel = func() {} // drop cancels the pump; no goroutine here
@@ -104,7 +104,6 @@ func TestApplyRotationDropReindexes(t *testing.T) {
 
 	canceled := make([]bool, 4)
 	for i := range c.active {
-		i := i
 		c.active[i].pumpCancel = func() { canceled[i] = true }
 	}
 

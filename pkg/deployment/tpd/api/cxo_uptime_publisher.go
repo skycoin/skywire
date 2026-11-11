@@ -20,8 +20,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
@@ -97,7 +95,7 @@ type compactVisorSummary struct {
 // client, listener bind failure, etc.); the caller should log and
 // continue without it. Best-effort: the existing HTTP /uptimes
 // route remains the source of truth.
-func StartUptimeCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, logger logrus.FieldLogger) (*UptimeCXOPublisher, error) {
+func StartUptimeCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, logger logging.FieldLogger) (*UptimeCXOPublisher, error) {
 	log := logging.MustGetLogger("tpd-cxo-uptime-pub")
 
 	pub, err := treestore.NewWithDMSG(dmsgC, sk, treestore.PubConfig{

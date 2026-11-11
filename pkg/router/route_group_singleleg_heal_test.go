@@ -67,12 +67,10 @@ func TestLegLivenessSwapsSoleBlackHoledLeg(t *testing.T) {
 		mt.Entry = transport.Entry{ID: tpID, Type: "test"}
 
 		rg.mu.Lock()
-		rg.tps = append(rg.tps, mt)
-		rg.fwd = append(rg.fwd, fwd)
-		rg.rvs = append(rg.rvs, rvs)
-		rg.mux.growLegs(len(rg.tps))
-		rg.mux.markLegReady(len(rg.tps) - 1)
-		rg.mux.rebuildWeights(rg.tps)
+		rg.appendLegLocked(fwd, rvs, mt)
+		rg.mux.growLegs(len(rg.legs))
+		rg.mux.markLegReady(len(rg.legs) - 1)
+		rg.mux.rebuildWeights(rg.legs)
 		rg.mu.Unlock()
 
 		mu.Lock()
@@ -85,7 +83,7 @@ func TestLegLivenessSwapsSoleBlackHoledLeg(t *testing.T) {
 	// The sole leg never echoes; after legPongMissThresholdDefault cycles it is declared
 	// black-holing and the swap fires. Keep the replacement (once present) echoing
 	// so it is not itself re-declared dead.
-	for i := 0; i < legPongMissThresholdDefault+3; i++ {
+	for range legPongMissThresholdDefault + 3 {
 		mu.Lock()
 		r := replID
 		mu.Unlock()
@@ -100,7 +98,7 @@ func TestLegLivenessSwapsSoleBlackHoledLeg(t *testing.T) {
 	require.Eventually(t, func() bool {
 		rg.mu.Lock()
 		defer rg.mu.Unlock()
-		return len(rg.tps) == 1 && rg.tps[0].Entry.ID != deadID
+		return len(rg.legs) == 1 && rg.legs[0].tp.Entry.ID != deadID
 	}, 2*time.Second, 20*time.Millisecond,
 		"the sole black-holing leg must be swapped for a live replacement, never left at zero throughput")
 
@@ -120,7 +118,7 @@ func TestLegLivenessSoleLegKeepsAliveWhenEchoing(t *testing.T) {
 	var addCalls int
 	rg.selfHealAdd = func(_ []string) { addCalls++ }
 
-	for i := 0; i < legPongMissThresholdDefault+3; i++ {
+	for range legPongMissThresholdDefault + 3 {
 		rg.legLivenessMu.Lock()
 		rg.legPongSeen[keep] = true
 		rg.legLivenessMu.Unlock()
@@ -129,7 +127,7 @@ func TestLegLivenessSoleLegKeepsAliveWhenEchoing(t *testing.T) {
 
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	require.Equal(t, 1, len(rg.tps))
-	require.Equal(t, keep, rg.tps[0].Entry.ID, "a healthy lone leg must never be swapped")
+	require.Equal(t, 1, len(rg.legs))
+	require.Equal(t, keep, rg.legs[0].tp.Entry.ID, "a healthy lone leg must never be swapped")
 	require.Equal(t, 0, addCalls, "no replacement dial for a healthy lone leg")
 }

@@ -182,7 +182,7 @@ func TestSetupNodePanelStaysWithinTheRule(t *testing.T) {
 	// A real dmsg fetch error embeds the full 66-character key in the URL it
 	// failed on, so the reason alone is wider than the panel.
 	s.Nodes[1].Err = `Get "dmsg://` + snPKb + `:80/stats": EOF`
-	for _, line := range strings.Split(renderSetupNodePanelANSI(s), "\n") {
+	for line := range strings.SplitSeq(renderSetupNodePanelANSI(s), "\n") {
 		// Columns, not bytes: the rules are box-drawing runes.
 		plain := []rune(stripANSI(line))
 		if len(plain) > tuiWidth+2 {

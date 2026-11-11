@@ -8,9 +8,10 @@ import (
 	"encoding/binary"
 	"errors"
 	"net"
-	"syscall"
 	"testing"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // TestTUN needs CAP_NET_ADMIN in its own network namespace, so it runs as
@@ -20,10 +21,10 @@ import (
 //
 // and skips anywhere it cannot open a TUN.
 func TestTUN(t *testing.T) {
-	if fd, err := syscall.Open("/dev/net/tun", syscall.O_RDWR, 0); err != nil {
+	if fd, err := unix.Open("/dev/net/tun", unix.O_RDWR, 0); err != nil {
 		t.Skip("no /dev/net/tun:", err)
 	} else {
-		_ = syscall.Close(fd) //nolint:errcheck
+		_ = unix.Close(fd) //nolint:errcheck
 	}
 	// It replaces the default route, so never on a real network.
 	if gw, err := defaultGateway(); err == nil {
@@ -34,7 +35,7 @@ func TestTUN(t *testing.T) {
 	defer cancel()
 
 	tun, err := c.TUN(ctx)
-	if errors.Is(err, syscall.EPERM) || (err != nil && err.Error() == syscall.EPERM.Error()) {
+	if errors.Is(err, unix.EPERM) || (err != nil && err.Error() == unix.EPERM.Error()) {
 		t.Skip("no CAP_NET_ADMIN; run the test under unshare -Urn")
 	}
 	must(t, err)
@@ -64,7 +65,7 @@ func TestTUN(t *testing.T) {
 	for {
 		n, err := tun.Read(pkt)
 		must(t, err)
-		if n >= 28 && pkt[9] == syscall.IPPROTO_UDP && net.IP(pkt[16:20]).Equal(net.IPv4(10, 88, 0, 5)) {
+		if n >= 28 && pkt[9] == unix.IPPROTO_UDP && net.IP(pkt[16:20]).Equal(net.IPv4(10, 88, 0, 5)) {
 			if string(pkt[28:n]) != "ping" {
 				t.Fatalf("payload %q", pkt[28:n])
 			}
@@ -110,7 +111,7 @@ func udpPacket(src net.IP, sport int, dst net.IP, dport int, payload []byte) []b
 	p[0] = 0x45
 	binary.BigEndian.PutUint16(p[2:], uint16(len(p))) //nolint:gosec // a test packet
 	p[8] = 64
-	p[9] = syscall.IPPROTO_UDP
+	p[9] = unix.IPPROTO_UDP
 	copy(p[12:16], src.To4())
 	copy(p[16:20], dst.To4())
 	var sum uint32

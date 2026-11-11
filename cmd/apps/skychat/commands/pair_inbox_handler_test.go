@@ -48,7 +48,7 @@ func (p *pairPollAPI) PairPoll(since time.Time) ([]visorapi.PairMessage, error) 
 func withFakePairRPC(t *testing.T, fake visorapi.API) {
 	t.Helper()
 	if appLog == nil {
-		appLog = func(string, ...interface{}) {}
+		appLog = func(string, ...any) {}
 	}
 	pairRPCMu.Lock()
 	prev := pairRPC

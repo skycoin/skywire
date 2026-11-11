@@ -59,12 +59,12 @@ func TestRateLimitSerializes(t *testing.T) {
 
 	frame := make([]byte, 64*1024)
 	start := time.Now()
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		if _, err := a.Write(frame); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		readFrame(t, b, 2*time.Second)
 	}
 	elapsed := time.Since(start)
@@ -83,7 +83,7 @@ func TestQueueBlocksWriter(t *testing.T) {
 
 	frame := make([]byte, 32*1024)
 	start := time.Now()
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		if _, err := a.Write(frame); err != nil {
 			t.Fatal(err)
 		}
@@ -92,7 +92,7 @@ func TestQueueBlocksWriter(t *testing.T) {
 	if blocked < 300*time.Millisecond {
 		t.Fatalf("writer was not blocked by a 64KiB queue at 256KiB/s: %v", blocked)
 	}
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		readFrame(t, b, 3*time.Second)
 	}
 }
@@ -104,7 +104,7 @@ func TestLossIsSeededAndReproducible(t *testing.T) {
 		a, b := NewPair(PairConfig{Name: "loss", AtoB: LinkConfig{LossPct: 30, Seed: 7}})
 		defer a.Close() //nolint:errcheck
 		defer b.Close() //nolint:errcheck
-		for i := 0; i < 200; i++ {
+		for i := range 200 {
 			if _, err := a.Write([]byte{byte(i)}); err != nil {
 				t.Fatal(err)
 			}
@@ -190,14 +190,14 @@ func TestCutBlackHoles(t *testing.T) {
 // it liked — 20 of 20 rounds reordered before the fix.
 func TestPairPreservesOrderWithoutImpairment(t *testing.T) {
 	const rounds, frames = 20, 64
-	for round := 0; round < rounds; round++ {
+	for round := range rounds {
 		a, b := NewPair(PairConfig{Name: "order"})
-		for i := 0; i < frames; i++ {
+		for i := range frames {
 			if _, err := a.Write([]byte{byte(i)}); err != nil {
 				t.Fatalf("round %d: write %d: %v", round, i, err)
 			}
 		}
-		for i := 0; i < frames; i++ {
+		for i := range frames {
 			got := readFrame(t, b, 5*time.Second)
 			if len(got) != 1 || got[0] != byte(i) {
 				t.Fatalf("round %d: frame %d arrived as %v", round, i, got)

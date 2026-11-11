@@ -4,6 +4,7 @@ package vpn
 import (
 	"fmt"
 	"net"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
@@ -110,7 +111,7 @@ func AppEnvArgs(config DirectRoutesEnvConfig) map[string]string {
 // - IP without port.
 // In case domain is provided instead of an IP address, a DNS lookup is also
 // performed to resolve the actual IP address
-func IPFromEnv(key string) (net.IP, bool, error) {
+func IPFromEnv(key string) (netip.Addr, bool, error) {
 	return ParseIP(os.Getenv(key))
 }
 
@@ -125,9 +126,9 @@ func IPFromEnv(key string) (net.IP, bool, error) {
 // - dmshhttp url without port.
 // In case domain is provided instead of an IP address, a DNS lookup is also
 // performed to resolve the actual IP address
-func ParseIP(addr string) (net.IP, bool, error) {
+func ParseIP(addr string) (netip.Addr, bool, error) {
 	if addr == "" {
-		return nil, false, nil
+		return netip.Addr{}, false, nil
 	}
 	var url dmsgcurl.URL
 
@@ -135,9 +136,9 @@ func ParseIP(addr string) (net.IP, bool, error) {
 	err := url.Fill(addr)
 	if url.Scheme == "dmsg" {
 		if err != nil {
-			return nil, false, err
+			return netip.Addr{}, false, err
 		}
-		return nil, true, nil
+		return netip.Addr{}, true, nil
 	}
 
 	// in case whole URL is passed with the scheme
@@ -155,22 +156,19 @@ func ParseIP(addr string) (net.IP, bool, error) {
 		addr = strings.Trim(addr, "[]")
 	}
 
-	ip := net.ParseIP(addr)
-	if ip != nil {
-		return ip, true, nil
+	if ip, err := netip.ParseAddr(addr); err == nil {
+		return ip.Unmap(), true, nil
 	}
 
 	// got domain instead of IP, need to resolve
 	ips, err := lookupIP(addr)
 	if err != nil {
-		return nil, false, err
+		return netip.Addr{}, false, err
 	}
 	if len(ips) == 0 {
-		return nil, false, fmt.Errorf("error resolving IPs of %s", addr)
+		return netip.Addr{}, false, fmt.Errorf("error resolving IPs of %s", addr)
 	}
 
 	// initially take just the first one
-	ip = ips[0]
-
-	return ip, true, nil
+	return ips[0], true, nil
 }

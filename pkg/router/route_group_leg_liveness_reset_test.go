@@ -24,7 +24,7 @@ func TestRegrownLegStartsWithCleanLiveness(t *testing.T) {
 
 	mt := transport.NewManagedTransportForTest(newWorkingTransport())
 	mt.Entry = transport.Entry{ID: id, Type: "test"}
-	g.appendRules(g.fwd[0], g.rvs[0], mt, "test regrow")
+	g.appendRules(g.legs[0].fwd, g.legs[0].rvs, mt, "test regrow")
 
 	g.legLivenessMu.Lock()
 	_, missed := g.legMissed[id]

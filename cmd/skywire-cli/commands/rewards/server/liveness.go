@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -127,7 +127,7 @@ func sumLivenessTimelines(visors []utGraphVisor) (*livenessSeries, error) {
 	for d := range dateSet {
 		dates = append(dates, d)
 	}
-	sort.Strings(dates)
+	slices.Sort(dates)
 
 	dayIndex := make(map[string]int, len(dates))
 	for i, d := range dates {
@@ -272,6 +272,6 @@ func medianOf(xs []int) int {
 	}
 	c := make([]int, len(xs))
 	copy(c, xs)
-	sort.Ints(c)
+	slices.Sort(c)
 	return c[len(c)/2]
 }

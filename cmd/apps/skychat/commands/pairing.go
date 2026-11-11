@@ -33,6 +33,8 @@ package commands
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -42,6 +44,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skychat/message"
 	"github.com/skycoin/skywire/pkg/skychat/pairing"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
@@ -66,6 +69,34 @@ var pairPollerCancel context.CancelFunc
 type pairMsg struct {
 	Type   string `json:"type"`
 	FromPK string `json:"from_pk,omitempty"`
+	// ID names the frame: the peer acks it, and handles each ID once, so a
+	// frame that is also parked takes effect once.
+	ID string `json:"id,omitempty"`
+}
+
+// pairAckWait is how long a sender waits for the peer to ack a pair frame
+// before parking it on the peer's dmsg-async inbox.
+var pairAckWait = 10 * time.Second
+
+var (
+	pairSeenMu sync.Mutex
+	pairSeen   = map[string]time.Time{}
+)
+
+// pairSeenBefore records peer's frame id and reports whether it came before.
+func pairSeenBefore(peer cipher.PubKey, id string) bool {
+	pairSeenMu.Lock()
+	defer pairSeenMu.Unlock()
+	now := time.Now()
+	for k, at := range pairSeen {
+		if now.Sub(at) > 24*time.Hour {
+			delete(pairSeen, k)
+		}
+	}
+	k := peer.Hex() + "/" + id
+	_, seen := pairSeen[k]
+	pairSeen[k] = now
+	return seen
 }
 
 const (
@@ -599,7 +630,7 @@ func pairItemHandler(ctx context.Context) http.HandlerFunc {
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
+			_ = json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
 				"ok": true,
 				"id": msgID,
 			})
@@ -651,6 +682,15 @@ func handlePairControlFrame(ctx context.Context, peerPK cipher.PubKey, raw []byt
 		return false
 	}
 	switch env.Type {
+	case pairTypeInvite, pairTypeAck, pairTypeDecline:
+		if env.ID != "" {
+			ackPairFrame(peerPK, env.ID)
+			if pairSeenBefore(peerPK, env.ID) {
+				return true
+			}
+		}
+	}
+	switch env.Type {
 	case pairTypeInvite:
 		// The from_pk in the envelope is informational — we use the
 		// legacy connection's RemoteAddr.PubKey as the authoritative
@@ -697,14 +737,21 @@ func handlePairControlFrame(ctx context.Context, peerPK cipher.PubKey, raw []byt
 // dial logic from messageHandler — we don't call messageHandler
 // directly because that's HTTP-shaped.
 func sendPairControl(ctx context.Context, peerPK cipher.PubKey, msgType string) error {
-	body, err := json.Marshal(pairMsg{Type: msgType})
+	id := make([]byte, 8)
+	_, _ = rand.Read(id) //nolint:errcheck // crypto/rand does not fail
+	body, err := json.Marshal(pairMsg{Type: msgType, ID: hex.EncodeToString(id)})
 	if err != nil {
 		return err
 	}
 	// Pair-control frames ride the shared DM controller's conns (dial/reuse +
 	// raw write, trying skynet then dmsg). The inbound side is consumed by the
-	// controller's PreHandleFrame hook → handlePairControlFrame.
-	return chatCtrl.SendRaw(ctx, peerPK, body)
+	// controller's PreHandleFrame hook → handlePairControlFrame. A peer no
+	// network reaches gets the frame from its dmsg-async inbox instead.
+	parked, err := chatCtrl.SendRawAcked(ctx, peerPK, body, hex.EncodeToString(id), pairAckWait)
+	if parked && chatLog != nil {
+		chatLog.Infof("pair %s for %s parked on its inbox until it comes back", msgType, peerPK.Hex())
+	}
+	return err
 }
 
 // parsePK parses a hex-encoded public key and returns a cipher.PubKey.
@@ -730,7 +777,7 @@ func parsePK(s string) (cipher.PubKey, error) {
 // helper kept here to avoid importing strings or bytes for the
 // JSON-vs-text fast-reject in handlePairControlFrame.
 func bytesTrimSpace(b []byte) []byte {
-	for i := 0; i < len(b); i++ {
+	for i := range b {
 		switch b[i] {
 		case ' ', '\t', '\n', '\r':
 			continue
@@ -738,4 +785,22 @@ func bytesTrimSpace(b []byte) []byte {
 		return b[i:]
 	}
 	return nil
+}
+
+// ackPairFrame tells peer its pair frame id arrived, so it does not park it.
+func ackPairFrame(peer cipher.PubKey, id string) {
+	if chatCtrl == nil {
+		return
+	}
+	b, err := (message.Envelope{Type: message.TypeAck, ID: id}).Marshal()
+	if err != nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := chatCtrl.SendRaw(ctx, peer, b); err != nil {
+			appLog("Pairing: ack to %s failed: %v", peer.Hex(), err)
+		}
+	}()
 }

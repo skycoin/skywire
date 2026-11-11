@@ -16,8 +16,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -47,7 +45,7 @@ type InProcessHost struct {
 // log_hook_level.
 type processLogs struct {
 	store logstore.Store
-	hook  logrus.Hook
+	hook  logging.Hook
 	bcast *logging.Broadcaster
 }
 

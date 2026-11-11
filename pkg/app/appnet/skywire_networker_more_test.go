@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"io"
 	"net"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -52,7 +51,7 @@ func TestSkywireNetworker_ListenAndPortBound(t *testing.T) {
 	r := testNetworker(t)
 	// Pretend the serve loop is already running so ListenContext doesn't
 	// spawn serveRouteGroup against the nil router.
-	atomic.StoreInt32(&r.isServing, 1)
+	r.isServing.Store(1)
 
 	pk, _ := cipher.GenerateKeyPair()
 	addr := Addr{Net: TypeSkynet, PubKey: pk, Port: 9123}
@@ -149,7 +148,7 @@ func TestSkywireNetworker_SetAppDirectMux_Nil(t *testing.T) {
 	r := testNetworker(t)
 	r.SetAppDirectMux(nil) // nil mux is a no-op; must not start the accept loop
 	require.Nil(t, r.appDirectMux)
-	require.EqualValues(t, 0, atomic.LoadInt32(&r.appDirectAccepting))
+	require.EqualValues(t, 0, r.appDirectAccepting.Load())
 }
 
 func TestReadWithTimeout(t *testing.T) {

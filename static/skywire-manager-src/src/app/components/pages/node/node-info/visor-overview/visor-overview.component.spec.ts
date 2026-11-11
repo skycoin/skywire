@@ -55,6 +55,16 @@ describe('visor overview alerts', () => {
       'node.overview.alert-no-reward', 'node.overview.alert-no-transports', 'node.overview.alert-no-dmsg',
     ]));
   });
+
+  it('says the visor is offline when it reports so', () => {
+    const n = base();
+    n.connectivity = 'offline';
+    expect(texts(n)[0]).toBe('node.overview.alert-offline');
+    n.connectivity = 'dmsg-only';
+    expect(texts(n)[0]).toBe('node.overview.alert-dmsg-only');
+    n.connectivity = 'online';
+    expect(texts(n)).not.toContain('node.overview.alert-offline');
+  });
 });
 
 describe('visor overview config version', () => {

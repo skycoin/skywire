@@ -100,32 +100,32 @@ GET /uptimes
 
 GET /security/nonces/{pk}
   %s`,
-		cmdutil.ExampleJSON(map[string]interface{}{
+		cmdutil.ExampleJSON(map[string]any{
 			"build_info": map[string]string{"version": "v1.3.29"}, "started_at": "2024-01-15T10:00:00Z",
 			"dmsg_address": pk1 + ":80", "dmsg_servers": []string{pk2},
 		}),
-		cmdutil.ExampleJSON([]map[string]interface{}{{
-			"entry":      map[string]interface{}{"t_id": tpID, "edges": []string{pk1, pk2}, "type": "stcpr"},
+		cmdutil.ExampleJSON([]map[string]any{{
+			"entry":      map[string]any{"t_id": tpID, "edges": []string{pk1, pk2}, "type": "stcpr"},
 			"signatures": []string{sig, sig}, "registered": 1705312800, "latency_ms": 45.2,
 		}}),
-		cmdutil.ExampleJSON(map[string]interface{}{
+		cmdutil.ExampleJSON(map[string]any{
 			"total_transports": 150, "by_type": map[string]int{"stcpr": 100, "sudph": 50}, "unique_visors": 75,
 		}),
 		cmdutil.ExampleJSON(map[string]map[string]int{pk1: {"total": 5, "stcpr": 3, "sudph": 2}}),
-		cmdutil.ExampleJSON(map[string]interface{}{
-			"entry":      map[string]interface{}{"t_id": tpID, "edges": []string{pk1, pk2}, "type": "stcpr"},
+		cmdutil.ExampleJSON(map[string]any{
+			"entry":      map[string]any{"t_id": tpID, "edges": []string{pk1, pk2}, "type": "stcpr"},
 			"signatures": []string{sig, sig}, "registered": 1705312800,
 		}),
-		cmdutil.ExampleJSON(map[string]interface{}{"total": 5, "by_type": map[string]int{"stcpr": 3, "sudph": 2}}),
-		cmdutil.ExampleJSON([]map[string]interface{}{{
-			"entry":      map[string]interface{}{"t_id": tpID, "edges": []string{pk1, pk2}, "type": "stcpr"},
+		cmdutil.ExampleJSON(map[string]any{"total": 5, "by_type": map[string]int{"stcpr": 3, "sudph": 2}}),
+		cmdutil.ExampleJSON([]map[string]any{{
+			"entry":      map[string]any{"t_id": tpID, "edges": []string{pk1, pk2}, "type": "stcpr"},
 			"signatures": []string{sig, sig},
 		}}),
 		cmdutil.ExampleJSON([]string{tpID}),
 		cmdutil.ExampleJSON([]transport.BandwidthData{{SentBytes: 1073741824, RecvBytes: 2147483648}}),
 		cmdutil.ExampleJSON(transport.BandwidthData{SentBytes: 5368709120, RecvBytes: 10737418240}),
-		cmdutil.ExampleJSON([]map[string]interface{}{{"pk": pk1, "on": true, "tp_count": 5}}),
-		cmdutil.ExampleJSON(map[string]interface{}{"nonce": 12345}),
+		cmdutil.ExampleJSON([]map[string]any{{"pk": pk1, "on": true, "tp_count": 5}}),
+		cmdutil.ExampleJSON(map[string]any{"nonce": 12345}),
 	)
 }
 

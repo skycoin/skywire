@@ -35,12 +35,12 @@ func readStreamBody(t *testing.T, c net.Conn, reqLine string) string {
 }
 
 func TestStreamConnReloadsOnReady(t *testing.T) {
-	var n int32
+	var n atomic.Int32
 	cfg := StreamConfig{
 		Target: "host.skynet", Mechanism: "skynet",
 		Interval: 2 * time.Millisecond, Deadline: 2 * time.Second,
 		Probe: func(context.Context) error {
-			if atomic.AddInt32(&n, 1) < 3 { // fail twice, then succeed
+			if n.Add(1) < 3 { // fail twice, then succeed
 				return errors.New("no route to host")
 			}
 			return nil
@@ -57,7 +57,7 @@ func TestStreamConnReloadsOnReady(t *testing.T) {
 	if strings.Contains(body, "Retry") {
 		t.Error("success stream must not offer a manual retry")
 	}
-	if got := atomic.LoadInt32(&n); got < 3 {
+	if got := n.Load(); got < 3 {
 		t.Errorf("probe called %d times, expected >=3", got)
 	}
 }

@@ -1,0 +1,181 @@
+package ui2
+
+import (
+	"fmt"
+	"strconv"
+)
+
+// RewardsPage is the rewards tab: the reward address, the rules, and the
+// reward system's history of the visor, loaded after the page.
+templ RewardsPage(rw Rewards) {
+	@VisorLayout(rw.PK, "rewards") {
+		<h1>{ T(ctx, "node.details.rewards-info.title") }</h1>
+		@RewardAddress(rw)
+		<details class="fold" hx-get={ VisorURL(rw.PK, "rewards/rules") } hx-trigger="toggle once" hx-target="find .fold-body">
+			<summary>{ T(ctx, "node.details.rewards-info.show-rules") }</summary>
+			<div class="fold-body"><p class="dim">{ T(ctx, "common.loading") }</p></div>
+		</details>
+		<div hx-get={ VisorURL(rw.PK, "rewards/history?days=7") } hx-trigger="load" hx-swap="outerHTML">
+			<p class="dim">{ T(ctx, "common.loading") }</p>
+		</div>
+	}
+}
+
+// RewardAddress shows the address, and with Editing set the form for it.
+templ RewardAddress(rw Rewards) {
+	<div id="reward-address">
+		@ErrorBox(rw.Err)
+		<dl class="kv">
+			<dt>{ T(ctx, "node.details.rewards-info.rewards-address") }</dt>
+			<dd>
+				if rw.Address != "" {
+					<span class="mono small key" data-copy={ rw.Address }>{ rw.Address }</span>
+					if !rw.IsXpub {
+						<a href={ templ.URL("https://explorer.skycoin.com/app/address/" + rw.Address) } target="_blank" rel="noreferrer nofollow noopener" title={ T(ctx, "node.details.rewards-info.open-in-explorer") }><span class="mi">open_in_browser</span></a>
+					}
+				} else {
+					<span title={ T(ctx, "node.details.rewards-info.not-registered-info") }>{ T(ctx, "node.details.rewards-info.not-registered") }</span>
+				}
+			</dd>
+		</dl>
+		if rw.Spent {
+			<p class="alert warn">
+				{ T(ctx, "node.details.rewards-info.exposed") }
+				if rw.Balance != "" && rw.Balance != "0" {
+					<strong>{ T(ctx, "node.details.rewards-info.exposed-balance", "balance", rw.Balance) }</strong>
+				}
+				{ T(ctx, "node.details.rewards-info.exposed-action") }
+			</p>
+		} else if rw.Address != "" && !rw.IsXpub {
+			<p class="alert">{ T(ctx, "node.details.rewards-info.single-risk") }</p>
+		}
+		if rw.IsXpub {
+			@xpubList(rw.Addresses, rw.XpubErr)
+		}
+		if rw.Editing {
+			<form class="form" hx-put={ VisorURL(rw.PK, "rewards/address") } hx-target="#reward-address" hx-swap="outerHTML">
+				<p class="small dim">{ T(ctx, "rewards-address-config.info") }</p>
+				<label>
+					{ T(ctx, "rewards-address-config.address") }
+					<input class="mono" name="address" value={ rw.Draft } maxlength="112" placeholder="xpub…" autocomplete="off" spellcheck="false" autofocus/>
+				</label>
+				<label class="check">
+					<input type="checkbox" name="accept_risk" value="1" checked?={ rw.AcceptRisk }/>
+					<span class="small">{ T(ctx, "rewards-address-config.accept-risk") }</span>
+				</label>
+				<div class="bar">
+					<button class="btn primary" type="submit">{ T(ctx, "common.save") }</button>
+					<button class="btn" type="button" hx-get={ VisorURL(rw.PK, "rewards/address") } hx-target="#reward-address" hx-swap="outerHTML">{ T(ctx, "common.cancel") }</button>
+					if rw.Address != "" {
+						<span class="spacer"></span>
+						<button class="btn warn" type="button" hx-delete={ VisorURL(rw.PK, "rewards/address") } hx-confirm={ T(ctx, "rewards-address-config.empty-warning") } hx-target="#reward-address" hx-swap="outerHTML">{ T(ctx, "common.remove") }</button>
+					}
+				</div>
+			</form>
+		} else {
+			<div class="bar">
+				<button class="btn" hx-get={ VisorURL(rw.PK, "rewards/address?edit=1") } hx-target="#reward-address" hx-swap="outerHTML">
+					<span class="mi">edit</span>
+					if rw.Address != "" {
+						{ T(ctx, "node.details.rewards-info.change-address-button") }
+					} else {
+						{ T(ctx, "node.details.rewards-info.set-address-button") }
+					}
+				</button>
+			</div>
+		}
+	</div>
+}
+
+templ xpubList(addrs []string, errMsg string) {
+	if errMsg != "" {
+		<p class="alert warn">{ errMsg }</p>
+	} else if len(addrs) > 0 {
+		<div class="small">
+			<p class="dim">{ T(ctx, "node.details.rewards-info.xpub-addresses") }</p>
+			for _, a := range addrs {
+				<div>
+					<span class="mono key" data-copy={ a }>{ a }</span>
+					<a href={ templ.URL("https://explorer.skycoin.com/app/address/" + a) } target="_blank" rel="noreferrer nofollow noopener" title={ T(ctx, "node.details.rewards-info.open-in-explorer") }><span class="mi">open_in_browser</span></a>
+				</div>
+			}
+			<div class="dim">…</div>
+		</div>
+	}
+}
+
+// RewardRules is the binary's own copy of the reward rules.
+templ RewardRules(text string) {
+	<div class="fold-body"><pre class="raw small">{ text }</pre></div>
+}
+
+// RewardHistoryView is what the reward system paid the visor.
+templ RewardHistoryView(h RewardHistory) {
+	<section class="card" id="reward-history">
+		<div class="head">
+			<h2>{ T(ctx, "ui2.rewards.history") }</h2>
+			<span class="spacer"></span>
+			<span class="seg">
+				for _, d := range []int{7, 30, 90} {
+					<button class={ "btn sm", templ.KV("primary", h.Days == d) } hx-get={ VisorURL(h.PK, "rewards/history?days="+strconv.Itoa(d)) } hx-target="#reward-history" hx-swap="outerHTML">{ strconv.Itoa(d) }d</button>
+				}
+			</span>
+		</div>
+		@ErrorBox(h.Err)
+		if len(h.List) == 0 && h.Err == "" {
+			<p class="dim">{ T(ctx, "ui2.rewards.none") }</p>
+		}
+		if len(h.List) > 0 {
+			<p class="ok"><strong>{ T(ctx, "ui2.rewards.total", "total", fmt.Sprintf("%.2f", h.Total)) }</strong> <span class="dim small">({ strconv.Itoa(h.Days) }d)</span></p>
+			<table class="list">
+				<thead>
+					<tr>
+						<th>{ T(ctx, "ui2.rewards.date") }</th>
+						<th class="num">{ T(ctx, "ui2.rewards.amount") }</th>
+						<th class="num">{ T(ctx, "ui2.rewards.share") }</th>
+						<th>{ T(ctx, "ui2.rewards.status") }</th>
+						<th>{ T(ctx, "ui2.rewards.tx") }</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, d := range h.List {
+						<tr>
+							<td class="name" data-label={ T(ctx, "ui2.rewards.date") }>{ d.DateLabel() }</td>
+							<td class="num" data-label={ T(ctx, "ui2.rewards.amount") }>
+								if d.Amount > 0 {
+									{ fmt.Sprintf("%.6f", d.Amount) }
+								} else {
+									-
+								}
+							</td>
+							<td class="num" data-label={ T(ctx, "ui2.rewards.share") }>
+								if d.Share > 0 {
+									{ fmt.Sprintf("%.4f%%", d.Share) }
+								} else {
+									-
+								}
+							</td>
+							<td data-label={ T(ctx, "ui2.rewards.status") }>
+								switch d.Status() {
+									case "sent":
+										<span class="badge on">{ T(ctx, "ui2.rewards.sent") }</span>
+									case "pending":
+										<span class="badge">{ T(ctx, "ui2.rewards.pending") }</span>
+									default:
+										<span class="badge off">{ T(ctx, "ui2.rewards.no-reward") }</span>
+								}
+							</td>
+							<td class="small" data-label={ T(ctx, "ui2.rewards.tx") }>
+								if d.TxID != "" {
+									<a href={ templ.URL("https://explorer.skycoin.com/app/transaction/" + d.TxID) } target="_blank" rel="noopener" title={ d.TxID }>{ ShortTx(d.TxID) }</a>
+								} else {
+									-
+								}
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	</section>
+}

@@ -38,10 +38,10 @@ import (
 	"time"
 
 	bolt "github.com/0magnet/bbolt"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
@@ -239,7 +239,7 @@ func isBolt(p string) bool {
 // the info level: the log store, the broadcaster and the sink are each added
 // once per process, never once per start.
 func processHookCount() int {
-	return len(visor.ProcessLogger().Hooks[logrus.InfoLevel])
+	return len(visor.ProcessLogger().Hooks[logging.InfoLevel])
 }
 
 // settledGoroutines waits for the goroutine count to stop falling and

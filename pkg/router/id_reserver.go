@@ -267,7 +267,7 @@ func (idr *idReserver) ReturnToPool(pool *ClientPool) {
 
 func firstError(n int, errCh <-chan error) error {
 	var firstErr error
-	for i := 0; i < n; i++ {
+	for range n {
 		if err := <-errCh; firstErr == nil && err != nil {
 			firstErr = err
 		}

@@ -20,6 +20,14 @@ type LoadStats struct {
 	CPUCores        int     `json:"cpu_cores"`
 	MemUsedPercent  float64 `json:"mem_used_percent"`
 	DiskUsedPercent float64 `json:"disk_used_percent"`
+	// HostUptime is the host's uptime in seconds, so the offline alerts
+	// can tell a reboot from a network outage.
+	HostUptime uint64 `json:"host_uptime_seconds,omitempty"`
+	// RootReadOnly, StorageIOErrors and LastStorageIOError are the
+	// storage health signs of a failing SD card (pkg/alerts.CheckStorage).
+	RootReadOnly       bool   `json:"root_read_only,omitempty"`
+	StorageIOErrors    int    `json:"storage_io_errors,omitempty"`
+	LastStorageIOError string `json:"last_storage_io_error,omitempty"`
 }
 
 // HostStatsInfo carries a snapshot of host system + visor process

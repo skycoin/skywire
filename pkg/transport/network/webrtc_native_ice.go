@@ -4,7 +4,7 @@ package network
 
 import (
 	"net"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 
@@ -31,7 +31,7 @@ func iceLocalIPs() string {
 	if err != nil {
 		return ""
 	}
-	sort.Strings(ips)
+	slices.Sort(ips)
 	return strings.Join(ips, ",")
 }
 

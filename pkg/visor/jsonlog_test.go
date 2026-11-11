@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,12 +20,11 @@ import (
 func TestJSONLogHook_PreservesFields(t *testing.T) {
 	path := filepath.Join(jsonLogDir(t), "skywire.jsonl")
 
-	hook, err := newJSONLogHook(path)
-	require.NoError(t, err)
+	hook := newJSONLogHook(path)
 
-	log := logrus.New()
+	log := logging.New()
 	log.SetOutput(io.Discard) // the hook is what is under test
-	log.SetLevel(logrus.TraceLevel)
+	log.SetLevel(logging.TraceLevel)
 	log.AddHook(hook)
 
 	log.WithField("module", "wasm-serve").
@@ -52,10 +51,9 @@ func TestJSONLogHook_PreservesFields(t *testing.T) {
 // a boot sequence where several subsystems start in the same second.
 func TestJSONLogHook_TimestampHasSubSecondResolution(t *testing.T) {
 	path := filepath.Join(jsonLogDir(t), "skywire.jsonl")
-	hook, err := newJSONLogHook(path)
-	require.NoError(t, err)
+	hook := newJSONLogHook(path)
 
-	log := logrus.New()
+	log := logging.New()
 	log.SetOutput(io.Discard)
 	log.AddHook(hook)
 	log.Info("first")
@@ -73,8 +71,7 @@ func TestJSONLogHook_TimestampHasSubSecondResolution(t *testing.T) {
 // cleanup calls RemoveAll and FAILS the test if that errors.
 //
 // The hook holds skywire.jsonl open for as long as it exists, which is correct
-// for a log sink and which lumberjackrus gives no way to undo — Hook keeps its
-// *lumberjack.Logger unexported and exposes no Close. On Unix that is
+// for a log sink, and the hook exposes no Close to undo it. On Unix that is
 // invisible: an open file unlinks fine. On Windows it is not, and both tests
 // failed in cleanup, after every assertion had already passed:
 //

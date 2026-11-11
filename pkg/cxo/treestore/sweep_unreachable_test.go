@@ -33,7 +33,7 @@ func TestPublisherStartSweepsUnreachable(t *testing.T) {
 	db := c.DB().CXDS()
 	before, _ := db.Amount()
 	var orphans []skycipher.SHA256
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		v := []byte{byte(i), 'o', 'r', 'p', 'h', 'a', 'n'}
 		k := skycipher.SumSHA256(v)
 		_, err := db.Set(k, v, 1)

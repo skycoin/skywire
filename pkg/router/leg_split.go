@@ -12,8 +12,7 @@
 // re-pointed at a different descriptor — so it rides the SAME packet type with
 // one more flag, routing.LegRehomeSplit, and the same capability bit
 // (routing.CapLegRehome). An exit that never negotiated it simply never acks,
-// and the caller falls back to what the release path did before: closing the
-// transport.
+// and the caller falls back to retiring the leg (closeReleasedLeg).
 //
 // Why it matters: a route has to be able to change from stream level to packet
 // level and back trivially. Before this, the pool arbiter's release
@@ -30,6 +29,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -38,8 +39,7 @@ import (
 // ErrSplitUnsupported is returned when a leg cannot be split back out in
 // place: the peer did not negotiate CapLegRehome, the group has no mux, or the
 // group is not registered with a router that can hold the new standby group.
-// The caller's fallback is to close the leg's transport, which is what the
-// release path did before splits existed.
+// The caller's fallback is to retire the leg (closeReleasedLeg).
 var ErrSplitUnsupported = fmt.Errorf("%w: leg split unavailable", ErrRehomeUnsupported)
 
 // splitPortFirst is the bottom of the local port range a split-out standby
@@ -65,7 +65,7 @@ type legSplitHost interface {
 // splitGroupPort implements legSplitHost: a random port in the ephemeral range
 // that no route group of this router already holds against the same peer.
 func (r *router) splitGroupPort(base routing.RouteDescriptor) (routing.Port, error) {
-	for i := 0; i < 32; i++ {
+	for range 32 {
 		port, err := randomSplitPort()
 		if err != nil {
 			return 0, err
@@ -110,13 +110,13 @@ func randomSplitPort() (routing.Port, error) {
 	return routing.Port(splitPortFirst + binary.BigEndian.Uint16(b[:])%(65535-splitPortFirst)), nil
 }
 
-// splitLeg is the initiator sequence: leg idx of this group leaves it and
+// splitLeg is the initiator sequence: the leg on transport id leaves this group and
 // becomes a standalone standby group of the same app and the same peer.
 //
 // On any refusal — an unsupported peer, no ack, a host that cannot register the
 // new group — the leg is left exactly where it was and an error is returned;
-// the caller then closes the transport as the release always did.
-func (rg *RouteGroup) splitLeg(idx int, reason string) (*RouteGroup, error) {
+// the caller then retires the leg (closeReleasedLeg).
+func (rg *RouteGroup) splitLeg(id uuid.UUID, reason string) (*RouteGroup, error) {
 	if rg.mux == nil || !rg.mux.legRehomeEnabled {
 		return nil, ErrSplitUnsupported
 	}
@@ -126,11 +126,11 @@ func (rg *RouteGroup) splitLeg(idx int, reason string) (*RouteGroup, error) {
 	}
 
 	rg.mu.Lock()
-	legs := len(rg.tps)
+	legs := len(rg.legs)
 	var fwd routing.Rule
 	var tp *transport.ManagedTransport
-	if idx >= 0 && idx < legs && idx < len(rg.fwd) {
-		fwd, tp = rg.fwd[idx], rg.tps[idx]
+	if idx := rg.legIndexLocked(id); idx >= 0 {
+		fwd, tp = rg.legs[idx].fwd, rg.legs[idx].tp
 	}
 	rg.mu.Unlock()
 	// A group's LAST leg is the group: splitting it off would leave the app's
@@ -139,7 +139,7 @@ func (rg *RouteGroup) splitLeg(idx int, reason string) (*RouteGroup, error) {
 		return nil, fmt.Errorf("a group holding %d leg(s) cannot split one off", legs)
 	}
 	if fwd == nil || tp == nil {
-		return nil, fmt.Errorf("no leg %d to split", idx)
+		return nil, fmt.Errorf("no leg on transport %s to split", id)
 	}
 
 	port, err := host.splitGroupPort(rg.desc)
@@ -151,11 +151,11 @@ func (rg *RouteGroup) splitLeg(idx int, reason string) (*RouteGroup, error) {
 	// onto a chain whose consume rule is about to name another group. The
 	// release path this serves closed the transport outright, so anything still
 	// in flight is no worse off than it was.
-	rg.mux.setLegStandby(idx, true)
+	rg.setLegStandbyByID(id, true)
 
 	nonce, err := newRehomeNonce()
 	if err != nil {
-		rg.mux.setLegStandby(idx, false)
+		rg.setLegStandbyByID(id, false)
 		return nil, err
 	}
 	ackCh := make(chan byte, 1)
@@ -167,7 +167,7 @@ func (rg *RouteGroup) splitLeg(idx int, reason string) (*RouteGroup, error) {
 	// forwards it.
 	chain := &rehomeLeg{fwd: fwd, tp: tp}
 	if err := rg.writeLegControl(chain, nonce, port, rg.desc.DstPort(), routing.LegRehomeSplit, legControlInBand); err != nil {
-		rg.mux.setLegStandby(idx, false)
+		rg.setLegStandbyByID(id, false)
 		return nil, fmt.Errorf("send split request: %w", err)
 	}
 	globalMuxCounters.legSplitsSent.Add(1)
@@ -176,7 +176,7 @@ func (rg *RouteGroup) splitLeg(idx int, reason string) (*RouteGroup, error) {
 	select {
 	case flags = <-ackCh:
 	case <-time.After(legRehomeAckTimeout()):
-		rg.mux.setLegStandby(idx, false)
+		rg.setLegStandbyByID(id, false)
 		globalMuxCounters.legSplitsFailed.Add(1)
 		// Same as the re-home timeout: name the FAR end the request was
 		// addressed to and the first hop it left on, so a silent split can be
@@ -195,21 +195,19 @@ func (rg *RouteGroup) splitLeg(idx int, reason string) (*RouteGroup, error) {
 			ErrRehomeNoAck, far, tp.Remote(), legRehomeAckTimeout())
 	}
 	if flags&routing.LegRehomeRefused != 0 || flags&routing.LegRehomeAck == 0 {
-		rg.mux.setLegStandby(idx, false)
+		rg.setLegStandbyByID(id, false)
 		globalMuxCounters.legSplitsFailed.Add(1)
 		return nil, fmt.Errorf("%w: peer %s refused the split; the leg is left where it was",
 			ErrRehomeNoAck, rg.farEndPK())
 	}
 	globalMuxCounters.legSplitsAcked.Add(1)
 
-	// The wait was long enough for a prune to have moved the legs under us;
-	// the chain is named by its TRANSPORT, never by the index the request was
-	// built from.
-	if idx = rg.releasableLegIndex(tp.Entry.ID); idx < 0 {
+	// The wait was long enough for a prune to have removed the leg.
+	if rg.releasableLegIndex(id) < 0 {
 		globalMuxCounters.legSplitsFailed.Add(1)
-		return nil, fmt.Errorf("the leg on transport %s is gone; nothing to split", tp.Entry.ID)
+		return nil, fmt.Errorf("the leg on transport %s is gone; nothing to split", id)
 	}
-	ns, err := rg.adoptSplitLeg(idx, port, rg.desc.DstPort(), reason)
+	ns, err := rg.adoptSplitLeg(id, port, rg.desc.DstPort(), reason)
 	if err != nil {
 		globalMuxCounters.legSplitsFailed.Add(1)
 		return nil, err
@@ -221,11 +219,12 @@ func (rg *RouteGroup) splitLeg(idx int, reason string) (*RouteGroup, error) {
 	return ns, nil
 }
 
-// adoptSplitLeg detaches leg idx and hands it to a new standby group on port,
-// rolling the leg back into this group if the hand-off itself fails. Shared by
-// both edges: the exit runs exactly this once it has agreed to the split.
-func (rg *RouteGroup) adoptSplitLeg(idx int, srcPort, dstPort routing.Port, reason string) (*RouteGroup, error) {
-	leg, err := rg.detachLegForRehome(idx, reason)
+// adoptSplitLeg detaches the leg on transport id and hands it to a new standby
+// group on port, rolling the leg back into this group if the hand-off itself
+// fails. Shared by both edges: the exit runs exactly this once it has agreed
+// to the split.
+func (rg *RouteGroup) adoptSplitLeg(id uuid.UUID, srcPort, dstPort routing.Port, reason string) (*RouteGroup, error) {
+	leg, err := rg.detachLegForRehome(id, reason)
 	if err != nil {
 		return nil, err
 	}
@@ -288,29 +287,29 @@ func (rg *RouteGroup) newSplitGroup(srcPort, dstPort routing.Port) *RouteGroup {
 func (rg *RouteGroup) acceptSplit(routeID routing.RouteID, nonce uint64, srcPort, dstPort routing.Port,
 	dialect legControlDialect) {
 	globalMuxCounters.legSplitsReceived.Add(1)
-	idx := rg.legIndexByConsumeRule(routeID)
+	id, via := rg.legChainByConsumeRule(routeID)
 	err := rg.splitAllowed(srcPort, dstPort)
-	if err == nil && idx < 0 {
+	if err == nil && id == uuid.Nil {
 		err = fmt.Errorf("no leg holds consume rule %d", routeID)
 	}
 	var ns *RouteGroup
 	reason := fmt.Sprintf("split out of :%d", rg.desc.DstPort())
 	if err == nil {
-		rg.mux.setLegStandby(idx, true)
+		rg.setLegStandbyByID(id, true)
 		// The initiator's ports are ITS ports; the new group on this side is
 		// their mirror, exactly as rehomeTarget mirrors a re-home's.
-		ns, err = rg.adoptSplitLeg(idx, dstPort, srcPort, reason)
+		ns, err = rg.adoptSplitLeg(id, dstPort, srcPort, reason)
 	}
 	if err == nil {
 		err = rg.rehomeHost.(legSplitHost).registerSplitGroup(ns) //nolint:errcheck,forcetypeassert // splitAllowed proved the type
 	}
 	if err != nil {
 		globalMuxCounters.legSplitsFailed.Add(1)
-		if idx >= 0 && rg.mux != nil {
-			rg.mux.setLegStandby(idx, false)
-		}
+		rg.setLegStandbyByID(id, false)
 		rg.logger.WithError(err).Debug("Split refused")
-		rg.replyRehome(idx, nonce, srcPort, dstPort, routing.LegRehomeRefused|routing.LegRehomeSplit, dialect)
+		if via != nil {
+			rg.replyRehomeOn(via, nonce, srcPort, dstPort, routing.LegRehomeRefused|routing.LegRehomeSplit, dialect)
+		}
 		return
 	}
 	// The chain now belongs to ns here, so the ack rides ITS leg — but it is
@@ -319,7 +318,7 @@ func (rg *RouteGroup) acceptSplit(routeID routing.RouteID, nonce uint64, srcPort
 	// is whose per-frame key opens it.
 	rg.replyRehomeOn(ns.firstLeg(), nonce, srcPort, dstPort,
 		routing.LegRehomeAck|routing.LegRehomeSplit, dialect)
-	rg.logger.Infof("Split leg %d out of :%d into standby group :%d (peer :%d)", idx, rg.desc.DstPort(), ns.desc.SrcPort(), ns.desc.DstPort())
+	rg.logger.Infof("Split the leg on %s out of :%d into standby group :%d (peer :%d)", id, rg.desc.DstPort(), ns.desc.SrcPort(), ns.desc.DstPort())
 }
 
 // splitAllowed reports whether this group may give a chain up: the mux must

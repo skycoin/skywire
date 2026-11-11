@@ -21,11 +21,13 @@ import { DragDropModule } from '@angular/cdk/drag-drop';
 import { TranslateDirective, TranslatePipe } from '@ngx-translate/core';
 
 import { AutoScalePipe } from '../pipes/auto-scale.pipe';
+import { VersionLabelPipe } from '../pipes/version-label.pipe';
 import { ClipboardDirective } from '../directives/clipboard.directive';
 
 import { BundleMountComponent } from './bundle-mount/bundle-mount.component';
 
 import { BulkRewardAddressChangerComponent } from '../components/layout/bulk-reward-address-changer/bulk-reward-address-changer.component';
+import { BulkAppActionComponent } from '../components/layout/bulk-app-action/bulk-app-action.component';
 import { ButtonComponent } from '../components/layout/button/button.component';
 import { ConfirmationComponent } from '../components/layout/confirmation/confirmation.component';
 import { CopyToClipboardTextComponent } from '../components/layout/copy-to-clipboard-text/copy-to-clipboard-text.component';
@@ -96,9 +98,11 @@ const SHARED_ANGULAR_MODULES = [
 
 const SHARED_DECLARATIONS = [
   AutoScalePipe,
+  VersionLabelPipe,
   ClipboardDirective,
   BundleMountComponent,
   BulkRewardAddressChangerComponent,
+  BulkAppActionComponent,
   ButtonComponent,
   ConfirmationComponent,
   CopyToClipboardTextComponent,

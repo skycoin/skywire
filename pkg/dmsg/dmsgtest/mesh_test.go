@@ -142,7 +142,7 @@ func TestServerMesh_CrossServerDial(t *testing.T) {
 
 	// Retry cross-server dial — peer mesh connection may still be establishing.
 	var stream1 *dmsg.Stream
-	for attempt := 0; attempt < 3; attempt++ {
+	for attempt := range 3 {
 		stream1, err = client1.DialStream(ctx, dmsg.Addr{PK: pk2, Port: port})
 		if err == nil {
 			break
@@ -162,12 +162,10 @@ func TestServerMesh_CrossServerDial(t *testing.T) {
 
 	// Client 1 -> Client 2
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_, wErr := stream1.Write(payload)
 		assert.NoError(t, wErr)
-	}()
+	})
 
 	recv := make([]byte, len(payload))
 	_, err = io.ReadFull(conn2, recv)
@@ -176,12 +174,10 @@ func TestServerMesh_CrossServerDial(t *testing.T) {
 	require.True(t, bytes.Equal(payload, recv), "data mismatch: client1 -> client2")
 
 	// Client 2 -> Client 1
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_, wErr := conn2.Write(payload)
 		assert.NoError(t, wErr)
-	}()
+	})
 
 	recv2 := make([]byte, len(payload))
 	_, err = io.ReadFull(stream1, recv2)
@@ -385,16 +381,14 @@ func TestNonPublicServer_ReverseDial(t *testing.T) {
 	payload := cipher.RandByte(1024)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() { defer wg.Done(); _, wErr := streamB.Write(payload); assert.NoError(t, wErr) }()
+	wg.Go(func() { ; _, wErr := streamB.Write(payload); assert.NoError(t, wErr) })
 	recv := make([]byte, len(payload))
 	_, err := io.ReadFull(connA, recv)
 	require.NoError(t, err, "B -> A read over reverse-forward path")
 	wg.Wait()
 	require.True(t, bytes.Equal(payload, recv), "data mismatch: B -> A")
 
-	wg.Add(1)
-	go func() { defer wg.Done(); _, wErr := connA.Write(payload); assert.NoError(t, wErr) }()
+	wg.Go(func() { ; _, wErr := connA.Write(payload); assert.NoError(t, wErr) })
 	recv2 := make([]byte, len(payload))
 	_, err = io.ReadFull(streamB, recv2)
 	require.NoError(t, err, "A -> B read over reverse-forward path")

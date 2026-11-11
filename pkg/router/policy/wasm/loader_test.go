@@ -27,7 +27,7 @@ func findExampleWASM() string {
 	}
 	_, here, _, _ := runtime.Caller(0)
 	repoRoot := here
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		repoRoot = filepath.Dir(repoRoot)
 		candidate := filepath.Join(repoRoot, "docs", "examples", "routing-policies", "wasm", "app-mux", "app-mux.wasm")
 		if _, err := os.Stat(candidate); err == nil {

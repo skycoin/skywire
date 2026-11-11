@@ -57,7 +57,7 @@ func TestSelectByDirectionBoundsFanoutToActive(t *testing.T) {
 	fwd := make([]routing.Rule, 4)
 
 	m.growLegs(4)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		m.markLegReady(i)
 	}
 	// Initiator-mirrored active set: legs 1 and 2 active; leg 3 parked standby; the
@@ -67,8 +67,8 @@ func TestSelectByDirectionBoundsFanoutToActive(t *testing.T) {
 	// legs 1,2 remain active (growLegs leaves them non-standby by default).
 
 	seen := map[int]int{}
-	for i := 0; i < 400; i++ {
-		_, _, idx, ok := m.selectByDirection(tps, fwd, false, dst, src)
+	for i := range 400 {
+		_, _, idx, ok := m.selectByDirection(testLegs(tps, fwd, nil), false, dst, src)
 		if !ok {
 			t.Fatalf("iteration %d: selectByDirection returned ok=false with two active reverse legs", i)
 		}
@@ -91,8 +91,8 @@ func TestSelectByDirectionBoundsFanoutToActive(t *testing.T) {
 	m.setLegStandby(1, true)
 	m.setLegStandby(2, true)
 	seen2 := map[int]int{}
-	for i := 0; i < 200; i++ {
-		_, _, idx, ok := m.selectByDirection(tps, fwd, false, dst, src)
+	for i := range 200 {
+		_, _, idx, ok := m.selectByDirection(testLegs(tps, fwd, nil), false, dst, src)
 		if !ok {
 			t.Fatalf("tier-2 iteration %d: ok=false — should fall back to a standby reverse leg", i)
 		}
@@ -148,8 +148,8 @@ func TestSelectByDirectionNeverDirectWhenNoReverseReady(t *testing.T) {
 	}
 
 	seen := map[int]int{}
-	for i := 0; i < 300; i++ {
-		_, _, idx, ok := m.selectByDirection(tps, fwd, false, dst, src)
+	for i := range 300 {
+		_, _, idx, ok := m.selectByDirection(testLegs(tps, fwd, nil), false, dst, src)
 		if !ok {
 			t.Fatalf("iteration %d: ok=false — a not-ready reverse leg is still the right CLASS and must be selected over the direct leg", i)
 		}
@@ -196,8 +196,8 @@ func TestSelectByDirectionPrefersActiveOverStandby(t *testing.T) {
 	}
 
 	seen := map[int]int{}
-	for i := 0; i < 300; i++ {
-		_, _, idx, ok := m.selectByDirection(tps, fwd, false, dst, src)
+	for i := range 300 {
+		_, _, idx, ok := m.selectByDirection(testLegs(tps, fwd, nil), false, dst, src)
 		if !ok {
 			t.Fatalf("iteration %d: ok=false with a live active reverse leg present", i)
 		}
@@ -233,7 +233,7 @@ func TestSelectByDirectionReverseSendableOnceEstablished(t *testing.T) {
 		t.Fatal("precondition: the reverse leg must start not-ready")
 	}
 
-	_, _, idx, ok := m.selectByDirection(tps, fwd, false, dst, src)
+	_, _, idx, ok := m.selectByDirection(testLegs(tps, fwd, nil), false, dst, src)
 	if !ok {
 		t.Fatal("a not-ready but established reverse leg must be sendable (ok=true)")
 	}

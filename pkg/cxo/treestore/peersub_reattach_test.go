@@ -118,7 +118,7 @@ func connectWithRetry(ctx context.Context, sub *Subscriber, peerPK cipher.PubKey
 	const maxAttempts = 6
 	backoff := 50 * time.Millisecond
 	var err error
-	for i := 0; i < maxAttempts; i++ {
+	for range maxAttempts {
 		if err = sub.Connect(ctx, peerPK); err == nil {
 			return nil
 		}
@@ -175,7 +175,7 @@ func newReattachRig(t *testing.T, n int) *reattachRig {
 		timeout: timeout,
 	}
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		pk, sk := cipher.GenerateKeyPair()
 		_, err := env.NewClientWithKeys(pk, sk, &dmsg.Config{MinSessions: 1})
 		require.NoErrorf(t, err, "visor %d: NewClientWithKeys", i)

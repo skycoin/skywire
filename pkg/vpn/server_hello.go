@@ -2,12 +2,12 @@
 package vpn
 
 import (
-	"net"
+	"net/netip"
 )
 
 // ServerHello is a message sent by server during the Client/Server handshake.
 type ServerHello struct {
 	Status     HandshakeStatus `json:"status"`
-	TUNIP      net.IP          `json:"tun_ip"`
-	TUNGateway net.IP          `json:"tun_gateway"`
+	TUNIP      netip.Addr      `json:"tun_ip"`
+	TUNGateway netip.Addr      `json:"tun_gateway"`
 }

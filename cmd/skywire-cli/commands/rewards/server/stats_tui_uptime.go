@@ -30,9 +30,10 @@
 package clirewardsserver
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -167,7 +168,9 @@ func gatherUptimeGraph() uptimeGraphStats {
 
 	sorted := make([]uptimestats.VisorSummary, len(entries))
 	copy(sorted, entries)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i].PK.Hex() < sorted[j].PK.Hex() })
+	slices.SortFunc(sorted, func(a, b uptimestats.VisorSummary) int {
+		return cmp.Compare(a.PK.Hex(), b.PK.Hex())
+	})
 
 	for _, e := range sorted {
 		if len(e.Timeline) == 0 {

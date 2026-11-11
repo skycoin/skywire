@@ -35,6 +35,7 @@ import { ServicesHealthComponent } from './components/pages/services-health/serv
 import { DmsgSettingsComponent } from './components/pages/dmsg-settings/dmsg-settings.component';
 import { AllRoutesComponent } from './components/pages/node/routing/all-routes/all-routes.component';
 import { AllAppsComponent } from './components/pages/node/apps/all-apps/all-apps.component';
+import { AppCatalogComponent } from './components/pages/node/apps/app-catalog/app-catalog.component';
 import { RouteReuseStrategy } from '@angular/router';
 import { AppReuseStrategy } from './app.reuse-strategy';
 import { TransportDetailsComponent } from './components/pages/node/routing/transport-list/transport-details/transport-details.component';
@@ -43,6 +44,7 @@ import { InitialSetupComponent } from './components/pages/login/initial-setup/in
 import { ProxySettingsComponent } from './components/pages/node/actions/proxy-settings/proxy-settings.component';
 import { SkynetComponent } from './components/pages/node/skynet/skynet.component';
 import { NodeSettingsComponent } from './components/pages/node/node-settings/node-settings.component';
+import { NodeAlertsComponent } from './components/pages/node/node-settings/node-alerts/node-alerts.component';
 import { NodeInfoContentComponent } from './components/pages/node/node-info/node-info-content/node-info-content.component';
 import { VisorOverviewComponent } from './components/pages/node/node-info/visor-overview/visor-overview.component';
 import { CommandPaletteComponent } from './components/layout/command-palette/command-palette.component';
@@ -56,6 +58,7 @@ import { WalletComponent } from './components/pages/node/wallet/wallet.component
 import { WalletPageComponent } from './wallet/wallet-page.component';
 import { FullAppHostComponent } from './components/pages/full-app-host/full-app-host.component';
 import { AppSettingsComponent } from './components/pages/node/apps/app-settings/app-settings.component';
+import { AppFlagsFormComponent } from './components/pages/node/apps/app-flags-form/app-flags-form.component';
 import { WebProxyComponent } from './components/pages/node/web-proxy/web-proxy.component';
 import { MailComponent } from './components/pages/node/mail/mail.component';
 import { ContactsComponent } from './components/pages/node/contacts/contacts.component';
@@ -105,12 +108,14 @@ const globalRippleConfig: RippleGlobalOptions = {
         ServicesHealthComponent,
         DmsgSettingsComponent,
         AllAppsComponent,
+        AppCatalogComponent,
         TransportDetailsComponent,
         LogFilterComponent,
         InitialSetupComponent,
         ProxySettingsComponent,
         SkynetComponent,
         NodeSettingsComponent,
+        NodeAlertsComponent,
         NodeInfoContentComponent,
         VisorOverviewComponent,
         CommandPaletteComponent,
@@ -124,6 +129,7 @@ const globalRippleConfig: RippleGlobalOptions = {
         WalletComponent,
         WalletPageComponent,
         AppSettingsComponent,
+        AppFlagsFormComponent,
         WebProxyComponent,
         MailComponent,
         ContactsComponent,

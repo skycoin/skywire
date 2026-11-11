@@ -11,8 +11,6 @@ import (
 	"errors"
 	"fmt"
 
-	skycoinlogging "github.com/skycoin/skycoin/src/util/logging"
-
 	stunserver "github.com/skycoin/skywire/pkg/deployment/stun"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/services"
@@ -81,12 +79,7 @@ func (s *service) Run(ctx context.Context) error {
 	if tag == "" {
 		tag = "stun"
 	}
-	// stunserver.Server.Log uses skycoin's logging package, not
-	// pkg/logging — supply a separate logger instance for it.
-	skyLogger := skycoinlogging.MustGetLogger(tag)
 	logger := services.NewLogger(tag, cfg.LogLevel)
-	_ = s.log // logger is replaced with a tag-scoped one
-	_ = logger
 
 	srv := &stunserver.Server{
 		PrimaryIP:   cfg.PrimaryIP,
@@ -94,7 +87,7 @@ func (s *service) Run(ctx context.Context) error {
 		PrimaryPort: port,
 		AltPort:     altPort,
 		Software:    "skywire-stun",
-		Log:         skyLogger,
+		Log:         logger,
 	}
 	if err := srv.Start(ctx); err != nil {
 		return fmt.Errorf("stun-server: start: %w", err)

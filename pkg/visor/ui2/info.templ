@@ -1,0 +1,276 @@
+package ui2
+
+import (
+	"strconv"
+
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
+)
+
+// InfoPage is the info tab: the live overview, then the visor's ports,
+// router settings and runtime config, and the restart and turn off actions.
+templ InfoPage(i Info) {
+	@VisorLayout(i.PK, "info") {
+		@InfoLive(i)
+		<div class="bar">
+			<button class="btn" hx-post={ VisorURL(i.PK, "info/restart") } hx-confirm={ T(ctx, "palette.restart-confirmation", "name", i.PK) } hx-swap="none"><span class="mi">replay</span>{ T(ctx, "palette.actions.restart") }</button>
+			<button class="btn warn" hx-post={ VisorURL(i.PK, "info/shutdown") } hx-confirm={ T(ctx, "actions.turn-off.confirmation") } hx-swap="none"><span class="mi">power_settings_new</span>{ T(ctx, "actions.menu.turn-off") }</button>
+			<a class="btn" href={ templ.URL(VisorURL(i.PK, "dmsg")) }><span class="mi">device_hub</span>{ T(ctx, "node.details.dmsg-settings.title") }</a>
+		</div>
+		if len(i.Ports) > 0 {
+			<details class="fold">
+				<summary>{ T(ctx, "node.details.ports.title") } <span class="dim">({ strconv.Itoa(len(i.Ports)) })</span></summary>
+				<dl class="kv">
+					for _, p := range i.Ports {
+						<dt>{ p.Name }</dt>
+						<dd class="mono">{ p.Value }</dd>
+					}
+				</dl>
+			</details>
+		}
+		<details class="fold">
+			<summary>{ T(ctx, "node.details.router-settings.title") }</summary>
+			@RouterForm(i.PK, i.Router, i.RouterErr)
+		</details>
+		<details class="fold" hx-get={ VisorURL(i.PK, "info/config") } hx-trigger="toggle once" hx-target="find .fold-body">
+			<summary>{ T(ctx, "node.details.config.title") }</summary>
+			<div class="fold-body"><p class="dim">{ T(ctx, "common.loading") }</p></div>
+		</details>
+	}
+}
+
+// InfoLive is the part of the info tab that refreshes itself.
+templ InfoLive(i Info) {
+	<div id="info-live" hx-get={ VisorURL(i.PK, "info/live") } hx-trigger="every 15s [document.visibilityState === 'visible']" hx-swap="outerHTML">
+		@ErrorBox(i.Err)
+		if i.Sum.Overview != nil {
+			@overview(i)
+			@infoCards(i)
+		}
+	</div>
+}
+
+templ overview(i Info) {
+	<div class="ov">
+		<div class="ov-card">
+			<span class="ov-title">{ T(ctx, "node.overview.health") }</span>
+			<span class={ "ov-big", HealthClass(i.health().ServicesHealth) }>{ T(ctx, "node.overview.health-" + HealthClass(i.health().ServicesHealth)) }</span>
+			@healthRow(i.health().UptimeTrackerHealth, "node.overview.uptime-tracker")
+			@healthRow(i.health().AutoconnectHealth, "node.overview.autoconnect")
+			@healthRow(i.health().TransportabilityHealth, "node.overview.transportability")
+		</div>
+		<a class="ov-card link" href={ templ.URL(VisorURL(i.PK, "transports")) }>
+			<span class="ov-title">{ T(ctx, "node.overview.transports") }</span>
+			<span class="ov-big">
+				{ strconv.Itoa(len(i.ov().Transports)) }
+				if in, out := i.Directions(); in+out > 0 {
+					<span class="ov-small">{ strconv.Itoa(in) }&#8595; { strconv.Itoa(out) }&#8593;</span>
+				}
+			</span>
+			for n, t := range i.TransportTypes() {
+				if n < 4 {
+					<span class="ov-row"><span class="ov-key">{ t.Type }</span>{ strconv.Itoa(t.Count) }</span>
+				}
+			}
+			if n := len(i.TransportTypes()); n > 4 {
+				<span class="ov-row dim">{ T(ctx, "node.overview.more-types", "n", strconv.Itoa(n-4)) }</span>
+			}
+		</a>
+		<a class="ov-card link" href={ templ.URL(VisorURL(i.PK, "routing")) }>
+			<span class="ov-title">{ T(ctx, "node.overview.network") }</span>
+			<span class="ov-row"><span class="ov-key">{ T(ctx, "node.overview.dmsg-servers") }</span>{ strconv.Itoa(len(i.Sum.DMSGServers)) }</span>
+			<span class="ov-row" title={ T(ctx, "ui2.routing-rules-info") }><span class="ov-key">{ T(ctx, "ui2.routing-rules") }</span>{ strconv.Itoa(i.ov().RoutesCount) }</span>
+			<span class="ov-row"><span class="ov-key">{ T(ctx, "ui2.route-groups") }</span>{ strconv.Itoa(len(i.Sum.RouteGroups)) }</span>
+			<span class="ov-row"><span class="ov-key">{ T(ctx, "node.overview.min-hops") }</span>{ strconv.Itoa(int(i.Sum.MinHops)) }</span>
+			<span class="ov-row"><span class="ov-key">{ T(ctx, "node.overview.public") }</span>{ yesNo(ctx, i.Sum.IsPublic) }</span>
+		</a>
+		<a class="ov-card link" href={ templ.URL(VisorURL(i.PK, "apps")) }>
+			<span class="ov-title">{ T(ctx, "node.overview.apps") }</span>
+			{{ running, autostart, failed := i.AppCounts() }}
+			<span class="ov-big">{ strconv.Itoa(running) }<span class="ov-small"> / { strconv.Itoa(len(i.ov().Apps)) } { T(ctx, "node.overview.running") }</span></span>
+			<span class="ov-row"><span class="ov-key">{ T(ctx, "node.overview.autostart") }</span>{ strconv.Itoa(autostart) }</span>
+			<span class={ "ov-row", templ.KV("bad", failed > 0) }><span class="ov-key">{ T(ctx, "node.overview.failed") }</span>{ strconv.Itoa(failed) }</span>
+		</a>
+		<div class="ov-card">
+			<a class="ov-title" href={ templ.URL(VisorURL(i.PK, "rewards")) }>{ T(ctx, "node.overview.rewards") } &rsaquo;</a>
+			if i.Sum.RewardAddress == "" {
+				<span class="ov-big wait">{ T(ctx, "node.overview.reward-not-set") }</span>
+			} else if i.Sum.RewardEligible != nil && !*i.Sum.RewardEligible {
+				<span class="ov-big bad">{ T(ctx, "node.overview.reward-ineligible") }</span>
+			} else {
+				<span class="ov-big ok">{ T(ctx, "node.overview.reward-set") }</span>
+			}
+			<a class="ov-row" href={ templ.URL(VisorURL(i.PK, "bandwidth")) }>{ T(ctx, "node.overview.bandwidth") } &rsaquo;</a>
+			<a class="ov-row" href={ templ.URL(VisorURL(i.PK, "uptime")) }>{ T(ctx, "node.overview.uptime") } &rsaquo;</a>
+		</div>
+	</div>
+	<div class="alerts">
+		if as := i.Alerts(ctx); len(as) == 0 {
+			<span class="alert ok">{ T(ctx, "node.overview.no-alerts") }</span>
+		} else {
+			for _, a := range as {
+				<span class={ "alert", templ.KV("warn", a.Warn) }>{ a.Text }</span>
+			}
+		}
+	</div>
+}
+
+templ healthRow(state, key string) {
+	<span class="ov-row"><span class={ "dot", HealthClass(state) }></span>{ T(ctx, key) }</span>
+}
+
+templ infoCards(i Info) {
+	<div class="grid">
+		<section class="card">
+			if i.Sum.IsHypervisor || i.PK == From(ctx).HVPK {
+				<h2>{ T(ctx, "node.details.node-info.title-local") }</h2>
+			} else {
+				<h2>{ T(ctx, "node.details.node-info.title") }</h2>
+			}
+			<dl class="kv">
+				<dt>{ T(ctx, "node.details.node-info.public-key") }</dt>
+				<dd class="mono small key" data-copy={ i.PK }>{ i.PK }</dd>
+				if m := i.MeshName(); m != "" {
+					<dt>{ T(ctx, "node.details.node-info.mesh-name") }</dt>
+					<dd class="mono small key" data-copy={ m }>{ m }</dd>
+					<dt>{ T(ctx, "node.details.node-info.landing-page") }</dt>
+					<dd>
+						<a href={ templ.URL("http://" + m + ".skynet/") } target="_blank" rel="noopener">skynet</a>
+						<a href={ templ.URL("http://" + m + ".dmsg/") } target="_blank" rel="noopener">dmsg</a>
+					</dd>
+				}
+				if i.ov().Hostname != "" {
+					<dt>{ T(ctx, "node.details.node-info.hostname") }</dt>
+					<dd>{ i.ov().Hostname }</dd>
+				}
+				if hs := i.Hypervisors(From(ctx).HVPK); len(hs) > 0 {
+					<dt>{ T(ctx, "node.details.node-info.hypervisors-section") }</dt>
+					<dd>
+						for _, h := range hs {
+							<div>
+								if h.Local {
+									<span class="mi small" title={ T(ctx, "node.details.node-info.hypervisor-local") }>star</span>
+								}
+								<span class="mono small key" data-copy={ h.PK }>{ h.PK }</span>
+								switch h.State {
+									case "connected":
+										<span class="badge on">{ T(ctx, "node.details.node-info.hypervisor-connected") }</span>
+									case "runtime":
+										<span class="badge">{ T(ctx, "node.details.node-info.hypervisor-runtime") }</span>
+									default:
+										<span class="badge off">{ T(ctx, "node.details.node-info.hypervisor-disconnected") }</span>
+								}
+							</div>
+						}
+					</dd>
+				}
+				<dt>{ T(ctx, "node.details.node-info.time.title") }</dt>
+				<dd>{ TimeOnline(ctx, i.Sum.Uptime) }</dd>
+				<dt>{ T(ctx, "node.details.node-info.node-version") }</dt>
+				<dd>{ orUnknown(ctx, i.Version()) }</dd>
+				<dt>{ T(ctx, "node.details.node-info.config-version") }</dt>
+				<dd>{ orUnknown(ctx, i.Sum.ConfigVersion) }</dd>
+				{{ os, arch := i.build() }}
+				<dt>{ T(ctx, "node.details.node-info.os") }</dt>
+				<dd>{ orUnknown(ctx, os) }</dd>
+				<dt>{ T(ctx, "node.details.node-info.arch") }</dt>
+				<dd>{ orUnknown(ctx, arch) }</dd>
+			</dl>
+		</section>
+		<section class="card">
+			<h2>{ T(ctx, "node.details.node-info.network-section") }</h2>
+			<dl class="kv">
+				<dt title={ T(ctx, "node.details.node-info.symmetic-nat-info") }>{ T(ctx, "node.details.node-info.symmetic-nat") }</dt>
+				<dd>{ yesNo(ctx, i.ov().IsSymmetricNAT) }</dd>
+				if !i.ov().IsSymmetricNAT && i.ov().PublicIP != "" {
+					<dt>{ T(ctx, "node.details.node-info.public-ip") }</dt>
+					<dd class="key" data-copy={ i.ov().PublicIP }>{ i.ov().PublicIP }</dd>
+				}
+				if i.ov().LocalIP != "" {
+					<dt>{ T(ctx, "node.details.node-info.ip") }</dt>
+					<dd class="key" data-copy={ i.ov().LocalIP }>{ i.ov().LocalIP }</dd>
+				}
+				<dt title={ T(ctx, "node.details.node-info.ping-info") }>{ T(ctx, "node.details.node-info.ping") }</dt>
+				<dd>
+					if i.Sum.DmsgStats != nil {
+						{ T(ctx, "common.time-in-ms", "time", strconv.FormatInt(i.Sum.DmsgStats.RoundTrip.Milliseconds(), 10)) }
+					} else {
+						-
+					}
+				</dd>
+			</dl>
+		</section>
+		<section class="card">
+			<h2>{ T(ctx, "node.details.node-info.dmsg-section") }</h2>
+			<dl class="kv">
+				<dt>{ T(ctx, "node.details.node-info.dmsg-servers") }</dt>
+				<dd>
+					if n := len(i.Sum.DMSGServers); n > 0 {
+						{ strconv.Itoa(n) } { T(ctx, "node.details.node-info.connected") }
+					} else {
+						{ T(ctx, "node.details.node-info.no-dmsg-server") }
+					}
+				</dd>
+			</dl>
+			for _, s := range i.Sum.DMSGServers {
+				<div class="srv">
+					<span class="mono small key" data-copy={ s.PK.Hex() }>{ s.PK.Hex() }</span>
+					if s.Protocol != "" {
+						<span class="badge">{ s.Protocol }</span>
+					}
+					if l := Latency(s.Latency); l != "" {
+						<span class={ "small", LatencyClass(s.Latency) }>{ l }</span>
+					}
+				</div>
+			}
+		</section>
+	</div>
+}
+
+// RouterForm edits the visor-wide dial settings.
+templ RouterForm(pk string, s *visorapi.RouterSettings, errMsg string) {
+	<form class="form" hx-put={ VisorURL(pk, "info/router") } hx-swap="outerHTML">
+		@ErrorBox(errMsg)
+		if s != nil {
+			<label class="check">
+				<input type="checkbox" name="force_local_routes" value="1" checked?={ s.ForceLocalRoutes }/>
+				<span>{ T(ctx, "node.details.router-settings.force-local-routes") } <span class="small dim">{ T(ctx, "node.details.router-settings.force-local-routes-hint") }</span></span>
+			</label>
+			<label class="check">
+				<input type="checkbox" name="existing_tp_only" value="1" checked?={ s.ExistingTPOnly }/>
+				<span>{ T(ctx, "node.details.router-settings.existing-tp-only") } <span class="small dim">{ T(ctx, "node.details.router-settings.existing-tp-only-hint") }</span></span>
+			</label>
+			<label>
+				{ T(ctx, "node.details.router-settings.min-hops") }
+				<input type="number" name="min_hops" min="0" value={ strconv.Itoa(int(s.MinHops)) } class="num"/>
+				<span class="small dim">{ T(ctx, "node.details.router-settings.min-hops-hint") }</span>
+			</label>
+			<div class="bar"><button class="btn primary" type="submit">{ T(ctx, "common.save") }</button></div>
+		}
+	</form>
+}
+
+// ConfigView shows the runtime config, read only.
+templ ConfigView(pk, raw, msg string) {
+	<div class="fold-body">
+		<div class="bar">
+			<button class="btn" hx-get={ VisorURL(pk, "info/config/edit") } hx-target="closest .fold-body" hx-swap="outerHTML"><span class="mi">edit</span>{ T(ctx, "node.details.config.edit") }</button>
+			if msg != "" {
+				<span class="ok">{ msg }</span>
+			}
+		</div>
+		<pre class="raw">{ raw }</pre>
+	</div>
+}
+
+// ConfigEdit is the runtime config in a text area.
+templ ConfigEdit(pk, raw, errMsg string) {
+	<form class="fold-body form" hx-put={ VisorURL(pk, "info/config") } hx-swap="outerHTML">
+		<div class="bar">
+			<button class="btn primary" type="submit"><span class="mi">save</span>{ T(ctx, "node.details.config.save") }</button>
+			<button class="btn" type="button" hx-get={ VisorURL(pk, "info/config") } hx-target="closest .fold-body" hx-swap="outerHTML">{ T(ctx, "common.cancel") }</button>
+			<span class="small dim">{ T(ctx, "node.details.config.restart-hint") }</span>
+		</div>
+		@ErrorBox(errMsg)
+		<textarea class="mono raw" name="config" rows="24" spellcheck="false">{ raw }</textarea>
+	</form>
+}

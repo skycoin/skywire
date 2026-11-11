@@ -2,7 +2,6 @@
 package router
 
 import (
-	"sync/atomic"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -41,7 +40,7 @@ func (rg *RouteGroup) MuxStats() MuxInfo {
 	if !rg.createdAt.IsZero() {
 		info.AgeMS = float64(time.Since(rg.createdAt)) / float64(time.Millisecond)
 	}
-	tpsCopy := append([]*transport.ManagedTransport(nil), rg.tps...)
+	tpsCopy := legTransports(rg.legs)
 	rg.mu.Unlock()
 
 	var stats []LegStats
@@ -158,7 +157,7 @@ func (rg *RouteGroup) recoverySnapshot(legs []MuxLeg) *MuxRecovery {
 		TLPProbes:          m.tlpProbes.Load(),
 		SACKsRecv:          m.sacksRecv.Load(),
 		LastSACKRecvMsAgo:  msSinceNano(&m.lastSACKRecvNano),
-		LastSACKRecvContig: atomic.LoadUint32(&m.lastAckedContig),
+		LastSACKRecvContig: m.lastAckedContig.Load(),
 		ReorderNextSeq:     m.reorderNextSeq(),
 		ReorderPending:     m.reorderPending(),
 		ReorderDrops:       m.reorderDrops.Load(),
@@ -251,7 +250,7 @@ type MuxInfo struct {
 	FECRepairBytesSent uint64
 	FECRepairBytesRecv uint64
 	FECReconstructs    uint64
-	// Legs is in tps[] order. One entry per active mux leg.
+	// Legs is in legs order. One entry per active mux leg.
 	Legs []MuxLeg
 	// Events is this group's most recent leg/group changes with their reasons,
 	// oldest first (the last muxEventsPerGroup of the router's ring). It puts

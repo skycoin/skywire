@@ -7,10 +7,10 @@ import (
 	"time"
 
 	rpc "github.com/0magnet/gobrpc"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/internal/rpctest"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
@@ -35,7 +35,7 @@ func (a rpcTestAPI) UptimeHistory(args visorapi.UptimeHistoryArgs) (*visorapi.Up
 
 func TestVisorRPCHandlers(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
-	r := &RPC{visor: rpcTestAPI{tpsNodes: []cipher.PubKey{pk}}, log: logrus.New()}
+	r := &RPC{visor: rpcTestAPI{tpsNodes: []cipher.PubKey{pk}}, log: logging.New()}
 	reg := func(s *rpc.Server, name string) error { return registerVisorRPC(s, name, r) }
 
 	rpctest.CheckHandlers(t, r, reg)

@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
@@ -25,7 +24,7 @@ import (
 )
 
 func init() {
-	logrus.SetLevel(logrus.WarnLevel)
+	logging.SetLevel(logging.WarnLevel)
 }
 
 // --- MakeHTTPTransport tests ---
@@ -38,8 +37,7 @@ func TestMakeHTTPTransport_ReturnsValidTransport(t *testing.T) {
 	dmsgC := dmsg.NewClient(pk, sk, dc, nil)
 	defer dmsgC.Close() //nolint:errcheck,gosec
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	transport := dmsghttp.MakeHTTPTransport(ctx, dmsgC)
 
@@ -55,8 +53,7 @@ func TestMakeHTTPTransport_RoundTripInvalidHost(t *testing.T) {
 	dmsgC := dmsg.NewClient(pk, sk, dc, nil)
 	defer dmsgC.Close() //nolint:errcheck,gosec
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	transport := dmsghttp.MakeHTTPTransport(ctx, dmsgC)
 
@@ -491,8 +488,7 @@ func TestListenAndServe_InvalidPort(t *testing.T) {
 	<-dmsgHost.Ready()
 
 	log := logging.MustGetLogger("test_invalid_port")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {})
 

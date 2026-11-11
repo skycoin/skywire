@@ -43,7 +43,7 @@ var (
 	cxoPub       *treestore.Publisher
 	cxoMyPK      cipher.PubKey
 	cxoSubs      []*treestore.Subscriber
-	cxoSeq       uint64
+	cxoSeq       atomic.Uint64
 	cxoGroupSess *group.Session
 )
 
@@ -164,7 +164,7 @@ func publishCXO(body string) (string, error) {
 	if pub == nil {
 		return "", fmt.Errorf("cxo publisher not ready")
 	}
-	seq := atomic.AddUint64(&cxoSeq, 1)
+	seq := cxoSeq.Add(1)
 	// Timestamp-nano + seq keeps paths lexically ordered and unique even
 	// for two messages within the same nanosecond.
 	path := fmt.Sprintf("msgs/%019d-%06d", time.Now().UTC().UnixNano(), seq)

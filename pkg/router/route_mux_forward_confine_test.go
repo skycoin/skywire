@@ -86,9 +86,9 @@ func TestForwardConfinedLegWaitsInsteadOfSpilling(t *testing.T) {
 	payload := make([]byte, 64*1024)
 	seen := map[int]int{}
 	const frames = 160 // 160 x 64 KiB = 10 MiB
-	for i := 0; i < frames; i++ {
-		m.waitSendWindow(tps, closed)
-		_, _, idx, err := m.selectTransportRaw(tps, fwd, payload)
+	for i := range frames {
+		m.waitSendWindow(tpLegs(tps), closed)
+		_, _, idx, err := m.selectTransportRaw(testLegs(tps, fwd, nil), payload)
 		if err != nil {
 			t.Fatalf("frame %d: selectTransportRaw: %v", i, err)
 		}
@@ -122,8 +122,8 @@ func TestForwardSpillKnobRestoresOldBehaviour(t *testing.T) {
 
 	payload := make([]byte, 64*1024)
 	spilled := 0
-	for i := 0; i < 20; i++ {
-		_, _, idx, err := m.selectTransportRaw(tps, fwd, payload)
+	for i := range 20 {
+		_, _, idx, err := m.selectTransportRaw(testLegs(tps, fwd, nil), payload)
 		if err != nil {
 			t.Fatalf("frame %d: selectTransportRaw: %v", i, err)
 		}
@@ -153,7 +153,7 @@ func TestForwardConfinementHysteresis(t *testing.T) {
 
 	sample := func() int {
 		m.confinedFwdAtNano = 0 // a fresh measurement, without sleeping a refresh
-		_, _, idx, err := m.selectTransportRaw(tps, fwd, []byte("payload"))
+		_, _, idx, err := m.selectTransportRaw(testLegs(tps, fwd, nil), []byte("payload"))
 		if err != nil {
 			t.Fatalf("selectTransportRaw: %v", err)
 		}
@@ -175,7 +175,7 @@ func TestForwardConfinementHysteresis(t *testing.T) {
 		}
 		return 44
 	})
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		if idx := sample(); idx != 1 {
 			t.Fatalf("sample %d: a 10 %% inversion moved the forward direction to leg %d", i, idx)
 		}
@@ -198,7 +198,7 @@ func TestForwardConfinementHysteresis(t *testing.T) {
 	if idx := sample(); idx != 0 {
 		t.Fatalf("a sustained 30 %% inversion did not move the direction; still on leg %d", idx)
 	}
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		if idx := sample(); idx != 0 {
 			t.Fatalf("the direction moved back to leg %d — it flipped", idx)
 		}
@@ -221,7 +221,7 @@ func TestForwardRehomesWhenConfinedLegParks(t *testing.T) {
 		reasons = append(reasons, reason)
 	})
 
-	_, _, idx, err := m.selectTransportRaw(tps, fwd, []byte("payload"))
+	_, _, idx, err := m.selectTransportRaw(testLegs(tps, fwd, nil), []byte("payload"))
 	if err != nil {
 		t.Fatalf("selectTransportRaw: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestForwardRehomesWhenConfinedLegParks(t *testing.T) {
 
 	m.setLegStandby(1, true)
 	m.confinedFwdAtNano = 0
-	_, _, idx, err = m.selectTransportRaw(tps, fwd, []byte("payload"))
+	_, _, idx, err = m.selectTransportRaw(testLegs(tps, fwd, nil), []byte("payload"))
 	if err != nil {
 		t.Fatalf("selectTransportRaw after park: %v", err)
 	}
@@ -276,8 +276,8 @@ func TestReverseFanoutUnchangedByForwardConfinement(t *testing.T) {
 	})
 
 	seen := map[int]int{}
-	for i := 0; i < 200; i++ {
-		_, _, idx, err := m.selectTransportRaw(tps, fwd, []byte("payload"))
+	for i := range 200 {
+		_, _, idx, err := m.selectTransportRaw(testLegs(tps, fwd, nil), []byte("payload"))
 		if err != nil {
 			t.Fatalf("iteration %d: selectTransportRaw: %v", i, err)
 		}

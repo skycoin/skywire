@@ -3,7 +3,6 @@ package router
 
 import (
 	"context"
-	"sync/atomic"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/router/routersettings"
@@ -17,18 +16,18 @@ func (rg *RouteGroup) sendSACK() error {
 	}
 
 	rg.mu.Lock()
-	if len(rg.tps) == 0 || len(rg.fwd) == 0 {
+	if len(rg.legs) == 0 || rg.legs[0].fwd == nil {
 		rg.mu.Unlock()
 		return nil
 	}
 	// The primary leg carries the SACK (control channel) unless it has gone
 	// silent inbound while another leg has not — see routeMux.sackLeg.
 	i := rg.mux.sackLeg(routersettings.SackLegSilence.Duration(), time.Now().UnixNano())
-	if i >= len(rg.tps) || i >= len(rg.fwd) || rg.tps[i] == nil || rg.fwd[i] == nil {
+	if i >= len(rg.legs) || rg.legs[i].tp == nil || rg.legs[i].fwd == nil {
 		i = 0
 	}
-	tp := rg.tps[i]
-	rule := rg.fwd[i]
+	tp := rg.legs[i].tp
+	rule := rg.legs[i].fwd
 	rg.mu.Unlock()
 
 	if tp == nil {
@@ -90,8 +89,8 @@ func (rg *RouteGroup) handleSACKPacket(packet routing.Packet) error {
 	// frontier seq is never sent twice for one SACK.
 	if rg.mux.holRetxEnabled {
 		rg.mu.Lock()
-		fastMs := rg.mux.fastestLegLatency(rg.tps)
-		legRTT := rg.mux.legLatencyByTp(rg.tps)
+		fastMs := rg.mux.fastestLegLatency(rg.legs)
+		legRTT := rg.mux.legLatencyByTp(rg.legs)
 		rg.mu.Unlock()
 		if due := rg.mux.proactiveRetxSeqs(lastContig, words, fastMs, legRTT, time.Now()); len(due) > 0 {
 			rg.mux.retxReqHOL.Add(uint64(len(due)))
@@ -207,11 +206,11 @@ func (rg *RouteGroup) resendSeqs(seqs []uint32) error {
 // SACK per delayedAckDelay. The fire path re-checks the shared SACK rate
 // limit, so a gap-SACK that went out meanwhile suppresses it.
 func (rg *RouteGroup) scheduleDelayedAck() {
-	if !atomic.CompareAndSwapInt32(&rg.delayedAckArmed, 0, 1) {
+	if !rg.delayedAckArmed.CompareAndSwap(0, 1) {
 		return
 	}
 	time.AfterFunc(rg.knDur(routersettings.SackDelayedAckDelay), func() {
-		atomic.StoreInt32(&rg.delayedAckArmed, 0)
+		rg.delayedAckArmed.Store(0)
 		if rg.isClosed() {
 			return
 		}

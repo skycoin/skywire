@@ -20,11 +20,11 @@ func mockTP(latencyMs float64) *transport.ManagedTransport {
 func TestTransportSelector_EqualWeight(t *testing.T) {
 	ts := newTransportSelector()
 	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0)}
-	ts.Rebuild(tps)
+	ts.Rebuild(tpLegs(tps))
 
 	// With no latency data, should alternate between 0 and 1
 	counts := make(map[int]int)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		counts[ts.Select()]++
 	}
 	assert.Equal(t, 50, counts[0])
@@ -35,14 +35,14 @@ func TestTransportSelector_WeightedByLatency(t *testing.T) {
 	ts := newTransportSelector()
 	// Transport 0: 30ms (fast), Transport 1: 300ms (slow)
 	tps := []*transport.ManagedTransport{mockTP(30), mockTP(300)}
-	ts.Rebuild(tps)
+	ts.Rebuild(tpLegs(tps))
 
 	// Weight 0 = 300/30 = 10, Weight 1 = 300/300 = 1
 	// Schedule should have 10 entries for tp0 and 1 for tp1 = 11 total
 	assert.Equal(t, 11, ts.Len())
 
 	counts := make(map[int]int)
-	for i := 0; i < 110; i++ {
+	for range 110 {
 		counts[ts.Select()]++
 	}
 	// Over 110 iterations (10 full cycles), tp0 gets 100, tp1 gets 10
@@ -54,13 +54,13 @@ func TestTransportSelector_ThreeTransports(t *testing.T) {
 	ts := newTransportSelector()
 	// 50ms, 100ms, 200ms
 	tps := []*transport.ManagedTransport{mockTP(50), mockTP(100), mockTP(200)}
-	ts.Rebuild(tps)
+	ts.Rebuild(tpLegs(tps))
 
 	// Weights: 200/50=4, 200/100=2, 200/200=1 → total 7
 	assert.Equal(t, 7, ts.Len())
 
 	counts := make(map[int]int)
-	for i := 0; i < 70; i++ {
+	for range 70 {
 		counts[ts.Select()]++
 	}
 	assert.Equal(t, 40, counts[0]) // 4/7 * 70
@@ -71,10 +71,10 @@ func TestTransportSelector_ThreeTransports(t *testing.T) {
 func TestTransportSelector_SingleTransport(t *testing.T) {
 	ts := newTransportSelector()
 	tps := []*transport.ManagedTransport{mockTP(100)}
-	ts.Rebuild(tps)
+	ts.Rebuild(tpLegs(tps))
 
 	assert.Equal(t, 1, ts.Len())
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		assert.Equal(t, 0, ts.Select())
 	}
 }
@@ -83,11 +83,11 @@ func TestTransportSelector_MixedLatency(t *testing.T) {
 	ts := newTransportSelector()
 	// Transport 0 has latency, transport 1 doesn't
 	tps := []*transport.ManagedTransport{mockTP(100), mockTP(0)}
-	ts.Rebuild(tps)
+	ts.Rebuild(tpLegs(tps))
 
 	// tp0 gets weight 100/100=1, tp1 gets weight 1 (unknown) → equal
 	counts := make(map[int]int)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		counts[ts.Select()]++
 	}
 	assert.Equal(t, 50, counts[0])
@@ -101,10 +101,10 @@ func TestTransportSelector_ExplicitWeights(t *testing.T) {
 	ts.SetExplicitWeights([]float64{0.6, 0.3, 0.1})
 	ts.SetMode(WeightModeExplicit)
 	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0), mockTP(0)}
-	ts.Rebuild(tps)
+	ts.Rebuild(tpLegs(tps))
 
 	counts := make(map[int]int)
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		counts[ts.Select()]++
 	}
 	// Allow ±2% slack on a 1000-sample run.
@@ -119,10 +119,10 @@ func TestTransportSelector_ExplicitWeightsIntegerForm(t *testing.T) {
 	ts.SetExplicitWeights([]float64{3, 1})
 	ts.SetMode(WeightModeExplicit)
 	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0)}
-	ts.Rebuild(tps)
+	ts.Rebuild(tpLegs(tps))
 
 	counts := make(map[int]int)
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		counts[ts.Select()]++
 	}
 	assert.InDelta(t, 750, counts[0], 20)
@@ -135,10 +135,10 @@ func TestTransportSelector_ExplicitWeightsEmptyFallsBackToEqual(t *testing.T) {
 	ts := newTransportSelector()
 	ts.SetMode(WeightModeExplicit)
 	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0)}
-	ts.Rebuild(tps)
+	ts.Rebuild(tpLegs(tps))
 
 	counts := make(map[int]int)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		counts[ts.Select()]++
 	}
 	assert.Equal(t, 50, counts[0])
@@ -150,10 +150,10 @@ func TestTransportSelector_SizeThreshold_LargePacketsToLeg0(t *testing.T) {
 	ts.SetSizeThreshold(1400)
 	ts.SetMode(WeightModeSizeThreshold)
 	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0), mockTP(0)}
-	ts.Rebuild(tps)
+	ts.Rebuild(tpLegs(tps))
 
 	// 1401 bytes → leg 0 every time.
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		assert.Equal(t, 0, ts.SelectForSize(1401))
 	}
 }
@@ -163,11 +163,11 @@ func TestTransportSelector_SizeThreshold_SmallPacketsRRRest(t *testing.T) {
 	ts.SetSizeThreshold(1400)
 	ts.SetMode(WeightModeSizeThreshold)
 	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0), mockTP(0)}
-	ts.Rebuild(tps)
+	ts.Rebuild(tpLegs(tps))
 
 	// 100 bytes → RR across legs 1 and 2 (50/50).
 	counts := make(map[int]int)
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		counts[ts.SelectForSize(100)]++
 	}
 	assert.Equal(t, 0, counts[0], "leg 0 should never get small packets")
@@ -182,10 +182,10 @@ func TestTransportSelector_SizeThreshold_ExactlyAtThreshold(t *testing.T) {
 	ts.SetSizeThreshold(1400)
 	ts.SetMode(WeightModeSizeThreshold)
 	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0)}
-	ts.Rebuild(tps)
+	ts.Rebuild(tpLegs(tps))
 
 	counts := make(map[int]int)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		counts[ts.SelectForSize(1400)]++
 	}
 	// 1400 == threshold → small-leg RR. With one small leg
@@ -201,9 +201,9 @@ func TestTransportSelector_SizeThreshold_SelectWithoutSizeReturns0(t *testing.T)
 	ts.SetSizeThreshold(1400)
 	ts.SetMode(WeightModeSizeThreshold)
 	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0)}
-	ts.Rebuild(tps)
+	ts.Rebuild(tpLegs(tps))
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		assert.Equal(t, 0, ts.Select())
 	}
 }
@@ -212,7 +212,7 @@ func TestTransportSelector_Sticky5Tuple_DeterministicByFlow(t *testing.T) {
 	ts := newTransportSelector()
 	ts.SetMode(WeightModeSticky5Tuple)
 	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0), mockTP(0), mockTP(0)}
-	ts.Rebuild(tps)
+	ts.Rebuild(tpLegs(tps))
 
 	// Construct a minimal IPv4 packet: 20-byte header + 4 bytes
 	// TCP/UDP header (src + dst port). Same 5-tuple → same leg
@@ -229,7 +229,7 @@ func TestTransportSelector_Sticky5Tuple_DeterministicByFlow(t *testing.T) {
 	pkt[22], pkt[23] = 0x00, 0x50
 
 	firstLeg := ts.SelectForPayload(pkt)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		if got := ts.SelectForPayload(pkt); got != firstLeg {
 			t.Fatalf("call %d: leg=%d, want %d (deterministic by flow)", i, got, firstLeg)
 		}
@@ -240,7 +240,7 @@ func TestTransportSelector_Sticky5Tuple_DifferentFlows(t *testing.T) {
 	ts := newTransportSelector()
 	ts.SetMode(WeightModeSticky5Tuple)
 	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0), mockTP(0), mockTP(0)}
-	ts.Rebuild(tps)
+	ts.Rebuild(tpLegs(tps))
 
 	// Build two flows differing only in src port.
 	mk := func(srcPort uint16) []byte {
@@ -273,9 +273,9 @@ func TestTransportSelector_LatencyAdaptive_PicksLowestLatency(t *testing.T) {
 		mockTP(50),  // leg 1 — lowest
 		mockTP(150), // leg 2
 	}
-	ts.Rebuild(tps)
+	ts.Rebuild(tpLegs(tps))
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		if got := ts.SelectForPayload([]byte("anything")); got != 1 {
 			t.Fatalf("call %d: leg=%d, want 1 (lowest latency)", i, got)
 		}
@@ -287,14 +287,14 @@ func TestTransportSelector_DSCPPriority_HighGoesToLeg0(t *testing.T) {
 	ts.SetMode(WeightModeDSCPPriority)
 	ts.SetDSCPThreshold(46) // EF
 	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0), mockTP(0)}
-	ts.Rebuild(tps)
+	ts.Rebuild(tpLegs(tps))
 
 	// IPv4 packet with DSCP = 46 (ToS byte = 0xB8 — 46 << 2)
 	high := make([]byte, 24)
 	high[0] = 0x45
 	high[1] = 0xB8
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		if got := ts.SelectForPayload(high); got != 0 {
 			t.Fatalf("high-DSCP: leg=%d, want 0", got)
 		}
@@ -306,7 +306,7 @@ func TestTransportSelector_DSCPPriority_LowRR(t *testing.T) {
 	ts.SetMode(WeightModeDSCPPriority)
 	ts.SetDSCPThreshold(46)
 	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0), mockTP(0)}
-	ts.Rebuild(tps)
+	ts.Rebuild(tpLegs(tps))
 
 	// IPv4 packet with DSCP = 0 (best-effort)
 	low := make([]byte, 24)
@@ -314,7 +314,7 @@ func TestTransportSelector_DSCPPriority_LowRR(t *testing.T) {
 	low[1] = 0x00
 
 	counts := make(map[int]int)
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		counts[ts.SelectForPayload(low)]++
 	}
 	if counts[0] > 0 {
@@ -330,12 +330,12 @@ func TestTransportSelector_DSCPPriority_NonIPv4FallsToRR(t *testing.T) {
 	ts.SetMode(WeightModeDSCPPriority)
 	ts.SetDSCPThreshold(46)
 	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0)}
-	ts.Rebuild(tps)
+	ts.Rebuild(tpLegs(tps))
 
 	// Random bytes that don't look like IPv4.
 	junk := []byte{0xFF, 0xFF, 0x00, 0x00}
 	counts := make(map[int]int)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		counts[ts.SelectForPayload(junk)]++
 	}
 	if counts[0] > 0 {
@@ -350,10 +350,10 @@ func TestTransportSelector_CapacityBootstrap(t *testing.T) {
 	ts := newTransportSelector()
 	ts.SetMode(WeightModeCapacity)
 	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0)}
-	ts.Rebuild(tps)
+	ts.Rebuild(tpLegs(tps))
 
 	counts := make(map[int]int)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		counts[ts.Select()]++
 	}
 	assert.Equal(t, 50, counts[0])
@@ -369,7 +369,7 @@ func TestTransportSelector_CapacityWeighted(t *testing.T) {
 	ts.SetMode(WeightModeCapacity)
 	ts.SetCapacityWeights([]float64{700, 100})
 	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0)}
-	ts.Rebuild(tps)
+	ts.Rebuild(tpLegs(tps))
 
 	counts := make(map[int]int)
 	for i := 0; i < ts.Len()*10; i++ {
@@ -388,7 +388,7 @@ func TestTransportSelector_CapacityFloor(t *testing.T) {
 	ts.SetMode(WeightModeCapacity)
 	ts.SetCapacityWeights([]float64{1000, 0})
 	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0)}
-	ts.Rebuild(tps)
+	ts.Rebuild(tpLegs(tps))
 
 	counts := make(map[int]int)
 	for i := 0; i < ts.Len()*5; i++ {

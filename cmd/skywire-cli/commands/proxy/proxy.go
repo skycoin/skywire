@@ -3,12 +3,13 @@ package skysocksc
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -17,7 +18,6 @@ import (
 
 	"github.com/bitfield/script"
 	"github.com/blang/semver/v4"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 	"golang.org/x/net/proxy"
@@ -29,6 +29,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	services "github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -260,7 +261,7 @@ var startCmd = &cobra.Command{
 		if startingTimeout != 0 {
 			tCtx, tCtxCancelFunc = context.WithTimeout(context.Background(), time.Duration(startingTimeout)*time.Second)
 		}
-		ctx, cancel := cmdutil.SignalContext(tCtx, &logrus.Logger{})
+		ctx, cancel := cmdutil.SignalContext(tCtx, logging.Discard())
 		go func() {
 			<-ctx.Done()
 			cancel()
@@ -866,7 +867,9 @@ func renderProxyRoute(rgs []muxRouteGroupInfo, direct []directStreamInfo) string
 			plural = "leg"
 		}
 		fmt.Fprintf(&sb, "Route: %d %s to %s  (rg %d)", len(rg.Legs), plural, shortPK(rg.farEnd()), rg.Desc.DstPort)
-		sort.SliceStable(rg.Legs, func(a, b int) bool { return rg.Legs[a].Index < rg.Legs[b].Index })
+		slices.SortStableFunc(rg.Legs, func(x, y muxLegInfo) int {
+			return cmp.Compare(x.Index, y.Index)
+		})
 		for _, leg := range rg.Legs {
 			lat := ""
 			if leg.LatencyMS > 0 {
@@ -1381,7 +1384,7 @@ Results show which proxies are reachable and their response latency.`,
 			defer cancel()
 
 			ready := false
-			for i := 0; i < 20; i++ {
+			for range 20 {
 				select {
 				case <-ctx.Done():
 					restore.fatal(fmt.Errorf("timeout waiting for proxy to start"))
@@ -1887,10 +1890,9 @@ Results show which proxies are reachable and their response latency.`,
 			}()
 
 			var wg sync.WaitGroup
-			var completed int32
-			var mu sync.Mutex
-			var rpcMu sync.Mutex // Serializes RPC calls to prevent overwhelming visor
-			var aborted int32    // Set to 1 if we should abort due to RPC failure
+			var completed atomic.Int32
+			var rpcMu sync.Mutex     // Serializes RPC calls to prevent overwhelming visor
+			var aborted atomic.Int32 // Set to 1 if we should abort due to RPC failure
 
 			// Wrapper to allow reconnection during test
 			type rpcClientWrapper struct {
@@ -1932,7 +1934,7 @@ Results show which proxies are reachable and their response latency.`,
 
 			for i, p := range proxiesToTest {
 				// Check if we should abort
-				if atomic.LoadInt32(&aborted) == 1 {
+				if aborted.Load() == 1 {
 					break
 				}
 
@@ -1946,7 +1948,7 @@ Results show which proxies are reachable and their response latency.`,
 					defer wg.Done()
 
 					// Check if aborted
-					if atomic.LoadInt32(&aborted) == 1 {
+					if aborted.Load() == 1 {
 						return
 					}
 
@@ -1999,7 +2001,7 @@ Results show which proxies are reachable and their response latency.`,
 							result.Error = testResult.err.Error()
 							// Abort if still connection error after retry
 							if testResult.err == errRPCConnectionLost {
-								atomic.StoreInt32(&aborted, 1)
+								aborted.Store(1)
 							}
 						} else {
 							result.Success = true
@@ -2015,10 +2017,7 @@ Results show which proxies are reachable and their response latency.`,
 					results[idx] = result
 
 					// Update progress
-					mu.Lock()
-					completed++
-					current := completed
-					mu.Unlock()
+					current := completed.Add(1)
 
 					// Show progress
 					showProgress := testVerbose || testBatchSize <= 5 || current%10 == 0 || current == int32(total)
@@ -2054,9 +2053,9 @@ Results show which proxies are reachable and their response latency.`,
 
 			wg.Wait()
 
-			if atomic.LoadInt32(&aborted) == 1 {
+			if aborted.Load() == 1 {
 				cmdutil.Printf("\nTest aborted: RPC connection to visor was lost\n")
-				cmdutil.Printf("Showing partial results (%d completed)...\n", atomic.LoadInt32(&completed))
+				cmdutil.Printf("Showing partial results (%d completed)...\n", completed.Load())
 			}
 		}
 

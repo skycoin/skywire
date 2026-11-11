@@ -4,7 +4,6 @@ package router
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -105,6 +104,7 @@ func (rg *RouteGroup) rotationServiceFn(_ time.Duration) {
 	applyAddForward := rg.rotationApplyAddForward
 	info := rg.legChangeInfo
 	legs := rg.snapshotLegs()
+	shown := rg.legIDsLocked() // what each index in legs means
 	rg.mu.Unlock()
 	if hook == nil {
 		return
@@ -125,26 +125,34 @@ func (rg *RouteGroup) rotationServiceFn(_ time.Duration) {
 		return
 	}
 
+	// on_tick names legs by index into the snapshot it was shown. Legs may have
+	// been pruned while it ran, so every index becomes a transport ID here.
+	promote := legIDsAt(shown, action.PromoteFromStandby)
+	demote := legIDsAt(shown, action.DemoteToStandby)
+	drop := legIDsAt(shown, action.DropLegs)
+
 	// Promote/demote first: they only flip the mux's per-leg standby flag (no
-	// teardown, no compaction), so they must run on the pre-drop indices. A
-	// demoted leg stays in tps[] — kept alive by the keepalive/liveness loops —
-	// but is skipped by selectTransport; promoting re-selects it instantly.
-	demoted := false
+	// teardown, no compaction). A demoted leg stays in legs — kept alive by the
+	// keepalive/liveness loops — but is skipped by selectTransport; promoting
+	// re-selects it instantly.
+	var demotedTps []uuid.UUID
 	if rg.mux != nil {
-		for _, idx := range action.PromoteFromStandby {
+		for _, id := range promote {
 			// Through the hysteresis seam: an adaptive park that named a reason
 			// holds for legParkMinHold, so the policy tick cannot undo it on the
 			// next tick. It also mirrors the promotion to the peer and emits the
 			// lifecycle event.
-			rg.promoteLegAdaptive(idx, "policy tick promoted the leg from standby")
+			rg.promoteLegAdaptive(id, "policy tick promoted the leg from standby")
 		}
-		for _, idx := range action.DemoteToStandby {
-			rg.mux.setLegStandby(idx, true)
+		for _, id := range demote {
+			if _, _, ok := rg.setLegStandbyByID(id, true); !ok {
+				continue
+			}
 			// Tell the remote so it stops striping its send traffic across this
 			// leg — the fix for the wide-mux download stall where the bulk-sending
 			// peer fanned data over every established leg, standby or not.
-			rg.sendLegState(idx, true)
-			demoted = true
+			rg.sendLegStateByID(id, true)
+			demotedTps = append(demotedTps, id)
 		}
 	}
 
@@ -164,24 +172,13 @@ func (rg *RouteGroup) rotationServiceFn(_ time.Duration) {
 	// dropping the rest). Runs before DropLegs so the data is rescued before any
 	// compaction. If no active leg is available the flush is a safe no-op — leg 0
 	// is never standby, so demoting an aux always leaves a resend target.
-	if demoted && rg.mux != nil {
+	if len(demotedTps) > 0 {
 		// Narrowed to the DEMOTED legs' in-flight sequences (plus any with
 		// unknown attribution): only those are stranded by the demote; the rest
 		// still ride active legs and heal through the normal SACK path. The
 		// whole-window flush this replaces duplicated the entire in-flight
 		// window (measured 33.8MB of dupes against 14.7MB payload on one leg
 		// of a 20MB transfer) on every demote event.
-		// Map the demoted leg INDICES to their transports' stable UUIDs under
-		// rg.mu before consulting the buffer — the retx tags are transport
-		// identities, immune to the index shifts a slice compaction causes.
-		rg.mu.Lock()
-		demotedTps := make([]uuid.UUID, 0, len(action.DemoteToStandby))
-		for _, idx := range action.DemoteToStandby {
-			if idx >= 0 && idx < len(rg.tps) && rg.tps[idx] != nil {
-				demotedTps = append(demotedTps, rg.tps[idx].Entry.ID)
-			}
-		}
-		rg.mu.Unlock()
 		if seqs := rg.mux.heldRetxSeqsOnTps(demotedTps); len(seqs) > 0 {
 			rg.mux.retxReqFlush.Add(uint64(len(seqs)))
 			if err := rg.resendSeqs(seqs); err != nil {
@@ -190,25 +187,23 @@ func (rg *RouteGroup) rotationServiceFn(_ time.Duration) {
 		}
 	}
 
-	if len(action.DropLegs) > 0 {
+	if len(drop) > 0 {
 		// A dropped ACTIVE leg strands its in-flight sequences exactly as a
 		// demote does, and closing it means no SACK round-trip will ever be
-		// answered on it. Name its transports before the drop compacts tps[],
+		// answered on it. Name its transports before the drop compacts legs,
 		// then resend their held sequences onto a surviving leg — the same
 		// narrowed flush as the demote above. Without it an aged-out sequence
 		// left the receiver's no-skip reorder gap open for good and the stream
 		// wedged: requests on the group failed until the app restarted.
 		var droppedTps []uuid.UUID
 		if rg.mux != nil {
-			rg.mu.Lock()
-			for _, idx := range action.DropLegs {
-				if idx >= 0 && idx < len(rg.tps) && rg.tps[idx] != nil && !rg.mux.isLegStandby(idx) {
-					droppedTps = append(droppedTps, rg.tps[idx].Entry.ID)
+			for _, id := range drop {
+				if standby, ok := rg.legStandbyByID(id); ok && !standby {
+					droppedTps = append(droppedTps, id)
 				}
 			}
-			rg.mu.Unlock()
 		}
-		rg.dropLegsByIndex(action.DropLegs)
+		rg.dropLegs(drop)
 		rg.resendHeldOn(droppedTps, "drop")
 	}
 
@@ -249,12 +244,13 @@ func (rg *RouteGroup) legLivenessServiceFn(_ time.Duration) {
 		id   uuid.UUID
 	}
 	rg.mu.Lock()
-	probes := make([]legProbe, 0, len(rg.tps))
-	for i, tp := range rg.tps {
-		if tp == nil || tp.IsClosed() || i >= len(rg.fwd) {
+	probes := make([]legProbe, 0, len(rg.legs))
+	for _, lg := range rg.legs {
+		tp := lg.tp
+		if tp == nil || tp.IsClosed() || lg.fwd == nil {
 			continue
 		}
-		probes = append(probes, legProbe{tp: tp, rule: rg.fwd[i], id: tp.Entry.ID})
+		probes = append(probes, legProbe{tp: tp, rule: lg.fwd, id: tp.Entry.ID})
 	}
 	rg.mu.Unlock()
 
@@ -396,7 +392,7 @@ func (rg *RouteGroup) reorderStallServiceFn(_ time.Duration) {
 				// Keep the seconds that led here, which are gone by the time
 				// anyone reads this warning.
 				flightrec.Snapshot("reorder-wedge")
-				atomic.StoreUint32(&rg.reorderWedgeSeq, seq)
+				rg.reorderWedgeSeq.Store(seq)
 				rg.noteMuxEvent(MuxEvent{
 					Event:    MuxEventReorderWedge,
 					By:       MuxByLocal,
@@ -416,7 +412,7 @@ func (rg *RouteGroup) reorderStallServiceFn(_ time.Duration) {
 		if startNano := rg.reorderWedgeStartNano.Swap(0); startNano != 0 {
 			held = time.Since(time.Unix(0, startNano))
 		}
-		seq := atomic.LoadUint32(&rg.reorderWedgeSeq)
+		seq := rg.reorderWedgeSeq.Load()
 		rg.reorderWedges.Add(1)
 		if ms := held.Milliseconds(); ms > rg.reorderWedgeLongestMs.Load() {
 			rg.reorderWedgeLongestMs.Store(ms)
@@ -448,14 +444,16 @@ func (rg *RouteGroup) legStateResyncServiceFn(_ time.Duration) {
 		return
 	}
 	rg.mu.Lock()
-	n := len(rg.tps)
+	ids := rg.legIDsLocked()
 	rg.mu.Unlock()
-	// sendLegState / isLegStandby are each individually bounds-checked and take
-	// their own locks, so the leg set changing mid-loop is safe (a since-removed
-	// index is a no-op).
-	for idx := 1; idx < n; idx++ {
-		standby := rg.mux.isLegStandby(idx)
-		if standby && rg.legParkedByPeer(idx) {
+	// Each leg's state is read again by transport ID just before it is sent, so
+	// a leg removed mid-loop is skipped and no other leg is skipped with it.
+	for _, id := range ids[min(1, len(ids)):] {
+		standby, ok := rg.legStandbyByID(id)
+		if !ok {
+			continue
+		}
+		if standby && rg.legParkedByPeer(id) {
 			// This park is the PEER's decision, mirrored here. The resync exists to
 			// repair a dropped signal of OUR OWN decisions; echoing the peer's park
 			// back at it holds the leg down from both ends even after the peer would
@@ -463,7 +461,7 @@ func (rg *RouteGroup) legStateResyncServiceFn(_ time.Duration) {
 			// its promote clears this record (notePeerLegState).
 			continue
 		}
-		rg.sendLegState(idx, standby)
+		rg.sendLegStateByID(id, standby)
 	}
 }
 
@@ -473,11 +471,15 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 	}
 
 	rg.mu.Lock()
-	tpsCopy := append([]*transport.ManagedTransport(nil), rg.tps...)
+	tpsCopy := legTransports(rg.legs)
 	manual := !rg.standbyNewLegs
-	rg.mu.Unlock()
-
+	// Read with the legs, so index i names the same leg in all three.
 	stats := rg.mux.snapshotLegs()
+	standbyAt := make([]bool, len(tpsCopy))
+	for i := range tpsCopy {
+		standbyAt[i] = rg.mux.isLegStandby(i)
+	}
+	rg.mu.Unlock()
 
 	type legRecv struct {
 		id      uuid.UUID
@@ -493,7 +495,7 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 		legs = append(legs, legRecv{
 			id:      tp.Entry.ID,
 			recv:    stats[i].PayloadBytes, // payload only: control frames (SACKs) must not elect a leader while the peer downloads
-			standby: rg.mux.isLegStandby(i),
+			standby: standbyAt[i],
 			direct:  rg.mux.legIsDirectTp(tp),
 		})
 	}
@@ -626,7 +628,7 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 	// Once a second leg is up the ordinary black-hole prune sheds the dead one.
 	activeCnt, soleSent, soleRecv := 0, uint64(0), uint64(0)
 	for i, tp := range tpsCopy {
-		if tp == nil || i >= len(stats) || rg.mux.isLegStandby(i) {
+		if tp == nil || i >= len(stats) || standbyAt[i] {
 			continue
 		}
 		activeCnt++
@@ -667,8 +669,8 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 	// earns its share within a few ticks, a fading leg loses it just as fast).
 	// Cheap: a per-leg byte-delta under the mux lock plus a selector rebuild.
 	rg.mu.Lock()
-	if rg.mux != nil && len(rg.tps) > 1 {
-		rg.mux.rebuildWeights(rg.tps)
+	if rg.mux != nil && len(rg.legs) > 1 {
+		rg.mux.rebuildWeights(rg.legs)
 	}
 	rg.mu.Unlock()
 
@@ -820,7 +822,7 @@ func (rg *RouteGroup) keepAliveServiceFn(interval time.Duration) {
 	}
 
 	if err := rg.sendKeepAlive(); err != nil {
-		failures := atomic.AddInt32(&rg.consecutiveWriteFailures, 1)
+		failures := rg.consecutiveWriteFailures.Add(1)
 		if failures >= maxConsecutiveWriteFailures {
 			rg.logger.Warnf("Closing RouteGroup after %d consecutive write failures: %v", failures, err)
 			rg.setCloseReason(fmt.Sprintf("%d consecutive keepalive write failures: %v", failures, err))
@@ -829,7 +831,7 @@ func (rg *RouteGroup) keepAliveServiceFn(interval time.Duration) {
 		}
 		rg.logger.Warnf("Failed to send keepalive: %v", err)
 	} else {
-		atomic.StoreInt32(&rg.consecutiveWriteFailures, 0)
+		rg.consecutiveWriteFailures.Store(0)
 	}
 
 	// Prune dead transports and rebuild weights
@@ -837,8 +839,8 @@ func (rg *RouteGroup) keepAliveServiceFn(interval time.Duration) {
 	if rg.mux != nil {
 		rg.mu.Lock()
 		droppedLegs = rg.pruneDeadTransports()
-		if len(rg.tps) > 1 {
-			rg.mux.rebuildWeights(rg.tps)
+		if len(rg.legs) > 1 {
+			rg.mux.rebuildWeights(rg.legs)
 		}
 		rg.mu.Unlock()
 	}
@@ -911,8 +913,8 @@ func (rg *RouteGroup) windowServiceFn(_ time.Duration) {
 		return
 	}
 	rg.mu.Lock()
-	tps := append([]*transport.ManagedTransport(nil), rg.tps...)
+	legs := append([]groupLeg(nil), rg.legs...)
 	rg.mu.Unlock()
-	rg.mux.refreshLegWindows(tps)
+	rg.mux.refreshLegWindows(legs)
 	rg.mux.signalWindow()
 }

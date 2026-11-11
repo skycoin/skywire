@@ -122,7 +122,7 @@ type Pack interface {
 func get(
 	pack Pack, //          : pack to get from
 	hash cipher.SHA256, // : hash of the object
-	obj interface{}, //    : pointer to object
+	obj any, //    : pointer to object
 ) (
 	err error, //          : getting or decoding error
 ) {
@@ -145,9 +145,9 @@ var byteSlices sync.Map // reflect.Type -> bool
 // decode decodes val into the pointer obj. The pack's val is shared with
 // the cache, so it is decoded without a copy only when obj has no byte
 // slice field to point into it. Strings and arrays are always copied out.
-func decode(val []byte, obj interface{}) (uint64, error) {
+func decode(val []byte, obj any) (uint64, error) {
 	t := reflect.TypeOf(obj)
-	if t == nil || t.Kind() != reflect.Ptr {
+	if t == nil || t.Kind() != reflect.Pointer {
 		return encoder.DeserializeRaw(val, obj)
 	}
 	t = t.Elem()
@@ -172,7 +172,7 @@ func hasByteSlice(t reflect.Type, seen map[reflect.Type]bool) bool {
 			return true
 		}
 		return hasByteSlice(t.Elem(), seen)
-	case reflect.Array, reflect.Ptr:
+	case reflect.Array, reflect.Pointer:
 		return hasByteSlice(t.Elem(), seen)
 	case reflect.Map:
 		return hasByteSlice(t.Key(), seen) || hasByteSlice(t.Elem(), seen)

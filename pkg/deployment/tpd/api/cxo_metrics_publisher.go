@@ -48,14 +48,14 @@ package api
 
 import (
 	"bytes"
+	"cmp"
 	"compress/gzip"
 	"context"
+	"maps"
 	"path/filepath"
-	"sort"
+	"slices"
 	"sync"
 	"time"
-
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
@@ -125,7 +125,7 @@ type MetricsCXOPublisher struct {
 // client, listener bind failure, etc.); the caller should log and
 // continue without it. Treat the publisher as best-effort: the
 // existing HTTP /metrics route stays the source of truth.
-func StartMetricsCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, logger logrus.FieldLogger) (*MetricsCXOPublisher, error) {
+func StartMetricsCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, logger logging.FieldLogger) (*MetricsCXOPublisher, error) {
 	log := logging.MustGetLogger("tpd-cxo-metrics-pub")
 
 	// Thirty days of leaves, several MB each, would otherwise sit in the heap
@@ -325,9 +325,7 @@ func (m *MetricsCXOPublisher) publishSaved(ctx context.Context, dates, window []
 // for.
 func planDayOps(bodies map[string][][]byte, dates []string, prev map[string]int, prune bool) (ops []treestore.PutOp, next map[string]int) {
 	next = make(map[string]int, len(prev)+len(dates))
-	for d, n := range prev {
-		next[d] = n
-	}
+	maps.Copy(next, prev)
 
 	inWindow := make(map[string]bool, len(dates))
 	var deletes, puts []treestore.PutOp
@@ -365,7 +363,7 @@ func planDayOps(bodies map[string][][]byte, dates []string, prev map[string]int,
 			if n == 0 {
 				deletes = append(deletes, treestore.PutOp{Path: store.MetricsDayPath(date)})
 			}
-			for i := 0; i < n; i++ {
+			for i := range n {
 				deletes = append(deletes, treestore.PutOp{Path: store.MetricsDayPartPath(date, i)})
 			}
 			delete(next, date)
@@ -380,7 +378,9 @@ func planDayOps(bodies map[string][][]byte, dates []string, prev map[string]int,
 }
 
 func sortOpsByPath(ops []treestore.PutOp) {
-	sort.Slice(ops, func(i, j int) bool { return ops[i].Path < ops[j].Path })
+	slices.SortFunc(ops, func(a, b treestore.PutOp) int {
+		return cmp.Compare(a.Path, b.Path)
+	})
 }
 
 // gzipParts encodes one day's records as one or more gzipped JSON arrays, each
@@ -475,10 +475,7 @@ func splitEvenly(metrics []store.TransportMetric, n int) [][]store.TransportMetr
 	size := (len(metrics) + n - 1) / n
 	out := make([][]store.TransportMetric, 0, n)
 	for i := 0; i < len(metrics); i += size {
-		end := i + size
-		if end > len(metrics) {
-			end = len(metrics)
-		}
+		end := min(i+size, len(metrics))
 		out = append(out, metrics[i:end])
 	}
 	return out
@@ -616,9 +613,7 @@ func (m *MetricsCXOPublisher) settle(ctx context.Context, bodies map[string][][]
 	for _, d := range open {
 		isOpen[d] = true
 	}
-	for date, parts := range bodies {
-		m.unsaved[date] = parts
-	}
+	maps.Copy(m.unsaved, bodies)
 	ls, ok := m.api.store.(leafStore)
 	for date, parts := range m.unsaved {
 		if isOpen[date] {

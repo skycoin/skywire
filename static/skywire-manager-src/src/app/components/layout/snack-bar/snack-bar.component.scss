@@ -42,7 +42,7 @@
 .close-button-separator {
   width: 1px;
   margin-right: 10px;
-  background-color: rgba(0, 0, 0, 0.3);
+  background-color: rgba(var(--sw-shade-rgb), 0.3);
 }
 
 .close-button {

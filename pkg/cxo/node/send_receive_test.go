@@ -243,7 +243,7 @@ func dynamicByValue(
 	t *testing.T,
 	up *skyobject.Unpack,
 	name string,
-	obj interface{},
+	obj any,
 ) (
 	dr registry.Dynamic,
 ) {
@@ -319,7 +319,7 @@ func Test_send_receive_refs(t *testing.T) {
 
 	var feed Feed
 
-	for i := 0; i < 32; i++ {
+	for i := range 32 {
 
 		err := feed.Posts.AppendValues(up, Post{
 			Head: fmt.Sprintf("Head #%d", i),

@@ -47,6 +47,7 @@ skywire cli config gen
       --min-hops int                         minimum route hops (1 = allow direct 1-hop routes, >=2 = force multihop through intermediaries for sender privacy) (default 1)
       --ar-transport-limit int               address-resolver registration: 0 = stay registered, N>0 = deregister after N transports, N<0 = never register (inbound-invisible)
       --no-direct-transports                 never create direct p2p transports; dmsg (relay) is still allowed
+      --no-dmsg-server-transports            do not keep a transport to each dmsg server the visor holds a session with
       --pty-rpc-exec                         allow visor-RPC-initiated dmsgpty exec (control/jump node opt-in; off = closes a local privilege-escalation vector)
       --routesetup string                    add route setup node PKs
       --tpsetup string                       add transport setup node PKs

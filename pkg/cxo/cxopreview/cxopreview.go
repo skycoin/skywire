@@ -63,6 +63,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -286,12 +287,7 @@ func (r *Reader) conn(ctx context.Context, peerPK cipher.PubKey) (*node.Conn, er
 // Connected reports whether the node already holds a connection to peerPK.
 func (r *Reader) Connected(peerPK cipher.PubKey) bool {
 	if d := r.node.DMSG(); d != nil {
-		for _, pk := range d.Connections() {
-			if pk == peerPK {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(d.Connections(), peerPK)
 	}
 	r.mu.Lock()
 	_, ok := r.tcpAddr[peerPK]

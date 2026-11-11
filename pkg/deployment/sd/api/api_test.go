@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
@@ -23,7 +23,7 @@ type apiTestWant struct {
 	// code is an HTTP status code wanted.
 	code int
 	// body is a response body wanted.
-	body interface{}
+	body any
 }
 
 func TestAPI_GetServices(t *testing.T) {

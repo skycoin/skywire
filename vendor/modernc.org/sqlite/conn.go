@@ -530,12 +530,23 @@ func (c *conn) retry(pstmt uintptr) error {
 	return nil
 }
 
-func (c *conn) bind(pstmt uintptr, n int, args []driver.NamedValue) (allocs []uintptr, err error) {
+// cBinding is a C buffer bind allocated for a text or blob argument, and the
+// 1-based index of the parameter it is bound to. The caller frees the buffer
+// once the statement has run and, for a cached statement, unbinds the
+// parameter, see clearBindings.
+type cBinding struct {
+	p   uintptr
+	idx int32
+}
+
+func (c *conn) bind(pstmt uintptr, n int, args []driver.NamedValue) (allocs []cBinding, err error) {
 	defer func() {
 		if err == nil {
 			return
 		}
 
+		// Leave no parameter pointing into the freed buffers.
+		c.clearBindings(pstmt, allocs)
 		c.freeAllocs(allocs)
 		allocs = nil
 	}()
@@ -614,7 +625,7 @@ func (c *conn) bind(pstmt uintptr, n int, args []driver.NamedValue) (allocs []ui
 			return allocs, fmt.Errorf("sqlite: invalid driver.Value type %T", x)
 		}
 		if p != 0 {
-			allocs = append(allocs, p)
+			allocs = append(allocs, cBinding{p, int32(i)})
 		}
 	}
 	return allocs, nil
@@ -964,9 +975,9 @@ func (c *conn) free(p uintptr) {
 	}
 }
 
-func (c *conn) freeAllocs(allocs []uintptr) {
+func (c *conn) freeAllocs(allocs []cBinding) {
 	for _, v := range allocs {
-		c.free(v)
+		c.free(v.p)
 	}
 }
 
@@ -1269,6 +1280,33 @@ func (c *conn) newStmtContext(ctx context.Context, query string) (*stmt, error) 
 		return nil, ctx.Err()
 	}
 	return s, err
+}
+
+// withWaitCtx runs f with ctx as the context of the call in progress, so that
+// a wait for a lock in f, under busy_timeout or with a shared cache, ends once
+// ctx is done, see busyHandler and retry; the outer call's context is restored
+// afterwards. A failure of f once ctx is done is reported as ctx.Err(). Only
+// the waits watch ctx: f is not interrupted, and a ctx without a deadline or
+// cancellation changes nothing.
+func (c *conn) withWaitCtx(ctx context.Context, f func() error) error {
+	if ctx == nil || ctx.Done() == nil {
+		return f()
+	}
+
+	prevWaitCtx := c.waitCtx
+	c.waitCtx = ctx
+	defer func() { c.waitCtx = prevWaitCtx }()
+
+	c.ensureBusyHandler()
+	if err := f(); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		return err
+	}
+
+	return nil
 }
 
 // Queryer is an optional interface that may be implemented by a Conn.

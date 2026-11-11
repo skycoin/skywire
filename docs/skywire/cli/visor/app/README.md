@@ -15,9 +15,11 @@ skywire cli visor app
 - [add](add/README.md) — Add a new app entry to the visor's launcher config
 - [arg](arg/README.md) — App args
 - [args](args/README.md) — Replace the entire Args list on an app
+- [catalog](catalog/README.md) — List every app the visor can run
 - [conns](conns/README.md) — Show an app's connection summary (bytes, latency)
 - [deregister](deregister/README.md) — Deregister app
 - [env](env/README.md) — Set, replace, or delete an env-var entry on an app
+- [flags](flags/README.md) — List the flags an app accepts
 - [log](log/README.md) — Logs from app
 - [ls](ls/README.md) — List apps
 - [register](register/README.md) — Register app

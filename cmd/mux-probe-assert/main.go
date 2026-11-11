@@ -209,8 +209,8 @@ func assignField(t *Tally, key, val string) error {
 			}
 		}
 		// Pull "(5678 bytes)" if present — purely informational.
-		if i := strings.Index(val, "("); i >= 0 {
-			rest := strings.TrimSuffix(strings.TrimPrefix(val[i+1:], ""), ")")
+		if _, after, ok := strings.Cut(val, "("); ok {
+			rest := strings.TrimSuffix(strings.TrimPrefix(after, ""), ")")
 			restFields := strings.Fields(rest)
 			if len(restFields) >= 1 {
 				_ = scanInt64(&t.ThroughputB, restFields[0]) //nolint:errcheck

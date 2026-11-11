@@ -12,7 +12,6 @@ package router
 import (
 	"io"
 	"net"
-	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -183,7 +182,7 @@ func TestDatagramRouteGroupInboundDroppedWhenReadChFull(t *testing.T) {
 	// Fill it without ever calling ReadFrom; the next Handle
 	// should atomically bump inboundDropped.
 	capacity := cap(dg.readCh)
-	for i := 0; i < capacity; i++ {
+	for range capacity {
 		pkt, err := routing.MakeDatagramPacket(routing.RouteID(1), []byte("x"))
 		require.NoError(t, err)
 		require.NoError(t, dg.Handle(pkt))
@@ -214,10 +213,10 @@ func TestDatagramRouteGroupIsAlive(t *testing.T) {
 	assert.True(t, dg.IsAlive(), "fresh group should be alive")
 
 	// Simulate accumulated write failures.
-	atomic.StoreInt32(&dg.consecutiveWriteFailures, maxConsecutiveWriteFailures)
+	dg.consecutiveWriteFailures.Store(maxConsecutiveWriteFailures)
 	assert.False(t, dg.IsAlive(), "group with maxed-out failures should not be alive")
 
-	atomic.StoreInt32(&dg.consecutiveWriteFailures, 0)
+	dg.consecutiveWriteFailures.Store(0)
 	require.NoError(t, dg.Close())
 	assert.False(t, dg.IsAlive(), "closed group should not be alive")
 }

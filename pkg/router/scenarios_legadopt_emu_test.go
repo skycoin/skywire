@@ -67,8 +67,10 @@ func newAdoptRouter(t *testing.T, pk cipher.PubKey, sk cipher.SecKey) *router {
 		datagramPorts: make(map[routing.Port]struct{}),
 		pending:       newPendingPackets(),
 		pendingLegs:   newPendingLegs(),
-		accept:        make(chan routing.EdgeRules, acceptSize),
+		accept:        make(chan acceptEntry, acceptSize),
 		adopted:       make(chan net.Conn, acceptSize),
+		accepted:      make(chan acceptResult, acceptSize),
+		acceptSem:     make(chan struct{}, acceptConcurrency),
 		done:          make(chan struct{}),
 	}
 }
@@ -94,7 +96,7 @@ func newAdoptRig(t *testing.T) *adoptRig {
 	descB := routing.NewRouteDescriptor(aPK, bPK, adoptClientPort, adoptServicePort)
 	var tpsA, tpsB []*transport.ManagedTransport
 	var fwdA, rvsA, fwdB, rvsB []routing.Rule
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		link := emu.LinkConfig{Delay: 20 * time.Millisecond, RateBps: 2 * emuMB, QueueBytes: 2 * emuMB}
 		connA, connB := emu.NewPair(emu.PairConfig{Name: "adopt-leg", AtoB: link, BtoA: link, APK: aPK, BPK: bPK, Type: "emu"})
 		id := uuid.New()
@@ -121,7 +123,7 @@ func newAdoptRig(t *testing.T) *adoptRig {
 		go rig.serve(rig.b, rig.connsB[i])
 	}
 
-	reserve, err := rig.activeA.splitLeg(1, "test: release the second leg")
+	reserve, err := rig.activeA.splitLeg(tpsA[1].Entry.ID, "test: release the second leg")
 	require.NoError(t, err, "the split that makes the leg reserve")
 	require.True(t, reserve.legReserve)
 	rig.reserveA, rig.reservePrt = reserve, reserve.farEndPort()
@@ -307,7 +309,7 @@ func TestAdoptLegReserveNoAckLeavesItIntact(t *testing.T) {
 	require.Same(t, reserveB, rig.b.anyLegReserve(), "the exit keeps its reserve")
 	require.Equal(t, 1, legCount(rig.reserveA))
 	require.Equal(t, 1, legCount(reserveB))
-	rule, err := rig.a.rt.Rule(rig.reserveA.rvs[0].KeyRouteID())
+	rule, err := rig.a.rt.Rule(rig.reserveA.legs[0].rvs.KeyRouteID())
 	require.NoError(t, err)
 	require.Equal(t, rig.reserveA.desc, rule.RouteDescriptor(), "the reserve's consume rule is not rewritten")
 	require.Nil(t, rig.a.rehomeGroupFor(rig.reserveA.adoptDesc(adoptNewPort, adoptServicePort)), "no half-built tunnel")
@@ -340,7 +342,7 @@ func TestAdoptedChainNeverBlocksOrdinaryAccepts(t *testing.T) {
 	// The exit adopts the reserve's chain, but no handshake will ever come for
 	// it: the initiator's side of the chain is cut.
 	rig.connsA[1].Egress().Cut()
-	leg, err := reserveB.detachLegForRehome(0, "test: adopted, initiator gone")
+	leg, err := reserveB.detachLegForRehome(reserveB.firstLegTpID(), "test: adopted, initiator gone")
 	require.NoError(t, err)
 	deadDesc := routing.NewRouteDescriptor(rig.aPK, rig.bPK, adoptNewPort, adoptServicePort)
 	rules, err := adoptedEdgeRules(rig.b.rt, leg, deadDesc)
@@ -361,7 +363,7 @@ func TestAdoptedChainNeverBlocksOrdinaryAccepts(t *testing.T) {
 		Forward: routing.ForwardRule(DefaultRouteKeepAlive, bF, aC, tp, rig.aPK, rig.bPK, ordPort, adoptServicePort),
 		Reverse: routing.ConsumeRule(DefaultRouteKeepAlive, bC, rig.aPK, rig.bPK, ordPort, adoptServicePort)}
 	require.NoError(t, rig.a.SaveRoutingRules(rulesA.Forward, rulesA.Reverse))
-	rig.b.accept <- rulesB
+	rig.b.accept <- acceptEntry{rules: rulesB}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

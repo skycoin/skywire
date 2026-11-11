@@ -3,17 +3,17 @@ package climdisc
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"text/tabwriter"
 
 	"github.com/bitfield/script"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -149,7 +149,7 @@ Resolves over RPC -> dmsg -> HTTP, so a dmsg:// --url works too.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		pk := internal.ParsePK(cmd.Flags(), "visor-public-key", args[0])
-		masterLogger.SetLevel(logrus.InfoLevel)
+		masterLogger.SetLevel(logging.InfoLevel)
 
 		// Use the RPC → DMSG → HTTP fallback chain so this works for
 		// mdURL values with dmsg:// scheme too, not just http(s)://.
@@ -181,7 +181,7 @@ The discovery entry only carries available sessions, so "connected~" assumes
 every server runs the default 2048 max; a server with a custom max_sessions
 would be off by the difference. A pv-t-style readout: most-loaded first.`,
 	Run: func(cmd *cobra.Command, _ []string) {
-		masterLogger.SetLevel(logrus.InfoLevel)
+		masterLogger.SetLevel(logging.InfoLevel)
 		// all_servers (not available_servers): a fully-loaded server drops out
 		// of available_servers, but it's exactly the one worth seeing in a load
 		// view. fetchAllServersAny is the same dmsg://-or-https scheme-aware
@@ -201,10 +201,7 @@ func printAvailableServers(cmdFlags *pflag.FlagSet, entries []*disc.Entry) {
 			continue
 		}
 		avail := entry.Server.AvailableSessions
-		connected := dmsg.DefaultMaxSessions - avail
-		if connected < 0 {
-			connected = 0
-		}
+		connected := max(dmsg.DefaultMaxSessions-avail, 0)
 		serverEntries = append(serverEntries, serverEntry{
 			PublicKey:         entry.Static,
 			Connected:         connected,
@@ -215,8 +212,8 @@ func printAvailableServers(cmdFlags *pflag.FlagSet, entries []*disc.Entry) {
 		})
 	}
 	// Most-loaded first, like `pv -t` sorts by transport count.
-	sort.Slice(serverEntries, func(i, j int) bool {
-		return serverEntries[i].Connected > serverEntries[j].Connected
+	slices.SortFunc(serverEntries, func(a, b serverEntry) int {
+		return cmp.Compare(b.Connected, a.Connected)
 	})
 
 	var b bytes.Buffer

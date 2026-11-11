@@ -28,7 +28,7 @@ func main() {
 	}
 	c.SetReadLimit(64 << 20)
 	defer c.Close(websocket.StatusNormalClosure, "") //nolint:errcheck // best-effort CDP goodbye
-	req := map[string]interface{}{"id": 1, "method": "Page.captureScreenshot", "params": map[string]interface{}{"format": "png"}}
+	req := map[string]any{"id": 1, "method": "Page.captureScreenshot", "params": map[string]any{"format": "png"}}
 	b, _ := json.Marshal(req) //nolint:errcheck // static map cannot fail to marshal
 	if err := c.Write(ctx, websocket.MessageText, b); err != nil {
 		fmt.Fprintln(os.Stderr, "write:", err)

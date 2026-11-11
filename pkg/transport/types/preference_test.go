@@ -1,7 +1,8 @@
 package tptypes
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"testing"
 )
 
@@ -150,7 +151,9 @@ func TestSetPreferenceOrderSortsTransports(t *testing.T) {
 	SetPreferenceOrder([]Type{QUIC, STCPR, DMSG}) // QUIC first now
 
 	tps := []Type{DMSG, STCPR, QUIC}
-	sort.Slice(tps, func(i, j int) bool { return TypePreference(tps[i]) < TypePreference(tps[j]) })
+	slices.SortFunc(tps, func(a, b Type) int {
+		return cmp.Compare(TypePreference(a), TypePreference(b))
+	})
 	if tps[0] != QUIC || tps[1] != STCPR || tps[2] != DMSG {
 		t.Fatalf("custom order not applied: %v", tps)
 	}

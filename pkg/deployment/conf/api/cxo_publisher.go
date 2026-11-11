@@ -22,8 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
@@ -54,7 +52,7 @@ type ServicesCXOPublisher struct {
 
 // StartServicesCXOPublisher starts publishing api's services config over
 // dmsgC, as a feed signed by sk, until ctx ends or Close is called.
-func StartServicesCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, logger logrus.FieldLogger) (*ServicesCXOPublisher, error) {
+func StartServicesCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, logger logging.FieldLogger) (*ServicesCXOPublisher, error) {
 	log := logging.MustGetLogger("conf-cxo-services-pub")
 	pub, err := treestore.NewWithDMSG(dmsgC, sk, treestore.PubConfig{
 		Logger:     log,

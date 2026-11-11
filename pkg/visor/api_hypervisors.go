@@ -4,6 +4,7 @@ package visor
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -31,7 +32,7 @@ func (v *Visor) AddHypervisor(hvPK cipher.PubKey) error {
 	log := v.MasterLogger().PackageLogger("hypervisor_client").WithField("hypervisor_pk", hvPK)
 
 	addr := dmsg.Addr{PK: hvPK, Port: skyenv.DmsgHypervisorPort}
-	rpcS, err := newRPCServer(v, addr.PK.String()[:shortHashLen])
+	rpcS, link, err := newHypervisorRPCServer(v, addr.PK)
 	if err != nil {
 		return fmt.Errorf("failed to start RPC server for hypervisor %s: %w", hvPK, err)
 	}
@@ -53,7 +54,7 @@ func (v *Visor) AddHypervisor(hvPK cipher.PubKey) error {
 		v.connectedHypervisors[hvPK] = true
 		v.hypervisorCancels[hvPK] = cancel
 		v.initLock.Unlock()
-		ServeRPCClient(ctx, log, v.tpM, v.dmsgC, rpcS, addr, hvErrs)
+		ServeRPCClient(ctx, log, v.tpM, v.dmsgC, rpcS, link, addr, hvErrs)
 	}()
 
 	v.pushCloseStack("hypervisor.runtime."+hvPK.String()[:shortHashLen], func() error {
@@ -80,22 +81,18 @@ func (v *Visor) AddHypervisor(hvPK cipher.PubKey) error {
 }
 
 // configuredHypervisors returns a copy of the visor's configured hypervisor PKs.
-// Unlocked read of v.conf.Hypervisors, matching the codebase's config-update
-// convention (UpdateMinHops etc. mutate under v1.mu; readers don't lock — the
-// writes are rare operator actions).
+// It locks because the mailbox app reads it while an operator may change it.
 func (v *Visor) configuredHypervisors() []cipher.PubKey {
 	if v.conf == nil {
 		return nil
 	}
-	return append([]cipher.PubKey(nil), v.conf.Hypervisors...)
+	return v.conf.GetHypervisors()
 }
 
 // addPK returns pks with pk appended if not already present.
 func addPK(pks []cipher.PubKey, pk cipher.PubKey) []cipher.PubKey {
-	for _, p := range pks {
-		if p == pk {
-			return pks
-		}
+	if slices.Contains(pks, pk) {
+		return pks
 	}
 	return append(pks, pk)
 }
@@ -139,6 +136,8 @@ func (v *Visor) RemoveHypervisor(hvPK cipher.PubKey) error {
 	v.initLock.Lock()
 	cancel, ok := v.hypervisorCancels[hvPK]
 	v.initLock.Unlock()
+	// Tell the hypervisor first, so it records a detach and does not alert.
+	v.sayGoodbye(byeDetached, hvPK)
 	if ok {
 		// Tear down the live connection; its goroutine's deferred cleanup removes
 		// hvPK from connectedHypervisors + hypervisorCancels. Config-loaded
@@ -162,10 +161,8 @@ func (v *Visor) dropPeerTrust(pk cipher.PubKey) {
 		return
 	}
 	if v.conf.Pty != nil {
-		for _, w := range v.conf.Pty.Whitelist {
-			if w == pk {
-				return
-			}
+		if slices.Contains(v.conf.Pty.Whitelist, pk) {
+			return
 		}
 	}
 	if err := v.peerWhitelist.Remove(pk); err == nil {
@@ -183,6 +180,7 @@ func (v *Visor) RemoveAllHypervisors() (int, error) {
 		cancels = append(cancels, c)
 	}
 	v.initLock.Unlock()
+	v.sayGoodbye(byeDetached)
 	for _, c := range cancels {
 		c()
 	}

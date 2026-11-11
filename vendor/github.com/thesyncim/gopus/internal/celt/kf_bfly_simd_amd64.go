@@ -176,8 +176,12 @@ func kfBfly4M1CoreSIMD(fout []kissCpx, n int) {
 	}
 	_ = fout[4*n-1]
 	lane3 := archsimd.LoadInt32x4Array(&[4]int32{0, 0, 0, -1}).ToMask()
-	p := unsafe.Pointer(unsafe.SliceData(fout))
-	for range n {
+	base := unsafe.Pointer(unsafe.SliceData(fout))
+	for i := range n {
+		// Index from base each iteration: advancing p after the last one would
+		// point one past fout's allocation, which unsafe.Pointer rules forbid
+		// (checkptr reports it under -race).
+		p := unsafe.Add(base, i*32)
 		x := loadF32x4(p)
 		y := loadF32x4(unsafe.Add(p, 16))
 		sum := x.Add(y)
@@ -188,7 +192,6 @@ func kfBfly4M1CoreSIMD(fout []kissCpx, n int) {
 		minus := a.Sub(b)
 		storeF32x4(p, minus.IfElse(lane3, plus))
 		storeF32x4(unsafe.Add(p, 16), plus.IfElse(lane3, minus))
-		p = unsafe.Add(p, 32)
 	}
 }
 

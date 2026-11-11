@@ -135,22 +135,19 @@ func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
 		cfg.ManualAnswer = true
 		cfg.Visualize = true // tap call audio for `voice spectrogram --call`
 		cfg.NewSource = func() skycall.Source {
-			s, err := skycall.NewMicSource(false, 0)
-			if err != nil {
-				log.WithError(err).Warn("voice: audio capture unavailable — using silence (call still connects)")
-				return skycall.SilentSource{}
-			}
-			return s
+			return micOrSilence(func() (skycall.Source, error) { return skycall.NewMicSource(false, 0) }, log)
 		}
 		cfg.NewSink = func() skycall.Sink {
-			s, err := skycall.NewSpeakerSink(0)
-			if err != nil {
-				return skycall.NullSink{}
-			}
-			return s
+			return speakerOrNull(func() (skycall.Sink, error) { return skycall.NewSpeakerSink(0) }, log)
 		}
 		cfg.Ring = ring
-		log.Info("voice: real audio enabled (system default input) — calls ring; answer to connect")
+		go func() {
+			if err := skycall.ProbeAudio(); err != nil {
+				log.WithError(err).Warn("voice: no audio server reachable — calls ring but carry silence until one is")
+				return
+			}
+			log.Info("voice: audio server reachable — calls ring; answer to connect")
+		}()
 	}
 
 	mgr := skycall.NewManager(cfg)
@@ -171,7 +168,7 @@ func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
 	// The skynet networker registers after dmsg; join its listener on the SAME
 	// port once it's up (best-effort, bounded wait).
 	go func() {
-		for i := 0; i < 30; i++ {
+		for range 30 {
 			if serveCtx.Err() != nil {
 				return
 			}
@@ -190,4 +187,26 @@ func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
 	v.pushCloseStack("voice", func() error { cancel(); return nil })
 	log.WithField("port", port).Info("voice: 1:1 call manager up (dmsg+skynet signaling)")
 	return nil
+}
+
+// micOrSilence opens a call's microphone, or sends silence and records why so
+// the call can report it.
+func micOrSilence(open func() (skycall.Source, error), log *logging.Logger) skycall.Source {
+	s, err := open()
+	if err != nil {
+		log.WithError(err).Warn("voice: audio capture unavailable — using silence (call still connects)")
+		return skycall.UnavailableSource{Err: err}
+	}
+	return s
+}
+
+// speakerOrNull opens a call's speaker, or drops the peer's audio and records
+// why so the call can report it.
+func speakerOrNull(open func() (skycall.Sink, error), log *logging.Logger) skycall.Sink {
+	s, err := open()
+	if err != nil {
+		log.WithError(err).Warn("voice: audio playback unavailable — the peer will not be heard (call still connects)")
+		return skycall.UnavailableSink{Err: err}
+	}
+	return s
 }

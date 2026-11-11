@@ -30,8 +30,7 @@ func TestSelfOnlyServer_ClientBeforeServer(t *testing.T) {
 	require.NoError(t, srvEntry.Sign(sk))
 	require.NoError(t, dc.PostEntry(context.Background(), srvEntry))
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	visor := NewClient(pk, sk, dc, &Config{MinSessions: 1})
 	visor.SetLogger(logging.MustGetLogger("self_only_visor"))

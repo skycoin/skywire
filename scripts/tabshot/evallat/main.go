@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strconv"
 	"time"
 
@@ -32,9 +32,9 @@ func main() {
 
 	var ms []float64
 	for i := 1; i <= n; i++ {
-		b, merr := json.Marshal(map[string]interface{}{
+		b, merr := json.Marshal(map[string]any{
 			"id": i, "method": "Runtime.evaluate",
-			"params": map[string]interface{}{"expression": "1+1", "returnByValue": true},
+			"params": map[string]any{"expression": "1+1", "returnByValue": true},
 		})
 		if merr != nil {
 			fmt.Fprintln(os.Stderr, "marshal:", merr)
@@ -61,7 +61,7 @@ func main() {
 		ms = append(ms, float64(time.Since(st).Microseconds())/1000)
 		time.Sleep(200 * time.Millisecond)
 	}
-	sort.Float64s(ms)
+	slices.Sort(ms)
 	var sum float64
 	for _, v := range ms {
 		sum += v

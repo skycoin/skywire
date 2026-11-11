@@ -359,7 +359,7 @@ func TestEncodeCacheInvalidatesOnlyAffectedPath(t *testing.T) {
 func TestPublisherConcurrentPutsAreSafe(t *testing.T) {
 	p, _ := newTestPublisher(t)
 	var wg sync.WaitGroup
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -391,7 +391,7 @@ func TestPublisherMutexNotHeldDuringPublish(t *testing.T) {
 
 	// Seed an initial publish so subsequent ticks have a non-trivial
 	// tree to encode.
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		path, jErr := JoinPath("seed", string(rune('a'+i%26)), string(rune('A'+i%26)))
 		if jErr != nil {
 			t.Fatalf("JoinPath: %v", jErr)
@@ -428,7 +428,7 @@ func TestPublisherMutexNotHeldDuringPublish(t *testing.T) {
 	var maxLatency time.Duration
 	var wg sync.WaitGroup
 
-	for w := 0; w < workers; w++ {
+	for w := range workers {
 		wg.Add(1)
 		go func(worker int) {
 			defer wg.Done()
@@ -477,7 +477,7 @@ func TestPublisherNoLostWritesUnderContention(t *testing.T) {
 
 	const writes = 200
 	var wg sync.WaitGroup
-	for i := 0; i < writes; i++ {
+	for i := range writes {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()

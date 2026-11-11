@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/alerts"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httputil"
@@ -112,8 +114,6 @@ type VisorTreeResponse struct {
 // dedup by hypervisor PK.
 func (hv *Hypervisor) getVisorsTreeSummary() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		localPK := hv.visor.conf.PK
-
 		// This handler does a parallel sub-hypervisor RPC walk with a 10s
 		// per-remote timeout, then a 5s fallback Summary pass, then writes a
 		// large (often >1MB) body — all BEFORE the first byte goes out. That
@@ -126,231 +126,237 @@ func (hv *Hypervisor) getVisorsTreeSummary() http.HandlerFunc {
 		if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(45 * time.Second)); err != nil {
 			hv.log(r).WithError(err).Debug("tree-summary: could not extend write deadline")
 		}
+		resp := VisorTreeResponse{Sections: hv.visorTree()}
+		hv.writeStreamedJSON(w, r, resp, func(w io.Writer) error { return writeVisorTree(w, resp) })
+	}
+}
 
-		// Build the local section by reusing the same Summary
-		// machinery as /visors-summary — same fields, same cache,
-		// same offline-row semantics.
-		localVisors := hv.collectLocalVisorSummaries()
-		sections := []VisorTreeSection{{
-			HypervisorPK: localPK,
-			ViaChain:     nil,
-			Visors:       localVisors,
-		}}
+// visorTree is the local section and one section per direct remote that
+// is itself a hypervisor, for the tree summary and the ui2 visor list.
+func (hv *Hypervisor) visorTree() []VisorTreeSection {
+	localPK := hv.visor.conf.PK
 
-		// Snapshot direct remotes for the sub-hypervisor walk. Each
-		// remote that's itself a hypervisor contributes a section;
-		// non-hypervisors are silently skipped (every visor in a
-		// deployment would otherwise show as a "this isn't a
-		// hypervisor" placeholder).
-		hv.mu.RLock()
-		type remote struct {
-			pk   cipher.PubKey
-			conn Conn
-		}
-		remotes := make([]remote, 0, len(hv.remoteVisors))
-		for pk, c := range hv.remoteVisors {
-			remotes = append(remotes, remote{pk, c})
-		}
-		hv.mu.RUnlock()
+	// Build the local section by reusing the same Summary
+	// machinery as /visors-summary — same fields, same cache,
+	// same offline-row semantics.
+	localVisors := hv.collectLocalVisorSummaries()
+	sections := []VisorTreeSection{{
+		HypervisorPK: localPK,
+		ViaChain:     nil,
+		Visors:       localVisors,
+	}}
 
-		type subResult struct {
-			hyperPK cipher.PubKey
-			entries []visorapi.HVVisorEntry
-			err     error
-		}
-		results := make([]subResult, len(remotes))
-		var wg sync.WaitGroup
-		wg.Add(len(remotes))
-		for i, e := range remotes {
-			go func(idx int, pk cipher.PubKey, api visorapi.API) {
-				defer wg.Done()
-				done := make(chan struct {
+	// Snapshot direct remotes for the sub-hypervisor walk. Each
+	// remote that's itself a hypervisor contributes a section;
+	// non-hypervisors are silently skipped (every visor in a
+	// deployment would otherwise show as a "this isn't a
+	// hypervisor" placeholder).
+	hv.mu.RLock()
+	type remote struct {
+		pk   cipher.PubKey
+		conn Conn
+	}
+	remotes := make([]remote, 0, len(hv.remoteVisors))
+	for pk, c := range hv.remoteVisors {
+		remotes = append(remotes, remote{pk, c})
+	}
+	hv.mu.RUnlock()
+
+	type subResult struct {
+		hyperPK cipher.PubKey
+		entries []visorapi.HVVisorEntry
+		err     error
+	}
+	results := make([]subResult, len(remotes))
+	var wg sync.WaitGroup
+	wg.Add(len(remotes))
+	for i, e := range remotes {
+		go func(idx int, pk cipher.PubKey, api visorapi.API) {
+			defer wg.Done()
+			done := make(chan struct {
+				vs  []visorapi.HVVisorEntry
+				err error
+			}, 1)
+			go func() {
+				vs, err := api.HVListDirectVisors()
+				done <- struct {
 					vs  []visorapi.HVVisorEntry
 					err error
-				}, 1)
-				go func() {
-					vs, err := api.HVListDirectVisors()
-					done <- struct {
-						vs  []visorapi.HVVisorEntry
-						err error
-					}{vs, err}
-				}()
-				select {
-				case r := <-done:
-					results[idx] = subResult{pk, r.vs, r.err}
-				case <-time.After(10 * time.Second):
-					results[idx] = subResult{pk, nil, fmt.Errorf("timeout")}
-				}
-			}(i, e.pk, e.conn.API)
+				}{vs, err}
+			}()
+			select {
+			case r := <-done:
+				results[idx] = subResult{pk, r.vs, r.err}
+			case <-time.After(10 * time.Second):
+				results[idx] = subResult{pk, nil, fmt.Errorf("timeout")}
+			}
+		}(i, e.pk, e.conn.API)
+	}
+	wg.Wait()
+
+	rendered := map[cipher.PubKey]bool{localPK: true}
+	for _, sr := range results {
+		if rendered[sr.hyperPK] {
+			continue
 		}
-		wg.Wait()
-
-		rendered := map[cipher.PubKey]bool{localPK: true}
-		for _, sr := range results {
-			if rendered[sr.hyperPK] {
+		if sr.err != nil {
+			// Skip remotes that simply aren't hypervisors (the
+			// most common case — every plain visor in the
+			// deployment would otherwise show as a no-op error
+			// row in the tree). Mirrors isNotHypervisorErr() in
+			// rpc_hypervisor_proxy.go — kept in sync there.
+			if isNotHypervisorErr(sr.err) {
 				continue
 			}
-			if sr.err != nil {
-				// Skip remotes that simply aren't hypervisors (the
-				// most common case — every plain visor in the
-				// deployment would otherwise show as a no-op error
-				// row in the tree). Mirrors isNotHypervisorErr() in
-				// rpc_hypervisor_proxy.go — kept in sync there.
-				if isNotHypervisorErr(sr.err) {
-					continue
-				}
-				es := sr.err.Error()
-				rendered[sr.hyperPK] = true
-				sections = append(sections, VisorTreeSection{
-					HypervisorPK: sr.hyperPK,
-					ViaChain:     []cipher.PubKey{localPK},
-					SubError:     es,
-				})
-				continue
-			}
+			es := sr.err.Error()
 			rendered[sr.hyperPK] = true
-			// Project HVVisorEntry → Summary so the UI's existing
-			// table renderer works identically across all sections.
-			// Sub-hypervisor visors don't carry the full Summary
-			// shape (health, dmsg stats, etc.) — those fields stay
-			// zero/empty. The basic fields the table cares about
-			// (PK, version, uptime, transports, apps, IP, country)
-			// come through populateEntryFromSummary on the remote
-			// side, here projected back.
-			visors := make([]visorapi.Summary, 0, len(sr.entries))
-			type fetchTarget struct {
-				idx int
-				pk  cipher.PubKey
-			}
-			var fetchTargets []fetchTarget
-			for i, e := range sr.entries {
-				s := projectEntryToSummary(e)
-				// The sub-section's ★ icon should appear on the
-				// section's own hypervisor row and nowhere else.
-				// Override IsHypervisor (which projectEntryToSummary
-				// sets from e.IsLocal) with strict PK-equality
-				// against this section's HypervisorPK. Defends
-				// against any path that might mistakenly mark a
-				// non-local entry with IsLocal=true on the remote
-				// side, and matches the semantic the hvui's
-				// node-list uses for the local section: "star = this
-				// row is the section's hypervisor."
-				s.IsHypervisor = e.PK == sr.hyperPK
-				visors = append(visors, s)
-				// Pre-#2789 sub-hypervisors return HVVisorEntry with
-				// only the transport COUNT, no per-transport detail.
-				// projectEntryTransports synthesizes typeless "?"
-				// placeholders so the count renders; the frontend
-				// filters those out for cleanliness — net effect is
-				// "Total: N" with no per-type breakdown. Fall back
-				// to HVVisorSummary (which routes through the
-				// proxy chain and ultimately calls the visor's real
-				// Summary()) so the per-type breakdown surfaces
-				// regardless of the sub-hypervisor's version.
-				if e.Online && len(e.TransportSummaries) == 0 && e.Transports > 0 {
-					fetchTargets = append(fetchTargets, fetchTarget{i, e.PK})
-				}
-			}
-			// Fan-out the fallback Summary fetches in parallel,
-			// bounded by a per-call timeout so a slow visor doesn't
-			// hold the entire tree response. Failures are silently
-			// tolerated — the placeholder row is still rendered as
-			// "Total: N" via projectEntryTransports, so the
-			// per-type breakdown just stays missing if the deeper
-			// query times out or errors.
-			if len(fetchTargets) > 0 && hv.visor != nil {
-				var fwg sync.WaitGroup
-				fwg.Add(len(fetchTargets))
-				for _, ft := range fetchTargets {
-					go func(idx int, pk cipher.PubKey) {
-						defer fwg.Done()
-						done := make(chan *visorapi.Summary, 1)
-						go func() {
-							s, err := hv.visor.HVVisorSummary(pk)
-							if err != nil {
-								done <- nil
-								return
-							}
-							done <- s
-						}()
-						select {
-						case full := <-done:
-							if full == nil || full.Overview == nil || len(full.Overview.Transports) == 0 {
-								return
-							}
-							if visors[idx].Overview == nil {
-								return
-							}
-							visors[idx].Overview.Transports = compactTransportSummaries(full.Overview.Transports)
-						case <-time.After(5 * time.Second):
-						}
-					}(ft.idx, ft.pk)
-				}
-				fwg.Wait()
-			}
-
-			// Enrich Hostname from the local summaryCache when the
-			// sub-hypervisor's HVVisorEntry round-trip didn't carry it
-			// — happens when the sub-hypervisor predates the
-			// Hostname-on-HVVisorEntry change (PR #2808). The local
-			// section already polls Summary for any PK we have a
-			// direct conn to, and that Summary's Overview.Hostname is
-			// the source of truth. Without this bridge, sub-section
-			// rows show LAN IP as the default label until the
-			// sub-hypervisor itself updates.
-			hv.summaryCacheMx.RLock()
-			for i := range visors {
-				if visors[i].Overview == nil || visors[i].Overview.Hostname != "" {
-					continue
-				}
-				cached, ok := hv.summaryCache[visors[i].Overview.PubKey]
-				if !ok || cached.sum == nil || cached.sum.Overview == nil {
-					continue
-				}
-				visors[i].Overview.Hostname = cached.sum.Overview.Hostname
-			}
-			hv.summaryCacheMx.RUnlock()
-
 			sections = append(sections, VisorTreeSection{
 				HypervisorPK: sr.hyperPK,
 				ViaChain:     []cipher.PubKey{localPK},
-				Visors:       visors,
+				SubError:     es,
 			})
+			continue
 		}
-
-		// Intentionally NOT scrubbing the local section. A visor that
-		// is both (a) directly connected to this hypervisor and (b)
-		// itself a hypervisor with its own section represents two
-		// distinct relationships, and both should be visible. The
-		// local section's row reflects "this visor is one of my
-		// managed visors"; the sub-section's IsLocal row reflects
-		// "this visor runs its own hypervisor too." Operators rely on
-		// the local-section row to manage the visor as a peer — pty
-		// access, transport admin, etc. — independent of its
-		// hypervisor role. Filtering it out hid managed visors that
-		// happened to also run a hypervisor.
-		//
-		// Sections still dedup by hypervisor PK (line 173 onward), so
-		// no section ever appears twice; only visor *rows* replicate
-		// across sections, which matches the doc comment at the top
-		// of this function ("Visor entries replicate across sections
-		// when a visor is connected to multiple hypervisors").
-
-		// A nil Visors slice marshals to JSON `null`, not `[]`. The hvui's
-		// node-list concatenates every section's `visors` and maps over the
-		// result; a `null` there throws "(...).map is not a function", which
-		// crashes buildSwitcherTabs and hangs the whole UI with a spinner. The
-		// SubError branch (an errored/timed-out sub-hypervisor) leaves Visors
-		// nil, so coerce every section to an empty array before writing.
-		for i := range sections {
-			if sections[i].Visors == nil {
-				sections[i].Visors = []visorapi.Summary{}
+		rendered[sr.hyperPK] = true
+		// Project HVVisorEntry → Summary so the UI's existing
+		// table renderer works identically across all sections.
+		// Sub-hypervisor visors don't carry the full Summary
+		// shape (health, dmsg stats, etc.) — those fields stay
+		// zero/empty. The basic fields the table cares about
+		// (PK, version, uptime, transports, apps, IP, country)
+		// come through populateEntryFromSummary on the remote
+		// side, here projected back.
+		visors := make([]visorapi.Summary, 0, len(sr.entries))
+		type fetchTarget struct {
+			idx int
+			pk  cipher.PubKey
+		}
+		var fetchTargets []fetchTarget
+		for i, e := range sr.entries {
+			s := projectEntryToSummary(e)
+			// The sub-section's ★ icon should appear on the
+			// section's own hypervisor row and nowhere else.
+			// Override IsHypervisor (which projectEntryToSummary
+			// sets from e.IsLocal) with strict PK-equality
+			// against this section's HypervisorPK. Defends
+			// against any path that might mistakenly mark a
+			// non-local entry with IsLocal=true on the remote
+			// side, and matches the semantic the hvui's
+			// node-list uses for the local section: "star = this
+			// row is the section's hypervisor."
+			s.IsHypervisor = e.PK == sr.hyperPK
+			visors = append(visors, s)
+			// Pre-#2789 sub-hypervisors return HVVisorEntry with
+			// only the transport COUNT, no per-transport detail.
+			// projectEntryTransports synthesizes typeless "?"
+			// placeholders so the count renders; the frontend
+			// filters those out for cleanliness — net effect is
+			// "Total: N" with no per-type breakdown. Fall back
+			// to HVVisorSummary (which routes through the
+			// proxy chain and ultimately calls the visor's real
+			// Summary()) so the per-type breakdown surfaces
+			// regardless of the sub-hypervisor's version.
+			if e.Online && len(e.TransportSummaries) == 0 && e.Transports > 0 {
+				fetchTargets = append(fetchTargets, fetchTarget{i, e.PK})
 			}
 		}
+		// Fan-out the fallback Summary fetches in parallel,
+		// bounded by a per-call timeout so a slow visor doesn't
+		// hold the entire tree response. Failures are silently
+		// tolerated — the placeholder row is still rendered as
+		// "Total: N" via projectEntryTransports, so the
+		// per-type breakdown just stays missing if the deeper
+		// query times out or errors.
+		if len(fetchTargets) > 0 && hv.visor != nil {
+			var fwg sync.WaitGroup
+			fwg.Add(len(fetchTargets))
+			for _, ft := range fetchTargets {
+				go func(idx int, pk cipher.PubKey) {
+					defer fwg.Done()
+					done := make(chan *visorapi.Summary, 1)
+					go func() {
+						s, err := hv.visor.HVVisorSummary(pk)
+						if err != nil {
+							done <- nil
+							return
+						}
+						done <- s
+					}()
+					select {
+					case full := <-done:
+						if full == nil || full.Overview == nil || len(full.Overview.Transports) == 0 {
+							return
+						}
+						if visors[idx].Overview == nil {
+							return
+						}
+						visors[idx].Overview.Transports = compactTransportSummaries(full.Overview.Transports)
+					case <-time.After(5 * time.Second):
+					}
+				}(ft.idx, ft.pk)
+			}
+			fwg.Wait()
+		}
 
-		resp := VisorTreeResponse{Sections: sections}
-		hv.writeStreamedJSON(w, r, resp, func(w io.Writer) error { return writeVisorTree(w, resp) })
+		// Enrich Hostname from the local summaryCache when the
+		// sub-hypervisor's HVVisorEntry round-trip didn't carry it
+		// — happens when the sub-hypervisor predates the
+		// Hostname-on-HVVisorEntry change (PR #2808). The local
+		// section already polls Summary for any PK we have a
+		// direct conn to, and that Summary's Overview.Hostname is
+		// the source of truth. Without this bridge, sub-section
+		// rows show LAN IP as the default label until the
+		// sub-hypervisor itself updates.
+		hv.summaryCacheMx.RLock()
+		for i := range visors {
+			if visors[i].Overview == nil || visors[i].Overview.Hostname != "" {
+				continue
+			}
+			cached, ok := hv.summaryCache[visors[i].Overview.PubKey]
+			if !ok || cached.sum == nil || cached.sum.Overview == nil {
+				continue
+			}
+			visors[i].Overview.Hostname = cached.sum.Overview.Hostname
+		}
+		hv.summaryCacheMx.RUnlock()
+
+		sections = append(sections, VisorTreeSection{
+			HypervisorPK: sr.hyperPK,
+			ViaChain:     []cipher.PubKey{localPK},
+			Visors:       visors,
+		})
 	}
+
+	// Intentionally NOT scrubbing the local section. A visor that
+	// is both (a) directly connected to this hypervisor and (b)
+	// itself a hypervisor with its own section represents two
+	// distinct relationships, and both should be visible. The
+	// local section's row reflects "this visor is one of my
+	// managed visors"; the sub-section's IsLocal row reflects
+	// "this visor runs its own hypervisor too." Operators rely on
+	// the local-section row to manage the visor as a peer — pty
+	// access, transport admin, etc. — independent of its
+	// hypervisor role. Filtering it out hid managed visors that
+	// happened to also run a hypervisor.
+	//
+	// Sections still dedup by hypervisor PK (line 173 onward), so
+	// no section ever appears twice; only visor *rows* replicate
+	// across sections, which matches the doc comment at the top
+	// of this function ("Visor entries replicate across sections
+	// when a visor is connected to multiple hypervisors").
+
+	// A nil Visors slice marshals to JSON `null`, not `[]`. The hvui's
+	// node-list concatenates every section's `visors` and maps over the
+	// result; a `null` there throws "(...).map is not a function", which
+	// crashes buildSwitcherTabs and hangs the whole UI with a spinner. The
+	// SubError branch (an errored/timed-out sub-hypervisor) leaves Visors
+	// nil, so coerce every section to an empty array before writing.
+	for i := range sections {
+		if sections[i].Visors == nil {
+			sections[i].Visors = []visorapi.Summary{}
+		}
+	}
+	return sections
 }
 
 // collectLocalVisorSummaries returns the Summary slice this
@@ -475,6 +481,11 @@ func projectEntryToSummary(e visorapi.HVVisorEntry) visorapi.Summary {
 		},
 		Transports: projectEntryTransports(e),
 	}
+	for _, name := range e.RunningApps {
+		app := &appserver.AppState{Status: appserver.AppStatusRunning}
+		app.Name = name
+		overview.Apps = append(overview.Apps, app)
+	}
 	// Health is partial here — only ServicesHealth carries through
 	// the HVVisorEntry round-trip from the remote hypervisor. That's
 	// enough for nodeStatusClass to choose between dot-green
@@ -520,6 +531,11 @@ func projectEntryToSummary(e visorapi.HVVisorEntry) visorapi.Summary {
 		IsHypervisor:  e.IsLocal,
 		RewardAddress: e.RewardAddress,
 		ConfigVersion: e.ConfigVersion,
+
+		DMSGServers:       e.DMSGServers,
+		PublicAutoconnect: e.PublicAutoconnect,
+		IsPublic:          e.IsPublic,
+		LastSeenAt:        e.LastSeenAt,
 	}
 }
 
@@ -542,7 +558,7 @@ func (r *bufferingResponseRecorder) Write(b []byte) (int, error) {
 	r.body = append(r.body, b...)
 	return len(b), nil
 }
-func (r *bufferingResponseRecorder) decode(v interface{}) error {
+func (r *bufferingResponseRecorder) decode(v any) error {
 	if len(r.body) == 0 {
 		return fmt.Errorf("empty body")
 	}
@@ -626,233 +642,243 @@ func (hv *Hypervisor) getRewardRules() http.HandlerFunc {
 
 func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Get DMSG stats first (uses its own lock internally)
-		dmsgStats := make(map[string]dmsgtracker.DmsgClientSummary)
-		for _, stat := range hv.getDmsgSummary() {
-			dmsgStats[stat.PK.String()] = stat
-		}
+		compact := hv.allVisorSummaries()
+		hv.writeStreamedJSON(w, r, compact, func(w io.Writer) error { return writeJSONArray(w, compact) })
+	}
+}
 
-		// Snapshot remote visors under lock, then release immediately
-		hv.mu.RLock()
-		type visorEntry struct {
-			pk   cipher.PubKey
-			conn Conn
-		}
-		remotes := make([]visorEntry, 0, len(hv.remoteVisors))
-		for pk, c := range hv.remoteVisors {
-			remotes = append(remotes, visorEntry{pk, c})
-		}
-		hv.mu.RUnlock()
+// allVisorSummaries is the node list: this visor and every visor connected
+// or cached, with the per-transport detail compacted.
+func (hv *Hypervisor) allVisorSummaries() []visorapi.Summary {
+	// Get DMSG stats first (uses its own lock internally)
+	dmsgStats := make(map[string]dmsgtracker.DmsgClientSummary)
+	for _, stat := range hv.getDmsgSummary() {
+		dmsgStats[stat.PK.String()] = stat
+	}
 
-		summaries := make([]visorapi.Summary, 0, len(remotes)+1)
+	// Snapshot remote visors under lock, then release immediately
+	hv.mu.RLock()
+	type visorEntry struct {
+		pk   cipher.PubKey
+		conn Conn
+	}
+	remotes := make([]visorEntry, 0, len(hv.remoteVisors))
+	for pk, c := range hv.remoteVisors {
+		remotes = append(remotes, visorEntry{pk, c})
+	}
+	hv.mu.RUnlock()
 
-		// Local visor summary
-		summary, err := hv.visor.Summary()
-		if err != nil {
-			hv.logger.WithError(err).Warn("Failed to obtain summary of this visor.")
-			summary = &visorapi.Summary{
-				Overview: &visorapi.Overview{PubKey: hv.visor.conf.PK},
-				Health:   &visorapi.HealthInfo{},
+	summaries := make([]visorapi.Summary, 0, len(remotes)+1)
+
+	// Local visor summary
+	summary, err := hv.visor.Summary()
+	if err != nil {
+		hv.logger.WithError(err).Warn("Failed to obtain summary of this visor.")
+		summary = &visorapi.Summary{
+			Overview: &visorapi.Overview{PubKey: hv.visor.conf.PK},
+			Health:   &visorapi.HealthInfo{},
+		}
+	}
+	summaries = append(summaries, makeSummaryResp(err == nil, true, summary))
+
+	// Remote visor summaries with per-visor timeout. The 5s outer
+	// cap keeps the UI snappy; cache update + eviction live in
+	// the inner Summary goroutine so completions that arrive
+	// after the outer fired still land — without this, an RPC
+	// that consistently took 6–20s would never refresh the cache
+	// and the visor would render permanently stale.
+	var mu sync.Mutex
+	// deadVisors accumulates PKs that errored Summary inside the
+	// 5s outer arm — evicted from remoteVisors AFTER wg.Wait so
+	// the eviction can't race with the poll goroutines still
+	// reading their captured Conn copies. The failed conn's API is
+	// kept alongside the PK so eviction can verify the map still
+	// holds the SAME conn: a peer that re-registered between our
+	// snapshot and wg.Wait (restart churn does this constantly)
+	// must not have its FRESH conn deleted for the old conn's sins.
+	type deadVisor struct {
+		pk  cipher.PubKey
+		api visorapi.API
+	}
+	var deadVisors []deadVisor
+	wg := new(sync.WaitGroup)
+	wg.Add(len(remotes))
+
+	// Visors whose cache was refreshed within this freshness
+	// window count as "live" even if THIS round's Summary RPC
+	// timed out at the 5s outer cap — they're slow, not broken.
+	// 3 minutes covers the 2-minute dmsg.StreamIdleTimeout
+	// (pkg/dmsg/dmsg/types.go) plus a generous slack for the
+	// peer-side redial → hypervisor-accept → next-poll cycle.
+	// Without this, a peer whose stream just idle-closed shows
+	// "last seen 2-3min ago" in the UI for one or two polls
+	// before the new conn's first Summary lands — visible
+	// flicker that operators flag as "nodes are stale". 30s
+	// (the original value) caught only inline RPC slowness
+	// and missed the steady-state 2-min idle pattern entirely.
+	// (cacheFreshWindow is now a package const — see hypervisor.go.)
+
+	for _, entry := range remotes {
+		go func(pk cipher.PubKey, c Conn) {
+			defer wg.Done()
+
+			type rpcResult struct {
+				sum    *visorapi.Summary
+				rpcErr error
 			}
-		}
-		summaries = append(summaries, makeSummaryResp(err == nil, true, summary))
-
-		// Remote visor summaries with per-visor timeout. The 5s outer
-		// cap keeps the UI snappy; cache update + eviction live in
-		// the inner Summary goroutine so completions that arrive
-		// after the outer fired still land — without this, an RPC
-		// that consistently took 6–20s would never refresh the cache
-		// and the visor would render permanently stale.
-		var mu sync.Mutex
-		// deadVisors accumulates PKs that errored Summary inside the
-		// 5s outer arm — evicted from remoteVisors AFTER wg.Wait so
-		// the eviction can't race with the poll goroutines still
-		// reading their captured Conn copies. The failed conn's API is
-		// kept alongside the PK so eviction can verify the map still
-		// holds the SAME conn: a peer that re-registered between our
-		// snapshot and wg.Wait (restart churn does this constantly)
-		// must not have its FRESH conn deleted for the old conn's sins.
-		type deadVisor struct {
-			pk  cipher.PubKey
-			api visorapi.API
-		}
-		var deadVisors []deadVisor
-		wg := new(sync.WaitGroup)
-		wg.Add(len(remotes))
-
-		// Visors whose cache was refreshed within this freshness
-		// window count as "live" even if THIS round's Summary RPC
-		// timed out at the 5s outer cap — they're slow, not broken.
-		// 3 minutes covers the 2-minute dmsg.StreamIdleTimeout
-		// (pkg/dmsg/dmsg/types.go) plus a generous slack for the
-		// peer-side redial → hypervisor-accept → next-poll cycle.
-		// Without this, a peer whose stream just idle-closed shows
-		// "last seen 2-3min ago" in the UI for one or two polls
-		// before the new conn's first Summary lands — visible
-		// flicker that operators flag as "nodes are stale". 30s
-		// (the original value) caught only inline RPC slowness
-		// and missed the steady-state 2-min idle pattern entirely.
-		// (cacheFreshWindow is now a package const — see hypervisor.go.)
-
-		for _, entry := range remotes {
-			go func(pk cipher.PubKey, c Conn) {
-				defer wg.Done()
-
-				type rpcResult struct {
-					sum    *visorapi.Summary
-					rpcErr error
+			resultCh := make(chan rpcResult, 1)
+			go func() {
+				s, e := c.API.Summary()
+				if e == nil && s != nil {
+					// Cache the success here (not in the outer
+					// select arm) so completions that arrive
+					// after the 5s outer timeout still refresh
+					// the cache for the next poll round. This
+					// is the load-bearing half of #2842: slow
+					// peers stay current in cache instead of
+					// rotting to "last seen at" forever.
+					now := time.Now().UTC()
+					cached := *s
+					hv.summaryCacheMx.Lock()
+					hv.summaryCache[pk] = cachedSummary{sum: &cached, seenAt: now}
+					hv.summaryCacheMx.Unlock()
 				}
-				resultCh := make(chan rpcResult, 1)
-				go func() {
-					s, e := c.API.Summary()
-					if e == nil && s != nil {
-						// Cache the success here (not in the outer
-						// select arm) so completions that arrive
-						// after the 5s outer timeout still refresh
-						// the cache for the next poll round. This
-						// is the load-bearing half of #2842: slow
-						// peers stay current in cache instead of
-						// rotting to "last seen at" forever.
-						now := time.Now().UTC()
-						cached := *s
-						hv.summaryCacheMx.Lock()
-						hv.summaryCache[pk] = cachedSummary{sum: &cached, seenAt: now}
-						hv.summaryCacheMx.Unlock()
-					}
-					resultCh <- rpcResult{s, e}
-				}()
+				resultCh <- rpcResult{s, e}
+			}()
 
-				select {
-				case r := <-resultCh:
-					if r.rpcErr == nil {
-						now := time.Now().UTC()
-						resp := makeSummaryResp(true, false, r.sum)
-						resp.LastSeenAt = &now
-						mu.Lock()
-						summaries = append(summaries, resp)
-						mu.Unlock()
-						return
-					}
-					// Inline-arm RPC failure: peer's conn errored
-					// inside the 5s outer budget — that's a strong
-					// signal the underlying stream is broken. Queue
-					// for eviction (deadVisors → mu/deadMu pattern
-					// below). NOTE we intentionally do NOT evict
-					// from inside the inner goroutine when it
-					// returns past the 5s mark: that double-arm
-					// eviction (which earlier iterations of #2842
-					// did) kicked out peers whose Summary was
-					// merely slow (dmsg jitter, route flap, transient
-					// load) and forced redial-and-re-register on
-					// every poll round, surfacing the flicker
-					// operators reported as "things were instant a
-					// week ago, now nodes appear slowly and some
-					// flicker to last-seen-at." Outer-arm-only
-					// eviction matches the pre-#2842 behavior;
-					// the cache update above still recovers slow
-					// peers' state for the next round.
-					hv.logger.WithError(r.rpcErr).WithField("pk", pk).Warn("Failed to obtain summary via RPC")
+			select {
+			case r := <-resultCh:
+				if r.rpcErr == nil {
+					now := time.Now().UTC()
+					resp := makeSummaryResp(true, false, r.sum)
+					resp.State = alerts.StateOnline
+					resp.LastSeenAt = &now
 					mu.Lock()
-					deadVisors = append(deadVisors, deadVisor{pk: pk, api: c.API})
+					summaries = append(summaries, resp)
 					mu.Unlock()
-				case <-time.After(5 * time.Second):
-					hv.logger.WithField("pk", pk).
-						Warn("Remote visor summary RPC slow (>5s); using cache, background-updating")
-				}
-
-				// Live fetch didn't return success in time — try the cache.
-				hv.summaryCacheMx.RLock()
-				cached, ok := hv.summaryCache[pk]
-				hv.summaryCacheMx.RUnlock()
-				if !ok {
 					return
 				}
-				stale := *cached.sum
-				// A recent cache hit means a previous round (or this
-				// round's background completion) just updated us —
-				// the visor's RPCs are merely slow, not dead. Surface
-				// it as online so the UI doesn't flap on slow peers.
-				fresh := time.Since(cached.seenAt) < cacheFreshWindow
-				seenAt := cached.seenAt
-				resp := makeSummaryResp(fresh, false, &stale)
-				resp.LastSeenAt = &seenAt
-				if !fresh {
-					offlineSince := time.Now().UTC()
-					resp.OfflineSince = &offlineSince
-				}
+				// Inline-arm RPC failure: peer's conn errored
+				// inside the 5s outer budget — that's a strong
+				// signal the underlying stream is broken. Queue
+				// for eviction (deadVisors → mu/deadMu pattern
+				// below). NOTE we intentionally do NOT evict
+				// from inside the inner goroutine when it
+				// returns past the 5s mark: that double-arm
+				// eviction (which earlier iterations of #2842
+				// did) kicked out peers whose Summary was
+				// merely slow (dmsg jitter, route flap, transient
+				// load) and forced redial-and-re-register on
+				// every poll round, surfacing the flicker
+				// operators reported as "things were instant a
+				// week ago, now nodes appear slowly and some
+				// flicker to last-seen-at." Outer-arm-only
+				// eviction matches the pre-#2842 behavior;
+				// the cache update above still recovers slow
+				// peers' state for the next round.
+				hv.logger.WithError(r.rpcErr).WithField("pk", pk).Warn("Failed to obtain summary via RPC")
 				mu.Lock()
-				summaries = append(summaries, resp)
+				deadVisors = append(deadVisors, deadVisor{pk: pk, api: c.API})
 				mu.Unlock()
-			}(entry.pk, entry.conn)
-		}
-		wg.Wait()
-
-		// Now that all goroutines have stopped reading their captured
-		// Conn entries, it's safe to delete the broken ones from
-		// remoteVisors. The peer's hypervisor_client will redial and
-		// the accept loop will re-register a fresh Conn — the cache
-		// keeps the row visible (as offline/stale) in the meantime
-		// via the sweep branch below.
-		if len(deadVisors) > 0 {
-			hv.mu.Lock()
-			for _, d := range deadVisors {
-				// Identity check: evict only if the entry is still the
-				// conn that failed. A differing API means the peer
-				// re-registered mid-poll and the new conn is innocent.
-				if cur, ok := hv.remoteVisors[d.pk]; ok && cur.API == d.api {
-					delete(hv.remoteVisors, d.pk)
-				}
+			case <-time.After(5 * time.Second):
+				hv.logger.WithField("pk", pk).
+					Warn("Remote visor summary RPC slow (>5s); using cache, background-updating")
 			}
-			hv.mu.Unlock()
-		}
 
-		// Surface stale cache rows for PKs that didn't make it into
-		// summaries this round. The above loop only consults the cache
-		// for visors still present in remoteVisors at fetch time, so
-		// once a visor's been cleaned up after its first transient RPC
-		// failure, subsequent refreshes would drop the row entirely —
-		// operators saw nodes disappearing from the list rather than
-		// staying as offline. Sweeping the cache here makes the offline
-		// state durable across cleanups; rows reappear as live when the
-		// visor reconnects and the cache is overwritten with fresh data.
-		rendered := make(map[cipher.PubKey]struct{}, len(summaries))
-		for _, s := range summaries {
-			if s.Overview != nil {
-				rendered[s.Overview.PubKey] = struct{}{}
-			}
-		}
-		hv.summaryCacheMx.RLock()
-		for pk, cached := range hv.summaryCache {
-			if _, already := rendered[pk]; already {
-				continue
+			// Live fetch didn't return success in time — try the cache.
+			hv.summaryCacheMx.RLock()
+			cached, ok := hv.summaryCache[pk]
+			hv.summaryCacheMx.RUnlock()
+			if !ok {
+				return
 			}
 			stale := *cached.sum
-			// Same freshness window as the in-remoteVisors fallback
-			// path above: a peer that was just Summary'd N seconds
-			// ago (within the dmsg stream-idle cycle) hasn't been
-			// disconnected long enough to render as offline. Once
-			// outside the window the row keeps showing "last seen
-			// at" with offline_since stamped.
-			fresh := time.Since(cached.seenAt) < cacheFreshWindow
+			// The same state hv ls and the alerts use: a slow peer whose
+			// last poll answered recently is still online.
+			state := hv.visorState(pk, time.Now())
 			seenAt := cached.seenAt
-			resp := makeSummaryResp(fresh, false, &stale)
+			resp := makeSummaryResp(state == alerts.StateOnline, false, &stale)
+			resp.State = state
 			resp.LastSeenAt = &seenAt
-			if !fresh {
+			if state != alerts.StateOnline {
 				offlineSince := time.Now().UTC()
 				resp.OfflineSince = &offlineSince
 			}
+			mu.Lock()
 			summaries = append(summaries, resp)
-		}
-		hv.summaryCacheMx.RUnlock()
+			mu.Unlock()
+		}(entry.pk, entry.conn)
+	}
+	wg.Wait()
 
-		// Attach DMSG stats
-		for i := 0; i < len(summaries); i++ {
-			if stat, ok := dmsgStats[summaries[i].Overview.PubKey.String()]; ok {
-				summaries[i].DmsgStats = &stat
+	// Now that all goroutines have stopped reading their captured
+	// Conn entries, it's safe to delete the broken ones from
+	// remoteVisors. The peer's hypervisor_client will redial and
+	// the accept loop will re-register a fresh Conn — the cache
+	// keeps the row visible (as offline/stale) in the meantime
+	// via the sweep branch below.
+	if len(deadVisors) > 0 {
+		hv.mu.Lock()
+		for _, d := range deadVisors {
+			// Identity check: evict only if the entry is still the
+			// conn that failed. A differing API means the peer
+			// re-registered mid-poll and the new conn is innocent.
+			if cur, ok := hv.remoteVisors[d.pk]; ok && cur.API == d.api {
+				delete(hv.remoteVisors, d.pk)
 			}
 		}
-
-		compact := compactSummaryTransports(summaries)
-		hv.writeStreamedJSON(w, r, compact, func(w io.Writer) error { return writeJSONArray(w, compact) })
+		hv.mu.Unlock()
 	}
+
+	// Surface stale cache rows for PKs that didn't make it into
+	// summaries this round. The above loop only consults the cache
+	// for visors still present in remoteVisors at fetch time, so
+	// once a visor's been cleaned up after its first transient RPC
+	// failure, subsequent refreshes would drop the row entirely —
+	// operators saw nodes disappearing from the list rather than
+	// staying as offline. Sweeping the cache here makes the offline
+	// state durable across cleanups; rows reappear as live when the
+	// visor reconnects and the cache is overwritten with fresh data.
+	rendered := make(map[cipher.PubKey]struct{}, len(summaries))
+	for _, s := range summaries {
+		if s.Overview != nil {
+			rendered[s.Overview.PubKey] = struct{}{}
+		}
+	}
+	type sweptRow struct {
+		pk     cipher.PubKey
+		sum    visorapi.Summary
+		seenAt time.Time
+	}
+	var swept []sweptRow
+	hv.summaryCacheMx.RLock()
+	for pk, cached := range hv.summaryCache {
+		if _, already := rendered[pk]; already {
+			continue
+		}
+		swept = append(swept, sweptRow{pk, *cached.sum, cached.seenAt})
+	}
+	hv.summaryCacheMx.RUnlock()
+	// visorState takes the cache lock itself, so it runs after the sweep.
+	for i := range swept {
+		row := &swept[i]
+		state := hv.visorState(row.pk, time.Now())
+		resp := makeSummaryResp(state == alerts.StateOnline, false, &row.sum)
+		resp.State = state
+		resp.LastSeenAt = &row.seenAt
+		if state != alerts.StateOnline {
+			offlineSince := time.Now().UTC()
+			resp.OfflineSince = &offlineSince
+		}
+		summaries = append(summaries, resp)
+	}
+
+	// Attach DMSG stats
+	for i := 0; i < len(summaries); i++ {
+		if stat, ok := dmsgStats[summaries[i].Overview.PubKey.String()]; ok {
+			summaries[i].DmsgStats = &stat
+		}
+	}
+
+	return compactSummaryTransports(summaries)
 }

@@ -6,14 +6,12 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
-// LogSink receives one formatted log line per entry, with its logrus level
+// LogSink receives one formatted log line per entry, with its log level
 // (0 panic … 6 trace). It is called from one goroutine, in order, never from
 // the goroutine that logged (see sinkQueue); it must not log.
 type LogSink func(level int32, line string)
@@ -82,7 +80,7 @@ func installProcessSinkHook() {
 func drainSink() {
 	for l := range sinkQueue {
 		if n := sinkDropped.Swap(0); n > 0 {
-			deliver(int32(logrus.WarnLevel), fmt.Sprintf("log sink: %d lines dropped, the host fell behind", n)) //nolint:gosec // logrus levels are 0..6
+			deliver(int32(logging.WarnLevel), fmt.Sprintf("log sink: %d lines dropped, the host fell behind", n)) //nolint:gosec // levels are 0..6
 		}
 		deliver(l.level, l.line)
 	}
@@ -104,12 +102,12 @@ func hookConfigLogger(conf *visorconfig.V1) {
 
 // sinkHook forwards log entries to the current sink.
 type sinkHook struct {
-	formatter logrus.Formatter
+	formatter logging.Formatter
 }
 
-func (h *sinkHook) Levels() []logrus.Level { return logrus.AllLevels }
+func (h *sinkHook) Levels() []logging.Level { return logging.AllLevels }
 
-func (h *sinkHook) Fire(e *logrus.Entry) error {
+func (h *sinkHook) Fire(e *logging.Entry) error {
 	fn := sink.Load()
 	if fn == nil {
 		return nil
@@ -122,7 +120,7 @@ func (h *sinkHook) Fire(e *logrus.Entry) error {
 		line = line[:n-1]
 	}
 	select {
-	case sinkQueue <- sinkLine{level: int32(e.Level), line: string(line)}: //nolint:gosec // logrus levels are 0..6
+	case sinkQueue <- sinkLine{level: int32(e.Level), line: string(line)}: //nolint:gosec // levels are 0..6
 	default:
 		sinkDropped.Add(1)
 	}

@@ -114,7 +114,7 @@ func newInProcessPublisher(t *testing.T, sk cipher.SecKey) *treestore.Publisher 
 // (very unlikely in this in-memory path) async-publish race.
 func pubReadable(t *testing.T, pub *treestore.Publisher, path string) []byte {
 	t.Helper()
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		body, ok := pub.Get(path)
 		if ok {
 			return body
@@ -217,9 +217,9 @@ func TestPublishSequenceIsAtomic(t *testing.T) {
 		errs atomic.Uint64
 	)
 	done := make(chan struct{}, 2)
-	for w := 0; w < 2; w++ {
+	for range 2 {
 		go func() {
-			for i := 0; i < N/2; i++ {
+			for range N / 2 {
 				seq, err := s.PublishRosterMutation(RosterOpAdd, peer, 0)
 				if err != nil {
 					errs.Add(1)

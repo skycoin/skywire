@@ -53,7 +53,6 @@ func TestNewClientEntryIsValid(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			entry := tc.entry()
 			err := entry.Sign(sk)
@@ -283,7 +282,6 @@ func TestCopy(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			disc.Copy(tc.dst, tc.src)
 

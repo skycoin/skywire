@@ -1,5 +1,4 @@
 //go:build !linux
-// +build !linux
 
 // Package vpn pkg/vpn/mesh_client_other.go c4-app-vpn
 package vpn
@@ -8,8 +7,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/sirupsen/logrus"
-
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skydns"
 )
 
@@ -22,9 +20,9 @@ func (m *meshClientGateway) stop() {}
 func (m *meshClientGateway) engine() *skydns.Engine { return nil }
 
 func (c *Client) startMeshGateway() (*meshClientGateway, error) {
-	return startMeshClientGateway(context.Background(), c.cfg, logrus.StandardLogger())
+	return startMeshClientGateway(context.Background(), c.cfg, logging.StandardLogger())
 }
 
-func startMeshClientGateway(_ context.Context, _ ClientConfig, _ logrus.FieldLogger) (*meshClientGateway, error) {
+func startMeshClientGateway(_ context.Context, _ ClientConfig, _ logging.FieldLogger) (*meshClientGateway, error) {
 	return nil, errors.New("vpn: mesh gateway is only supported on Linux and Android")
 }

@@ -67,7 +67,7 @@ func TestGunzipPooledReaderAndForgedSize(t *testing.T) {
 	orig := bytes.Repeat([]byte(`{"k":"v"},`), 5000)
 	gz := Gzip(orig)
 	bad := append([]byte(nil), gz[:len(gz)/2]...)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		if got := Gunzip(bad); !bytes.Equal(got, bad) {
 			t.Fatal("a truncated stream must come back raw")
 		}

@@ -20,7 +20,7 @@ func fillDrive(t testing.TB, n int) (*driveCXDS, []cipher.SHA256) {
 	d := ds.(*driveCXDS)
 	keys := make([]cipher.SHA256, 0, n)
 	require.NoError(t, d.RunBatch(func(s data.CXDS) error {
-		for i := 0; i < n; i++ {
+		for i := range n {
 			v := make([]byte, 16)
 			binary.BigEndian.PutUint64(v, uint64(i))
 			k := cipher.SumSHA256(v)

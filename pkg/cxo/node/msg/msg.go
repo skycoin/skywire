@@ -410,30 +410,30 @@ func (m Type) String() string {
 }
 
 var forwardRegistry = [...]reflect.Type{
-	PingType: reflect.TypeOf(Ping{}),
-	PongType: reflect.TypeOf(Pong{}),
+	PingType: reflect.TypeFor[Ping](),
+	PongType: reflect.TypeFor[Pong](),
 
-	SynType: reflect.TypeOf(Syn{}),
-	AckType: reflect.TypeOf(Ack{}),
+	SynType: reflect.TypeFor[Syn](),
+	AckType: reflect.TypeFor[Ack](),
 
-	OkType:  reflect.TypeOf(Ok{}),
-	ErrType: reflect.TypeOf(Err{}),
+	OkType:  reflect.TypeFor[Ok](),
+	ErrType: reflect.TypeFor[Err](),
 
-	SubType:   reflect.TypeOf(Sub{}),
-	UnsubType: reflect.TypeOf(Unsub{}),
+	SubType:   reflect.TypeFor[Sub](),
+	UnsubType: reflect.TypeFor[Unsub](),
 
-	RqListType: reflect.TypeOf(RqList{}),
-	ListType:   reflect.TypeOf(List{}),
+	RqListType: reflect.TypeFor[RqList](),
+	ListType:   reflect.TypeFor[List](),
 
-	RootType: reflect.TypeOf(Root{}),
+	RootType: reflect.TypeFor[Root](),
 
-	RqObjectType: reflect.TypeOf(RqObject{}),
-	ObjectType:   reflect.TypeOf(Object{}),
+	RqObjectType: reflect.TypeFor[RqObject](),
+	ObjectType:   reflect.TypeFor[Object](),
 
-	RqPreviewType: reflect.TypeOf(RqPreview{}),
+	RqPreviewType: reflect.TypeFor[RqPreview](),
 
-	RqPeersType: reflect.TypeOf(RqPeers{}),
-	PeersType:   reflect.TypeOf(Peers{}),
+	RqPeersType: reflect.TypeFor[RqPeers](),
+	PeersType:   reflect.TypeFor[Peers](),
 }
 
 // An InvalidTypeError represents decoding error when

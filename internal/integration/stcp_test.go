@@ -1,5 +1,4 @@
 //go:build !no_ci
-// +build !no_ci
 
 // Package integration_test — pkg/../internal/integration/stcp_test.go: end-to-end
 // DATA-ROUTE coverage for the STCP (skywire-tcp) transport.
@@ -127,7 +126,7 @@ func TestEnv_STCPDataRoute(t *testing.T) {
 	// Route real application data A→B over the STCP transport.
 	const msgs = 6
 	payload := strings.Repeat("x", 256)
-	for i := 0; i < msgs; i++ {
+	for i := range msgs {
 		resp, serr := env.SendSkyMessage(visorA, visorB, fmt.Sprintf("stcp-data-route-%d-%s", i, payload))
 		require.NoError(t, serr, "skychat message %d over STCP failed", i)
 		if resp != nil && resp.Body != nil {

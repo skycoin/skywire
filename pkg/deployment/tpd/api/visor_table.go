@@ -3,9 +3,10 @@ package api
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"time"
 
@@ -54,16 +55,18 @@ func (api *API) visorTable(ctx context.Context) charts.Table {
 	for t := range typeTotals {
 		types = append(types, t)
 	}
-	sort.Slice(types, func(i, j int) bool { return typeTotals[types[i]] > typeTotals[types[j]] })
+	slices.SortFunc(types, func(a, b string) int {
+		return cmp.Compare(typeTotals[b], typeTotals[a])
+	})
 	list := make([]*row, 0, len(rows))
 	for _, r := range rows {
 		list = append(list, r)
 	}
-	sort.Slice(list, func(i, j int) bool {
-		if list[i].total != list[j].total {
-			return list[i].total > list[j].total
-		}
-		return bytes.Compare(list[i].pk[:], list[j].pk[:]) < 0
+	slices.SortFunc(list, func(a, b *row) int {
+		return cmp.Or(
+			cmp.Compare(b.total, a.total),
+			bytes.Compare(a.pk[:], b.pk[:]),
+		)
 	})
 
 	roles := api.serverRoles(ctx)

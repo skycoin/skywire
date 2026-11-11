@@ -9,17 +9,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/hashicorp/go-version"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/net/proxy"
@@ -589,7 +589,7 @@ func download(ctx context.Context, log *logging.Logger, httpC http.Client, targe
 }
 
 // downloadDmsg downloads a file from the given URL into 'w'.
-func downloadDmsg(ctx context.Context, log logrus.FieldLogger, httpC *http.Client, w io.Writer, urlStr string, maxSize int64) error {
+func downloadDmsg(ctx context.Context, log logging.FieldLogger, httpC *http.Client, w io.Writer, urlStr string, maxSize int64) error {
 	req, err := http.NewRequest(http.MethodGet, urlStr, nil)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to formulate HTTP request.")
@@ -639,8 +639,7 @@ func CancellableCopy(ctx context.Context, w io.Writer, body io.ReadCloser, lengt
 
 // ProgressWriter prints the progress of a download to stdout.
 type ProgressWriter struct {
-	// atomic requires 64-bit alignment for struct field access
-	Current int64
+	Current atomic.Int64
 	Total   int64
 }
 
@@ -648,8 +647,8 @@ type ProgressWriter struct {
 func (pw *ProgressWriter) Write(p []byte) (int, error) {
 	n := len(p)
 
-	current := atomic.AddInt64(&pw.Current, int64(n))
-	total := atomic.LoadInt64(&pw.Total)
+	current := pw.Current.Add(int64(n))
+	total := pw.Total
 	pc := fmt.Sprintf("%d%%", current*100/total)
 	cmdutil.Printf("Downloading: %d/%dB (%s)", current, total, pc)
 	if current != total {
@@ -738,12 +737,7 @@ type dmsgServer struct {
 }
 
 func contains(s []string, str string) bool {
-	for _, v := range s {
-		if v == str {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s, str)
 }
 
 type httpError struct {
@@ -979,9 +973,9 @@ func stripCSVHeader(filePath string, log *logging.Logger) {
 	content := string(data)
 	if strings.HasPrefix(content, "tp_id,recv,sent,time_stamp") {
 		// Find the first newline and remove everything before it
-		idx := strings.Index(content, "\n")
-		if idx != -1 {
-			newContent := content[idx+1:]
+		_, after, ok := strings.Cut(content, "\n")
+		if ok {
+			newContent := after
 			if err := os.WriteFile(filePath, []byte(newContent), 0600); err == nil { //nolint:gosec
 				log.Debugf("Stripped CSV header from %s", filePath)
 			}

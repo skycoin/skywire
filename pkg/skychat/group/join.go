@@ -47,16 +47,18 @@
 package group
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/routing"
 )
 
 // Relay frame kinds. Chat submissions (RelayMessage) carry no "kind"
@@ -480,6 +482,9 @@ func remotePKOf(c net.Conn) (cipher.PubKey, bool) {
 			return cipher.PubKey{}, false
 		}
 		return a.PubKey, a.PubKey != cipher.PubKey{}
+	case routing.Addr:
+		// A conn accepted over a route. Its Noise KK handshake proved this key.
+		return a.PubKey, a.PubKey != cipher.PubKey{}
 	default:
 		return cipher.PubKey{}, false
 	}
@@ -552,11 +557,11 @@ func (r JoinRequest) IsPending() bool { return r.Status == JoinStatusPending }
 // iterates by key, the js map iterates arbitrarily) so an admin's queue
 // reads the same on every platform.
 func sortJoinRequests(reqs []JoinRequest) {
-	sort.Slice(reqs, func(i, j int) bool {
-		if !reqs[i].AskedAt.Equal(reqs[j].AskedAt) {
-			return reqs[i].AskedAt.After(reqs[j].AskedAt)
-		}
-		return reqs[i].PK.Hex() < reqs[j].PK.Hex()
+	slices.SortFunc(reqs, func(a, b JoinRequest) int {
+		return cmp.Or(
+			b.AskedAt.Compare(a.AskedAt),
+			cmp.Compare(a.PK.Hex(), b.PK.Hex()),
+		)
 	})
 }
 

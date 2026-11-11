@@ -21,14 +21,14 @@
 
   .dim {
     flex: 1;
-    color: rgba(255, 255, 255, 0.6);
+    color: rgba(var(--sw-fg-rgb), var(--sw-a60));
   }
 
   // All stroked buttons in the control row (Node toggle, fullscreen) —
   // legible light text + visible border on the dark box.
   button.mat-mdc-outlined-button:not(:disabled) {
-    color: rgba(255, 255, 255, 0.92) !important;
-    border-color: rgba(255, 255, 255, 0.35) !important;
+    color: rgba(var(--sw-fg-rgb), 0.92) !important;
+    border-color: rgba(var(--sw-fg-rgb), 0.35) !important;
     .mat-icon { color: inherit; }
   }
 }
@@ -42,13 +42,13 @@
   align-items: center;
   gap: 10px;
   padding: 6px 0 12px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(var(--sw-fg-rgb), 0.08);
   margin-bottom: 10px;
   flex-wrap: wrap;
 
   .web-name {
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-    color: rgba(255, 255, 255, 0.92);
+    color: rgba(var(--sw-fg-rgb), 0.92);
     font-size: 0.95em;
   }
 
@@ -56,19 +56,19 @@
     font-size: 0.85em;
     padding: 2px 10px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.65);
+    background: rgba(var(--sw-fg-rgb), 0.08);
+    color: rgba(var(--sw-fg-rgb), var(--sw-a65));
 
-    &.status-running { background: rgba(74, 222, 128, 0.18); color: #4ade80; }
-    &.status-stopped { background: rgba(248, 113, 113, 0.15); color: #f87171; }
-    &.status-starting { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+    &.status-running { background: rgba(var(--sw-ok-rgb), 0.18); color: rgb(var(--sw-ok-rgb)); }
+    &.status-stopped { background: rgba(var(--sw-err-rgb), 0.15); color: rgb(var(--sw-err-rgb)); }
+    &.status-starting { background: rgba(var(--sw-warn-rgb), 0.15); color: rgb(var(--sw-warn-rgb)); }
   }
 
   .spacer { flex: 1; }
 
   button.mat-mdc-outlined-button:not(:disabled) {
-    color: rgba(255, 255, 255, 0.92) !important;
-    border-color: rgba(255, 255, 255, 0.35) !important;
+    color: rgba(var(--sw-fg-rgb), 0.92) !important;
+    border-color: rgba(var(--sw-fg-rgb), 0.35) !important;
     .mat-icon { color: inherit; }
   }
 }
@@ -98,13 +98,13 @@
     font-size: 64px;
     width: 64px;
     height: 64px;
-    color: rgba(255, 255, 255, 0.3);
+    color: rgba(var(--sw-fg-rgb), var(--sw-a30));
   }
 
   .wallet-empty-title {
     font-size: 1.1em;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.85);
+    color: rgba(var(--sw-fg-rgb), 0.85);
   }
 
   .wallet-empty-help {
@@ -115,7 +115,7 @@
 
 .mono { font-family: monospace; }
 .small { font-size: 0.85em; }
-.dim { color: rgba(255, 255, 255, 0.85); }
+.dim { color: rgba(var(--sw-fg-rgb), 0.85); }
 
 .mt-3 { margin-top: 12px; }
 
@@ -130,16 +130,16 @@
   align-items: center;
   gap: 8px;
   padding: 4px 0 8px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(var(--sw-fg-rgb), 0.08);
   margin-bottom: 8px;
 
-  .mat-icon { color: #00d4ff; }
+  .mat-icon { color: rgb(var(--sw-cyan-rgb)); }
 }
 
 .daemons-title {
   font-size: 1.05em;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.92);
+  color: rgba(var(--sw-fg-rgb), 0.92);
   letter-spacing: 0.5px;
   flex: 0 0 auto;
 }
@@ -155,14 +155,14 @@
   gap: 10px;
   padding: 8px 12px;
   margin: 4px 0;
-  background: rgba(0, 212, 255, 0.05);
-  border-left: 2px solid rgba(0, 212, 255, 0.3);
+  background: rgba(var(--sw-cyan-rgb), 0.05);
+  border-left: 2px solid rgba(var(--sw-cyan-rgb), 0.3);
   border-radius: 4px;
   flex-wrap: wrap;
 
   .daemon-name {
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-    color: rgba(255, 255, 255, 0.92);
+    color: rgba(var(--sw-fg-rgb), 0.92);
     font-size: 0.95em;
   }
 
@@ -170,19 +170,19 @@
     font-size: 0.85em;
     padding: 2px 10px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.65);
+    background: rgba(var(--sw-fg-rgb), 0.08);
+    color: rgba(var(--sw-fg-rgb), var(--sw-a65));
 
-    &.status-running { background: rgba(74, 222, 128, 0.18); color: #4ade80; }
-    &.status-stopped { background: rgba(248, 113, 113, 0.15); color: #f87171; }
-    &.status-starting { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+    &.status-running { background: rgba(var(--sw-ok-rgb), 0.18); color: rgb(var(--sw-ok-rgb)); }
+    &.status-stopped { background: rgba(var(--sw-err-rgb), 0.15); color: rgb(var(--sw-err-rgb)); }
+    &.status-starting { background: rgba(var(--sw-warn-rgb), 0.15); color: rgb(var(--sw-warn-rgb)); }
   }
 
   .spacer { flex: 1; }
 
   button.mat-mdc-outlined-button:not(:disabled) {
-    color: rgba(255, 255, 255, 0.92) !important;
-    border-color: rgba(255, 255, 255, 0.35) !important;
+    color: rgba(var(--sw-fg-rgb), 0.92) !important;
+    border-color: rgba(var(--sw-fg-rgb), 0.35) !important;
     .mat-icon { color: inherit; }
   }
 }
@@ -195,8 +195,8 @@
   flex-wrap: wrap;
 
   button.mat-mdc-outlined-button:not(:disabled) {
-    color: rgba(255, 255, 255, 0.92) !important;
-    border-color: rgba(255, 255, 255, 0.35) !important;
+    color: rgba(var(--sw-fg-rgb), 0.92) !important;
+    border-color: rgba(var(--sw-fg-rgb), 0.35) !important;
     .mat-icon { color: inherit; }
   }
 
@@ -213,25 +213,25 @@
   gap: 8px;
   padding: 10px 12px;
   margin: 4px 0 10px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(var(--sw-fg-rgb), 0.16);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--sw-fg-rgb), 0.05);
 
   // Help text: legible, not near-black. (default .dim is fine, but the
   // panel sits on a lighter surface so nudge it brighter.)
   .wallet-backend-help {
     line-height: 1.4;
-    color: rgba(255, 255, 255, 0.82) !important;
-    b { color: rgba(255, 255, 255, 0.95); }
-    .mono { color: rgba(255, 255, 255, 0.7); }
+    color: rgba(var(--sw-fg-rgb), 0.82) !important;
+    b { color: rgba(var(--sw-fg-rgb), 0.95); }
+    .mono { color: rgba(var(--sw-fg-rgb), 0.7); }
   }
 
   // Stroked buttons (mode toggle, "Add coin node") default to Material's
   // themed foreground, which is near-invisible on this dark panel — pin
   // them to legible light text + a visible border, same as .web-header.
   button.mat-mdc-outlined-button:not(:disabled) {
-    color: rgba(255, 255, 255, 0.92) !important;
-    border-color: rgba(255, 255, 255, 0.35) !important;
+    color: rgba(var(--sw-fg-rgb), 0.92) !important;
+    border-color: rgba(var(--sw-fg-rgb), 0.35) !important;
     .mat-icon { color: inherit; }
   }
 
@@ -245,13 +245,13 @@
     flex: 1;
     min-width: 0;
     padding: 6px 8px;
-    background: rgba(0, 0, 0, 0.35);
-    color: rgba(255, 255, 255, 0.95);
-    border: 1px solid rgba(255, 255, 255, 0.28);
+    background: rgba(var(--sw-shade-rgb), 0.35);
+    color: rgba(var(--sw-fg-rgb), 0.95);
+    border: 1px solid rgba(var(--sw-fg-rgb), 0.28);
     border-radius: 4px;
     font-size: 12px;
 
-    &::placeholder { color: rgba(255, 255, 255, 0.45); }
+    &::placeholder { color: rgba(var(--sw-fg-rgb), var(--sw-a45)); }
     &:focus {
       outline: none;
       border-color: #6f4bd8;
@@ -303,12 +303,12 @@
   padding: 2px 10px;
   border-radius: 999px;
   white-space: nowrap;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.75);
+  background: rgba(var(--sw-fg-rgb), 0.08);
+  color: rgba(var(--sw-fg-rgb), 0.75);
 
-  &.status-running { background: rgba(74, 222, 128, 0.18); color: #4ade80; }
-  &.status-stopped { background: rgba(248, 113, 113, 0.15); color: #f87171; }
-  &.status-starting { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+  &.status-running { background: rgba(var(--sw-ok-rgb), 0.18); color: rgb(var(--sw-ok-rgb)); }
+  &.status-stopped { background: rgba(var(--sw-err-rgb), 0.15); color: rgb(var(--sw-err-rgb)); }
+  &.status-starting { background: rgba(var(--sw-warn-rgb), 0.15); color: rgb(var(--sw-warn-rgb)); }
 }
 
 // Optional "run a local skycoin-web server" row inside the service-mode panel.
@@ -319,11 +319,11 @@
   flex-wrap: wrap;
   margin-top: 6px;
   padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.10);
+  border-top: 1px solid rgba(var(--sw-fg-rgb), 0.10);
 
   button.mat-mdc-outlined-button:not(:disabled) {
-    color: rgba(255, 255, 255, 0.92) !important;
-    border-color: rgba(255, 255, 255, 0.35) !important;
+    color: rgba(var(--sw-fg-rgb), 0.92) !important;
+    border-color: rgba(var(--sw-fg-rgb), 0.35) !important;
     .mat-icon { color: inherit; }
   }
 }

@@ -5,7 +5,7 @@ package vpn
 
 import (
 	"bytes"
-	"net"
+	"net/netip"
 	"strings"
 
 	"github.com/skycoin/skywire/pkg/util/osutil"
@@ -16,27 +16,26 @@ const (
 )
 
 // DefaultNetworkGateway fetches system's default network gateway.
-func DefaultNetworkGateway() (net.IP, error) {
+func DefaultNetworkGateway() (netip.Addr, error) {
 	outputBytes, err := osutil.RunWithResult("sh", "-c", defaultNetworkGatewayCMD)
 	if err != nil {
-		return nil, err
+		return netip.Addr{}, err
 	}
 
 	outputBytes = bytes.TrimRight(outputBytes, "\n")
 
-	lines := bytes.Split(outputBytes, []byte{'\n'})
-	for _, l := range lines {
+	lines := bytes.SplitSeq(outputBytes, []byte{'\n'})
+	for l := range lines {
 		if bytes.Count(l, []byte{'.'}) != 3 {
 			continue
 		}
 
-		ip := net.ParseIP(string(l))
-		if ip != nil {
-			return ip, nil
+		if ip, err := netip.ParseAddr(string(l)); err == nil && ip.Unmap().Is4() {
+			return ip.Unmap(), nil
 		}
 	}
 
-	return nil, errCouldFindDefaultNetworkGateway
+	return netip.Addr{}, errCouldFindDefaultNetworkGateway
 }
 
 func setupClientSysPrivileges() (int, error) {

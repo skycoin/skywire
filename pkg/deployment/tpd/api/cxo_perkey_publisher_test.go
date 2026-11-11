@@ -90,7 +90,7 @@ func TestPerKeyPublisherHoldsLastCompleteSample(t *testing.T) {
 	}
 
 	api.transportsCache = testEntries(300)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		now = now.Add(perKeyPublishInterval)
 		p.publishOnce(context.Background(), now)
 	}

@@ -6,18 +6,23 @@ package fuse
 
 const useSingleReader = false
 
-func (r *fuseFD) write(req *request) Status {
+func (r *fuseFD) write(req *requestAlloc) Status {
 	if req.outPayloadSize() == 0 {
-		err := handleEINTR(func() error {
-			_, err := r.writevFD([][]byte{req.outHeaderBuf, req.outDataBuf})
-			return err
-		})
+		_, err := req.call.writev(req.outHeaderBuf, req.outDataBuf)
 		return ToStatus(err)
 	}
+
 	if req.readResult != nil {
-		defer req.readResult.Done()
-		if r.server.canSplice {
-			err := r.trySplice(req, req.readResult)
+		defer func() {
+			req.readResult.Done()
+			req.readResult = nil
+		}()
+		if ws, ok := req.readResult.(withSlice); ok {
+			return r.writeWithSlice(&req.request, ws)
+		}
+
+		if r.server.canSplice && !r.server.opts.DisableSplice {
+			err := r.trySplice(&req.request, req.readResult)
 			if err == nil {
 				return OK
 			}
@@ -30,6 +35,6 @@ func (r *fuseFD) write(req *request) Status {
 		req.serializeHeader(len(req.outPayload))
 	}
 
-	_, err := r.writevFD([][]byte{req.outHeaderBuf, req.outDataBuf, req.outPayload})
+	_, err := req.call.writev(req.outHeaderBuf, req.outDataBuf, req.outPayload)
 	return ToStatus(err)
 }

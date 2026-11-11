@@ -21,7 +21,8 @@
 package visor
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -153,13 +154,15 @@ func dmsgRelayRole(nominees []cipher.PubKey, sessions []dmsgSessionView,
 		}
 		role.Attached = append(role.Attached, visorapi.DmsgRelayAttachment(s))
 	}
-	sort.Slice(role.Attached, func(i, j int) bool { return role.Attached[i].PK.String() < role.Attached[j].PK.String() })
+	slices.SortFunc(role.Attached, func(a, b visorapi.DmsgRelayAttachment) int {
+		return cmp.Compare(a.PK.String(), b.PK.String())
+	})
 
 	for pk, n := range clientStreams {
 		role.RelayClients = append(role.RelayClients, visorapi.DmsgRelayClient{PK: pk, Streams: n})
 	}
-	sort.Slice(role.RelayClients, func(i, j int) bool {
-		return role.RelayClients[i].PK.String() < role.RelayClients[j].PK.String()
+	slices.SortFunc(role.RelayClients, func(a, b visorapi.DmsgRelayClient) int {
+		return cmp.Compare(a.PK.String(), b.PK.String())
 	})
 	return role
 }
@@ -192,6 +195,8 @@ func dmsgServerSessions(srv *dmsg.Server) (total, peers int, clients []visorapi.
 	}
 	// Stable order: a caller diffing two snapshots must not see map iteration
 	// masquerading as churn.
-	sort.Slice(clients, func(i, j int) bool { return clients[i].PK.String() < clients[j].PK.String() })
+	slices.SortFunc(clients, func(a, b visorapi.DmsgServerClient) int {
+		return cmp.Compare(a.PK.String(), b.PK.String())
+	})
 	return len(clients), peers, clients
 }

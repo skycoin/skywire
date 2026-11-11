@@ -106,7 +106,7 @@ func TestAdaptiveParkHoldStopsControllerFlap(t *testing.T) {
 		"the latency band re-admitted a leg the bottleneck controller just parked — this is the flap")
 
 	// 13 more ticks inside the hold: still one park, no promotions.
-	for i := 0; i < 13; i++ {
+	for i := range 13 {
 		rg.enforceBottleneckGroups(loadedDeltas(rg, mts))
 		rg.enforceLatencyBand(nil)
 		require.True(t, rg.mux.isLegStandby(1), "leg 1 must stay parked for the whole hold (tick %d)", i+2)
@@ -173,13 +173,13 @@ func TestOperatorPinOverridesParkHold(t *testing.T) {
 }
 
 // TestPromoteLegAdaptiveIgnoresPrimaryAndUnknown covers the guards: the primary
-// is never promoted through this seam (it is never parked), and a leg index with
-// no transport still mirrors and records rather than panicking.
+// is never promoted through this seam (it is never parked), and a transport
+// that is no leg of the group promotes nothing.
 func TestPromoteLegAdaptiveIgnoresPrimaryAndUnknown(t *testing.T) {
-	rg, _ := parkFlapRig(t)
+	rg, mts := parkFlapRig(t)
 
-	require.False(t, rg.promoteLegAdaptive(0, "primary"), "leg 0 is not promotable through the adaptive seam")
-	require.False(t, rg.promoteLegAdaptive(-1, "negative"), "a negative index is refused")
-	require.True(t, rg.promoteLegAdaptive(9, "no such leg"),
-		"an index with no transport is a mirror-only promotion, not a panic")
+	require.False(t, rg.promoteLegAdaptive(mts[0].Entry.ID, "primary"), "leg 0 is not promotable through the adaptive seam")
+	require.False(t, rg.promoteLegAdaptive(uuid.Nil, "nil"), "the nil transport ID is refused")
+	require.False(t, rg.promoteLegAdaptive(uuid.New(), "no such leg"), "a transport that is no leg promotes nothing")
+	require.Zero(t, countEvents(rg, MuxEventLegPromoted), "and records nothing")
 }

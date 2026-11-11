@@ -1,0 +1,126 @@
+package ui2
+
+import "strconv"
+
+// SettingsPage is the settings tab.
+templ SettingsPage(s Settings) {
+	@VisorLayout(s.PK, "settings") {
+		@ErrorBox(s.Err)
+		if s.Path != "" {
+			<p class="small">
+				<span class="mono">{ s.Path }</span>
+				if !s.Exists {
+					{ T(ctx, "ui2.settings.not-exist") }
+				}
+				if !s.Writable {
+					{ T(ctx, "ui2.settings.not-writable") }
+				}
+				<br/>
+				<span class="dim">{ T(ctx, "ui2.settings.intro") }</span>
+			</p>
+			<div id="settings-panel">
+				@SettingsPanel(s)
+			</div>
+		}
+	}
+}
+
+// SettingsPanel is the form, or the review of it.
+templ SettingsPanel(s Settings) {
+	if s.Reviewing {
+		@settingsReview(s)
+	} else {
+		@settingsForm(s)
+	}
+}
+
+templ settingsForm(s Settings) {
+	<form id="settings-form" hx-post={ VisorURL(s.PK, "settings/review") } hx-target="#settings-panel">
+		<div class="bar sticky">
+			<input class="filter" type="search" placeholder={ T(ctx, "ui2.settings.filter") } data-filter=".srow"/>
+			<label class="check small"><input type="checkbox" data-filter-set=".srow"/>{ T(ctx, "ui2.settings.set-only") }</label>
+			<span class="small dim" data-filter-count>{ strconv.Itoa(len(s.Fields)) }</span>
+			<span class="spacer"></span>
+			if n := badFields(s.Fields); n > 0 {
+				<span class="error small">{ T(ctx, "ui2.settings.to-fix", "n", strconv.Itoa(n)) }</span>
+			}
+			<button class="btn primary" type="submit">{ T(ctx, "ui2.settings.review") }</button>
+		</div>
+		for _, f := range s.Fields {
+			<div class={ "srow", templ.KV("is-set", f.Set) } data-text={ f.FilterText() } data-set={ setFlag(f.Set) }>
+				<div class="about">
+					<div><span class="mono">{ f.Key }</span> <span class="small dim mono">--{ f.Flag }</span></div>
+					<div class="small dim">{ f.Help }</div>
+					if f.Note != "" {
+						<div class="small warn-text">{ f.Note }</div>
+					}
+				</div>
+				<div class="field">
+					if f.Format == "bool" {
+						<select name={ "v." + f.Key }>
+							<option value="" selected?={ f.Draft == "" }>{ f.DefaultLabel() }</option>
+							<option value="true" selected?={ f.Draft == "true" }>on</option>
+							<option value="false" selected?={ f.Draft == "false" }>off</option>
+						</select>
+					} else {
+						<input type={ f.InputType() } name={ "v." + f.Key } value={ f.Draft } placeholder={ f.Placeholder() } spellcheck="false" autocomplete="off" class={ templ.KV("invalid", f.Problem != "") }/>
+					}
+					if f.Problem != "" {
+						<div class="error small">{ f.Problem }</div>
+					}
+				</div>
+			</div>
+		}
+	</form>
+}
+
+func badFields(fs []Field) int {
+	n := 0
+	for _, f := range fs {
+		if f.Problem != "" {
+			n++
+		}
+	}
+	return n
+}
+
+templ settingsReview(s Settings) {
+	<form id="settings-form" hx-put={ VisorURL(s.PK, "settings") } hx-target="#settings-panel">
+		for _, f := range s.Fields {
+			<input type="hidden" name={ "v." + f.Key } value={ f.Draft }/>
+		}
+		if s.Saved {
+			<p class="ok">{ T(ctx, "ui2.settings.saved", "path", s.Path) }</p>
+			<p class="small">{ T(ctx, "ui2.settings.saved-help") }</p>
+			<pre class="raw mono key" data-copy="sudo skywire autoconfig">sudo skywire autoconfig</pre>
+			<div class="bar"><button class="btn" type="button" hx-get={ VisorURL(s.PK, "settings/panel") } hx-target="#settings-panel">{ T(ctx, "ui2.settings.back-to-settings") }</button></div>
+		} else {
+			if len(s.Changes) == 0 {
+				<p class="dim">{ T(ctx, "ui2.settings.no-changes") }</p>
+			} else {
+				<table class="list">
+					<thead><tr><th>{ T(ctx, "ui2.settings.variable") }</th><th>{ T(ctx, "ui2.settings.now") }</th><th>{ T(ctx, "ui2.settings.after") }</th></tr></thead>
+					<tbody>
+						for _, c := range s.Changes {
+							<tr>
+								<td class="mono name" data-label={ T(ctx, "ui2.settings.variable") }>{ c.Key }</td>
+								<td class="mono" data-label={ T(ctx, "ui2.settings.now") }>{ c.From }</td>
+								<td class="mono" data-label={ T(ctx, "ui2.settings.after") }>{ c.To }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			}
+			if s.Command != "" && len(s.Changes) > 0 {
+				<p class="small">{ T(ctx, "ui2.settings.run-cmd") }</p>
+				<pre class="raw mono key" data-copy={ s.Command }>{ s.Command }</pre>
+			}
+			<div class="bar">
+				<button class="btn" type="button" hx-post={ VisorURL(s.PK, "settings/panel") } hx-include="#settings-form" hx-target="#settings-panel">{ T(ctx, "ui2.settings.back") }</button>
+				if s.Writable && len(s.Changes) > 0 {
+					<button class="btn primary" type="submit">{ T(ctx, "common.save") }</button>
+				}
+			</div>
+		}
+	</form>
+}

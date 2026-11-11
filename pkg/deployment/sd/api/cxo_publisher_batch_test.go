@@ -42,7 +42,7 @@ func TestBatchLeafCountIsPerType(t *testing.T) {
 
 	types := []string{"vpn", "visor", "skysocks", "proxy"}
 	const nServices = 600
-	for i := 0; i < nServices; i++ {
+	for i := range nServices {
 		pk, _ := cipher.GenerateKeyPair()
 		svcType := types[i%len(types)]
 		p.stateSet(svcType, pk, mustSvc(t, svcType, pk))
@@ -85,7 +85,7 @@ func TestBatchLeafCountIsPerType(t *testing.T) {
 // no-op — the basis of the heartbeat short-circuit.
 func TestServicesBatchEncodeDeterministic(t *testing.T) {
 	p := newTestPub()
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		pk, _ := cipher.GenerateKeyPair()
 		p.stateSet("vpn", pk, mustSvc(t, "vpn", pk))
 	}

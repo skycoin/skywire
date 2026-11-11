@@ -1,5 +1,4 @@
 //go:build linux
-// +build linux
 
 // Package vpn pkg/vpn/os_server_linux.go c4-app-vpn
 package vpn
@@ -7,7 +6,7 @@ package vpn
 import (
 	"errors"
 	"fmt"
-	"net"
+	"net/netip"
 	"strings"
 
 	"golang.org/x/sys/unix"
@@ -51,14 +50,14 @@ func SetIPTablesForwardAcceptPolicy() error {
 
 // AllowIPToLocalNetwork allows all the packets coming from `source`
 // to private IP ranges.
-func AllowIPToLocalNetwork(src, _ net.IP) error {
+func AllowIPToLocalNetwork(src, _ netip.Addr) error {
 	cmd := fmt.Sprintf(allowIPToLocalNetCMDFmt, src, src)
 	return osutil.RunElevated("sh", "-c", cmd)
 }
 
 // BlockIPToLocalNetwork blocks all the packets coming from `source`
 // to private IP ranges.
-func BlockIPToLocalNetwork(src, _ net.IP) error {
+func BlockIPToLocalNetwork(src, _ netip.Addr) error {
 	cmd := fmt.Sprintf(blockIPToLocalNetCMDFmt, src, src)
 	return osutil.RunElevated("sh", "-c", cmd)
 }

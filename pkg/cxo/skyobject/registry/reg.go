@@ -20,7 +20,7 @@ func newReg() *Reg {
 // givne value is pointer, then it will be converted to
 // non-pointer inside. E.g. it registers non-pointer types
 // only
-func (r *Reg) Register(name string, val interface{}) {
+func (r *Reg) Register(name string, val any) {
 	if name == "" {
 		panic("empty name")
 	}
@@ -156,7 +156,7 @@ func (r *Reg) getField(sf reflect.StructField) Field {
 		f.schema = &referenceSchema{
 			schema: schema{
 				ref:  SchemaRef{},
-				kind: reflect.Ptr, // Ref is pointer
+				kind: reflect.Pointer, // Ref is pointer
 			},
 			typ:  ReferenceTypeSingle,
 			elem: &schema{kind: reflect.Struct, name: []byte(tagRef)},
@@ -167,7 +167,7 @@ func (r *Reg) getField(sf reflect.StructField) Field {
 		f.schema = &referenceSchema{
 			schema: schema{
 				ref:  SchemaRef{},
-				kind: reflect.Ptr, // Refs is pointer (actually []*T)
+				kind: reflect.Pointer, // Refs is pointer (actually []*T)
 			},
 			typ:  ReferenceTypeSlice,
 			elem: &schema{kind: reflect.Struct, name: []byte(tagRef)},

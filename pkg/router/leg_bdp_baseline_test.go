@@ -52,7 +52,7 @@ func TestSendWindowFollowsFeedbackDelayOverFirstHopBaseline(t *testing.T) {
 			m.legs[0].ecfLastAckedNano = time.Now().Add(-time.Second).UnixNano()
 		}
 		m.legMu.Unlock()
-		m.refreshLegWindows(mts)
+		m.refreshLegWindows(tpLegs(mts))
 		return ecfStatesOf(m)[0].cwndBytes, fb
 	}
 

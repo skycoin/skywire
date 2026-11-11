@@ -3,7 +3,7 @@ package clivisor
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -151,6 +151,9 @@ func formatNetworkState(n *visorapi.NetworkState) string {
 		}
 		return s
 	}
+	if c := n.Connectivity; c.State != "" {
+		fmt.Fprintf(&b, "connectivity:   %s%s, %s\n", c.State, at(c.Since), orDash(c.Reason))
+	}
 	src := ""
 	if n.PublicIPSource != "" {
 		src = " via " + n.PublicIPSource
@@ -179,7 +182,7 @@ func formatNetworkState(n *visorapi.NetworkState) string {
 	for t := range n.Advertised {
 		types = append(types, t)
 	}
-	sort.Strings(types)
+	slices.Sort(types)
 	for _, t := range types {
 		fmt.Fprintf(&b, "  %-12s %s\n", t+":", orDash(strings.Join(n.Advertised[t], ", ")))
 	}

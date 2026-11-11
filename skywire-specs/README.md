@@ -18,6 +18,7 @@ and wording rules are in [CONVENTIONS.md](CONVENTIONS.md).
 - [Cascading Route Setup](specifications/28-Cascading_Route_Setup.md)
 - [Dmsg](specifications/05-Messaging_System.md)
 - [CXO Feeds](specifications/31-CXO_Feeds.md)
+- [Dmsg Async](specifications/35-Dmsg_Async.md)
 
 ## Visor
 
@@ -28,6 +29,7 @@ and wording rules are in [CONVENTIONS.md](CONVENTIONS.md).
 - [Public Visors](specifications/24-Public_Visors.md)
 - [Public Autoconnect](specifications/25-Public_Autoconnect.md)
 - [Address Resolver Privacy](specifications/29-Address_Resolver_Privacy.md)
+- [Skymail](specifications/34-Skymail.md)
 
 ## Deployment services
 

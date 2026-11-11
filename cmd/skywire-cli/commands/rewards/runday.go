@@ -14,14 +14,17 @@
 package clirewards
 
 import (
+	"cmp"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"math"
 	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -34,7 +37,6 @@ import (
 	deprewards "github.com/skycoin/skywire/pkg/deployment/rewards"
 	"github.com/skycoin/skywire/pkg/geoip"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/rewards"
 )
 
@@ -304,12 +306,12 @@ func calcDay(opts calcOpts) (*dayResult, error) {
 		return nil, fmt.Errorf("parse date: %w", err)
 	}
 
-	if _, err := os.Stat(opts.HwSurveyPath); os.IsNotExist(err) {
+	if _, err := os.Stat(opts.HwSurveyPath); errors.Is(err, fs.ErrNotExist) {
 		return nil, fmt.Errorf("survey path does not exist: %s", opts.HwSurveyPath)
 	}
 
 	utfilePath := filepath.Join(opts.HistDir, opts.Date+"_ut.txt")
-	if _, err := os.Stat(utfilePath); os.IsNotExist(err) {
+	if _, err := os.Stat(utfilePath); errors.Is(err, fs.ErrNotExist) {
 		return nil, fmt.Errorf("ut file not found: %s", utfilePath)
 	}
 
@@ -352,12 +354,18 @@ func calcDay(opts calcOpts) (*dayResult, error) {
 	// available for diagnostics but is not load-bearing for rewards.
 
 	// Get PKs that met uptime on this date.
-	res, _ := script.File(utfilePath).Match(strings.TrimRight(opts.Date, "\n")).Column(1).Slice() //nolint:errcheck
+	res, belowUptime, err := uptimeKeys(utfilePath, strings.TrimRight(opts.Date, "\n"))
+	if err != nil {
+		return nil, fmt.Errorf("read uptime file: %w", err)
+	}
 	if len(res) == 0 {
 		return nil, fmt.Errorf("no keys achieved minimum uptime on %s", opts.Date)
 	}
 
 	var nodesInfos1, grrInfos []nodeinfo
+	for _, pk := range belowUptime {
+		grrInfos = append(grrInfos, nodeinfo{PK: pk, Reason: uptimeBelowReason})
+	}
 	for _, pk := range res {
 		surveyPath := fmt.Sprintf("%s/%s/node-info.json", opts.HwSurveyPath, pk)
 		survey, parseErr := parseSurvey(surveyPath)
@@ -387,7 +395,7 @@ func calcDay(opts calcOpts) (*dayResult, error) {
 		}
 		uu := survey.UUID
 
-		_, _, addrErr := rewardconfig.ValidateRewardAddress(sky)
+		addrErr := rewardAddressError(sky, wDate)
 
 		// TPD-integrated UT already gated >= 2 transports at heartbeat
 		// time, so every pk we're iterating qualified by definition.
@@ -491,7 +499,7 @@ func ineligibilityReason(archAllowed bool, arch, ip, uu, ifc string, macs []stri
 	case hv != "null":
 		return hv
 	case addrErr != nil:
-		return "Invalid Skycoin address"
+		return addressReason(addrErr)
 	case !meetsTP:
 		return "No transports"
 	default:
@@ -609,7 +617,9 @@ func writeRewardTxnCSV(w io.Writer, r *dayResult) error {
 	for a, v := range sums {
 		rows = append(rows, pair{a, v})
 	}
-	sort.Slice(rows, func(i, j int) bool { return rows[i].amt > rows[j].amt })
+	slices.SortFunc(rows, func(a, b pair) int {
+		return cmp.Compare(b.amt, a.amt)
+	})
 	if _, err := fmt.Fprintln(w, "Skycoin Address, Reward Amount"); err != nil {
 		return err
 	}

@@ -90,6 +90,7 @@ var (
 
 func init() {
 	launcher.RegisterApp("skynet-client", RunSkynetClient)
+	launcher.RegisterAppFlags("skynet-client", RootCmd.Flags())
 	RootCmd.Flags().StringVar(&srv, "srv", "", "remote server public key")
 	RootCmd.Flags().IntVar(&remotePort, "remote", 0, "remote port to forward")
 	RootCmd.Flags().IntVar(&localPort, "local", 0, "local port to listen on")

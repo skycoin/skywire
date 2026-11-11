@@ -13,7 +13,6 @@ import (
 	"sync"
 
 	"github.com/0magnet/calvin"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
@@ -230,23 +229,19 @@ var RootCmd = &cobra.Command{
 			return fmt.Errorf("failed to serve CLI: %w", err)
 		}
 		log.WithField("addr", cliL.Addr()).Info("Listening for CLI connections.")
-		wg.Add(1)
-		go func() {
+		wg.Go(func() {
 			log.WithError(host.ServeCLI(ctx, cliL)).
 				Info("Stopped serving CLI.")
-			wg.Done()
-		}()
+		})
 
 		// Dmsg-overlay listener — only when dmsg is enabled.
 		if dmsgC != nil {
 			log.WithField("port", conf.DmsgPort).
 				Info("Listening for dmsg streams.")
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				log.WithError(host.ListenAndServe(ctx, conf.DmsgPort)).
 					Info("Stopped serving dmsgpty-host.")
-				wg.Done()
-			}()
+			})
 		}
 
 		// Optional direct-TCP entry point (XK-noise + whitelist
@@ -478,7 +473,7 @@ func getConfig(cmd *cobra.Command, skGen bool) (pty.Config, error) {
 	}
 
 	// Print values.
-	pLog := logrus.FieldLogger(log)
+	pLog := logging.FieldLogger(log)
 	pLog = pLog.WithField("dmsgdisc", conf.DmsgDisc)
 	pLog = pLog.WithField("dmsgsessions", conf.DmsgSessions)
 	pLog = pLog.WithField("dmsgport", conf.DmsgPort)

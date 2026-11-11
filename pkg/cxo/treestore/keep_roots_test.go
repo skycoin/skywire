@@ -86,7 +86,7 @@ func TestKeepRootsLetsSlowFillsFinish(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	require.NoError(t, sub.ConnectTCP(ctx, addr))
-	_, ok := cs.waitConverge(leaves, 30*time.Second)
+	_, ok := cs.waitConverge(pathSet("tp/%04d", 0, leaves), 30*time.Second)
 	require.True(t, ok, "seed set must converge")
 
 	for i, end := 0, time.Now().Add(5*time.Second); time.Now().Before(end); i++ {

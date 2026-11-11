@@ -427,8 +427,8 @@ func (r *RPC) GroupLeave(id *string, _ *struct{}) (err error) {
 }
 
 // GroupHistory returns persisted group messages for a given group.
-// Returns ErrGroupHistoryDisabled when persistence is off — operators
-// enable it via Skychat.GroupHistoryDB in the visor config. Unlike
+// Returns ErrGroupHistoryDisabled when persistence is off, which
+// Skychat.GroupHistoryDB "off" does. Unlike
 // GroupPoll (which drains the in-memory ring), this RPC reads from
 // disk and survives visor restarts.
 func (r *RPC) GroupHistory(req *visorapi.GroupHistoryRequest, out *[]visorapi.GroupMessage) (err error) {

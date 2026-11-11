@@ -20,7 +20,7 @@ func connGoroutines(t *testing.T) int {
 		t.Fatal(err)
 	}
 	n := 0
-	for _, g := range strings.Split(b.String(), "\n\n") {
+	for g := range strings.SplitSeq(b.String(), "\n\n") {
 		if strings.Contains(g, "cxo/node.(*Conn)") || strings.Contains(g, "cxo/node/transport.(*Connection)") {
 			n++
 		}
@@ -34,7 +34,7 @@ func TestIdleConnHoldsOneGoroutine(t *testing.T) {
 	const clients = 10
 	ln := getTestNode("goroutines-server")
 	defer ln.Close() //nolint:errcheck,gosec
-	for i := 0; i < clients; i++ {
+	for range clients {
 		cn, err := NewNode(getTestConfigNotListen("goroutines-client"))
 		assertNil(t, err)
 		defer cn.Close() //nolint:errcheck,gosec

@@ -41,7 +41,7 @@ func TestParseLivenessTrimsThePartialFinalSlot(t *testing.T) {
 	for i := range counts {
 		counts[i] = 47
 	}
-	for i := 0; i < 114; i++ {
+	for i := range 114 {
 		counts[i] = 48
 	}
 
@@ -67,7 +67,7 @@ func TestParseLivenessKeepsASustainedDrop(t *testing.T) {
 	for i := range counts {
 		counts[i] = 40
 	}
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		counts[i] = 60
 	}
 

@@ -18,7 +18,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime/trace"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -168,7 +168,7 @@ func prune(d string) {
 			names = append(names, e.Name())
 		}
 	}
-	sort.Strings(names) // the timestamp in the name sorts oldest first
+	slices.Sort(names) // the timestamp in the name sorts oldest first
 	for len(names) > keepSnapshots {
 		os.Remove(filepath.Join(d, names[0])) //nolint:errcheck,gosec
 		names = names[1:]
@@ -185,8 +185,8 @@ func Snapshots() []string {
 		return nil
 	}
 	var out []string
-	for i := len(entries) - 1; i >= 0; i-- {
-		n := entries[i].Name()
+	for _, entrie := range slices.Backward(entries) {
+		n := entrie.Name()
 		if strings.HasPrefix(n, "flightrec-") && strings.HasSuffix(n, ".trace") {
 			out = append(out, filepath.Join(d, n))
 		}

@@ -70,11 +70,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"sync"
 	"sync/atomic"
-
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
@@ -108,7 +106,7 @@ type ServicesCXOPublisher struct {
 	done   chan struct{}
 	wg     sync.WaitGroup
 
-	dropped uint64 // atomic; incremented on queue overflow
+	dropped atomic.Uint64 // atomic; incremented on queue overflow
 
 	// state is the live per-type service set: service type -> service PK ->
 	// that service's full JSON servicedisc.Service. Owned exclusively by
@@ -130,7 +128,7 @@ const servicesKeepRoots = 60
 // mirror inherits that. Returns nil + error if the publisher can't be
 // created (no dmsg client, listener bind failure, etc.); callers log
 // and continue without it (the HTTP path remains the source of truth).
-func StartServicesCXOPublisher(_ context.Context, dmsgC *dmsg.Client, sk cipher.SecKey, logger logrus.FieldLogger) (*ServicesCXOPublisher, error) {
+func StartServicesCXOPublisher(_ context.Context, dmsgC *dmsg.Client, sk cipher.SecKey, logger logging.FieldLogger) (*ServicesCXOPublisher, error) {
 	log := logging.MustGetLogger("sd-cxo-services-pub")
 
 	pub, err := treestore.NewWithDMSG(dmsgC, sk, treestore.PubConfig{
@@ -186,7 +184,7 @@ func (p *ServicesCXOPublisher) submit(fn func()) {
 	select {
 	case p.events <- fn:
 	default:
-		dropped := atomic.AddUint64(&p.dropped, 1)
+		dropped := p.dropped.Add(1)
 		// Log on the first drop and every power-of-two thereafter
 		// (1, 2, 4, 8 …) so a runaway backlog is visible but a
 		// transient bump doesn't spam the log.
@@ -210,7 +208,7 @@ func (p *ServicesCXOPublisher) Dropped() uint64 {
 	if p == nil {
 		return 0
 	}
-	return atomic.LoadUint64(&p.dropped)
+	return p.dropped.Load()
 }
 
 // Close stops the worker goroutine and the underlying publisher.
@@ -335,7 +333,9 @@ func encodeServicesBatch(svcs map[cipher.PubKey][]byte) []byte {
 	for pk := range svcs {
 		pks = append(pks, pk)
 	}
-	sort.Slice(pks, func(i, j int) bool { return bytes.Compare(pks[i][:], pks[j][:]) < 0 })
+	slices.SortFunc(pks, func(a, b cipher.PubKey) int {
+		return bytes.Compare(a[:], b[:])
+	})
 	payload := make([]byte, 0, 2+len(pks)*256)
 	payload = append(payload, '[')
 	for i, pk := range pks {

@@ -113,7 +113,7 @@ func Test_fillinng(t *testing.T) {
 	testFillRoot(t, sc, rc, r)
 	testFillDBs(t, sc, rc)
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 
 		t.Log(i)
 
@@ -149,9 +149,7 @@ func testFillRoot(t *testing.T, sc, rc *Container, r *registry.Root) {
 	var wg sync.WaitGroup
 
 	// the rq channel
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 
 		for {
 			var key, ok = <-rq
@@ -167,7 +165,7 @@ func testFillRoot(t *testing.T, sc, rc *Container, r *registry.Root) {
 			assertNil(t, err)
 		}
 
-	}()
+	})
 
 	assertNil(t, f.Run())
 
@@ -190,7 +188,7 @@ func createDynamic(
 	pack registry.Pack,
 	reg *registry.Registry,
 	name string,
-	obj interface{},
+	obj any,
 ) (
 	dr registry.Dynamic,
 ) {

@@ -17,7 +17,7 @@ package visorconfig
 
 import (
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"sort"
 	"strings"
 
@@ -42,22 +42,19 @@ func (v1 *V1) UpdateAppAutostart(launch *launcher.AppLauncher, appName string, a
 			break
 		}
 	}
+	// In place: a reset to the config's list would drop the apps the visor
+	// adds at runtime, such as skymail.
+	launch.SetAppAutoStart(appName, autoStart)
 	if !changed {
 		return nil
 	}
-	launch.ResetConfig(launcher.AppLauncherConfig{
-		VisorPK:       v1.PK,
-		Apps:          conf.Apps,
-		ServerAddr:    conf.ServerAddr,
-		DisplayNodeIP: conf.DisplayNodeIP,
-	})
 	return v1.flush(v1)
 }
 
 // UpdateAppArg updates the cli flag of the specified app config and also within the
 // The updated config gets flushed to file if there are any changes.
 // func (v1 *V1) UpdateAppArg(appName, argName string, value interface{}) error {
-func (v1 *V1) UpdateAppArg(launch *launcher.AppLauncher, appName, argName string, value interface{}) error {
+func (v1 *V1) UpdateAppArg(launch *launcher.AppLauncher, appName, argName string, value any) error {
 	v1.mu.Lock()
 	defer v1.mu.Unlock()
 
@@ -275,7 +272,7 @@ func (v1 *V1) AddAppConfig(launch *launcher.AppLauncher, appName, binaryName str
 	for {
 		minn := 10
 		maxx := 99
-		randomNumber = rand.Intn(maxx-minn+1) + minn             //nolint: gosec
+		randomNumber = rand.IntN(maxx-minn+1) + minn             //nolint: gosec
 		if _, ok := busyPorts[routing.Port(randomNumber)]; !ok { //nolint: gosec
 			break
 		}
@@ -418,7 +415,7 @@ func updateStringArg(conf *Launcher, appName, argName, value string) bool {
 
 		argChanged := false
 		l := len(conf.Apps[i].Args)
-		for j := 0; j < l; j++ {
+		for j := range l {
 			equalArgName := conf.Apps[i].Args[j] == argName && j+1 < len(conf.Apps[i].Args)
 			if !equalArgName {
 				continue

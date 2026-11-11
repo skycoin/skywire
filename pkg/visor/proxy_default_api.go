@@ -19,12 +19,14 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/skycoin/skywire/pkg/alerts"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/contacts"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgasync"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
@@ -234,6 +236,10 @@ func (proxyDefaultAPI) Apps() ([]*appserver.AppState, error) {
 	return nil, ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) AppCatalog() ([]visorapi.CatalogEntry, error) {
+	return nil, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) StartApp(_ string) error {
 	return ErrProxyNotSupported
 }
@@ -357,6 +363,10 @@ func (proxyDefaultAPI) SetAppLauncherMode(_ string, _ string) error {
 
 func (proxyDefaultAPI) AppHelp(_ string) (string, error) {
 	return "", ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) AppFlags(_ string) (visorapi.AppFlags, error) {
+	return visorapi.AppFlags{}, ErrProxyNotSupported
 }
 
 func (proxyDefaultAPI) LogsSince(_ time.Time, _ string) ([]string, error) {
@@ -1062,6 +1072,11 @@ func (proxyDefaultAPI) VoiceCallAudio(_ string) (sent, recv []int16, err error) 
 	return nil, nil, ErrProxyNotSupported
 }
 
+// VoiceCallDevices implements API (not proxied).
+func (proxyDefaultAPI) VoiceCallDevices(_ string) (visorapi.VoiceDevices, error) {
+	return visorapi.VoiceDevices{}, ErrProxyNotSupported
+}
+
 // VoiceMute implements API (not proxied).
 func (proxyDefaultAPI) VoiceMute(_ string, _, _ bool) error {
 	return ErrProxyNotSupported
@@ -1207,6 +1222,10 @@ func (proxyDefaultAPI) RemoveAllHypervisors() (int, error) {
 	return 0, ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) HypervisorNotice() (string, error) {
+	return "", ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) SetHypervisorPassword(_ string, _ string) error {
 	return ErrProxyNotSupported
 }
@@ -1248,6 +1267,14 @@ func (proxyDefaultAPI) HVStartApp(_ cipher.PubKey, _ string) error {
 }
 
 func (proxyDefaultAPI) HVStopApp(_ cipher.PubKey, _ string) error {
+	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) HVAppCatalog(_ cipher.PubKey) ([]visorapi.CatalogEntry, error) {
+	return nil, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) HVAddApp(_ cipher.PubKey, _, _ string) error {
 	return ErrProxyNotSupported
 }
 
@@ -1375,6 +1402,10 @@ func (proxyDefaultAPI) MailDelete(_ string, _ string) error {
 	return ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) MailRetry(_ string) error {
+	return ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) MailSetWhitelist(_ []cipher.PubKey) error {
 	return ErrProxyNotSupported
 }
@@ -1435,4 +1466,62 @@ func (proxyDefaultAPI) ContactsImport(_ []byte) (int, error) {
 
 func (proxyDefaultAPI) ContactsExport() ([]byte, error) {
 	return nil, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) DmsgAsyncStatus() (*visorapi.DmsgAsyncStatus, error) {
+	return nil, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) DmsgAsyncSend(visorapi.DmsgAsyncSendRequest) (*visorapi.DmsgAsyncSendResult, error) {
+	return nil, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) DmsgAsyncTake([]uint16) ([]dmsgasync.Message, error) {
+	return nil, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) DmsgAsyncSync() error { return ErrProxyNotSupported }
+
+// DmsgAsyncSettings implements visorapi.API.
+func (proxyDefaultAPI) DmsgAsyncSettings() (*visorapi.DmsgAsyncSettings, error) {
+	return nil, ErrProxyNotSupported
+}
+
+// DmsgAsyncSetSettings implements visorapi.API.
+func (proxyDefaultAPI) DmsgAsyncSetSettings(map[string]string) error { return ErrProxyNotSupported }
+
+func (proxyDefaultAPI) SetSingleRewardAddress(_ string) (string, error) {
+	return "", ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) HVSetSingleRewardAddress(_ cipher.PubKey, _ string) (string, error) {
+	return "", ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) HVForgetVisor(_ cipher.PubKey) error {
+	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) AlertsStatus() (*alerts.Status, error) {
+	return nil, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) AlertsSet(_ alerts.Settings) error {
+	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) AlertsTest() ([]alerts.Result, error) {
+	return nil, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) AlertsLANProbe(_ string) (bool, error) {
+	return false, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) AlertsPushAdd(sub alerts.PushSubscription) (alerts.PushSubscription, error) {
+	return sub, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) AlertsPushRemove(_ string) (int, error) {
+	return 0, ErrProxyNotSupported
 }

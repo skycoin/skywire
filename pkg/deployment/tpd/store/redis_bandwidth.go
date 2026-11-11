@@ -245,7 +245,7 @@ func (s *redisStore) GetTransportBandwidth(ctx context.Context, tpID uuid.UUID,
 
 	switch period {
 	case "daily":
-		for i := 0; i < limit; i++ {
+		for i := range limit {
 			t := now.AddDate(0, 0, -i)
 			if !s.liveBandwidthDay(i) {
 				date := t.Format(MetricsDateFormat)
@@ -290,7 +290,7 @@ func (s *redisStore) GetVisorBandwidth(ctx context.Context, pk cipher.PubKey,
 	var cmds []*redis.StringStringMapCmd
 
 	pipe := s.client.Pipeline()
-	for d := 0; d < limit; d++ {
+	for d := range limit {
 		t := now.AddDate(0, 0, -d)
 		dateStr := t.Format("2006-01-02")
 		if !s.liveBandwidthDay(d) {

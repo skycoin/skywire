@@ -16,7 +16,6 @@ import (
 func TestEveryKnobRoundTrips(t *testing.T) {
 	t.Cleanup(Reset)
 	for _, e := range Snapshot() {
-		e := e
 		t.Run(e.Name, func(t *testing.T) {
 			// Format(default) parses back to exactly the default.
 			back, err := Parse(e.Name, e.DefaultStr)

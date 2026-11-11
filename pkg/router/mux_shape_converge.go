@@ -39,6 +39,7 @@ package router
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"sync"
 	"time"
@@ -126,9 +127,7 @@ func (l *shapeLedger) read(key shapeSession) (map[string]uint64, *MuxShapeMove) 
 		return nil, nil
 	}
 	counts := make(map[string]uint64, len(e.counts))
-	for k, v := range e.counts {
-		counts[k] = v
-	}
+	maps.Copy(counts, e.counts)
 	last := e.last
 	return counts, &last
 }
@@ -411,7 +410,7 @@ func (c *shapeConverge) decompose(g *RouteGroup, from Shape, why string) bool {
 	}
 	idx := leg.idx
 	reason := fmt.Sprintf("shape %s -> %s: %s", from, c.target, why)
-	ns, err := g.splitLeg(idx, reason)
+	ns, err := g.splitLeg(leg.tp, reason)
 	if err != nil {
 		if errors.Is(err, ErrRehomeNoAck) || errors.Is(err, ErrRehomeUnsupported) {
 			// Not a transient: the hop dropping the request will still be

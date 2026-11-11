@@ -11,8 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
@@ -41,7 +39,7 @@ func TestBootReportHandler(t *testing.T) {
 	if code := postBootReport(h, `{"kind":"`+strings.Repeat("x", bootReportMaxBytes)+`"}`, "c"); code != http.StatusRequestEntityTooLarge {
 		t.Errorf("oversized: status %d, want 413", code)
 	}
-	for i := 0; i < bootReportPerWindow; i++ {
+	for range bootReportPerWindow {
 		postBootReport(h, `{"kind":"error"}`, "d")
 	}
 	if code := postBootReport(h, `{"kind":"error"}`, "d"); code != http.StatusTooManyRequests {
@@ -55,7 +53,7 @@ func TestBootReportHandler(t *testing.T) {
 func TestBootReportLimiterWindowResets(t *testing.T) {
 	l := &bootReportLimiter{perKey: make(map[string]int)}
 	now := time.Now()
-	for i := 0; i < bootReportPerWindow; i++ {
+	for range bootReportPerWindow {
 		l.allow("k", now)
 	}
 	if l.allow("k", now) {
@@ -109,7 +107,7 @@ func TestBootReportFileRotates(t *testing.T) {
 		t.Fatal(err)
 	}
 	f := &bootReportFile{path: file}
-	if err := f.add(logrus.Fields{"kind": "error"}, time.Now()); err != nil {
+	if err := f.add(logging.Fields{"kind": "error"}, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if st, err := os.Stat(file + ".1"); err != nil || st.Size() != bootReportFileMax {

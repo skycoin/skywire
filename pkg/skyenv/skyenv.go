@@ -242,6 +242,10 @@ const (
 	// the value only needs to be collision-free, which ports_test guards.
 	DmsgRelayPort uint16 = 70
 
+	// DmsgAsyncPort is where an inbox host serves dmsg-async, holding
+	// messages for offline keys (pkg/dmsg/dmsgasync).
+	DmsgAsyncPort uint16 = 85
+
 	// DmsgWebRTCSignalPort is the dmsg port the WebRTC carrier exchanges its SDP
 	// offer/answer + ICE candidates on (a visor dials a peer here to open a
 	// signaling stream; the answerer listens). It MUST live in this registry: it
@@ -312,6 +316,9 @@ const (
 	// (stcpr/sudph) transport to each configured hypervisor, so RPC + skypty ride a
 	// fast p2p path instead of the dmsg relay (dmsg stays the bootstrap/fallback).
 	HypervisorAutoconnect = true
+	// DmsgServerTransports determines if the visor keeps one automatic transport to
+	// each dmsg server it holds a session with, when that server is also a visor.
+	DmsgServerTransports = true
 
 	// Dmsgpty constants.
 

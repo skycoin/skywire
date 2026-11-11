@@ -19,7 +19,7 @@ const (
 // KCPConversationFilter filters KCP conversations with specified ID.
 type KCPConversationFilter struct {
 	log *logging.Logger
-	id  uint32
+	id  atomic.Uint32
 }
 
 // NewKCPConversationFilter returns a new KCPConversationFilter.
@@ -34,7 +34,7 @@ func (f *KCPConversationFilter) ClaimIncoming(in []byte, _ net.Addr) bool {
 	if !f.isKCPConversation(in) {
 		return false
 	}
-	expectedID := atomic.LoadUint32(&f.id)
+	expectedID := f.id.Load()
 	receivedID := binary.LittleEndian.Uint32(in[:packetTypeOffset]) //nolint
 
 	return expectedID != 0 && expectedID == receivedID
@@ -44,7 +44,7 @@ func (f *KCPConversationFilter) ClaimIncoming(in []byte, _ net.Addr) bool {
 func (f *KCPConversationFilter) Outgoing(out []byte, _ net.Addr) {
 	if f.isKCPConversation(out) && len(out) >= minPacketLen {
 		id := binary.LittleEndian.Uint32(out[:packetTypeOffset])
-		atomic.StoreUint32(&f.id, id)
+		f.id.Store(id)
 	}
 }
 

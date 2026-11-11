@@ -11,7 +11,6 @@ import (
 	"time"
 
 	rpc "github.com/0magnet/gobrpc"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -63,8 +62,7 @@ func meterVisor(t *testing.T) (*Visor, *fakeLevers) {
 	return v, f
 }
 
-func boolp(b bool) *bool { return &b }
-
+//go:fix inline
 func TestMeteredModesPullTheirLevers(t *testing.T) {
 	v, f := meterVisor(t)
 	set := func(mode string) {
@@ -106,14 +104,14 @@ func TestMeteredModesPullTheirLevers(t *testing.T) {
 	require.Equal(t, transport.RestrictNone, l.restrict)
 	require.False(t, v.meter.lean.Load())
 
-	require.Error(t, v.NetworkSet(visorapi.NetworkSettings{MeteredMode: strPtr("frugal")}))
-	require.Error(t, v.NetworkSet(visorapi.NetworkSettings{Metered: strPtr("maybe")}))
+	require.Error(t, v.NetworkSet(visorapi.NetworkSettings{MeteredMode: new("frugal")}))
+	require.Error(t, v.NetworkSet(visorapi.NetworkSettings{Metered: new("maybe")}))
 }
-
-func strPtr(s string) *string { return &s }
 
 // The operator's override beats an app's report, which beats the rule, and
 // "auto" hands control back.
+//
+//go:fix inline
 func TestMeteredSignalPrecedence(t *testing.T) {
 	v, _ := meterVisor(t)
 	route := "wlan0"
@@ -131,19 +129,19 @@ func TestMeteredSignalPrecedence(t *testing.T) {
 	require.Equal(t, "rule wwan0", st.MeteredSource)
 	require.Equal(t, visorapi.ModeLean, st.Mode)
 
-	require.NoError(t, v.NetworkSet(visorapi.NetworkSettings{Metered: strPtr("false")}))
+	require.NoError(t, v.NetworkSet(visorapi.NetworkSettings{Metered: new("false")}))
 	require.Equal(t, visorapi.ModeNormal, v.NetworkState().Mode, "the override beats the rule")
 
-	require.NoError(t, v.NetworkSet(visorapi.NetworkSettings{Metered: strPtr("auto")}))
+	require.NoError(t, v.NetworkSet(visorapi.NetworkSettings{Metered: new("auto")}))
 	require.Equal(t, visorapi.ModeLean, v.NetworkState().Mode, "auto follows the rule again")
 
 	route = "wlan0"
-	require.NoError(t, v.NetworkEvent(visorapi.NetworkEvent{Event: "changed", Metered: boolp(true)}))
+	require.NoError(t, v.NetworkEvent(visorapi.NetworkEvent{Event: "changed", Metered: new(true)}))
 	st = v.NetworkState()
 	require.Equal(t, "android", st.MeteredSource)
 	require.Equal(t, visorapi.ModeLean, st.Mode)
 
-	require.NoError(t, v.NetworkEvent(visorapi.NetworkEvent{Event: "changed", Metered: boolp(false)}))
+	require.NoError(t, v.NetworkEvent(visorapi.NetworkEvent{Event: "changed", Metered: new(false)}))
 	require.Equal(t, visorapi.ModeNormal, v.NetworkState().Mode)
 
 	// A range entry matches the route's source address.
@@ -183,7 +181,7 @@ func TestLeanRefusesAutomaticInbound(t *testing.T) {
 	v, _ := meterVisor(t)
 	pk, _ := cipher.GenerateKeyPair()
 	require.True(t, v.inboundGate(pk, transport.LabelAutomatic))
-	require.NoError(t, v.NetworkSet(visorapi.NetworkSettings{Metered: strPtr("true")}))
+	require.NoError(t, v.NetworkSet(visorapi.NetworkSettings{Metered: new("true")}))
 	require.False(t, v.inboundGate(pk, transport.LabelAutomatic))
 	require.True(t, v.inboundGate(pk, transport.LabelUser))
 }
@@ -232,13 +230,13 @@ func TestNetworkEventOverRPC(t *testing.T) {
 	v, _ := meterVisor(t)
 	v.netMove.refresh = func(string) {}
 	srv := rpc.NewServer()
-	require.NoError(t, registerVisorRPC(srv, visorapi.RPCPrefix, &RPC{visor: v, log: logrus.New()}))
+	require.NoError(t, registerVisorRPC(srv, visorapi.RPCPrefix, &RPC{visor: v, log: logging.New()}))
 	sc, cc := net.Pipe()
 	go srv.ServeConn(sc)
 	api := visorapi.NewRPCClient(nil, cc, visorapi.RPCPrefix, 30*time.Second)
 
-	require.NoError(t, api.NetworkEvent(visorapi.NetworkEvent{Event: "moved", Metered: boolp(true), Source: "android"}))
+	require.NoError(t, api.NetworkEvent(visorapi.NetworkEvent{Event: "moved", Metered: new(true), Source: "android"}))
 	require.Equal(t, visorapi.ModeLean, v.NetworkState().Mode)
-	require.NoError(t, api.NetworkEvent(visorapi.NetworkEvent{Event: "moved", Metered: boolp(false), Source: "android"}))
+	require.NoError(t, api.NetworkEvent(visorapi.NetworkEvent{Event: "moved", Metered: new(false), Source: "android"}))
 	require.Equal(t, visorapi.ModeNormal, v.NetworkState().Mode)
 }

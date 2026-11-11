@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/0magnet/yamux"
-	"github.com/sirupsen/logrus"
 	"github.com/xtaci/smux"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/noise"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // Stream represents a dmsg connection between two dmsg clients.
@@ -37,7 +37,7 @@ type Stream struct {
 	nsConn  *noise.ReadWriter
 	closeMu sync.Mutex
 	close   func() // to be called when closing
-	log     logrus.FieldLogger
+	log     logging.FieldLogger
 
 	// traffic, when set, counts this accepted stream's bytes for its port.
 	traffic *portTraffic
@@ -135,8 +135,8 @@ func (s *Stream) Close() error {
 	return nil
 }
 
-// Logger returns the internal logrus.FieldLogger instance.
-func (s *Stream) Logger() logrus.FieldLogger {
+// Logger returns the internal logging.FieldLogger instance.
+func (s *Stream) Logger() logging.FieldLogger {
 	return s.log
 }
 

@@ -47,8 +47,9 @@
 package store
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 )
@@ -225,7 +226,9 @@ func MergeDailyMetrics(days [][]TransportMetric) []TransportMetric {
 }
 
 func sortMetricsByID(m []TransportMetric) {
-	sort.Slice(m, func(i, j int) bool { return m[i].ID < m[j].ID })
+	slices.SortFunc(m, func(a, b TransportMetric) int {
+		return cmp.Compare(a.ID, b.ID)
+	})
 }
 
 // MetricsLateWindow is how long after UTC midnight yesterday stays open:

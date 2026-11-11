@@ -1,5 +1,4 @@
 //go:build linux
-// +build linux
 
 // Package vpn pkg/vpn/mesh_gateway_standalone_linux.go c4-app-vpn
 //
@@ -30,9 +29,9 @@ import (
 	"strconv"
 
 	miekgdns "github.com/miekg/dns"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skynetca"
 	"github.com/skycoin/skywire/pkg/vpn/netctl"
 	"github.com/skycoin/skywire/pkg/vpnrouter/meshgw"
@@ -95,9 +94,9 @@ func (c MeshGatewayConfig) bindHost() string {
 // same firewall backend (iptables, or nftables under -tags nftfw) and meshgw
 // engine as the full router; it just skips the DHCP/DNS-server-owns-the-LAN,
 // interface, WiFi, and tunnel-NAT roles.
-func RunMeshGatewayOnly(ctx context.Context, cfg MeshGatewayConfig, log logrus.FieldLogger) error {
+func RunMeshGatewayOnly(ctx context.Context, cfg MeshGatewayConfig, log logging.FieldLogger) error {
 	if log == nil {
-		log = logrus.New()
+		log = logging.New()
 	}
 	if cfg.LANInterface == "" {
 		return fmt.Errorf("mesh gateway: LAN interface is required (the REDIRECT iif)")

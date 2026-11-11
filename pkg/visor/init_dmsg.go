@@ -18,8 +18,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
@@ -255,11 +253,9 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	httpC.Transport = dmsgTr
 
 	wg := new(sync.WaitGroup)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		dmsgC.Serve(ctx)
-	}()
+	})
 
 	v.pushCloseStack("dmsg", func() error {
 		if err := dmsgC.Close(); err != nil {
@@ -641,7 +637,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	logger := v.MasterLogger().PackageLogger("dmsghttp_logserver")
 
 	var printLog bool
-	if v.MasterLogger().GetLevel() == logrus.DebugLevel || v.MasterLogger().GetLevel() == logrus.TraceLevel {
+	if v.MasterLogger().GetLevel() == logging.DebugLevel || v.MasterLogger().GetLevel() == logging.TraceLevel {
 		printLog = true
 	}
 
@@ -764,10 +760,8 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	}
 
 	wg := new(sync.WaitGroup)
-	wg.Add(1)
 
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err = srv.Serve(lis)
 		if errors.Is(err, dmsg.ErrEntityClosed) {
 			return
@@ -778,7 +772,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 		if err != nil {
 			logger.WithError(err).Error("Logserver exited with error.")
 		}
-	}()
+	})
 
 	// Skynet mirror of the HTTP log server at the same port. Same
 	// http.Server (and therefore same handler, timeouts, and graceful
@@ -851,14 +845,12 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 			}
 
 			localWg := new(sync.WaitGroup)
-			localWg.Add(1)
 
-			go func() {
-				defer localWg.Done()
+			localWg.Go(func() {
 				if err := localSrv.Serve(localLis); err != nil && !errors.Is(err, http.ErrServerClosed) {
 					logger.WithError(err).Error("Localhost logserver exited with error")
 				}
-			}()
+			})
 
 			v.pushCloseStack("localhost.logserver", func() error {
 				shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -1012,14 +1004,12 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 		}
 		serveCtx, cancel := context.WithCancel(context.Background()) //nolint:gosec // cancel called in pushCloseStack
 		wg := new(sync.WaitGroup)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			runtimeErrors := getErrors(ctx)
 			if err := scpHost.ListenAndServe(serveCtx, scpPort); err != nil {
 				runtimeErrors <- fmt.Errorf("dmsgscp listen-and-serve stopped: %w", err)
 			}
-		}()
+		})
 		// Skynet mirror — same port, same Host. Polls until the
 		// router's skynet networker is registered (initRouter may
 		// run after this), then binds and serves. Same accept loop
@@ -1061,15 +1051,13 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 		serveCtx, cancel := context.WithCancel(context.Background()) //nolint:gosec // cancel is called in pushCloseStack
 		wg := new(sync.WaitGroup)
-		wg.Add(1)
 
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			runtimeErrors := getErrors(ctx)
 			if err := host.ServeCLI(serveCtx, cliL); err != nil {
 				runtimeErrors <- fmt.Errorf("serve cli stopped: %w", err)
 			}
-		}()
+		})
 
 		v.pushCloseStack("router.serve", func() error {
 			cancel()
@@ -1121,11 +1109,9 @@ func initDmsgPing(ctx context.Context, v *Visor, log *logging.Logger) error {
 				return
 			}
 			log.WithField("transport", transport).Debugf("Accepted ping conn from %s", conn.RemoteAddr())
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				handleDmsgPingConn(log, conn)
-			}()
+			})
 		}
 	}
 	go func() {
@@ -1287,7 +1273,7 @@ func initDmsgServerLatency(ctx context.Context, v *Visor, log *logging.Logger) e
 			v.dmsgLatency.servers[serverPK] = avgLatency
 			v.dmsgLatency.mu.Unlock()
 
-			log.WithFields(logrus.Fields{
+			log.WithFields(logging.Fields{
 				"server":  serverPKStr,
 				"latency": avgLatency.Round(time.Millisecond),
 				"elapsed": time.Since(start).Round(time.Millisecond),
@@ -1368,13 +1354,11 @@ func buildPtyAppFunc(v *Visor, host *pty.Host, dmsgPort uint16, sshAddr string) 
 		// dmsg listener — primary entry. ListenAndServe blocks
 		// until listenerCtx cancels or the listener fails.
 		if dmsgPort != 0 {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				if err := host.ListenAndServe(listenerCtx, dmsgPort); err != nil && !errors.Is(err, context.Canceled) {
 					log.WithError(err).Warn("dmsg listener stopped with error")
 				}
-			}()
+			})
 
 			// Parallel skynet listener — accepts pty over the
 			// skywire networker so routed peers can reach the
@@ -1382,12 +1366,10 @@ func buildPtyAppFunc(v *Visor, host *pty.Host, dmsgPort uint16, sshAddr string) 
 			// runtimeErrors channel is OK; the helper's select
 			// has a default case.
 			if closer := startSkywirePtyListener(listenerCtx, host, v.conf.PK, dmsgPort, nil); closer != nil {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
+				wg.Go(func() {
 					<-listenerCtx.Done()
 					_ = closer() //nolint:errcheck
-				}()
+				})
 			}
 			if v.services != nil {
 				servePtyOverForwarding(listenerCtx, v, host, dmsgPort)
@@ -1399,13 +1381,11 @@ func buildPtyAppFunc(v *Visor, host *pty.Host, dmsgPort uint16, sshAddr string) 
 		// the whitelist is shared with the dmsg path. Exposed at
 		// CLI as `skywire cli pty shell` / `skywire cli pty host`.
 		if sshAddr != "" {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				if err := host.ListenAndServeTCP(listenerCtx, sshAddr, v.conf.PK, v.conf.SK); err != nil && !errors.Is(err, context.Canceled) {
 					log.WithError(err).WithField("addr", sshAddr).Warn("tcp listener stopped with error")
 				}
-			}()
+			})
 			log.WithField("addr", sshAddr).Info("Mounted pty TCP entry point.")
 		}
 

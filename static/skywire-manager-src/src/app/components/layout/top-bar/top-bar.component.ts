@@ -247,6 +247,13 @@ export class TopBarComponent implements OnInit, OnDestroy {
   // Shows the Mac shortcut in the command palette hint.
   readonly paletteMac = paletteIsMac();
 
+  /** The same page in the server rendered UI at ui2/ (pkg/visor/ui2). */
+  get ui2Href(): string {
+    const m = /^\/nodes\/([0-9a-f]{66})(?:\/([a-z-]+))?/.exec(this.router.url || '');
+
+    return m ? 'ui2/visors/' + m[1] + '/' + (m[2] || 'info') : 'ui2/';
+  }
+
   private langSubscriptionsGroup: Subscription[] = [];
   private vpnDataSubscription!: Subscription;
   private showVpnStateChangeAnimationSubscription!: Subscription;

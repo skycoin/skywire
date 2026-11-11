@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"sync/atomic"
 
@@ -59,7 +60,7 @@ func NewHTTP(addr string, key cipher.PubKey, sec cipher.SecKey, httpC *http.Clie
 }
 
 // Post performs a POST request.
-func (c *apiClient) Post(ctx context.Context, path string, payload interface{}) (*http.Response, error) {
+func (c *apiClient) Post(ctx context.Context, path string, payload any) (*http.Response, error) {
 	body := bytes.NewBuffer(nil)
 	if err := json.NewEncoder(body).Encode(payload); err != nil {
 		return nil, err
@@ -338,9 +339,7 @@ func (c *apiClient) GetAllTransportsPerKeyStats(ctx context.Context) (transport.
 	for _, entry := range oldStats {
 		counts := make(map[string]int, len(entry.ByType)+1)
 		counts["total"] = entry.Total
-		for tpType, count := range entry.ByType {
-			counts[tpType] = count
-		}
+		maps.Copy(counts, entry.ByType)
 		stats[entry.PK] = counts
 	}
 

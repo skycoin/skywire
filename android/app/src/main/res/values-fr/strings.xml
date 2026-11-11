@@ -346,7 +346,23 @@
     <string name="transport_sudph_hint">UDP direct avec trou de NAT. Exige un NAT qui l’autorise — beaucoup d’opérateurs non.</string>
 
     <!-- SkyChat (embedded web UI) -->
+    <string name="chat_cannot_post_removed">Un administrateur vous a retiré de ce groupe.</string>
+    <string name="chat_clear_selection">Annuler la sélection</string>
+    <string name="chat_confirm_delete_selected">Supprimer pour moi les messages sélectionnés ?\n\nCette action est irréversible.</string>
+    <string name="chat_delete_selected">Supprimer la sélection</string>
+    <string name="chat_get_file">Récupérer le fichier</string>
+    <string name="chat_notice_admin_added">Administrateur ajouté : %1$s</string>
+    <string name="chat_notice_admin_removed">Administrateur retiré : %1$s</string>
+    <string name="chat_notice_banned">Banni : %1$s</string>
+    <string name="chat_notice_joined">Nouveau membre : %1$s</string>
+    <string name="chat_notice_left">N’est plus membre : %1$s</string>
+    <string name="chat_notice_muted">Publication restreinte : %1$s</string>
+    <string name="chat_notice_read_only_off">Tout le monde peut de nouveau envoyer des messages.</string>
+    <string name="chat_notice_read_only_on">Seuls les administrateurs peuvent désormais envoyer des messages.</string>
+    <string name="chat_notice_unbanned">Bannissement levé : %1$s</string>
+    <string name="chat_notice_unmuted">Publication rétablie : %1$s</string>
     <string name="chat_page_lang">fr</string>
+    <string name="chat_selected_count">%1$d sélectionnés</string>
     <string name="chat_starting">Démarrage de SkyChat…</string>
     <string name="chat_core_starting">En attente du démarrage du cœur Skywire…</string>
     <string name="chat_core_offline">Le cœur Skywire ne tourne pas. Démarrez-le depuis l’onglet Accueil.</string>
@@ -476,6 +492,15 @@
     <string name="settings_export_prompt">Exporter la configuration Skywire</string>
     <string name="settings_export_done">Configuration exportée.</string>
     <string name="settings_export_unwritable">Le fichier choisi n’a pas pu être ouvert en écriture.</string>
+    <string name="settings_backup">Sauvegarder avec les groupes</string>
+    <string name="settings_backup_title">Sauvegarder avec les groupes ?</string>
+    <string name="settings_backup_warning">La sauvegarde contient la clé secrète de ce visor en clair, avec les chaînes et groupes qu’il a créés ou rejoints. La restaurer sur un nouveau téléphone les ramène. Toute personne qui la lit peut fonctionner comme ce visor, gardez-la donc là où vous seul y avez accès.\n\nSkywire se déconnecte pendant la copie, puis se reconnecte.</string>
+    <string name="settings_backup_prompt">Sauvegarder Skywire</string>
+    <string name="settings_backup_done">Sauvegarde enregistrée.</string>
+    <string name="settings_backup_unreadable">Ce fichier n’est pas une sauvegarde Skywire.</string>
+    <string name="settings_restore">Restaurer une sauvegarde</string>
+    <string name="settings_restore_extra">La sauvegarde est celle de %1$s. Ses chaînes et groupes reviennent avec elle.</string>
+    <string name="settings_restore_done">Sauvegarde restaurée.</string>
 
     <!-- Settings — app lock -->
     <string name="settings_app_lock">Verrouillage de l’application</string>
@@ -1230,6 +1255,7 @@
     <string name="help_mail_body">SkyMail est du courrier entre visors. Votre visor tient une boîte aux lettres à une adresse formée depuis sa clé publique, et le courrier voyage sur Skywire, chiffré, la clé de l’expéditeur étant prouvée par le réseau plutôt que par un serveur de messagerie.\n\nIl n’atteint pas le courrier électronique ordinaire, et un visor hors ligne ne peut pas recevoir de courrier : le courrier part immédiatement et rien ne réessaie. Utilisez l’adresse .dmsg depuis un téléphone ; une adresse .skynet exige une route, qu’un téléphone a rarement.\n\nLe courrier est gardé sur ce téléphone, dans les limites de taille et d’âge des réglages de la boîte aux lettres.</string>
     <!-- skychat-native:begin -->
     <string name="chat_attachment">Pièce jointe</string>
+    <string name="chat_state_removed">retiré</string>
     <string name="chat_you">Vous</string>
     <string name="chat_note_failed">Échec : %1$s</string>
     <string name="chat_note_group_send_failed">Échec de l’envoi au groupe : %1$s</string>
@@ -1390,6 +1416,10 @@
     <string name="chat_cannot_open">Impossible d’ouvrir ce fichier.</string>
     <string name="chat_cannot_play">Impossible de lire ce clip.</string>
     <string name="chat_cannot_post">Vous ne pouvez pas envoyer de messages dans ce groupe.</string>
+    <string name="chat_cannot_post_banned">Vous êtes banni de ce groupe.</string>
+    <string name="chat_cannot_post_channel">Ceci est une chaîne. Seuls ses administrateurs peuvent publier.</string>
+    <string name="chat_cannot_post_muted">Vous êtes restreint dans ce groupe et ne pouvez pas y envoyer de messages.</string>
+    <string name="chat_cannot_post_read_only">Ce groupe est en lecture seule. Seuls les administrateurs peuvent envoyer des messages.</string>
     <string name="chat_catalog_open">ouvrir</string>
     <string name="chat_catalog_view">voir</string>
     <string name="chat_catalog_title">Également publié par ce visor</string>

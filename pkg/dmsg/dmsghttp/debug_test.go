@@ -2,7 +2,6 @@
 package dmsghttp_test
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -124,8 +123,7 @@ func TestServeDebug_Integration(t *testing.T) {
 	lis, err := nettest.NewLocalListener("tcp")
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	go srv.Serve(lis, "") //nolint:errcheck
 	<-srv.Ready()
@@ -168,7 +166,7 @@ func TestServeDebug_Integration(t *testing.T) {
 
 	// Retry the request — noise handshakes can race on CI
 	var resp *http.Response
-	for attempt := 0; attempt < 3; attempt++ {
+	for range 3 {
 		resp, err = httpC.Get(fmt.Sprintf("dmsg://%s:%d/debug/pprof/", clientPK.Hex(), dmsghttp.DefaultDebugPort))
 		if err == nil {
 			break

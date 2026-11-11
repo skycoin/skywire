@@ -16,7 +16,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/ccding/go-stun/stun"
@@ -85,7 +85,7 @@ func (v *Visor) reachDecl() arfeed.ReachDecl {
 			d.Accepts = append(d.Accepts, name)
 		}
 	}
-	sort.Strings(d.Accepts)
+	slices.Sort(d.Accepts)
 	g := int64(arfeed.InboundGranularity / time.Second)
 	for t, at := range tm.LastInbound() {
 		name, ok := reachTypes[t]

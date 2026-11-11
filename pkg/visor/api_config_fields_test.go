@@ -169,8 +169,8 @@ func TestLiveConfigFieldsResolve(t *testing.T) {
 }
 
 func TestDecodeConfigValue(t *testing.T) {
-	strType := reflect.TypeOf("")
-	intType := reflect.TypeOf(int(0))
+	strType := reflect.TypeFor[string]()
+	intType := reflect.TypeFor[int]()
 	boolType := reflect.TypeOf(false)
 
 	// A bare word is accepted for a string field (what the CLI sends after
@@ -228,16 +228,16 @@ func TestSetConfigFieldsRestartRequired(t *testing.T) {
 	// One flush for the batch, and the persisted maps survive it.
 	onDisk, err := os.ReadFile(path) //nolint:gosec
 	require.NoError(t, err)
-	var got map[string]interface{}
+	var got map[string]any
 	require.NoError(t, json.Unmarshal(onDisk, &got))
 
-	tp, _ := got["transport"].(map[string]interface{})
+	tp, _ := got["transport"].(map[string]any)
 	require.EqualValues(t, 7777, tp["transport_port"])
 
-	rt, _ := got["routing"].(map[string]interface{})
-	rs, _ := rt["router_settings"].(map[string]interface{})
+	rt, _ := got["routing"].(map[string]any)
+	rs, _ := rt["router_settings"].(map[string]any)
 	require.Equal(t, "4MiB", rs["ecf_max_window_bytes"], "router_settings must survive the flush")
-	ras, _ := rt["router_app_settings"].(map[string]interface{})
+	ras, _ := rt["router_app_settings"].(map[string]any)
 	require.Contains(t, ras, "skysocks-client", "router_app_settings must survive the flush")
 	require.Contains(t, got, "app_settings", "app_settings must survive the flush")
 	require.Contains(t, got, "sk", "the visor's own flush still writes the real sk")
@@ -367,7 +367,7 @@ func TestSetConfigFieldsEmbeddedService(t *testing.T) {
 	onDisk, err := os.ReadFile(path) //nolint:gosec
 	require.NoError(t, err)
 	var got struct {
-		Services []map[string]interface{} `json:"embedded_services"`
+		Services []map[string]any `json:"embedded_services"`
 	}
 	require.NoError(t, json.Unmarshal(onDisk, &got))
 	require.Len(t, got.Services, 2)

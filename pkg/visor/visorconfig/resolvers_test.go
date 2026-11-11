@@ -102,8 +102,7 @@ func TestParseResolverSpecs_OrderAndNames(t *testing.T) {
 	}
 }
 
-func boolPtr(b bool) *bool { return &b }
-
+//go:fix inline
 func TestValidateResolvers(t *testing.T) {
 	base := func(rs ...ResolverConfig) *V1 {
 		return &V1{
@@ -260,9 +259,9 @@ func TestResolverConfigRoundTrip(t *testing.T) {
 	want := ResolverConfig{
 		Name: "lan", Kind: ResolverKindDmsg, Enable: true, SecretKey: &sk,
 		ProxyPort: 4447, ProxyAddr: "0.0.0.0", DomainSuffix: ".dmsg",
-		UpstreamSOCKS: "127.0.0.1:1080", Chain: boolPtr(false), Alias: "gw",
+		UpstreamSOCKS: "127.0.0.1:1080", Chain: new(false), Alias: "gw",
 		UpstreamRules: []proxyroute.Rule{{Suffix: "example.com", Upstream: "127.0.0.1:1081"}},
-		SelfLoopback:  boolPtr(false), SelfLoopbackAuthenticated: boolPtr(false),
+		SelfLoopback:  new(false), SelfLoopbackAuthenticated: new(false),
 		TLSMITM: true, TLSPort: 443, TLSCAPath: "/ca.pem", TLSCAKeyPath: "/ca.key",
 	}
 	b, err := json.Marshal(want)
@@ -318,5 +317,24 @@ func TestResolverListenAddr(t *testing.T) {
 		if got := ResolverListenAddr(c.addr, c.port); got != c.want {
 			t.Errorf("ResolverListenAddr(%q,%d) = %q, want %q", c.addr, c.port, got, c.want)
 		}
+	}
+}
+
+// A resolver written back to RESOLVERS reads back the same, enable included.
+func TestFormatResolverSpecRoundTrips(t *testing.T) {
+	in := "dmsg:4447;name=lan;addr=0.0.0.0;chain=false;enable=false,skynet:4448;suffix=.skynet;upstream=127.0.0.1:1080"
+	rs, err := ParseResolverSpecs(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rs[0].Enable {
+		t.Fatal("enable=false parsed as enabled")
+	}
+	again, err := ParseResolverSpecs(FormatResolverSpecs(rs))
+	if err != nil {
+		t.Fatalf("formatted specs do not parse: %v", err)
+	}
+	if !reflect.DeepEqual(rs, again) {
+		t.Fatalf("round trip changed the resolvers:\n got %+v\nwant %+v", again, rs)
 	}
 }

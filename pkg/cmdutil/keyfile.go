@@ -2,7 +2,9 @@
 package cmdutil
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"strings"
 
@@ -23,7 +25,7 @@ func LoadOrGenerateKey(path string, sk *cipher.SecKey) error {
 		}
 		return sk.Set(trimmed)
 	}
-	if !os.IsNotExist(err) {
+	if !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("failed to read keyfile %s: %w", path, err)
 	}
 	// Auto-generate new keypair

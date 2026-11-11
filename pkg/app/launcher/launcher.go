@@ -5,24 +5,24 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/user"
 	"path/filepath"
 	"runtime"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/util/pathutil"
 )
@@ -40,7 +40,7 @@ var (
 // AppLauncher is responsible for launching and keeping track of app states.
 type AppLauncher struct {
 	conf  AppLauncherConfig
-	log   logrus.FieldLogger
+	log   logging.FieldLogger
 	r     router.Router
 	procM appserver.ProcManager
 	apps  map[string]appserver.AppConfig
@@ -94,8 +94,22 @@ func (l *AppLauncher) ResetConfig(conf AppLauncherConfig) {
 	l.conf.ServerAddr = conf.ServerAddr
 }
 
+// SetAppAutoStart changes one app's autostart in place, so the apps the visor
+// adds at runtime stay listed. It reports whether the launcher has the app.
+func (l *AppLauncher) SetAppAutoStart(name string, autoStart bool) bool {
+	l.mx.Lock()
+	defer l.mx.Unlock()
+	ac, ok := l.apps[name]
+	if !ok {
+		return false
+	}
+	ac.AutoStart = autoStart
+	l.apps[name] = ac
+	return true
+}
+
 // NewLauncher creates a new launcher.
-func NewLauncher(log logrus.FieldLogger, conf AppLauncherConfig, dmsgC *dmsg.Client, r router.Router, procM appserver.ProcManager) (*AppLauncher, error) {
+func NewLauncher(log logging.FieldLogger, conf AppLauncherConfig, dmsgC *dmsg.Client, r router.Router, procM appserver.ProcManager) (*AppLauncher, error) {
 	launcher := &AppLauncher{
 		conf:  conf,
 		log:   log,
@@ -252,7 +266,7 @@ func (l *AppLauncher) AppStates() []*appserver.AppState {
 	// reshuffle on each poll (rows "moving around" and flickering in/out as the
 	// *ngFor re-rendered). Sorting by name pins the order for every consumer
 	// (UI + `cli visor app ls`).
-	sort.Strings(names)
+	slices.Sort(names)
 
 	var states []*appserver.AppState
 	for _, name := range names {
@@ -653,12 +667,12 @@ func expandHomeAllEnv(env []string, home string) []string {
 	}
 	out := make([]string, len(env))
 	for i, kv := range env {
-		eq := strings.IndexByte(kv, '=')
-		if eq < 0 {
+		before, after, ok := strings.Cut(kv, "=")
+		if !ok {
 			out[i] = kv
 			continue
 		}
-		key, value := kv[:eq], kv[eq+1:]
+		key, value := before, after
 		out[i] = key + "=" + expandHome(value, home)
 	}
 	return out
@@ -715,7 +729,7 @@ func ensureDir(path *string) error {
 	if *path, err = filepath.Abs(*path); err != nil {
 		return fmt.Errorf("failed to expand path: %s", err)
 	}
-	if _, err := os.Stat(*path); !os.IsNotExist(err) {
+	if _, err := os.Stat(*path); !errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
 	if err := os.MkdirAll(*path, 0750); err != nil {

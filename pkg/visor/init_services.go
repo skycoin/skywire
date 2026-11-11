@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -1018,8 +1019,10 @@ func (a *visorAPIAdapter) RoutingRules() ([]routing.Rule, error) {
 // feed (with-self, so the local visor's own transports appear in the graph) —
 // no clearnet HTTP. Returns the not-ready error on a CXO cache miss; tpviz
 // surfaces that instead of falling back to a deprecated clearnet TPD.
-func (a *visorAPIAdapter) AllTransports(_ context.Context) ([]byte, error) {
-	return a.v.FetchAllTransportsCXO(true)
+func (a *visorAPIAdapter) AllTransports(ctx context.Context) ([]byte, error) {
+	// Stay under the hypervisor's 10 s WriteTimeout; the pinned feed keeps
+	// filling after a miss, so a later refresh finds it.
+	return a.v.FetchAllTransportsCXO(ctx, true, 8*time.Second)
 }
 
 // Close implements tpviz.VisorAPI.
@@ -1123,7 +1126,7 @@ func (a *visorAPIAdapter) DMSGHealth(ctx context.Context, pk string) (*tpviz.DMS
 	}
 
 	// Try to parse as JSON
-	var healthResp map[string]interface{}
+	var healthResp map[string]any
 	if err := json.Unmarshal(body, &healthResp); err == nil {
 		status := "healthy"
 		if resp.StatusCode != http.StatusOK {
@@ -1466,10 +1469,8 @@ func wireDirectDialPolicyHook(v *Visor, mux *transport.VStreamMux) {
 				if ip := v.stunPublicIP(); ip != "" {
 					self = net.ParseIP(ip)
 				}
-				for _, pk := range v.tpM.SameLANPeers(self) {
-					if pk == remotePK {
-						return nil // same-LAN destination → direct passthrough
-					}
+				if slices.Contains(v.tpM.SameLANPeers(self), remotePK) {
+					return nil // same-LAN destination → direct passthrough
 				}
 			}
 			// Policy wants overlay even though a direct transport

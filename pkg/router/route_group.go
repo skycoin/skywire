@@ -196,8 +196,25 @@ func DefaultRouteGroupConfig() *RouteGroupConfig {
 
 // RouteGroup should implement 'io.ReadWriteCloser'.
 // It implements 'net.Conn'.
+// groupLeg is one leg of a route group: a transport, the forward rule sent on it
+// and the consume rule read from it. See docs/design/mux-leg-model.md.
+type groupLeg struct {
+	tp  *transport.ManagedTransport
+	fwd routing.Rule
+	rvs routing.Rule // nil on a forward-only leg
+}
+
+// legTransports copies the transports out of legs. It allocates, so it is for
+// snapshots taken off the per-packet path.
+func legTransports(legs []groupLeg) []*transport.ManagedTransport {
+	tps := make([]*transport.ManagedTransport, len(legs))
+	for i := range legs {
+		tps[i] = legs[i].tp
+	}
+	return tps
+}
+
 type RouteGroup struct {
-	// atomic requires 64-bit alignment for struct field access
 	lastSent atomic.Int64
 
 	// lastRecv is the arrival time of the most recent inbound packet. It exists
@@ -208,7 +225,7 @@ type RouteGroup struct {
 
 	// consecutiveWriteFailures tracks repeated transport write errors.
 	// After maxConsecutiveWriteFailures, the RouteGroup closes itself.
-	consecutiveWriteFailures int32
+	consecutiveWriteFailures atomic.Int32
 
 	// wake releases the service loops parked by their gate (service_gate.go).
 	wake serviceWake
@@ -282,7 +299,7 @@ type RouteGroup struct {
 	// legForwardHops uses) to the FAR END's first-hop transport ID for that
 	// leg — i.e. Reverse[0].TpID of the plan this leg was dialed with.
 	//
-	// That value is an exact mirror of one entry in the peer's own rg.tps: the
+	// That value is an exact mirror of one entry in the peer's own rg.legs: the
 	// setup node installs `respEdge.Forward` on the destination, which is the
 	// ForwardRule generated for the reverse route's first hop, and
 	// appendRouteToGroup registers r.tm.Transport(rules.Forward.NextTransportID())
@@ -291,7 +308,7 @@ type RouteGroup struct {
 	// the destination would refuse a plan whose reverse leaves it over a
 	// transport it already has a leg on. Initiator-local; no wire change.
 	//
-	// Read only through remoteLegTransportIDs, which walks the LIVE tps, so an
+	// Read only through remoteLegTransportIDs, which walks the LIVE legs, so an
 	// entry for a leg that has since been pruned stops excluding anything
 	// (it is inert, not sticky). Guarded by rg.mu.
 	legRemoteTp map[uuid.UUID]uuid.UUID
@@ -312,17 +329,10 @@ type RouteGroup struct {
 	// testbed), where farEndPK falls back to the descriptor's Src.
 	localPK cipher.PubKey
 
-	// 'tps' is transports used for writing/forward rules.
-	// It should have the same number of elements as 'fwd'
-	// where each element corresponds with the adjacent element in 'fwd'.
-	tps []*transport.ManagedTransport
-
-	// The following fields are used for writing:
-	// - fwd/tps should have the same number of elements.
-	// - the corresponding element of tps should have tpID of the corresponding rule in fwd.
-	// - fwd references 'ForwardRule' rules for writes.
-	fwd []routing.Rule // forward rules (for writing)
-	rvs []routing.Rule // reverse rules (for reading)
+	// legs holds one entry per leg, index 0 the primary. Guarded by mu.
+	legs []groupLeg
+	// rvsOnly holds consume rules that pair with no leg. Guarded by mu.
+	rvsOnly []routing.Rule
 
 	// 'readCh' reads in incoming packets of this route group.
 	// - Router should serve call '(*transport.Manager).ReadPacket' in a loop,
@@ -363,7 +373,7 @@ type RouteGroup struct {
 	closeObserver   func(age time.Duration, carried uint64)
 
 	// used as a bool to indicate if this particular route group initiated close loop
-	closeInitiated   int32
+	closeInitiated   atomic.Int32
 	remoteClosedOnce sync.Once
 	remoteClosed     chan struct{}
 	closed           chan struct{}
@@ -376,7 +386,7 @@ type RouteGroup struct {
 	// used to wait for all the `Close` packets to run through the loop and come back.
 	// Atomic counter + channel instead of sync.WaitGroup to avoid
 	// "WaitGroup reused before previous Wait returned" panics.
-	closeDonePending int32 // atomic counter of outstanding close acks
+	closeDonePending atomic.Int32 // atomic counter of outstanding close acks
 	// closeDoneCh is closed when closeDonePending reaches 0. It is reached
 	// from three goroutines — both Close() callers and the packet loop
 	// handling the peer's close replies — so it is created and closed through
@@ -492,14 +502,14 @@ type RouteGroup struct {
 	soleBHTicks           int
 	reorderWedgeTicks     atomic.Int64
 	reorderWedgeStartNano atomic.Int64
-	reorderWedgeSeq       uint32
+	reorderWedgeSeq       atomic.Uint32
 	reorderWedges         atomic.Uint64
 	reorderWedgeLongestMs atomic.Int64
 	reorderWedgeLoggedAt  time.Duration
 
 	// delayedAckArmed guards the one-shot delayed-ack timer (see
 	// scheduleDelayedAck): 1 while a timer is outstanding. Atomic.
-	delayedAckArmed int32
+	delayedAckArmed atomic.Int32
 	legMissed       map[uuid.UUID]int
 	inflightPings   map[int64]uuid.UUID
 	// legE2ELatency is the EWMA-smoothed END-TO-END round-trip latency per leg,
@@ -553,13 +563,14 @@ type RouteGroup struct {
 	adaptiveParks map[uuid.UUID]adaptivePark
 	// peerParkMu guards peerParkedLegs. Leaf lock: NEVER held while taking rg.mu.
 	peerParkMu sync.Mutex
-	// peerParkedLegs holds the leg indices currently standby because the PEER said
+	// peerParkedLegs holds the legs, by transport ID, standby because the PEER said
 	// so (a mirrored CapLegState park), not because a controller here decided it.
 	// The leg-state resync re-broadcasts this side's OWN active/standby set to
 	// repair a dropped signal; re-asserting a park the peer originated instead
 	// pins the leg down from both ends, which is how a peer-mirrored park survived
-	// five downloads. Written by handleLegStatePacket, read by the resync.
-	peerParkedLegs map[int]struct{}
+	// five downloads. Written by handleLegStatePacket, read by the resync, and
+	// dropped when the leg leaves the group.
+	peerParkedLegs map[uuid.UUID]struct{}
 	// legRecvSnap is each leg's last-sampled rg-scoped RecvBytes, keyed by
 	// transport ID (survives index shifts), for the fast data-progress prune:
 	// an ACTIVE leg whose recv is flat across an interval while the group keeps
@@ -597,9 +608,7 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		logger:             logger,
 		desc:               desc,
 		rt:                 rt,
-		tps:                make([]*transport.ManagedTransport, 0),
-		fwd:                make([]routing.Rule, 0),
-		rvs:                make([]routing.Rule, 0),
+		legs:               make([]groupLeg, 0),
 		readCh:             make(chan []byte, cfg.ReadChBufSize),
 		inCh:               make(chan routing.Packet, intakeChBufSize),
 		readBuf:            bytes.Buffer{},
@@ -749,9 +758,9 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 		// write always makes progress.
 		if rg.mux != nil {
 			rg.mu.Lock()
-			tpsSnap := append([]*transport.ManagedTransport(nil), rg.tps...)
+			legsSnap := append([]groupLeg(nil), rg.legs...)
 			rg.mu.Unlock()
-			rg.mux.waitSendWindow(tpsSnap, rg.closed)
+			rg.mux.waitSendWindow(legsSnap, rg.closed)
 		}
 		rg.mu.Lock()
 		chunk := len(p) - n
@@ -801,7 +810,7 @@ func (rg *RouteGroup) Close() error {
 		return nil
 	}
 
-	atomic.StoreInt32(&rg.closeInitiated, 1)
+	rg.closeInitiated.Store(1)
 
 	// rg.mu is deliberately NOT held across this call: close() broadcasts close
 	// packets (2s ctx) and then waits up to closeRoutineTimeout for the peer's
@@ -1026,7 +1035,7 @@ func (rg *RouteGroup) flushFECRepairs() {
 		return
 	}
 	rg.mu.Lock()
-	tp, rule, _, err := rg.mux.selectFastestTransport(rg.tps, rg.fwd)
+	tp, rule, _, err := rg.mux.selectFastestTransport(rg.legs)
 	rg.mu.Unlock()
 	if err != nil || tp == nil || rule == nil {
 		return
@@ -1077,11 +1086,11 @@ func (rg *RouteGroup) resendOnAnotherLeg(failed *transport.ManagedTransport, seq
 		return false
 	}
 	rg.mu.Lock()
-	if len(rg.tps) == 0 || len(rg.tps) != len(rg.fwd) {
+	if len(rg.legs) == 0 || rg.legs[0].fwd == nil {
 		rg.mu.Unlock()
 		return false
 	}
-	tp, rule, leg, err := rg.mux.selectRetxTransport(rg.tps, rg.fwd, failed.Entry.ID)
+	tp, rule, leg, err := rg.mux.selectRetxTransport(rg.legs, failed.Entry.ID)
 	rg.mu.Unlock()
 	if err != nil || tp == nil || tp == failed {
 		return false

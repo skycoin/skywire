@@ -238,11 +238,7 @@ func (rg *RouteGroup) requestAdopt(desc routing.RouteDescriptor) (*rehomeLeg, er
 	if flags&routing.LegRehomeRefused != 0 || flags&routing.LegRehomeAck == 0 {
 		return nil, fmt.Errorf("%w: peer %s refused to adopt the leg reserve", ErrRehomeNoAck, rg.farEndPK())
 	}
-	idx := rg.legIndexByTransport(tp)
-	if idx < 0 {
-		return nil, fmt.Errorf("the leg reserve's chain on %s is gone", tp.Entry.ID)
-	}
-	return rg.detachLegForRehome(idx, fmt.Sprintf("adopted as tunnel :%d", desc.DstPort()))
+	return rg.detachLegForRehome(tp.Entry.ID, fmt.Sprintf("adopted as tunnel :%d", desc.DstPort()))
 }
 
 // adoptableChain is the reserve's one chain, or why it has none to give.
@@ -255,22 +251,10 @@ func (rg *RouteGroup) adoptableChain() (routing.Rule, *transport.ManagedTranspor
 	}
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	if len(rg.tps) != 1 || len(rg.fwd) != 1 || rg.fwd[0] == nil || rg.tps[0] == nil {
-		return nil, nil, fmt.Errorf("%w: the leg reserve holds %d chains", ErrAdoptUnsupported, len(rg.tps))
+	if len(rg.legs) != 1 || rg.legs[0].fwd == nil || rg.legs[0].tp == nil {
+		return nil, nil, fmt.Errorf("%w: the leg reserve holds %d chains", ErrAdoptUnsupported, len(rg.legs))
 	}
-	return rg.fwd[0], rg.tps[0], nil
-}
-
-// legIndexByTransport finds the leg riding tp.
-func (rg *RouteGroup) legIndexByTransport(tp *transport.ManagedTransport) int {
-	rg.mu.Lock()
-	defer rg.mu.Unlock()
-	for i, held := range rg.tps {
-		if held != nil && held.Entry.ID == tp.Entry.ID {
-			return i
-		}
-	}
-	return -1
+	return rg.legs[0].fwd, rg.legs[0].tp, nil
 }
 
 // acceptAdopt is the exit half: the request arrived on this reserve's chain and
@@ -278,15 +262,15 @@ func (rg *RouteGroup) legIndexByTransport(tp *transport.ManagedTransport) int {
 // adoption that cannot be carried out is refused and the reserve stays.
 func (rg *RouteGroup) acceptAdopt(routeID routing.RouteID, nonce uint64, srcPort, dstPort routing.Port,
 	dialect legControlDialect) {
-	idx := rg.legIndexByConsumeRule(routeID)
+	id, via := rg.legChainByConsumeRule(routeID)
 	// The ports are the SENDER's, mirrored onto this side's PK pair.
 	desc := routing.NewRouteDescriptor(rg.desc.SrcPK(), rg.desc.DstPK(), dstPort, srcPort)
-	host, err := rg.adoptAllowed(idx, desc)
+	host, err := rg.adoptAllowed(via, desc)
 	var leg *rehomeLeg
 	var rules routing.EdgeRules
 	reason := fmt.Sprintf("adopted as tunnel :%d", desc.DstPort())
 	if err == nil {
-		leg, err = rg.detachLegForRehome(idx, reason)
+		leg, err = rg.detachLegForRehome(id, reason)
 	}
 	if err == nil {
 		if rules, err = adoptedEdgeRules(rg.rt, leg, desc); err != nil {
@@ -297,7 +281,9 @@ func (rg *RouteGroup) acceptAdopt(routeID routing.RouteID, nonce uint64, srcPort
 	}
 	if err != nil {
 		rg.logger.WithError(err).Debug("Adopt refused")
-		rg.replyRehome(idx, nonce, srcPort, dstPort, routing.LegRehomeRefused|routing.LegRehomeAdopt, dialect)
+		if via != nil {
+			rg.replyRehomeOn(via, nonce, srcPort, dstPort, routing.LegRehomeRefused|routing.LegRehomeAdopt, dialect)
+		}
 		return
 	}
 	// Sealed by the reserve: at the initiator the chain is still the
@@ -316,11 +302,11 @@ func (rg *RouteGroup) acceptAdopt(routeID routing.RouteID, nonce uint64, srcPort
 // adoptAllowed reports whether this group may hand its chain over as the
 // tunnel desc: it must be a one-chain leg reserve with the capability, on a
 // host that can accept it, and nothing may already hold desc.
-func (rg *RouteGroup) adoptAllowed(idx int, desc routing.RouteDescriptor) (legAdoptHost, error) {
+func (rg *RouteGroup) adoptAllowed(via *rehomeLeg, desc routing.RouteDescriptor) (legAdoptHost, error) {
 	if _, _, err := rg.adoptableChain(); err != nil {
 		return nil, err
 	}
-	if idx < 0 {
+	if via == nil {
 		return nil, errors.New("no leg holds the request's consume rule")
 	}
 	host, ok := rg.rehomeHost.(legAdoptHost)

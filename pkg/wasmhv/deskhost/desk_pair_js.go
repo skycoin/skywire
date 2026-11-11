@@ -113,7 +113,8 @@ func fetchPairStatus(ctx context.Context, origin, pk string) (pairStatus, error)
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512)) //nolint:errcheck
 		return st, fmt.Errorf("status %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
 	}
-	return st, json.NewDecoder(resp.Body).Decode(&st)
+	err = json.NewDecoder(resp.Body).Decode(&st)
+	return st, err
 }
 
 func redeemPairCode(ctx context.Context, origin, pk, code string) error {

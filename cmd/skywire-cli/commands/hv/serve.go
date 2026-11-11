@@ -17,22 +17,23 @@ import (
 )
 
 var (
-	serveAddr         string
-	serveHarness      bool
-	serveHelpTerminal bool
-	serveDocsPort     int
-	serveTLS          bool
-	serveTLSCert      string
-	serveTLSKey       string
-	servePassword     string
-	serveBrowseSuffix string
-	serveBrowseOrigin string
-	serveVOrigin      string
-	serveExecWasm     string
-	serveExecTinyGoJS string
-	serveBootReports  string
-	serveLinks        []string
-	serveLinuxOnTab   string
+	serveAddr           string
+	serveHarness        bool
+	serveHelpTerminal   bool
+	serveDocsPort       int
+	serveTLS            bool
+	serveTLSCert        string
+	serveTLSKey         string
+	servePassword       string
+	serveBrowseSuffix   string
+	serveBrowseOrigin   string
+	serveVOrigin        string
+	serveExecWasm       string
+	serveExecWasmTinyGo string
+	serveExecTinyGoJS   string
+	serveBootReports    string
+	serveLinks          []string
+	serveLinuxOnTab     string
 )
 
 var serveLinuxOnTabOpen bool
@@ -50,6 +51,7 @@ func init() {
 	serveCmd.Flags().StringVar(&serveBrowseOrigin, "browse-origin", "", "ALSO serve the browse-origin SW bootstrap on this second addr (e.g. 127.0.0.1:7998), for the hosted real-origin browser's B origins. Caddy routes *.<browse-suffix> here; this same process serves V on --addr and B here. Empty = off (V host-routes B on --addr, local mode)")
 	serveCmd.Flags().StringVar(&serveVOrigin, "v-origin", "", "the PUBLIC origin(s) of the visor app V that B's bootstrap postMessages to, e.g. https://theskywirenetwork.net. Comma-separated for several apps sharing one browse domain, or \"*\" to accept any parent. Only needed with --browse-origin behind a proxy; empty = derive from --addr (local)")
 	serveCmd.Flags().StringVar(&serveExecWasm, "exec-wasm", "", "path to the full skywire CLI wasm module to serve at /skywire.wasm — the desk host, the tab's visor and the terminal's 'skywire' command (build: GOOS=js GOARCH=wasm go build -tags \"withoutsystray withoutgotop\" -o build/skywire.wasm .). Empty = the module kept beside this binary (skywire.wasm.gz), or in the user cache directory when that directory is not writable; when there is none yet, the release's is fetched the first time the desk is opened")
+	serveCmd.Flags().StringVar(&serveExecWasmTinyGo, "exec-wasm-tinygo", "", "path to a TinyGo build of the skywire module, served at /skywire-tinygo.wasm. The desk loads it instead of the Go module when opened with ?wasm=tinygo. Needs --exec-js-tinygo. Empty = none")
 	serveCmd.Flags().StringVar(&serveExecTinyGoJS, "exec-js-tinygo", "", "path to TinyGo's wasm_exec.js (targets/wasm_exec.js in the TinyGo tree that built --exec-wasm), served at /wasm_exec_tinygo.js. The desk picks it for a module TinyGo built and keeps Go's loader for the rest. Empty = none")
 	serveCmd.Flags().StringVar(&serveBootReports, "boot-reports", defaultBootReports(), "keep the reports of desks that did not start in this file as JSON lines, moved to <file>.1 at 1 MiB (they are also logged). The default is under $STATE_DIRECTORY when systemd sets one (StateDirectory=), else the temp dir. Empty = log only")
 	serveCmd.Flags().StringVar(&serveLinuxOnTab, "lot", "", "serve LinuxOnTab at /lot/ from a shell directory, or proxy it from a site that publishes it (e.g. https://next.linuxontab.com), and make the desk cross-origin isolated, so LinuxOnTab can run inside it with the tab visor as its network: /lot/wasm.html?disk=full&wisp=vnet:6001. See docs/guides/linuxontab.md")
@@ -86,6 +88,10 @@ page never asks anyone to type a secret key.`,
 			cmdutil.Eprintln("--lot-open needs --lot")
 			cmdutil.Exit(1)
 		}
+		if serveExecWasmTinyGo != "" && serveExecTinyGoJS == "" {
+			cmdutil.Eprintln("--exec-wasm-tinygo needs --exec-js-tinygo")
+			cmdutil.Exit(1)
+		}
 		if serveExecTinyGoJS != "" {
 			js, err := os.ReadFile(filepath.Clean(serveExecTinyGoJS))
 			if err != nil {
@@ -113,22 +119,23 @@ page never asks anyone to type a secret key.`,
 			links = append(links, visor.WasmLink{Name: name, URL: u})
 		}
 		if err := visor.ServeWasm(cmd.Context(), visor.WasmServeConfig{
-			Addr:             serveAddr,
-			TLS:              serveTLS,
-			TLSCert:          serveTLSCert,
-			TLSKey:           serveTLSKey,
-			Harness:          serveHarness,
-			DeskHelpTerminal: serveHelpTerminal,
-			DeskDocsPort:     serveDocsPort,
-			Password:         servePassword,
-			BrowseSuffix:     browseSuffix,
-			BrowseOriginAddr: serveBrowseOrigin,
-			VOrigin:          serveVOrigin,
-			ExecWasmPath:     serveExecWasm,
-			BootReportFile:   serveBootReports,
-			Links:            links,
-			LinuxOnTab:       serveLinuxOnTab,
-			LinuxOnTabOpen:   serveLinuxOnTabOpen,
+			Addr:               serveAddr,
+			TLS:                serveTLS,
+			TLSCert:            serveTLSCert,
+			TLSKey:             serveTLSKey,
+			Harness:            serveHarness,
+			DeskHelpTerminal:   serveHelpTerminal,
+			DeskDocsPort:       serveDocsPort,
+			Password:           servePassword,
+			BrowseSuffix:       browseSuffix,
+			BrowseOriginAddr:   serveBrowseOrigin,
+			VOrigin:            serveVOrigin,
+			ExecWasmPath:       serveExecWasm,
+			ExecWasmTinyGoPath: serveExecWasmTinyGo,
+			BootReportFile:     serveBootReports,
+			Links:              links,
+			LinuxOnTab:         serveLinuxOnTab,
+			LinuxOnTabOpen:     serveLinuxOnTabOpen,
 		}); err != nil {
 			cmd.PrintErrln("serve:", err)
 			cmdutil.Exit(1)

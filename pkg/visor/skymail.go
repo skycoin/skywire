@@ -1,83 +1,42 @@
 // Package visor pkg/visor/skymail.go c3-vis-core
 //
-// The visor's own mailbox (pkg/skymail). It listens for SMTP on port 25
-// over dmsg and skynet, like every dual-listened visor port, and sends
-// by dialing the recipient visor's port 25 directly: no MTA, no queue,
-// no certificate, so it runs as-is in a browser tab. It is on by
-// default everywhere; the size and age limits keep an open mailbox from
-// filling the storage it lives in. Enable and every limit are live
-// settings (MailSetSettings), kept in settings.json beside the mail.
+// The visor's side of the skymail app (cmd/apps/skymail). The app is the
+// mailbox: it serves port 25 over dmsg and skynet through the app client,
+// like any app. The visor keeps what an app cannot have: its secret key,
+// which seals and opens envelopes (MailHost), and its hypervisor relation,
+// the default helpers. The visor's mail API is a client of the app's
+// control surface, in process or over TCP.
 package visor
 
 import (
-	"context"
-	"encoding/json"
+	"bytes"
 	"errors"
 	"fmt"
-	"net"
-	"net/mail"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/app"
-	"github.com/skycoin/skywire/pkg/app/appcommon"
-	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skymail"
-	"github.com/skycoin/skywire/pkg/skymailbridge"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
-// skymailPort is SMTP's port, on dmsg and skynet alike.
-const skymailPort = 25
+// skymailApp is the mailbox's name in the launcher.
+const skymailApp = "skymail"
 
 // errMailboxOff answers every mail call while the mailbox is not running.
 var errMailboxOff = errors.New("mailbox is not running on this visor")
 
-// skymailHost owns the mailbox's lifecycle on a visor. Its zero value is
-// a mailbox that has not been started.
-type skymailHost struct {
-	mu     sync.Mutex
-	ctx    context.Context // the visor's, captured at init
-	log    *logging.Logger
-	rt     *skymailRuntime
-	reason string // why rt is nil
-}
-
-type skymailRuntime struct {
-	mb     *skymail.Mailbox
-	dir    string
-	cancel context.CancelFunc
-
-	lisMu sync.Mutex
-	lis   []net.Listener
-}
-
-func (rt *skymailRuntime) track(l net.Listener) {
-	rt.lisMu.Lock()
-	rt.lis = append(rt.lis, l)
-	rt.lisMu.Unlock()
-}
-
-// stop closes the listeners before returning, so port 25 can be bound
-// again straight away.
-func (rt *skymailRuntime) stop() {
-	rt.cancel()
-	rt.lisMu.Lock()
-	defer rt.lisMu.Unlock()
-	for _, l := range rt.lis {
-		_ = l.Close() //nolint:errcheck
-	}
-	rt.lis = nil
-}
+// errHostMTA is why the mailbox stays down when `serve add 25` hands port
+// 25 to the host's mail server, which then receives the mail instead.
+var errHostMTA = errors.New("port 25 is served by the host's mail server (`serve add 25`)")
 
 // skymailEnabled: on unless the config section turns it off.
 func skymailEnabled(conf *visorconfig.V1) bool {
@@ -87,8 +46,16 @@ func skymailEnabled(conf *visorconfig.V1) bool {
 	return true
 }
 
-// skymailDir defaults to "mail" beside the local path, not inside it:
-// the wasm visor never persists local/, and mail must survive a reload.
+// skymailDir is the app's --dir when the config lists the app, else the
+// config section's, else "mail" beside the local path, not inside it: the
+// wasm visor never persists local/, and mail must survive a reload.
+func (v *Visor) skymailDir() string {
+	if d := readAppArg(v, skymailApp, "--dir"); d != "" {
+		return d
+	}
+	return skymailDir(v.conf)
+}
+
 func skymailDir(conf *visorconfig.V1) string {
 	if conf.Skymail != nil && conf.Skymail.Dir != "" {
 		return conf.Skymail.Dir
@@ -108,307 +75,199 @@ func skymailLimits(conf *visorconfig.V1) skymail.Limits {
 	}
 }
 
-// skymailSettingsFile keeps the settings changed at runtime beside the
-// mail, like the whitelist. The config cannot hold them: the wasm desk
-// regenerates the visor config on every boot, so a flushed change was
-// gone after a tab reload. Order of precedence: this file, the config
-// section, the defaults.
-const skymailSettingsFile = "settings.json"
-
-type skymailSaved struct {
-	Enable         *bool                 `json:"enable,omitempty"`
-	MaxMessageSize *int64                `json:"max_message_size,omitempty"`
-	MaxTotalSize   *int64                `json:"max_total_size,omitempty"`
-	MaxAge         *visorconfig.Duration `json:"max_age,omitempty"`
-}
-
-func loadSkymailSaved(dir string) (skymailSaved, error) {
-	var s skymailSaved
-	raw, err := os.ReadFile(filepath.Join(dir, skymailSettingsFile)) //nolint:gosec // our own file
-	if errors.Is(err, os.ErrNotExist) {
-		return s, nil
-	}
-	if err != nil {
-		return s, err
-	}
-	return s, json.Unmarshal(raw, &s)
-}
-
-func (s skymailSaved) save(dir string) error {
-	raw, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	path := filepath.Join(dir, skymailSettingsFile)
-	if err := os.WriteFile(path+".tmp", raw, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(path+".tmp", path)
-}
-
-// skymailEffective is whether the mailbox should run and its limits.
+// skymailEffective is whether the mailbox should run and its limits:
+// settings.json, then the config section, then the defaults.
 func skymailEffective(conf *visorconfig.V1) (bool, skymail.Limits, error) {
-	enabled, l := skymailEnabled(conf), skymailLimits(conf)
-	s, err := loadSkymailSaved(skymailDir(conf))
+	return skymailEffectiveIn(conf, skymailDir(conf))
+}
+
+func skymailEffectiveIn(conf *visorconfig.V1, dir string) (bool, skymail.Limits, error) {
+	enabled := skymailEnabled(conf)
+	s, err := skymail.LoadSettings(dir)
 	if s.Enable != nil {
 		enabled = *s.Enable
 	}
-	if s.MaxMessageSize != nil {
-		l.MaxMessageSize = *s.MaxMessageSize
-	}
-	if s.MaxTotalSize != nil {
-		l.MaxTotalSize = *s.MaxTotalSize
-	}
-	if s.MaxAge != nil {
-		l.MaxAge = time.Duration(*s.MaxAge)
-	}
-	return enabled, l, err
+	return enabled, s.Over(skymailLimits(conf)), err
 }
 
-// skymailApp is the mailbox's name in the launcher: `cli visor app ls`, start,
-// stop and autostart treat it like any other app. It runs in the visor process,
-// as pty and the resolving proxies do, so it works the same in a browser tab.
-const skymailApp = "skymail"
+// skymailArgs start the app with the config section as its baseline. The
+// directory is absolute, as an external app runs in a directory of its own.
+func skymailArgs(conf *visorconfig.V1) []string {
+	dir := skymailDir(conf)
+	if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs
+	}
+	args := []string{"--dir", dir}
+	l := skymailLimits(conf)
+	size := func(flag string, n int64) {
+		switch {
+		case n > 0:
+			args = append(args, flag, strconv.FormatInt(n, 10))
+		case n < 0:
+			args = append(args, flag, "none")
+		}
+	}
+	size("--max-message-size", l.MaxMessageSize)
+	size("--max-total-size", l.MaxTotalSize)
+	switch {
+	case l.MaxAge > 0:
+		args = append(args, "--max-age", l.MaxAge.String())
+	case l.MaxAge < 0:
+		args = append(args, "--max-age", "none")
+	}
+	return args
+}
 
-// errHostMTA is why the mailbox stays down when `serve add 25` hands skynet
-// port 25 to the host's mail server, which then receives the mail instead.
-var errHostMTA = errors.New("port 25 is served by the host's mail server (`serve add 25`)")
+// mailHost is the visor's side of the skymail app's gateway calls.
+type mailHost struct{ v *Visor }
 
-func initSkymail(ctx context.Context, v *Visor, log *logging.Logger) error {
-	v.mail.mu.Lock()
-	v.mail.ctx, v.mail.log = ctx, log
-	v.mail.reason = "not started"
-	v.mail.mu.Unlock()
-	if v.conf == nil {
+func (h mailHost) MailSeal(msg []byte, rcpt cipher.PubKey) ([]byte, error) {
+	return skymail.Seal(msg, h.v.conf.SK, rcpt)
+}
+
+func (h mailHost) MailOpen(body []byte) ([]byte, cipher.PubKey, error) {
+	return skymail.OpenSealed(body, h.v.conf.SK)
+}
+
+func (h mailHost) MailHostInfo() appserver.MailHostInfo {
+	return appserver.MailHostInfo{
+		Managed:     h.v.managedVisorPKs(),
+		Hypervisors: h.v.configuredHypervisors(),
+		PortServed:  h.v.mailPortServed(),
+	}
+}
+
+// appMailHost serves the gateway's mail calls to the skymail app only. Any
+// app can already send mail as this visor, since the transport
+// authenticates the visor's key, but only the mailbox may open its mail.
+func (v *Visor) appMailHost(appName string) appserver.MailHost {
+	if appName != skymailApp || v.conf == nil {
 		return nil
 	}
-	if _, _, err := skymailEffective(v.conf); err != nil {
-		log.WithError(err).Warn("mailbox: unreadable " + skymailSettingsFile + "; using the config")
-	}
-	launcher.RegisterApp(skymailApp, v.skymailAppFunc())
-	return nil
+	return mailHost{v}
 }
 
-// skymailAppFunc runs the mailbox for as long as the app runs.
-func (v *Visor) skymailAppFunc() appcommon.AppFunc {
-	return func(ctx context.Context, _ []string) error {
-		appCl := app.NewClient(nil)
-		defer appCl.Close()
-		appCl.SetStatusOrLog(appserver.AppDetailedStatusStarting)
-		if v.dmsgC != nil {
-			select {
-			case <-v.dmsgC.Ready():
-			case <-ctx.Done():
-				return nil
-			}
-		}
-		if err := v.startSkymail(); err != nil {
-			// The host's own mail server owning port 25 is a setup, not a fault.
-			if errors.Is(err, errHostMTA) {
-				appCl.SetStatusOrLog(appserver.AppDetailedStatus(err.Error()))
-				return nil
-			}
-			appCl.SetErrorOrLog(err)
-			return err
-		}
-		appCl.SetStatusOrLog(appserver.AppDetailedStatusRunning)
-		<-ctx.Done()
-		v.stopSkymail("stopped")
-		appCl.SetStatusOrLog(appserver.AppDetailedStatusStopped)
+func (v *Visor) mailPortServed() bool {
+	return v.forwardedPorts != nil && v.forwardedPorts.Get(skymail.Port) != nil
+}
+
+// managedVisorPKs are the visors connected to this visor's hypervisor.
+func (v *Visor) managedVisorPKs() []cipher.PubKey {
+	hv := v.hvInstance
+	if hv == nil {
 		return nil
 	}
+	hv.mu.RLock()
+	defer hv.mu.RUnlock()
+	out := make([]cipher.PubKey, 0, len(hv.remoteVisors))
+	for pk := range hv.remoteVisors {
+		out = append(out, pk)
+	}
+	return out
 }
 
-// startSkymail brings the mailbox up; it is a no-op when it runs.
-func (v *Visor) startSkymail() error {
-	h := &v.mail
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.rt != nil {
-		return nil
+// mailControl reaches the running app's control surface: the handler an
+// in-process app publishes, or the TCP address the config gives an
+// external one, with the token it wrote beside the mail.
+func (v *Visor) mailControl() (skymail.Control, error) {
+	h := v.mailHandler
+	if h == nil {
+		h = launcher.GetHTTPHandler(skymailApp)
 	}
-	fail := func(err error) error {
-		h.reason = err.Error()
-		return err
+	if h != nil {
+		return skymail.Control{Do: func(req *http.Request) (*http.Response, error) {
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+			return rec.Result(), nil
+		}}, nil
 	}
-	if h.ctx == nil {
-		h.ctx = v.ctx
-		if h.ctx == nil {
-			h.ctx = context.Background()
+	addr := readAppArg(v, skymailApp, "--addr")
+	if addr == "" || !v.mailAppRunning() {
+		return skymail.Control{}, errMailboxOff
+	}
+	if strings.HasPrefix(addr, ":") {
+		addr = "127.0.0.1" + addr
+	}
+	dir := v.skymailDir()
+	client := &http.Client{}
+	return skymail.Control{Do: func(req *http.Request) (*http.Response, error) {
+		token, err := os.ReadFile(filepath.Join(dir, skymail.TokenFile)) //nolint:gosec // our own file
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", errMailboxOff, err)
 		}
-	}
-	if h.log == nil {
-		h.log = logging.MustGetLogger("skymail")
-	}
-	if v.dmsgC == nil {
-		return fail(errors.New("no dmsg client"))
-	}
-	if v.forwardedPorts != nil && v.forwardedPorts.Get(skymailPort) != nil {
-		return fail(errHostMTA)
-	}
-
-	v.initLock.Lock()
-	dir := skymailDir(v.conf)
-	_, limits, _ := skymailEffective(v.conf) //nolint:errcheck // reported at init
-	v.initLock.Unlock()
-	mb, err := skymail.Open(skymail.Config{
-		Dir: dir,
-		PK:  v.conf.PK,
-		PeerPK: func(c net.Conn) (cipher.PubKey, bool) {
-			return remotePK(c.RemoteAddr())
-		},
-		Dialers: map[string]skymailbridge.Dialer{
-			".skynet": skynetMailDialer{},
-			".dmsg":   &visorDmsgDialer{c: v.dmsgC},
-		},
-		Limits:    limits,
-		OnDeliver: v.notifyMail,
-		Log:       h.log,
-	})
-	if err != nil {
-		return fail(err)
-	}
-	lis, err := v.dmsgC.Listen(skymailPort)
-	if err != nil {
-		return fail(fmt.Errorf("dmsg port 25: %w", err))
-	}
-
-	ctx, cancel := context.WithCancel(h.ctx)
-	rt := &skymailRuntime{mb: mb, dir: dir, cancel: cancel}
-	rt.track(lis)
-	log := h.log
-	go func() {
-		if err := mb.Serve(ctx, lis); err != nil {
-			log.WithError(err).Warn("mailbox: dmsg listener stopped")
-		}
-	}()
-	goServeSkynetMirror(ctx, v.conf.PK, skymailPort, "skymail", log, func(l net.Listener) {
-		rt.track(l)
-		if err := mb.Serve(ctx, l); err != nil {
-			log.WithError(err).Warn("mailbox: skynet listener stopped")
-		}
-	})
-	go mb.RunExpiry(ctx)
-
-	h.rt, h.reason = rt, ""
-	lim := mb.Limits()
-	log.WithField("address", mb.Address("", ".skynet")).WithField("dir", dir).
-		WithField("max_total_size", lim.MaxTotalSize).WithField("max_age", lim.MaxAge).
-		Info("Mailbox running")
-	return nil
+		req.URL.Scheme, req.URL.Host = "http", addr
+		req.Header.Set(skymail.TokenHeader, string(bytes.TrimSpace(token)))
+		return client.Do(req) //nolint:gosec // the visor's own configured address
+	}}, nil
 }
 
-// stopSkymail takes the mailbox down, keeping its mail.
-func (v *Visor) stopSkymail(reason string) {
-	h := &v.mail
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.rt != nil {
-		h.rt.stop()
-		h.rt = nil
+func (v *Visor) mailAppState() (*appserver.AppState, bool) {
+	if v.appL == nil {
+		return nil, false
 	}
-	h.reason = reason
+	return v.appL.AppState(skymailApp)
 }
 
-// notifyMail announces new mail, under the mailbox's own app name so a
-// phone files it in a channel of its own.
-func (v *Visor) notifyMail(d skymail.Delivered) {
-	hub := v.NotifyHub()
-	if hub == nil {
-		return
-	}
-	subject := d.Subject
-	if subject == "" {
-		subject = "(no subject)"
-	}
-	hub.Publish(appserver.NotifyReq{App: skymailApp, Title: mailSender(d.From), Body: subject, Tag: d.ID})
-}
-
-// mailSender is a sender short enough for a notification title: the display
-// name when there is one, else the address with its 53-character key cut.
-func mailSender(from string) string {
-	a, err := mail.ParseAddress(from)
-	if err != nil {
-		return from
-	}
-	if a.Name != "" {
-		return a.Name
-	}
-	local, domain, ok := strings.Cut(a.Address, "@")
-	if !ok || len(domain) <= 16 {
-		return a.Address
-	}
-	return local + "@" + domain[:8] + "…" + domain[strings.LastIndex(domain, "."):]
-}
-
-// skynetMailDialer reaches a .skynet address over a skywire route and
-// nothing else: the suffix is the sender's choice of network, so a
-// failed route is reported, not quietly replaced with dmsg. (A .dmsg
-// address goes to the dmsg client, whose sessions may themselves ride
-// skynet; that choice is dmsg's.)
-type skynetMailDialer struct{}
-
-func (skynetMailDialer) Dial(ctx context.Context, peer cipher.PubKey, port uint16) (net.Conn, error) {
-	return appnet.DialContext(ctx, appnet.Addr{Net: appnet.TypeSkynet, PubKey: peer, Port: routing.Port(port)})
-}
-
-func (v *Visor) mailbox() (*skymailRuntime, error) {
-	v.mail.mu.Lock()
-	defer v.mail.mu.Unlock()
-	if v.mail.rt == nil {
-		return nil, errMailboxOff
-	}
-	return v.mail.rt, nil
+func (v *Visor) mailAppRunning() bool {
+	st, ok := v.mailAppState()
+	return ok && st.Status == appserver.AppStatusRunning
 }
 
 // MailStatus implements visorapi.API.
 func (v *Visor) MailStatus() (*visorapi.MailStatus, error) {
 	v.initLock.Lock()
-	enabled, limits, _ := skymailEffective(v.conf) //nolint:errcheck // a status line
+	enabled, limits, _ := skymailEffectiveIn(v.conf, v.skymailDir()) //nolint:errcheck // a status line
 	v.initLock.Unlock()
-	limits = limits.WithDefaults()
-	st := &visorapi.MailStatus{Enabled: enabled, Limits: limits, Whitelist: []cipher.PubKey{}}
-	rt, err := v.mailbox()
+	st := &visorapi.MailStatus{Enabled: enabled, Limits: limits.WithDefaults(), Whitelist: []cipher.PubKey{}}
+	c, err := v.mailControl()
+	var s skymail.Status
+	if err == nil {
+		s, err = c.Status()
+	}
 	if err != nil {
-		v.mail.mu.Lock()
-		st.Reason = v.mail.reason
-		v.mail.mu.Unlock()
-		if st.Reason == "" {
-			st.Reason = "not started"
-		}
+		st.Reason = v.mailOffReason(enabled)
 		return st, nil
 	}
 	st.Running = true
-	st.Address = rt.mb.Address("", ".skynet")
-	st.AddressDmsg = rt.mb.Address("", ".dmsg")
-	st.Dir = rt.dir
-	st.Whitelist = rt.mb.Whitelist()
-	st.Limits = rt.mb.Limits()
-	st.Usage, _ = rt.mb.Usage() //nolint:errcheck // a status line, not a decision
-	if inbox, err := rt.mb.List(skymail.FolderInbox); err == nil {
-		st.Total = len(inbox)
-		for _, m := range inbox {
-			if !m.Seen {
-				st.Unread++
-			}
-		}
+	st.Address, st.AddressDmsg, st.Dir = s.Address, s.AddressDmsg, s.Dir
+	st.Limits, st.Usage = s.Limits, s.Usage
+	if s.Whitelist != nil {
+		st.Whitelist = s.Whitelist
 	}
+	st.Unread, st.Total = s.Unread, s.Total
+	st.HasOutbox, st.Outbox = s.HasOutbox, s.Outbox
+	st.Helpers, st.HelpersDefault = s.Helpers, s.HelpersDefault
+	st.RelayFor, st.RelayForDefault = s.RelayFor, s.RelayForDefault
 	return st, nil
 }
 
-// MailSetSettings implements visorapi.API: it applies at once and is
-// kept in the mailbox's settings.json, which survives a restart and, in
-// a browser tab, a reload.
+// mailOffReason says why the mailbox is not running.
+func (v *Visor) mailOffReason(enabled bool) string {
+	switch {
+	case !enabled:
+		return "disabled"
+	case v.mailPortServed():
+		return errHostMTA.Error()
+	}
+	if st, ok := v.mailAppState(); ok {
+		if st.DetailedStatus != "" {
+			return st.DetailedStatus
+		}
+		return st.Status.String()
+	}
+	return "not started"
+}
+
+// MailSetSettings implements visorapi.API: it is kept in the mailbox's
+// settings.json, which survives a restart and, in a browser tab, a
+// reload, and applies at once.
 func (v *Visor) MailSetSettings(u visorapi.MailSettingsUpdate) error {
 	v.initLock.Lock()
-	dir := skymailDir(v.conf)
+	dir := v.skymailDir()
 	v.initLock.Unlock()
-	s, err := loadSkymailSaved(dir)
+	s, err := skymail.LoadSettings(dir)
 	if err != nil {
-		return fmt.Errorf("read %s: %w", skymailSettingsFile, err)
+		return fmt.Errorf("read %s: %w", skymail.SettingsFile, err)
 	}
 	if u.Enable != nil {
 		s.Enable = u.Enable
@@ -420,112 +279,155 @@ func (v *Visor) MailSetSettings(u visorapi.MailSettingsUpdate) error {
 		s.MaxTotalSize = u.MaxTotalSize
 	}
 	if u.MaxAge != nil {
-		d := visorconfig.Duration(*u.MaxAge)
-		s.MaxAge = &d
+		a := skymail.Age(*u.MaxAge)
+		s.MaxAge = &a
 	}
-	if err := s.save(dir); err != nil {
-		return fmt.Errorf("save %s: %w", skymailSettingsFile, err)
+	switch {
+	case u.HelpersDefault:
+		s.Helpers = nil
+	case u.Helpers != nil:
+		h := append([]cipher.PubKey{}, *u.Helpers...)
+		s.Helpers = &h
+	}
+	switch {
+	case u.RelayForDefault:
+		s.RelayFor = nil
+	case u.RelayFor != nil:
+		r := append([]cipher.PubKey{}, *u.RelayFor...)
+		s.RelayFor = &r
+	}
+	if err := s.Save(dir); err != nil {
+		return fmt.Errorf("save %s: %w", skymail.SettingsFile, err)
 	}
 
 	v.initLock.Lock()
-	enable, limits, _ := skymailEffective(v.conf) //nolint:errcheck // just written
+	enable, _, _ := skymailEffectiveIn(v.conf, dir) //nolint:errcheck // just written
 	v.initLock.Unlock()
+	// The launcher's autostart is what app lists and the hypervisor show.
+	if v.appL != nil {
+		v.appL.SetAppAutoStart(skymailApp, enable)
+	}
 	if !enable {
-		if v.appL == nil || v.StopApp(skymailApp) != nil {
-			v.stopSkymail("disabled")
+		if v.mailAppRunning() {
+			return v.StopApp(skymailApp)
 		}
-		v.mail.mu.Lock()
-		v.mail.reason = "disabled"
-		v.mail.mu.Unlock()
 		return nil
 	}
-	if _, err := v.mailbox(); err != nil {
-		start := v.startSkymail // no launcher: run it directly
-		if v.appL != nil {
-			start = func() error { return v.StartApp(skymailApp) }
-		}
-		if err := start(); err != nil {
-			return err
-		}
+	if c, err := v.mailControl(); err == nil {
+		return c.Reload()
 	}
-	if rt, err := v.mailbox(); err == nil {
-		rt.mb.SetLimits(limits)
+	if v.appL == nil {
+		return errMailboxOff
 	}
-	return nil
+	return v.StartApp(skymailApp)
+}
+
+func (v *Visor) mailCall(f func(skymail.Control) error) error {
+	c, err := v.mailControl()
+	if err != nil {
+		return err
+	}
+	return f(c)
 }
 
 // MailList implements visorapi.API.
-func (v *Visor) MailList(folder string) ([]skymail.Summary, error) {
-	rt, err := v.mailbox()
-	if err != nil {
-		return nil, err
-	}
-	return rt.mb.List(folder)
+func (v *Visor) MailList(folder string) (list []skymail.Summary, err error) {
+	err = v.mailCall(func(c skymail.Control) error {
+		list, err = c.List(folder)
+		return err
+	})
+	return list, err
 }
 
 // MailRead implements visorapi.API.
-func (v *Visor) MailRead(folder, id string) (*skymail.Rendered, error) {
-	rt, err := v.mailbox()
-	if err != nil {
-		return nil, err
-	}
-	raw, err := rt.mb.Raw(folder, id)
-	if err != nil {
-		return nil, err
-	}
-	r, err := skymail.Render(raw)
-	if err != nil {
-		return nil, err
-	}
-	_ = rt.mb.MarkSeen(folder, id) //nolint:errcheck // shown is what matters; the flag is cosmetic
-	return r, nil
+func (v *Visor) MailRead(folder, id string) (m *skymail.Rendered, err error) {
+	err = v.mailCall(func(c skymail.Control) error {
+		m, err = c.Read(folder, id)
+		return err
+	})
+	return m, err
 }
 
 // MailRaw implements visorapi.API.
-func (v *Visor) MailRaw(folder, id string) ([]byte, error) {
-	rt, err := v.mailbox()
-	if err != nil {
-		return nil, err
-	}
-	return rt.mb.Raw(folder, id)
+func (v *Visor) MailRaw(folder, id string) (raw []byte, err error) {
+	err = v.mailCall(func(c skymail.Control) error {
+		raw, err = c.Raw(folder, id)
+		return err
+	})
+	return raw, err
 }
 
 // MailAttachment implements visorapi.API.
-func (v *Visor) MailAttachment(folder, id string, n int) (*skymail.AttachmentData, error) {
-	rt, err := v.mailbox()
-	if err != nil {
-		return nil, err
-	}
-	return rt.mb.Attachment(folder, id, n)
+func (v *Visor) MailAttachment(folder, id string, n int) (a *skymail.AttachmentData, err error) {
+	err = v.mailCall(func(c skymail.Control) error {
+		a, err = c.Attachment(folder, id, n)
+		return err
+	})
+	return a, err
 }
 
 // MailSend implements visorapi.API.
-func (v *Visor) MailSend(msg skymail.Outgoing) (*skymail.SendResult, error) {
-	rt, err := v.mailbox()
-	if err != nil {
-		return nil, err
-	}
-	ctx := v.ctx
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	return rt.mb.Send(ctx, msg)
+func (v *Visor) MailSend(msg skymail.Outgoing) (res *skymail.SendResult, err error) {
+	err = v.mailCall(func(c skymail.Control) error {
+		res, err = c.Send(msg)
+		return err
+	})
+	return res, err
 }
 
 // MailDelete implements visorapi.API.
 func (v *Visor) MailDelete(folder, id string) error {
-	rt, err := v.mailbox()
-	if err != nil {
-		return err
-	}
-	return rt.mb.Delete(folder, id)
+	return v.mailCall(func(c skymail.Control) error { return c.Delete(folder, id) })
+}
+
+// MailRetry implements visorapi.API.
+func (v *Visor) MailRetry(id string) error {
+	return v.mailCall(func(c skymail.Control) error { return c.Retry(id) })
 }
 
 // MailSetWhitelist implements visorapi.API.
 func (v *Visor) MailSetWhitelist(pks []cipher.PubKey) error {
-	rt, err := v.mailbox()
-	if err != nil {
-		return err
+	err := v.mailCall(func(c skymail.Control) error { return c.SetWhitelist(pks) })
+	if err == nil {
+		// The inbox hosts apply the whitelist to parked mail too.
+		v.asyncKick()
 	}
-	return rt.mb.SetWhitelist(pks)
+	return err
+}
+
+func (h mailHost) MailPark(rcpt cipher.PubKey, env []byte, ref string) (cipher.PubKey, error) {
+	res, err := h.v.DmsgAsyncSend(visorapi.DmsgAsyncSendRequest{To: rcpt, Port: skymail.Port, Payload: env, Ref: ref})
+	if err != nil {
+		return cipher.PubKey{}, err
+	}
+	return res.Host, nil
+}
+
+func (h mailHost) MailUnpark() ([]appserver.ParkedMail, error) {
+	msgs, err := h.v.asyncPeek([]uint16{skymail.Port})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]appserver.ParkedMail, len(msgs))
+	for i, m := range msgs {
+		out[i] = appserver.ParkedMail{ID: m.ID, Host: m.Host, From: m.From, Body: m.Payload}
+	}
+	return out, nil
+}
+
+func (h mailHost) MailAck(refs []appserver.ParkedRef) error { return h.v.ackParked(refs) }
+
+// ackParked removes parked messages from the hosts that hold them.
+func (v *Visor) ackParked(refs []appserver.ParkedRef) error {
+	byHost := map[cipher.PubKey][]string{}
+	for _, r := range refs {
+		byHost[r.Host] = append(byHost[r.Host], r.ID)
+	}
+	var errs []error
+	for host, ids := range byHost {
+		if err := v.asyncAck(host, ids); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }

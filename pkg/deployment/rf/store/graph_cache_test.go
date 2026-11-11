@@ -34,14 +34,12 @@ func TestGraphCacheRebuildAndGet(t *testing.T) {
 
 	// Concurrent reads on the shared graph must be race-free (run with -race).
 	var wg sync.WaitGroup
-	for i := 0; i < 8; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 8 {
+		wg.Go(func() {
 			if _, e := c.Get().GetRoute(context.Background(), n1, n5, 0, 100, 5); e != nil {
 				t.Errorf("concurrent GetRoute: %v", e)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }
@@ -57,8 +55,7 @@ func TestGraphCacheRebuildsOnDemand(t *testing.T) {
 	// staleFactor*refresh synchronous rebuild.
 	refresh := 250 * time.Millisecond
 	c := NewGraphCache(m, refresh, nil)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go c.Run(ctx)
 	require.Eventually(t, func() bool { return c.Get() != nil }, time.Second, time.Millisecond)
 	first := c.Get()
@@ -77,15 +74,13 @@ func TestGraphCacheRebuildsOnDemand(t *testing.T) {
 		mu   sync.Mutex
 		seen = map[*Graph]bool{}
 	)
-	for i := 0; i < 16; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 16 {
+		wg.Go(func() {
 			g := c.Get()
 			mu.Lock()
 			seen[g] = true
 			mu.Unlock()
-		}()
+		})
 	}
 	wg.Wait()
 	require.LessOrEqual(t, len(seen), 2, "one rebuild serves them all")

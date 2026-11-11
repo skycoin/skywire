@@ -20,7 +20,7 @@ func TestSelectFastestTransportPicksLowestLatency(t *testing.T) {
 	tps := []*transport.ManagedTransport{mockTP(200), mockTP(50), mockTP(300)}
 	fwd := make([]routing.Rule, 3)
 
-	_, _, leg, err := m.selectFastestTransport(tps, fwd)
+	_, _, leg, err := m.selectFastestTransport(testLegs(tps, fwd, nil))
 	if err != nil {
 		t.Fatalf("selectFastestTransport: %v", err)
 	}
@@ -41,7 +41,7 @@ func TestSelectFastestTransportSkipsStandby(t *testing.T) {
 	tps := []*transport.ManagedTransport{mockTP(200), mockTP(50), mockTP(300)}
 	fwd := make([]routing.Rule, 3)
 
-	_, _, leg, err := m.selectFastestTransport(tps, fwd)
+	_, _, leg, err := m.selectFastestTransport(testLegs(tps, fwd, nil))
 	if err != nil {
 		t.Fatalf("selectFastestTransport: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestSelectFastestTransportUnknownLatencyFallback(t *testing.T) {
 	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0)}
 	fwd := make([]routing.Rule, 2)
 
-	_, _, leg, err := m.selectFastestTransport(tps, fwd)
+	_, _, leg, err := m.selectFastestTransport(testLegs(tps, fwd, nil))
 	if err != nil {
 		t.Fatalf("selectFastestTransport: %v", err)
 	}

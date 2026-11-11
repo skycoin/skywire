@@ -212,7 +212,7 @@ func TestHostRewriteConn_UpgradeSplicesRawBytes(t *testing.T) {
 	// a 0x00..0xFF run to confirm binary survives unchanged.
 	rawFrames := append([]byte{0x81, 0x05, 'h', 'e', 'l', 'l', 'o'},
 		[]byte{0x88, 0x02, 0x03, 0xE8}...) // close frame (1000)
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		rawFrames = append(rawFrames, byte(i))
 	}
 

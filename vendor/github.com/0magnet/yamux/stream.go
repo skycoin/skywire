@@ -450,6 +450,11 @@ func (s *Stream) forceClose() {
 // processFlags is used to update the state of the stream
 // based on set flags, if any. Lock must be held
 func (s *Stream) processFlags(flags uint16) error {
+	// Most data frames carry no flags. Skipping the deferred closure saves
+	// TinyGo, which heap allocates it, allocations on every frame.
+	if flags == 0 {
+		return nil
+	}
 	s.stateLock.Lock()
 	defer s.stateLock.Unlock()
 

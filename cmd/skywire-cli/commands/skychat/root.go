@@ -208,10 +208,7 @@ Outcomes (--wait > 0):
 		// retry. The in-handler redial+retry already absorbs the
 		// common transient stale-conn case; --retries here is the
 		// belt-and-suspenders for HTTP-layer / chat-app-down cases.
-		attempts := sendRetries + 1
-		if attempts < 1 {
-			attempts = 1
-		}
+		attempts := max(sendRetries+1, 1)
 		errOut := cmd.ErrOrStderr()
 		var preCounters *statusCounters
 		if sendVerbose {
@@ -229,7 +226,7 @@ Outcomes (--wait > 0):
 			}
 		}
 		var ack *AckResponse
-		for i := 0; i < attempts; i++ {
+		for i := range attempts {
 			if sendVerbose && i > 0 {
 				fmt.Fprintf(errOut, "[verbose] retry attempt %d/%d (backoff fired)\n", i+1, attempts) //nolint:errcheck
 			}
@@ -259,6 +256,10 @@ Outcomes (--wait > 0):
 		}
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		if ack != nil && ack.Parked {
+			internal.PrintOutput(cmd.Flags(), nil, fmt.Sprintf("%s is offline. Message parked on inbox host %s (id=%s)\n", pk.String(), ack.Host, ack.ID))
+			return
 		}
 		if sendWait > 0 {
 			if ack != nil && ack.Acked {
@@ -497,6 +498,10 @@ type AckResponse struct {
 	ID     string `json:"id,omitempty"`
 	MS     int64  `json:"ms,omitempty"`
 	Reason string `json:"reason,omitempty"`
+	// Parked is set when no network reached the peer and the message waits
+	// on its dmsg-async inbox host Host.
+	Parked bool   `json:"parked,omitempty"`
+	Host   string `json:"host,omitempty"`
 }
 
 // postMessage POSTs the message payload to the skychat app's HTTP
@@ -506,7 +511,7 @@ type AckResponse struct {
 // 504-on-timeout case (which is returned as a non-nil ack with
 // Acked=false).
 func postMessage(addr, recipientPK, msg, network string, wait time.Duration) (*AckResponse, error) {
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"recipient": recipientPK,
 		"message":   msg,
 		"network":   network,
@@ -543,6 +548,13 @@ func postMessage(addr, recipientPK, msg, network string, wait time.Duration) (*A
 		return &AckResponse{Acked: false, Reason: "timeout"}, nil
 	}
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		if resp.StatusCode == http.StatusAccepted {
+			var ack AckResponse
+			if err := json.NewDecoder(resp.Body).Decode(&ack); err != nil {
+				return nil, fmt.Errorf("decode parked reply: %w", err)
+			}
+			return &ack, nil
+		}
 		if wait > 0 {
 			var ack AckResponse
 			if err := json.NewDecoder(resp.Body).Decode(&ack); err != nil {

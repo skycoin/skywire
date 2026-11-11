@@ -99,7 +99,7 @@ func ShapeMode(cmd *cobra.Command) bool {
 }
 
 // printJQ marshals v, runs it through the jq filter, and writes the results.
-func printJQ(w io.Writer, v interface{}, filter string) error {
+func printJQ(w io.Writer, v any, filter string) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -120,7 +120,7 @@ func ApplyJQ(src []byte, filter string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("invalid --jq filter: %w", err)
 	}
-	var input interface{}
+	var input any
 	if err := json.Unmarshal(src, &input); err != nil {
 		return "", fmt.Errorf("decode JSON for --jq: %w", err)
 	}
@@ -154,7 +154,7 @@ func ApplyJQCompact(src []byte, filter string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid --jq filter: %w", err)
 	}
-	var input interface{}
+	var input any
 	if err := json.Unmarshal(src, &input); err != nil {
 		return nil, fmt.Errorf("decode JSON for --jq: %w", err)
 	}
@@ -182,12 +182,12 @@ func ApplyJQCompact(src []byte, filter string) ([]string, error) {
 // compact bytes MarshalJSON returns, so nested orderedMaps still pretty-print.
 type orderedMap struct {
 	keys []string
-	vals map[string]interface{}
+	vals map[string]any
 }
 
-func newOrderedMap() *orderedMap { return &orderedMap{vals: map[string]interface{}{}} }
+func newOrderedMap() *orderedMap { return &orderedMap{vals: map[string]any{}} }
 
-func (o *orderedMap) set(k string, v interface{}) {
+func (o *orderedMap) set(k string, v any) {
 	if _, ok := o.vals[k]; !ok {
 		o.keys = append(o.keys, k)
 	}
@@ -217,21 +217,21 @@ func (o *orderedMap) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-var jsonMarshalerType = reflect.TypeOf((*json.Marshaler)(nil)).Elem()
+var jsonMarshalerType = reflect.TypeFor[json.Marshaler]()
 
 // Skeleton returns a shape skeleton for v's type: every exported field at its
 // zero value, omitempty ignored so nothing is hidden. Types with a custom
 // MarshalJSON (cipher.PubKey, time.Time, uuid.UUID, …) render as their zero
 // marshaled form rather than being recursed into. Native-only (the CLI is never
 // built under TinyGo), so reflect is fine here.
-func Skeleton(v interface{}) interface{} {
+func Skeleton(v any) any {
 	if v == nil {
 		return nil
 	}
 	return skeletonType(reflect.TypeOf(v), map[reflect.Type]bool{})
 }
 
-func skeletonType(t reflect.Type, seen map[reflect.Type]bool) interface{} {
+func skeletonType(t reflect.Type, seen map[reflect.Type]bool) any {
 	if t == nil {
 		return nil
 	}
@@ -262,7 +262,7 @@ func skeletonType(t reflect.Type, seen map[reflect.Type]bool) interface{} {
 		if t.Elem().Kind() == reflect.Uint8 {
 			return "" // []byte marshals as a base64 string
 		}
-		return []interface{}{skeletonType(t.Elem(), seen)}
+		return []any{skeletonType(t.Elem(), seen)}
 	case reflect.String:
 		return ""
 	case reflect.Bool:
@@ -278,8 +278,7 @@ func skeletonType(t reflect.Type, seen map[reflect.Type]bool) interface{} {
 }
 
 func addStructFields(t reflect.Type, om *orderedMap, seen map[reflect.Type]bool) {
-	for i := 0; i < t.NumField(); i++ {
-		f := t.Field(i)
+	for f := range t.Fields() {
 		if f.PkgPath != "" { // unexported
 			continue
 		}
@@ -304,12 +303,12 @@ func addStructFields(t reflect.Type, om *orderedMap, seen map[reflect.Type]bool)
 	}
 }
 
-func marshalZero(t reflect.Type) (interface{}, bool) {
+func marshalZero(t reflect.Type) (any, bool) {
 	b, err := json.Marshal(reflect.Zero(t).Interface())
 	if err != nil {
 		return nil, false
 	}
-	var v interface{}
+	var v any
 	if err := json.Unmarshal(b, &v); err != nil {
 		return nil, false
 	}

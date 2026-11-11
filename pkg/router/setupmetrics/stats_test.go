@@ -152,7 +152,7 @@ func TestCollector_FailureRingEviction(t *testing.T) {
 	c := NewCollector(CollectorConfig{FailureRingSize: 3})
 	dst, _ := cipher.GenerateKeyPair()
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		err := fmt.Errorf("failure %d", i)
 		c.RecordRouteContext(context.Background(), cipher.PubKey{}, dst, 1)(&err)
 	}
@@ -658,7 +658,7 @@ func TestCollector_CircuitBreakerOffByDefault(t *testing.T) {
 	dst, _ := cipher.GenerateKeyPair()
 
 	const attempts = 10 // well past setup.circuit_fail_threshold
-	for i := 0; i < attempts; i++ {
+	for i := range attempts {
 		var probes ProbeHolder
 		ok, reason := c.AllowDestination(dst, &probes)
 		if !ok {

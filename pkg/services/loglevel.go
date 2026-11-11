@@ -18,8 +18,6 @@ package services
 import (
 	"sync/atomic"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
@@ -61,7 +59,7 @@ func NewLogger(tag, level string) *logging.Logger {
 // parseLevel converts level, warning through logger when it is not a level
 // name. The returned level is usable either way: LevelFromString falls back
 // to info on error.
-func parseLevel(logger *logging.Logger, tag, level string) logrus.Level {
+func parseLevel(logger *logging.Logger, tag, level string) logging.Level {
 	lvl, err := logging.LevelFromString(level)
 	if err != nil {
 		logger.WithError(err).Warnf("%s: bad log_level %q; logging at %q instead", tag, level, lvl)
@@ -79,9 +77,9 @@ func parseLevel(logger *logging.Logger, tag, level string) logrus.Level {
 // make the process noisier than every block asked for, and — unlike the
 // last-one-wins behavior this replaces — the result does not depend on the
 // order the blocks happen to be built in.
-func sharedLogLevel(log *logging.Logger, file File) (logrus.Level, bool) {
+func sharedLogLevel(log *logging.Logger, file File) (logging.Level, bool) {
 	var (
-		quietest logrus.Level
+		quietest logging.Level
 		found    bool
 	)
 	for _, b := range file.Services {

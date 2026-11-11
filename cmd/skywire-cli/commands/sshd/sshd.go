@@ -37,7 +37,7 @@ import (
 
 // jsonDecode is a tiny wrapper over encoding/json that doesn't
 // require importing dmsgpty's codec alias just for this one call.
-func jsonDecode(r io.Reader, v interface{}) error {
+func jsonDecode(r io.Reader, v any) error {
 	return json.NewDecoder(r).Decode(v)
 }
 
@@ -239,7 +239,7 @@ func buildSshdWhitelist(confPath string, inline []string) (pty.Whitelist, int, e
 	}
 
 	for _, raw := range inline {
-		for _, s := range strings.Split(raw, ",") {
+		for s := range strings.SplitSeq(raw, ",") {
 			s = strings.TrimSpace(s)
 			if s == "" {
 				continue

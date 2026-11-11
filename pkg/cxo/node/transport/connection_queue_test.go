@@ -80,11 +80,11 @@ func TestConnectionQueueConcurrentSenders(t *testing.T) {
 
 	const senders, each = 8, 200
 	var wg sync.WaitGroup
-	for s := 0; s < senders; s++ {
+	for s := range senders {
 		wg.Add(1)
 		go func(s int) {
 			defer wg.Done()
-			for i := 0; i < each; i++ {
+			for i := range each {
 				if err := c.SendFrame(Frame{Body: []byte{byte(s), byte(i >> 8), byte(i)}}, nil, 10*time.Second); err != nil { //nolint:gosec
 					t.Error(err)
 					return

@@ -1,6 +1,7 @@
 {
   "common": {
     "open-full-page": "Open full page",
+    "change-parked": "The visor is offline. The change will apply when it is back.",
     "save": "Save",
     "cancel": "Cancel",
     "loading": "Loading…",
@@ -133,7 +134,13 @@
       "offline": "Offline",
       "offline-tooltip": "The visor is offline.",
       "stale": "Offline (stale)",
-      "stale-tooltip": "The visor is offline; showing last-known data."
+      "stale-tooltip": "The visor is offline; showing last-known data.",
+      "reconnecting": "Reconnecting",
+      "reconnecting-tooltip": "The link to the visor dropped, but the visor still answers the hypervisor.",
+      "restarting": "Restarting",
+      "restarting-tooltip": "The visor said it is restarting.",
+      "detached": "Detached",
+      "detached-tooltip": "The visor removed this hypervisor. It can be forgotten."
     },
     "overview": {
       "health": "Health",
@@ -169,6 +176,8 @@
       "alert-app-stopped-why": "{{ app }} is set to start with the visor but is not running: {{ why }}",
       "alert-no-transports": "This visor has no transports.",
       "alert-no-dmsg": "This visor is not connected to any DMSG server.",
+      "alert-offline": "Offline, waiting for network.",
+      "alert-dmsg-only": "No transports, reachable over dmsg only.",
       "alert-no-reward": "No reward address is set, so this visor earns no rewards.",
       "alert-reward-ineligible": "Not eligible for rewards: {{ reason }}",
       "alert-config-version": "The config was made by {{ config }}, not by the running version.",
@@ -226,9 +235,27 @@
         "set-address-button": "Set address",
         "change-address-button": "Change address",
         "show-rules": "Reward rules (embedded mainnet_rules.md)",
-        "exposed": "This address has sent coins before, so its public key is on the blockchain. A future quantum computer could use it to steal coins sent to it.",
-        "exposed-balance": "It holds {{ balance }} SKY now. Move them to a new address.",
-        "exposed-action": "Set a new address or a BIP44 account xpub as the reward address."
+        "exposed": "This address has sent coins, so it no longer earns rewards.",
+        "exposed-balance": "It holds {{ balance }} SKY now. Move them to an address of the xpub's wallet.",
+        "exposed-action": "Set your wallet's account xpub as the reward address. The address's public key is also on the blockchain, where a future quantum computer could use it to take coins sent there.",
+        "xpub-addresses": "Rewards go to these addresses of the xpub, each day to the next one not used yet. They should match the first addresses of the wallet:",
+        "single-risk": "A single reward address stops earning rewards from the first reward day after it sends coins. Send from it only after switching to an xpub. An account xpub avoids this.",
+        "history": {
+          "title": "Reward History",
+          "show": "Show:",
+          "total": "Total: {{ total }} SKY",
+          "days": "({{ days }} days)",
+          "date": "Date",
+          "amount": "Amount (SKY)",
+          "share": "Share (%)",
+          "status": "Status",
+          "transaction": "Transaction",
+          "no-data": "No reward data available for this visor.",
+          "load-error": "Failed to load reward data.",
+          "status-none": "No reward",
+          "status-sent": "Sent",
+          "status-pending": "Pending"
+        }
       },
       "transports-info": {
         "title": "Transport",
@@ -310,6 +337,7 @@
       "rewards": "Rewards",
       "skynet": "Skynet",
       "web-proxy": "Web Proxy",
+      "app-catalog": "App catalog",
       "vpn": "VPN",
       "resources": "Resources",
       "terminal": "Terminal",
@@ -324,13 +352,15 @@
   },
   "rewards-address-config": {
     "title": "Reward Address Configuration",
-    "info": "Here you can set the account xpub (BIP44, account level) of the wallet the rewards are sent to. Each reward goes to a fresh address derived from it. A single Skycoin address is no longer accepted. If you leave the field empty, the registration will be deleted and the visor will not receive rewards.",
+    "info": "Here you can set the account xpub (BIP44, account level) of the wallet the rewards are sent to. Each reward goes to a fresh address derived from it. A single Skycoin address can be set only by accepting its risk below. If you leave the field empty, the registration will be deleted and the visor will not receive rewards.",
     "more-info-link": "(More info about the reward system)",
     "address": "Account xpub",
-    "address-error": "Please enter a valid account xpub. It starts with \"xpub\".",
+    "address-error": "Please enter a valid account xpub. It starts with \"xpub\". For a single address, tick the box below.",
     "save-config-button": "Save configuration",
     "done": "Changes saved.",
-    "empty-warning": "The address in empty, so the registration will be deleted and no rewards will be received. Do you really want to continue?"
+    "empty-warning": "The address in empty, so the registration will be deleted and no rewards will be received. Do you really want to continue?",
+    "accept-risk": "Use a single address and accept the risk. It stops earning rewards from the first reward day after it sends coins, so send from it only after switching to an xpub. An address that has already sent coins is refused.",
+    "single-needs-opt-in": "A single address can be set only by ticking the box that accepts its risk. An account xpub is recommended."
   },
   "router-config": {
     "title": "Router Configuration",
@@ -365,6 +395,9 @@
     "key": "Key",
     "subhypervisor-error": "Could not query this hypervisor",
     "subhypervisor-empty": "No visors directly connected to this hypervisor.",
+    "show-managed": "Show the visors this hypervisor manages",
+    "hide-managed": "Hide the visors this hypervisor manages",
+    "managed-count": "Visors this hypervisor manages",
     "ip": "IP",
     "lan-ip": "LAN IP",
     "public-ip": "Public IP",
@@ -374,6 +407,8 @@
     "version": "Version",
     "config-version": "Config",
     "hypervisor-info": "This visor is the current Hypervisor.",
+    "attached-hypervisor": "Attached hypervisor",
+    "attached-hypervisor-info": "A hypervisor attached to this one.",
     "drag-to-reorder": "Drag to reorder. Click any column header to clear the custom order.",
     "copy-key": "Copy key",
     "copy-dmsg": "Copy DMSG server key",
@@ -402,7 +437,34 @@
       "none-online": "None of the selected visors is online.",
       "restart-confirmation": "Restart {{ n }} visor(s)? Each one reconnects after a short while.",
       "restarting": "{{ name }} is restarting.",
-      "restart-error": "{{ name }} did not accept the restart."
+      "restart-error": "{{ name }} did not accept the restart.",
+      "add-app": "Add app…",
+      "start-app": "Start app…",
+      "stop-app": "Stop app…"
+    },
+    "apps-filter": {
+      "label": "Running app",
+      "any": "any",
+      "column": "Apps",
+      "column-tooltip": "Show each visor's apps. Green ones are running, grey ones are configured but stopped."
+    },
+    "bulk-apps": {
+      "title-add": "Add an app to the selected visors",
+      "title-start": "Start an app on the selected visors",
+      "title-stop": "Stop an app on the selected visors",
+      "app": "App",
+      "loading-catalog": "Loading the app catalog…",
+      "catalog-fallback": "The app catalog is not available, so the apps configured on the selected visors are offered.",
+      "start-after-add": "Start it after adding",
+      "run": "Run on {{ n }} visor(s)",
+      "summary": "{{ ok }} done, {{ failed }} failed, {{ skipped }} skipped",
+      "waiting": "waiting",
+      "working": "working…",
+      "ok": "done",
+      "offline": "offline",
+      "already-added": "already added",
+      "not-configured": "this app is not configured here",
+      "via-sub": "through a sub-hypervisor"
     },
     "error-load": "An error occurred while refreshing the list. Retrying...",
     "empty": "There aren't any visors connected to this hypervisor.",
@@ -510,6 +572,7 @@
   },
   "app-settings": {
     "title": "App Settings",
+    "restart-prompt": "{{ app }} is running. Save now and restart it so it uses the new server?",
     "args": "Args",
     "show-help": "Show help",
     "help-loading": "Loading help…",
@@ -522,18 +585,43 @@
     "internal-unavailable": "Internal mode is not available for this app — only the seven shipped in-process apps (skysocks, skysocks-client, vpn-client, vpn-server, skychat, skynet, skynet-client) can run inside the visor process. Embedded subcommands like skycoin-daemon / skycoin-web run as external children regardless.",
     "autostart": "Autostart on visor boot",
     "saved": "Settings saved (restart the app for changes to take effect)",
-    "last-error": "Last error"
+    "last-error": "Last error",
+    "show-flags-form": "Edit flags",
+    "flags-invalid": "Fix the flagged values before saving"
+  },
+  "app-flags": {
+    "loading": "Loading flags…",
+    "choose-server": "Choose server",
+    "none": "This app reports no flags.",
+    "reset": "Reset to default",
+    "default": "Default",
+    "empty": "empty",
+    "on": "On",
+    "off": "Off",
+    "list-placeholder": "Comma separated values",
+    "type-bool": "on / off",
+    "type-string": "text",
+    "type-int": "number",
+    "type-duration": "duration, like 10s or 5m",
+    "type-stringList": "list"
   },
   "skysocks-tab": {
     "select-server": {
       "button": "Choose server",
       "title": "Choose a proxy server",
+      "title-vpn": "Choose a VPN server",
       "help": "Pick a public skysocks server as the exit for {{ client }}, or enter a server public key manually.",
+      "help-vpn": "Pick a public VPN server for {{ client }}, or enter a server public key manually.",
       "manual-pk": "Server public key",
       "use": "Use",
       "filter": "Filter by location or key",
+      "country": "Country",
+      "all-countries": "All countries",
+      "count": "{{ shown }} of {{ total }} servers",
+      "latency-hint": "Latency of this visor's direct transport to the server",
       "unknown-location": "Unknown location",
       "empty": "No public proxy servers found in the discovery service.",
+      "empty-vpn": "No public VPN servers found in the discovery service.",
       "load-error": "Couldn't reach the discovery service.",
       "invalid-pk": "That doesn't look like a valid public key (66 hex characters).",
       "done": "Proxy server updated.",
@@ -680,29 +768,58 @@
     "copy": "Click to copy",
     "inbox": "Inbox",
     "sent": "Sent",
+    "outbox": "Outbox",
     "compose": "Compose",
     "settings": "Settings",
     "empty-inbox": "No mail yet. Mail sent to this visor's address arrives here.",
     "empty-sent": "Nothing sent yet.",
+    "empty-outbox": "Nothing waiting. Mail for a visor that is offline waits here until it can be delivered.",
+    "outbox-help": "This visor keeps trying, and gives up after the maximum age with a note in the inbox.",
     "from": "From",
     "to": "To",
     "subject": "Subject",
     "date": "Date",
     "no-subject": "(no subject)",
     "verified": "sender's key verified",
+    "relayed-by": "Relayed by",
     "from-html": "Shown as text, reduced from an HTML message.",
     "attachments": "Attachments",
     "reply": "Reply",
     "raw": "Download .eml",
     "delete": "Delete",
+    "cancel-delivery": "Cancel delivery",
+    "retry": "Retry now",
+    "retry-all": "Retry all now",
     "send": "Send",
     "sending": "Sending…",
     "delivered-via": "delivered over",
+    "queued": "offline for now, queued in the Outbox",
+    "waiting-for": "Waiting for",
+    "tries-so-far": "Tries so far",
+    "try": "try",
+    "tries": "tries",
+    "next-try": "Next try",
+    "gives-up": "gives up",
     "turn-on": "Turn mail on",
     "turn-off": "Turn mail off",
     "usage": "Using",
     "whitelist": "Who may send to this mailbox",
     "whitelist-help": "One public key per line. Leave it empty to accept mail from anyone.",
+    "helpers": "Visors that carry my mail when the recipient is offline",
+    "helpers-default": "Empty: the visors this one manages",
+    "relay-for": "Visors whose mail this one carries",
+    "relay-for-default": "Empty: this visor's hypervisors",
+    "helpers-help": "One public key per line, or none. A helper gets queued mail sealed for its recipient, so it cannot read it, and delivers it while this visor is away.",
+    "carried-for": "Sealed mail carried for",
+    "sealed-title": "Sealed mail",
+    "carried-note": "Sealed for its recipient. This visor cannot read it and delivers it for",
+    "handed-to": "Helpers holding a copy:",
+    "now": "Now:",
+    "none": "none",
+    "helper-has": "helper has it",
+    "helpers-have": "helpers have it",
+    "parked": "parked",
+    "parked-for": "Parked on the inbox hosts of:",
     "save": "Save"
   },
   "web-proxy": {
@@ -799,6 +916,7 @@
     "connected": "Connected",
     "disconnected": "Disconnected",
     "no-history": "history is disabled (--persist not set)",
+    "remote-unavailable": "Chat is only available for the visor this hypervisor runs on. Open the remote visor's own hypervisor or skychat UI to use its chat.",
     "empty": "No messages yet — incoming chats from connected peers will appear here.",
     "peers": "Peers",
     "peers-empty": "No peers yet. Send a message or wait for an incoming chat.",
@@ -911,7 +1029,7 @@
   },
   "bulk-rewards": {
     "title": "Change reward address",
-    "info": "Enter the account xpub (BIP44, account level) of the wallet where you want to receive the rewards. It will be set on all the selected visors. If you leave the field empty, the registration will be deleted and the visors will not receive rewards. You can also set the reward address of each node individually using the option on the visor details page.",
+    "info": "Enter the account xpub (BIP44, account level) of the wallet where you want to receive the rewards. It will be set on all the selected visors. A single Skycoin address can be set only by accepting its risk below. If you leave the field empty, the registration will be deleted and the visors will not receive rewards. You can also set the reward address of each node individually using the option on the visor details page.",
     "more-info-link": "(More info about the reward system)",
     "address": "New address",
     "select-visors": "Visors to alter:",
@@ -933,6 +1051,12 @@
   "settings": {
     "title": "Settings",
     "checking-auth": "Checking authentication settings.",
+    "theme": {
+      "label": "Theme",
+      "system": "System",
+      "light": "Light",
+      "dark": "Dark"
+    },
     "visor-switcher-row": {
       "label": "Show the visor switcher as a full row of tabs",
       "info": "Off (default): the per-visor switcher is a compact dropdown, keeping the navigation clean. On: it's shown as a full second row of tabs for switching between individual visor pages."
@@ -987,8 +1111,9 @@
       "remove-confirmation": "Are you sure you want to remove the custom settings?"
     },
     "change-password": "Change password",
-    "refresh-rate": "Refresh rate",
-    "refresh-rate-help": "Time the system waits to update the data automatically.",
+    "refresh-rate": "Fallback refresh rate",
+    "refresh-rate-help": "Pages update live over the hypervisor socket. This rate is how often they poll instead when live updates are unavailable.",
+    "refresh-rate-hint": "Used only when live updates are unavailable.",
     "refresh-rate-confirmation": "Refresh rate changed.",
     "seconds": "seconds"
   },
@@ -1059,7 +1184,34 @@
       "list": "All Apps",
       "chat": "Skychat",
       "vpn": "VPN",
-      "skysocks": "Skysocks"
+      "skysocks": "Skysocks",
+      "catalog": "Catalog"
+    },
+    "catalog": {
+      "loading": "Loading the app catalog...",
+      "choose-server": "Choose server",
+      "kinds": {
+        "server": "Servers",
+        "client": "Clients",
+        "service": "Services",
+        "external": "External"
+      },
+      "kind": {
+        "server": "Server",
+        "client": "Client",
+        "service": "Service",
+        "external": "External"
+      },
+      "not-added": "Not added",
+      "add": "Add",
+      "add-another": "Add another",
+      "port": "Port",
+      "autostart": "Autostart",
+      "on": "on",
+      "off": "off",
+      "failed": "Failed",
+      "name-prompt": "Instance name (must be unique on this visor):",
+      "start-prompt": "{{ app }} was added. Start it now?"
     },
     "log": {
       "title": "Log",
@@ -1081,6 +1233,8 @@
       "title": "Applications",
       "title-official": "Official Applications",
       "title-user": "User Applications",
+      "heading-official": "Apps",
+      "heading-other": "Services and other apps",
       "list-title": "Application list",
       "app-name": "Name",
       "port": "Port",
@@ -1494,6 +1648,12 @@
     "no-results": "Nothing matches.",
     "footer": "Up and down to move, Enter to open, Esc to close. Type a visor name and a tab to open that tab.",
     "restart-confirmation": "Restart {{ name }}? It reconnects after a short while.",
+    "theme": {
+      "system": "Theme: follow the system",
+      "light": "Theme: light",
+      "dark": "Theme: dark",
+      "current": "Current"
+    },
     "groups": {
       "visors": "Visors",
       "pages": "Pages",
@@ -1787,6 +1947,110 @@
       "ip": "Custom DNS server IP address",
       "save-config-button": "Save configuration",
       "done": "Changes saved."
+    }
+  },
+  "ui2": {
+    "classic": "Classic UI",
+    "classic-tab": "Open this tab in the classic UI",
+    "not-ported": "This tab is not in the new UI yet.",
+    "theme": "Theme",
+    "username": "Username",
+    "login": "Log in",
+    "create-account": "Create account",
+    "create-help": "No account exists yet. Choose the password for the admin account.",
+    "online": "Online",
+    "offline": "Offline",
+    "routes": "Routes",
+    "this-hypervisor": "This hypervisor",
+    "last-seen": "Last seen",
+    "open-full-page": "Open in a new tab",
+    "refresh": "Refresh",
+    "visors-count": "{{ n }} visors",
+    "no-session": "Your session ended. Log in again.",
+    "unreachable": "The hypervisor did not answer.",
+    "language": "Language",
+    "menu": "Menu",
+    "password-confirm": "Confirm password",
+    "password-mismatch": "The passwords do not match.",
+    "apps": {
+      "no-logs": "No log lines in the last 24 hours."
+    },
+    "routing": {
+      "count": "Count"
+    },
+    "transports": {
+      "throughput": "Throughput",
+      "remove-all": "Remove all",
+      "remove-all-confirm": "Remove every transport of this visor? Persistent ones may be created again shortly."
+    },
+    "route-viz": "Route visualizer",
+    "wallet": {
+      "node": "Coin node"
+    },
+    "mail": {
+      "deleted": "Message deleted.",
+      "retrying": "Trying again now.",
+      "sent": "Sent.",
+      "queued": "Queued. This visor keeps trying until the recipient is online.",
+      "no-recipient": "Add at least one recipient.",
+      "turned-on": "Mail turned on.",
+      "turned-off": "Mail turned off.",
+      "saved": "Saved.",
+      "delete-confirm": "Delete this message?",
+      "cancel-confirm": "Stop trying to deliver this message and delete it?"
+    },
+    "dmsg": {
+      "role-main": "Main visor",
+      "role-route_setup": "Route Setup Node",
+      "role-transport_setup": "Transport Setup Node"
+    },
+    "rewards": {
+      "history": "Reward History",
+      "none": "No reward data available for this visor.",
+      "total": "Total: {{ total }} SKY",
+      "date": "Date",
+      "amount": "Amount (SKY)",
+      "share": "Share (%)",
+      "status": "Status",
+      "tx": "Transaction",
+      "sent": "Sent",
+      "pending": "Pending",
+      "no-reward": "No reward"
+    },
+    "settings": {
+      "not-exist": "— does not exist yet; saving creates it.",
+      "not-writable": "— this visor cannot write it. Review a change to get the sudo skywire autoconfig command that makes it.",
+      "intro": "The visor reads skywire.json, which skywire autoconfig regenerates from this file. A change applies once autoconfig runs again and the visor restarts.",
+      "filter": "Filter",
+      "set-only": "Set in the file only",
+      "to-fix": "{{ n }} to fix",
+      "review": "Review changes",
+      "saved": "Saved to {{ path }}.",
+      "saved-help": "The visor runs with its old settings until skywire.json is regenerated and it restarts:",
+      "no-changes": "Nothing changed.",
+      "variable": "Variable",
+      "now": "Now",
+      "after": "After",
+      "run-cmd": "Run this on the visor's host; it edits the file, regenerates skywire.json and restarts the visor:",
+      "back": "Back",
+      "back-to-settings": "Back to settings"
+    },
+    "try": "Try new UI",
+    "try-tooltip": "Open this page in the new server rendered UI",
+    "list": {
+      "search-transports": "Filter by ID, key, type or label",
+      "search-rules": "Filter by key, type, visor or transport",
+      "showing": "{{ from }}–{{ to }} of {{ total }}",
+      "page": "Page {{ n }} of {{ of }}",
+      "prev": "Previous page",
+      "next": "Next page",
+      "no-match": "Nothing matches the filter."
+    },
+    "routing-rules": "Routing rules",
+    "routing-rules-info": "Rules in this visor's routing table. Each route uses a few, at the ends and at every hop it passes.",
+    "route-groups": "Route groups",
+    "nodes": {
+      "shown": "{{ n }} of {{ total }}"
     }
   }
 }

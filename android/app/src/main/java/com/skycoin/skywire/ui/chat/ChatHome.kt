@@ -549,6 +549,7 @@ fun groupSubtitle(g: GroupInfo, me: String): String {
         g.status == "awaiting_approval" -> parts += stringResource(R.string.chat_state_waiting)
         g.status == "denied" -> parts += stringResource(R.string.chat_state_declined)
         g.status == "banned" -> parts += stringResource(R.string.chat_state_banned)
+        g.status == "removed" -> parts += stringResource(R.string.chat_state_removed)
         g.readOnly -> parts += stringResource(R.string.chat_state_read_only)
         g.canPost == false -> parts += stringResource(R.string.chat_state_restricted)
     }
@@ -558,6 +559,7 @@ fun groupSubtitle(g: GroupInfo, me: String): String {
 /** `↑ `/`↓ ` and the shown text, the way list rows preview (index.html updatePreview). */
 @Composable
 fun previewText(m: ChatMessage, own: Boolean, group: Boolean = false, sender: String = ""): String {
+    if (m.notice.isNotEmpty()) return noticeText(m.notice, sender)
     val f = m.file
     val text = when {
         f == null -> shownText(m.text)

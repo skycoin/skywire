@@ -12,8 +12,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
 	"github.com/skycoin/skywire/pkg/deployment/netgraph"
@@ -112,8 +110,8 @@ type API struct {
 	// single transport. Delete is called when an edge no longer has any
 	// transports to drop the stale target.
 	dhtMirror interface {
-		Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
-		MirrorMany(subjectPKs []cipher.PubKey, entry interface{}, seq uint64)
+		Mirror(subjectPK cipher.PubKey, entry any, seq uint64)
+		MirrorMany(subjectPKs []cipher.PubKey, entry any, seq uint64)
 		Delete(subjectPK cipher.PubKey)
 	}
 }
@@ -126,7 +124,7 @@ type HealthCheckResponse = httputil.HealthCheckResponse
 const maxBodyBytes = 8 << 20
 
 // New constructs a new API instance.
-func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
+func New(log logging.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	enableMetrics bool, m tpdiscmetrics.Metrics, dmsgAddr string, backupPath string) *API {
 	if log == nil {
 		log = logging.MustGetLogger("tp_disc")
@@ -307,8 +305,8 @@ func (api *API) uptimeDates(w http.ResponseWriter, r *http.Request) {
 
 // SetDHTMirror sets a mirror that publishes transport lists to the DHT.
 func (api *API) SetDHTMirror(m interface {
-	Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
-	MirrorMany(subjectPKs []cipher.PubKey, entry interface{}, seq uint64)
+	Mirror(subjectPK cipher.PubKey, entry any, seq uint64)
+	MirrorMany(subjectPKs []cipher.PubKey, entry any, seq uint64)
 	Delete(subjectPK cipher.PubKey)
 }) {
 	api.dhtMirror = m
@@ -351,7 +349,7 @@ func (api *API) mirrorEdges(ctx context.Context, edges map[cipher.PubKey]struct{
 // (value = all that edge's transports) matches the semantics of
 // GET /transports/edge:{pk} and avoids the pre-#2333 data loss where
 // per-transport mirroring overwrote each other's target.
-func (api *API) BackfillDHTMirror(ctx context.Context, log logrus.FieldLogger) {
+func (api *API) BackfillDHTMirror(ctx context.Context, log logging.FieldLogger) {
 	if api.dhtMirror == nil {
 		return
 	}
@@ -382,7 +380,7 @@ func (api *API) BackfillDHTMirror(ctx context.Context, log logrus.FieldLogger) {
 }
 
 // RunBackgroundTasks is function which runs periodic background tasks of API.
-func (api *API) RunBackgroundTasks(ctx context.Context, logger logrus.FieldLogger) {
+func (api *API) RunBackgroundTasks(ctx context.Context, logger logging.FieldLogger) {
 	tpTicker := time.NewTicker(transportsCacheDelay)
 	defer tpTicker.Stop()
 
@@ -421,7 +419,7 @@ func (api *API) RunBackgroundTasks(ctx context.Context, logger logrus.FieldLogge
 }
 
 // refreshUptimesCache fetches visor data from the store and caches both v1 and v2 formats.
-func (api *API) refreshUptimesCache(ctx context.Context, logger logrus.FieldLogger) {
+func (api *API) refreshUptimesCache(ctx context.Context, logger logging.FieldLogger) {
 	uptimes, err := api.store.GetAllVisorSummaries(ctx, false, false)
 	if err != nil {
 		logger.WithError(err).Error("failed to refresh uptimes cache")
@@ -452,7 +450,7 @@ func (api *API) getUptimesV2FromCache() []store.VisorSummary {
 	return api.uptimesV2Cache
 }
 
-func (api *API) log(r *http.Request) logrus.FieldLogger {
+func (api *API) log(r *http.Request) logging.FieldLogger {
 	return httputil.GetLogger(r)
 }
 
@@ -505,7 +503,7 @@ func (api *API) writeError(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 // refreshTransportsCache loads all transports from Redis into memory and updates metrics.
-func (api *API) refreshTransportsCache(ctx context.Context, logger logrus.FieldLogger) {
+func (api *API) refreshTransportsCache(ctx context.Context, logger logging.FieldLogger) {
 	entries, err := api.store.GetAllTransports(ctx, true)
 	if err != nil {
 		logger.WithError(err).Error("failed to refresh transports cache")
@@ -627,7 +625,7 @@ func byKind(handlers map[string]http.HandlerFunc) http.HandlerFunc {
 
 // archiveTimelines writes settled days of per-transport uptime timelines to
 // disk before they leave redis, when the store keeps an archive.
-func (api *API) archiveTimelines(ctx context.Context, logger logrus.FieldLogger) {
+func (api *API) archiveTimelines(ctx context.Context, logger logging.FieldLogger) {
 	ta, ok := api.store.(interface {
 		ArchiveTransportTimelines(context.Context, time.Time) error
 	})

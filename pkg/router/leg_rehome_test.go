@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -63,7 +62,7 @@ func TestRehomeForwardRuleKeepsItsNextHop(t *testing.T) {
 // re-homes in flight at once must not answer each other's waiter.
 func TestRehomeNonceIsUnique(t *testing.T) {
 	seen := make(map[uint64]bool, 64)
-	for i := 0; i < 64; i++ {
+	for range 64 {
 		n, err := newRehomeNonce()
 		require.NoError(t, err)
 		require.False(t, seen[n], "re-home nonce repeated")
@@ -91,7 +90,7 @@ func TestRehomeRefusedWhenPeerLacksTheBit(t *testing.T) {
 func newRehomeTestGroup(t *testing.T, srcPK, dstPK cipher.PubKey, srcPort, dstPort routing.Port, rehome bool) *RouteGroup {
 	t.Helper()
 	l := logging.NewMasterLogger()
-	l.SetLevel(logrus.PanicLevel)
+	l.SetLevel(logging.PanicLevel)
 	rt := routing.NewTable(l.PackageLogger("rehome-rt"))
 	rg := NewRouteGroup(DefaultRouteGroupConfig(), rt, routing.NewRouteDescriptor(srcPK, dstPK, srcPort, dstPort), l)
 	rg.mux = newRouteMux(l.PackageLogger("rehome-mux"), true)

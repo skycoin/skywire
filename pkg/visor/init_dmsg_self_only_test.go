@@ -1,7 +1,6 @@
 package visor
 
 import (
-	"context"
 	"net"
 	"net/http"
 	"sync"
@@ -75,8 +74,7 @@ func requireReady(t *testing.T, dmsgC *dmsg.Client) {
 // then the service entries are seeded and the dmsg:// service clients are made.
 func TestSelfOnlyVisorDmsgClientBecomesReady(t *testing.T) {
 	v, addr := selfOnlyVisor(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	mLog := v.MasterLogger()
 	log := logging.MustGetLogger("test")
 
@@ -108,8 +106,7 @@ func TestSelfOnlyVisorDmsgClientBecomesReady(t *testing.T) {
 // has. Several services on the visor key must not replace it.
 func TestSelfOnlyVisorSeedKeepsOwnServer(t *testing.T) {
 	v, addr := selfOnlyVisor(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	dmsgC := dmsg.NewClient(v.conf.PK, v.conf.SK, disc.NewMock(0), &dmsg.Config{MinSessions: 1})
 	v.dmsgSelfOnly = true

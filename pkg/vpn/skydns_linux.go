@@ -13,8 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skydns"
 	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/vpn/netctl"
@@ -36,7 +35,7 @@ const (
 func RunSkyDNS(ctx context.Context, cfg SkyDNSConfig) error {
 	log := cfg.Log
 	if log == nil {
-		log = logrus.StandardLogger()
+		log = logging.StandardLogger()
 	}
 	var (
 		tun  TUNDevice
@@ -261,7 +260,7 @@ func stripSkyDNSBlock(conf string) string {
 }
 
 func firstNameserver(conf string) string {
-	for _, l := range strings.Split(conf, "\n") {
+	for l := range strings.SplitSeq(conf, "\n") {
 		f := strings.Fields(l)
 		if len(f) >= 2 && f[0] == "nameserver" && net.ParseIP(f[1]) != nil {
 			return f[1]

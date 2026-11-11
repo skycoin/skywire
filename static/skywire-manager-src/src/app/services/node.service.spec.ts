@@ -42,6 +42,10 @@ describe('NodeService', () => {
       { desc: 'getSkynetForwards', run: () => service.getSkynetForwards('NK'), verb: 'get', args: ['visors/NK/skynet-forwards'] },
       { desc: 'checkIfUpdating', run: () => service.checkIfUpdating('NK'), verb: 'get', args: ['visors/NK/update/ws/running'] },
       { desc: 'setRewardsAddress', run: () => service.setRewardsAddress('NK', 'ADDR'), verb: 'put', args: ['visors/NK/reward', { reward_address: 'ADDR' }] },
+      {
+        desc: 'setRewardsAddress with the single address opt-in', run: () => service.setRewardsAddress('NK', 'ADDR', true),
+        verb: 'put', args: ['visors/NK/reward', { reward_address: 'ADDR', accept_risk: true }],
+      },
       { desc: 'deleteRewardsAddress', run: () => service.deleteRewardsAddress('NK'), verb: 'delete', args: ['visors/NK/reward'] },
       { desc: 'setProxyEnabled', run: () => service.setProxyEnabled('NK', 'socks', true), verb: 'post', args: ['visors/NK/proxies/set', { kind: 'socks', enable: true }] },
       { desc: 'setProxyUpstream', run: () => service.setProxyUpstream('NK', 'socks', '1.2.3.4'), verb: 'post', args: ['visors/NK/proxies/upstream', { kind: 'socks', addr: '1.2.3.4' }] },
@@ -122,6 +126,18 @@ describe('NodeService', () => {
         archive_url: 'http://a',
         checksums_url: 'http://c',
       });
+    });
+  });
+
+  describe('nodesTreeFromResponse', () => {
+    it('keeps each visor\'s apps for the apps column and filter', () => {
+      const storage = { getLabelInfo: () => null, getDefaultLabel: () => 'x' };
+      const svc = new NodeService(apiService, storage as any);
+      const sections = svc.nodesTreeFromResponse({ sections: [{ hypervisor_pk: 'h', visors: [{
+        online: true,
+        overview: { local_pk: 'a', apps: [{ name: 'skysocks', status: 1, auto_start: true }] },
+      }] }] });
+      expect(sections[0].nodes[0].apps.map(a => [a.name, a.status, a.autostart])).toEqual([['skysocks', 1, true]]);
     });
   });
 });

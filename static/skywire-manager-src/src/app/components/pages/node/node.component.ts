@@ -2,14 +2,14 @@ import { Component, OnDestroy, OnInit, NgZone, Injector, ChangeDetectorRef, Chan
 import { ActivatedRoute, Router } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { Subscription } from 'rxjs/internal/Subscription';
-import { EMPTY, Observable, ReplaySubject, catchError, delay, of, switchMap, timer } from 'rxjs';
+import { EMPTY, Observable, ReplaySubject, catchError, concat, delay, of, switchMap, timer } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
 
 import { Node } from '../../../app.datatypes';
 import { StorageService } from '../../../services/storage.service';
 import { TabButtonData } from '../../layout/top-bar/top-bar.component';
 import { homeTabsData } from '../../../utils/home-tabs';
-import { nodeTabsData } from '../../../utils/node-tabs';
+import { isRemoteVisor, nodeTabsData } from '../../../utils/node-tabs';
 import { visorSwitcherChips } from '../../../utils/visor-switcher';
 import { NodeService } from '../../../services/node.service';
 import { LiveService } from '../../../services/live.service';
@@ -94,6 +94,8 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
    private initialRouteEventFired = false;
 
   private dataSubscription!: Subscription;
+  // The visor whose data dataSubscription follows.
+  private requestedNodeKey = '';
   private updateTimeSubscription!: Subscription;
   private navigationsSubscription: Subscription;
   private initSubscription!: Subscription;
@@ -302,7 +304,8 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       // above the per-node tabs, so navigation stays available on node pages.
       this.refreshNavRows();
 
-      this.tabsData = nodeTabsData(NodeComponent.currentNodeKey, !!this.node && (this.node as any).arch === 'wasm');
+      this.tabsData = nodeTabsData(NodeComponent.currentNodeKey, !!this.node && (this.node as any).arch === 'wasm',
+        isRemoteVisor(NodeComponent.currentNodeKey, this.storageService.getLocalHypervisorPk()));
 
       // Pick the selected tab by matching the URL to a tab's route (its last
       // linkParts segment), last match wins — robust to tabs being filtered out
@@ -499,16 +502,28 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
    * Starts getting the data from the backend.
    */
   private startGettingData(checkSavedData: boolean) {
-    // Use saved data or get from the server. If there is no saved data, savedData is null.
-    const savedData = checkSavedData ? this.getLocalValue(this.persistentDataResponseKey) : null;
-    let nextOperation: Observable<any> = this.singleNodeDataService.startRequestingData(NodeComponent.currentNodeKey!);
-    if (savedData) {
-      nextOperation = of(JSON.parse(savedData.value));
+    // The component is reused across visors, so drop the previous visor's
+    // stream first. Otherwise both keep writing this.node and the page flips.
+    if (this.dataSubscription) {
+      this.dataSubscription.unsubscribe();
+    }
+    const key = NodeComponent.currentNodeKey!;
+    if (this.requestedNodeKey && this.requestedNodeKey !== key) {
+      this.singleNodeDataService.stopRequestingSpecificNode(this.requestedNodeKey);
+    }
+    this.requestedNodeKey = key;
+
+    // Saved data, if it is for this visor, shows at once and the live data follows.
+    const savedValue = checkSavedData ? this.getLocalValue(this.persistentDataResponseKey) : null;
+    const savedData: SingleNodeBackendData | null = savedValue ? JSON.parse(savedValue.value) : null;
+    let nextOperation: Observable<any> = this.singleNodeDataService.startRequestingData(key);
+    if (savedData && savedData.data && savedData.data.localPk === key) {
+      nextOperation = concat(of(savedData), nextOperation);
     }
 
     // Get the node info.
     this.dataSubscription = nextOperation.subscribe((result: SingleNodeBackendData) => {
-      if (!savedData) {
+      if (result !== savedData) {
         this.saveLocalValue(this.persistentDataResponseKey, JSON.stringify(result));
       }
 
@@ -596,11 +611,6 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           this.errorsUpdating = true;
           AppComponent.currentInstance.showDataProblemMsg();
         }
-      }
-
-      // If old saved data was used, repeat the operation, ignoring the saved data.
-      if (savedData) {
-        this.startGettingData(false);
       }
     });
   }

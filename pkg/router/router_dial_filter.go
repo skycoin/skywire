@@ -4,6 +4,7 @@ package router
 import (
 	"errors"
 	"net"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -293,12 +294,7 @@ func firstHopTransportExcluded(hops []routing.Hop, excludeTpIDs []uuid.UUID) boo
 	if len(hops) == 0 {
 		return false
 	}
-	for _, id := range excludeTpIDs {
-		if hops[0].TpID == id {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(excludeTpIDs, hops[0].TpID)
 }
 
 // rejectDMSGMultihop returns paths with any multihop candidate
@@ -440,7 +436,8 @@ func intermediatesOfRouteGroup(nrg *NoiseRouteGroup, src, dst cipher.PubKey) []c
 	nrg.rg.mu.Lock()
 	defer nrg.rg.mu.Unlock()
 	var out []cipher.PubKey
-	for _, tp := range nrg.rg.tps {
+	for _, lg := range nrg.rg.legs {
+		tp := lg.tp
 		if tp == nil {
 			continue
 		}
@@ -492,7 +489,8 @@ func (r *router) siblingRouteGroupExclusions(lPK, rPK cipher.PubKey, rPort routi
 	count = len(siblings)
 	for _, nrg := range siblings {
 		nrg.rg.mu.Lock()
-		for _, tp := range nrg.rg.tps {
+		for _, lg := range nrg.rg.legs {
+			tp := lg.tp
 			if tp == nil {
 				continue
 			}
@@ -561,10 +559,8 @@ func appendExcludeIntermediate(opts *DialOptions, pk cipher.PubKey) *DialOptions
 	if opts == nil {
 		opts = DefaultDialOptions()
 	}
-	for _, existing := range opts.ExcludeIntermediatePKs {
-		if existing == pk {
-			return opts
-		}
+	if slices.Contains(opts.ExcludeIntermediatePKs, pk) {
+		return opts
 	}
 	opts.ExcludeIntermediatePKs = append(opts.ExcludeIntermediatePKs, pk)
 	return opts
@@ -605,12 +601,7 @@ func (r *router) isSameLANDest(dst cipher.PubKey) bool {
 	if r.conf != nil && r.conf.SelfPublicIP != nil {
 		self = r.conf.SelfPublicIP()
 	}
-	for _, pk := range r.tm.SameLANPeers(self) {
-		if pk == dst {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(r.tm.SameLANPeers(self), dst)
 }
 
 // appendUniquePKs appends every pk in add that is not already in base,

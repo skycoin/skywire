@@ -8,10 +8,11 @@
 package proxyroute
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"net"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -86,11 +87,11 @@ func Normalize(rules []Rule) ([]Rule, error) {
 	for _, r := range bySuffix {
 		out = append(out, r)
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if len(out[i].Suffix) != len(out[j].Suffix) {
-			return len(out[i].Suffix) > len(out[j].Suffix)
-		}
-		return out[i].Suffix < out[j].Suffix
+	slices.SortFunc(out, func(a, b Rule) int {
+		return cmp.Or(
+			cmp.Compare(len(b.Suffix), len(a.Suffix)),
+			cmp.Compare(a.Suffix, b.Suffix),
+		)
 	})
 	return out, nil
 }

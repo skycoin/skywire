@@ -48,7 +48,7 @@ Examples:
 		}
 		var carriers []string
 		if strings.TrimSpace(convergeCarriers) != "" {
-			for _, c := range strings.Split(convergeCarriers, ",") {
+			for c := range strings.SplitSeq(convergeCarriers, ",") {
 				if c = strings.TrimSpace(c); c != "" {
 					carriers = append(carriers, c)
 				}

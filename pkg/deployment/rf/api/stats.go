@@ -2,7 +2,7 @@
 package api
 
 import (
-	"sort"
+	"slices"
 	"sync"
 	"time"
 )
@@ -70,7 +70,7 @@ func (s *requestStats) takeTimes() []float64 {
 	t := s.times
 	s.times = nil
 	s.mu.Unlock()
-	sort.Float64s(t)
+	slices.Sort(t)
 	return t
 }
 
@@ -86,10 +86,7 @@ func (s *requestStats) found(hops []int) {
 	if len(hops) == 0 {
 		return
 	}
-	n := len(hops)
-	if n > maxCountedRoutes {
-		n = maxCountedRoutes
-	}
+	n := min(len(hops), maxCountedRoutes)
 	s.mu.Lock()
 	s.perPair[n]++
 	s.mu.Unlock()

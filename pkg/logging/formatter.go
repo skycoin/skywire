@@ -4,7 +4,7 @@ package logging
 import (
 	"bytes"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -12,7 +12,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/mgutz/ansi"
-	"github.com/sirupsen/logrus"
 )
 
 const defaultTimestampFormat = time.RFC3339
@@ -217,7 +216,7 @@ func compileColorScheme(s *ColorScheme) *compiledColorScheme {
 	}
 }
 
-func (f *TextFormatter) init(entry *logrus.Entry) {
+func (f *TextFormatter) init(entry *Entry) {
 	if len(f.QuoteCharacter) == 0 {
 		f.QuoteCharacter = "\""
 	}
@@ -236,8 +235,8 @@ func (f *TextFormatter) SetColorScheme(colorScheme *ColorScheme) {
 	f.colorScheme = compileColorScheme(colorScheme)
 }
 
-// Format formats a logrus.Entry
-func (f *TextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
+// Format formats a Entry
+func (f *TextFormatter) Format(entry *Entry) ([]byte, error) {
 	var b *bytes.Buffer
 
 	var keyArr [stackKeys]string
@@ -253,7 +252,7 @@ func (f *TextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	// Nothing to order below two keys, and the overwhelming majority of
 	// entries carry just the module key plus a field or two.
 	if !f.DisableSorting && len(keys) > 1 {
-		sort.Strings(keys)
+		slices.Sort(keys)
 	}
 	if entry.Buffer != nil {
 		b = entry.Buffer
@@ -299,20 +298,20 @@ func (f *TextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-func (f *TextFormatter) printColored(b *bytes.Buffer, entry *logrus.Entry, keys []string, timestampFormat string, colorScheme *compiledColorScheme) {
+func (f *TextFormatter) printColored(b *bytes.Buffer, entry *Entry, keys []string, timestampFormat string, colorScheme *compiledColorScheme) {
 	var levelColor ansiStyle
 	switch entry.Level {
-	case logrus.InfoLevel:
+	case InfoLevel:
 		levelColor = colorScheme.InfoLevelColor
-	case logrus.WarnLevel:
+	case WarnLevel:
 		levelColor = colorScheme.WarnLevelColor
-	case logrus.ErrorLevel:
+	case ErrorLevel:
 		levelColor = colorScheme.ErrorLevelColor
-	case logrus.FatalLevel:
+	case FatalLevel:
 		levelColor = colorScheme.FatalLevelColor
-	case logrus.PanicLevel:
+	case PanicLevel:
 		levelColor = colorScheme.PanicLevelColor
-	case logrus.TraceLevel:
+	case TraceLevel:
 		levelColor = colorScheme.TraceLevelColor
 	default:
 		levelColor = colorScheme.DebugLevelColor
@@ -322,7 +321,7 @@ func (f *TextFormatter) printColored(b *bytes.Buffer, entry *logrus.Entry, keys 
 	hasPriority := priority == logPriorityCritical
 
 	var levelText string
-	if entry.Level != logrus.WarnLevel {
+	if entry.Level != WarnLevel {
 		levelText = entry.Level.String()
 	} else {
 		levelText = "warn"
@@ -383,7 +382,7 @@ func (f *TextFormatter) printColored(b *bytes.Buffer, entry *logrus.Entry, keys 
 // printCritical renders a _priority=CRITICAL entry, whose whole line is wrapped
 // in one color. Kept on fmt deliberately: it is a rare path and the padded
 // message format is easier to get right there.
-func (f *TextFormatter) printCritical(b *bytes.Buffer, entry *logrus.Entry, colorScheme *compiledColorScheme, levelText, message, timestampFormat string, ccFile, ccFunc, ccLine string) {
+func (f *TextFormatter) printCritical(b *bytes.Buffer, entry *Entry, colorScheme *compiledColorScheme, levelText, message, timestampFormat string, ccFile, ccFunc, ccLine string) {
 	messageFormat := "%s"
 	if f.SpacePadding != 0 {
 		messageFormat = fmt.Sprintf("%%-%ds", f.SpacePadding)
@@ -415,22 +414,22 @@ func (f *TextFormatter) printCritical(b *bytes.Buffer, entry *logrus.Entry, colo
 }
 
 // upperLevelText returns the uppercased level name. strings.ToUpper allocates
-// for the lowercase names logrus hands back, and the set is closed.
-func upperLevelText(level logrus.Level, text string) string {
+// for the lowercase level names, and the set is closed.
+func upperLevelText(level Level, text string) string {
 	switch level {
-	case logrus.PanicLevel:
+	case PanicLevel:
 		return "PANIC"
-	case logrus.FatalLevel:
+	case FatalLevel:
 		return "FATAL"
-	case logrus.ErrorLevel:
+	case ErrorLevel:
 		return "ERROR"
-	case logrus.WarnLevel:
+	case WarnLevel:
 		return "WARN"
-	case logrus.InfoLevel:
+	case InfoLevel:
 		return "INFO"
-	case logrus.DebugLevel:
+	case DebugLevel:
 		return "DEBUG"
-	case logrus.TraceLevel:
+	case TraceLevel:
 		return "TRACE"
 	default:
 		return strings.ToUpper(text)
@@ -467,7 +466,7 @@ func writePrefixBody(b *bytes.Buffer, module, priority string) {
 }
 
 // appendTimestamp writes the timestamp without its brackets.
-func (f *TextFormatter) appendTimestamp(b *bytes.Buffer, entry *logrus.Entry, timestampFormat string) {
+func (f *TextFormatter) appendTimestamp(b *bytes.Buffer, entry *Entry, timestampFormat string) {
 	if f.FullTimestamp {
 		var scratch [64]byte
 		b.Write(entry.Time.AppendFormat(scratch[:0], timestampFormat)) //nolint:gosec,errcheck
@@ -509,7 +508,7 @@ func (f *TextFormatter) appendMessage(b *bytes.Buffer, message string) {
 // callContext pulls the file/func/line keys out of the entry. Skywire sets
 // none of them, so returning three strings keeps the common case free of the
 // slice that used to be built and thrown away for every line.
-func callContext(entry *logrus.Entry) (file, fn, line string) {
+func callContext(entry *Entry) (file, fn, line string) {
 	if v, ok := entry.Data["file"]; ok {
 		file, _ = v.(string)
 	}
@@ -558,7 +557,7 @@ func (f *TextFormatter) needsQuoting(text string) bool {
 	return false
 }
 
-func prefixParts(e *logrus.Entry) (module, priority string) {
+func prefixParts(e *Entry) (module, priority string) {
 	if iModule, ok := e.Data[logModuleKey]; ok {
 		module, _ = iModule.(string)
 	}
@@ -568,7 +567,7 @@ func prefixParts(e *logrus.Entry) (module, priority string) {
 	return module, priority
 }
 
-func extractPrefix(e *logrus.Entry) string {
+func extractPrefix(e *Entry) string {
 	module, priority := prefixParts(e)
 
 	switch {
@@ -583,7 +582,7 @@ func extractPrefix(e *logrus.Entry) string {
 
 // appendFormattedValue is the buffer-appending equivalent of the old
 // formatKeyValue/formatValue pair, which cost two Sprintf calls per field.
-func (f *TextFormatter) appendFormattedValue(b *bytes.Buffer, value interface{}) {
+func (f *TextFormatter) appendFormattedValue(b *bytes.Buffer, value any) {
 	switch value := value.(type) {
 	case string:
 		f.appendMaybeQuoted(b, value)
@@ -604,7 +603,7 @@ func (f *TextFormatter) appendMaybeQuoted(b *bytes.Buffer, s string) {
 	b.WriteString(f.QuoteCharacter) //nolint:gosec
 }
 
-func (f *TextFormatter) appendKeyValue(b *bytes.Buffer, key string, value interface{}, appendSpace bool) {
+func (f *TextFormatter) appendKeyValue(b *bytes.Buffer, key string, value any, appendSpace bool) {
 	b.WriteString(key)      //nolint:gosec
 	b.WriteByte('=')        //nolint:gosec
 	f.appendValue(b, value) //nolint:gosec
@@ -614,7 +613,7 @@ func (f *TextFormatter) appendKeyValue(b *bytes.Buffer, key string, value interf
 	}
 }
 
-func (f *TextFormatter) appendValue(b *bytes.Buffer, value interface{}) {
+func (f *TextFormatter) appendValue(b *bytes.Buffer, value any) {
 	switch value := value.(type) {
 	case string:
 		if f.needsQuoting(value) {

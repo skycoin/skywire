@@ -16,8 +16,9 @@ func (rg *RouteGroup) RouteHops() []cipher.PubKey {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
 
-	hops := make([]cipher.PubKey, 0, len(rg.tps)+1)
-	for _, tp := range rg.tps {
+	hops := make([]cipher.PubKey, 0, len(rg.legs)+1)
+	for _, lg := range rg.legs {
+		tp := lg.tp
 		if tp != nil {
 			hops = append(hops, tp.Remote())
 		}
@@ -60,12 +61,12 @@ func (rg *RouteGroup) recordLegRoute(fwd, rev []routing.Hop) {
 }
 
 // remoteLegTransportIDs returns the far end's first-hop transport ID for every
-// LIVE leg of this group — the peer's own rg.tps set, as far as this side
+// LIVE leg of this group — the peer's own rg.legs set, as far as this side
 // recorded it. A planned aux leg whose Reverse[0].TpID is in this set is
 // guaranteed to be refused by the peer's appendRouteToGroup/appendRouteAsymmetric
 // duplicate-transport guard, so the planners drop it BEFORE the setup-node dial.
 //
-// Derived from the live tps on every call (not from an accumulating set), so a
+// Derived from the live legs on every call (not from an accumulating set), so a
 // leg that has been pruned locally immediately stops excluding its remote
 // transport and a replacement leg over that same far-end link can be built
 // again. Callers must NOT hold rg.mu.
@@ -78,8 +79,9 @@ func (rg *RouteGroup) remoteLegTransportIDs() []uuid.UUID {
 	if len(rg.legRemoteTp) == 0 {
 		return nil
 	}
-	out := make([]uuid.UUID, 0, len(rg.tps))
-	for _, tp := range rg.tps {
+	out := make([]uuid.UUID, 0, len(rg.legs))
+	for _, lg := range rg.legs {
+		tp := lg.tp
 		if tp == nil {
 			continue
 		}
@@ -125,27 +127,44 @@ func (rg *RouteGroup) RouteHopDetails() []RouteHopInfo {
 		return hops
 	}
 
-	// Fallback: reconstruct from local transports (may be incomplete for multi-hop)
-	srcPK := rg.desc.SrcPK()
-	hops := make([]RouteHopInfo, 0, len(rg.tps))
-	for i, tp := range rg.tps {
+	// Fallback: one first hop per leg. Legs are parallel routes, so each starts
+	// at this visor, which is the descriptor's Dst (see LocalAddr).
+	local := rg.localPK
+	if local.Null() {
+		local = rg.desc.DstPK()
+	}
+	hops := make([]RouteHopInfo, 0, len(rg.legs))
+	for _, lg := range rg.legs {
+		tp := lg.tp
 		if tp == nil {
 			continue
 		}
-		var fromPK cipher.PubKey
-		if i == 0 {
-			fromPK = srcPK
-		} else if i > 0 && rg.tps[i-1] != nil {
-			fromPK = rg.tps[i-1].Remote()
-		}
 		hops = append(hops, RouteHopInfo{
 			TpID:   tp.Entry.ID.String(),
-			From:   fromPK.String(),
+			From:   local.String(),
 			To:     tp.Remote().String(),
-			TpType: string(tp.Type()),
+			TpType: string(tp.Entry.Type),
 		})
 	}
 	return hops
+}
+
+// appendLegLocked adds one leg and returns its index. reverse is nil on a
+// forward-only leg.
+func (rg *RouteGroup) appendLegLocked(forward, reverse routing.Rule, tp *transport.ManagedTransport) int {
+	rg.legs = append(rg.legs, groupLeg{tp: tp, fwd: forward, rvs: reverse})
+	return len(rg.legs) - 1
+}
+
+// legByConsumeRuleLocked returns the leg whose reverse rule is routeID, or -1.
+// A reverse-only rule belongs to no leg. Caller holds rg.mu.
+func (rg *RouteGroup) legByConsumeRuleLocked(routeID routing.RouteID) int {
+	for i := range rg.legs {
+		if rv := rg.legs[i].rvs; rv != nil && rv.KeyRouteID() == routeID {
+			return i
+		}
+	}
+	return -1
 }
 
 // appendRules adds a forward/reverse rule pair and its transport as a new leg.
@@ -154,20 +173,17 @@ func (rg *RouteGroup) RouteHopDetails() []RouteHopInfo {
 func (rg *RouteGroup) appendRules(forward, reverse routing.Rule, tp *transport.ManagedTransport, reason string) {
 	rg.mu.Lock()
 
-	rg.fwd = append(rg.fwd, forward)
-	rg.rvs = append(rg.rvs, reverse)
-	rg.tps = append(rg.tps, tp)
-	newIdx := len(rg.tps) - 1
+	newIdx := rg.appendLegLocked(forward, reverse, tp)
 	rg.resetLegLiveness(tpEntryID(tp))
-	legs := len(rg.tps)
+	legs := len(rg.legs)
 
 	// Rebuild transport weights when transports change
-	if rg.mux != nil && len(rg.tps) > 1 {
-		rg.mux.rebuildWeights(rg.tps)
+	if rg.mux != nil && len(rg.legs) > 1 {
+		rg.mux.rebuildWeights(rg.legs)
 	}
-	// Keep per-leg counters parallel to tps[].
+	// Keep per-leg counters parallel to legs.
 	if rg.mux != nil {
-		rg.mux.growLegs(len(rg.tps))
+		rg.mux.growLegs(len(rg.legs))
 	}
 	rg.noteLegEvent(MuxEventLegAdded, reason, MuxByLocal, newIdx, legs, tp, rg.legHopsLocked(tpEntryID(tp)))
 	// Initial single-leg rg's get their first leg via appendRules
@@ -193,26 +209,25 @@ func (rg *RouteGroup) appendRules(forward, reverse routing.Rule, tp *transport.M
 // (router.appendRouteAsymmetric) so it doesn't leak in the routing
 // table.
 //
-// Mirrors appendRules' tps[]+fwd[] parallel maintenance but leaves
-// rvs[] untouched. Mux weight + per-leg counter bookkeeping treats
+// Mirrors appendRules but holds a nil in the leg's rvs field. Mux weight
+// + per-leg counter bookkeeping treats
 // this as a new forward leg.
 func (rg *RouteGroup) appendForwardLeg(forward routing.Rule, tp *transport.ManagedTransport, reason string) {
 	rg.mu.Lock()
 
-	rg.fwd = append(rg.fwd, forward)
-	rg.tps = append(rg.tps, tp)
-	newIdx := len(rg.tps) - 1
+	newIdx := rg.appendLegLocked(forward, nil, tp)
 	rg.resetLegLiveness(tpEntryID(tp))
-	legs := len(rg.tps)
+	legs := len(rg.legs)
 
-	if rg.mux != nil && len(rg.tps) > 1 {
-		rg.mux.rebuildWeights(rg.tps)
+	if rg.mux != nil && len(rg.legs) > 1 {
+		rg.mux.rebuildWeights(rg.legs)
 	}
 	if rg.mux != nil {
-		rg.mux.growLegs(len(rg.tps))
+		rg.mux.growLegs(len(rg.legs))
 	}
 	rg.noteLegEvent(MuxEventLegAdded, reason, MuxByLocal, newIdx, legs, tp, rg.legHopsLocked(tpEntryID(tp)))
-	hookSet := rg.legChangeHook != nil
+	// As in appendRules, a group's first leg is not a leg change.
+	hookSet := rg.legChangeHook != nil && newIdx > 0
 	rg.mu.Unlock()
 
 	// A second leg is what the leg-gated loops were parked waiting for.
@@ -229,17 +244,17 @@ func (rg *RouteGroup) appendForwardLeg(forward routing.Rule, tp *transport.Manag
 // canonical bandwidth-asymmetric case (1 forward + N reverse for
 // download-heavy workloads).
 //
-// rvs[] grows independently of tps[]/fwd[]; the read path is by
-// route-id lookup (not slice-indexed) so this works without further
+// The rule is kept in rvsOnly, apart from the legs, so it shifts no leg; the read
+// path is by route-id lookup (not slice-indexed) so this works without further
 // data-plane changes. Per-leg counter slots (mux.legs) are NOT
-// extended here — they are parallel to tps[] and the reverse-only
+// extended here — they are parallel to legs and the reverse-only
 // leg doesn't add a forward transport. Per-direction recv-byte
 // attribution for reverse-only legs is a separate refinement.
 func (rg *RouteGroup) appendReverseLeg(reverse routing.Rule) {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
 
-	rg.rvs = append(rg.rvs, reverse)
+	rg.rvsOnly = append(rg.rvsOnly, reverse)
 }
 
 // RouteHopInfo contains detailed information about a single hop in a route.

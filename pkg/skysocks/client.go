@@ -3,6 +3,7 @@ package skysocks
 
 import (
 	"bytes"
+	"cmp"
 	"crypto/sha1" //nolint:gosec // RFC6455 mandates SHA-1 for the WebSocket accept key
 	"crypto/x509"
 	"encoding/base64"
@@ -13,7 +14,7 @@ import (
 	"io"
 	"net"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1868,12 +1869,9 @@ func (c *Client) maybePoolFill() {
 	// batched setup request, and one serial dial per tick gave it nothing to
 	// coalesce (and built a pool of eight in ~56 s of setup-node round trips).
 	inflight := router.SetupFillInflight()
-	want := poolMax - held
-	if want > inflight {
-		want = inflight
-	}
+	want := min(poolMax-held, inflight)
 	launched := 0
-	for i := 0; i < want; i++ {
+	for range want {
 		if int(c.poolFillInFlight.Add(1)) > inflight {
 			c.poolFillInFlight.Add(-1)
 			break
@@ -2018,10 +2016,7 @@ const maxRedialFails = 3
 func (c *Client) maybeRedial(live int) {
 	c.redialMu.Lock()
 	fn := c.redial
-	target := c.target
-	if target < 1 {
-		target = 1
-	}
+	target := max(c.target, 1)
 	backedOff := c.redialFails >= maxRedialFails
 	c.redialMu.Unlock()
 
@@ -3473,7 +3468,9 @@ func (c *Client) streamSnapshot() []proxystatus.Stream {
 			RecvRateBps: m.downRate,
 		})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	slices.SortFunc(out, func(a, b proxystatus.Stream) int {
+		return cmp.Compare(a.ID, b.ID)
+	})
 	return out
 }
 
@@ -3686,7 +3683,7 @@ func wsHandshake(conn net.Conn, req []byte) bool {
 // httpHeaderValue returns the value of the named header (case-insensitive) from a
 // raw HTTP request, or "" if absent.
 func httpHeaderValue(req []byte, name string) string {
-	for _, ln := range strings.Split(string(req), "\n") {
+	for ln := range strings.SplitSeq(string(req), "\n") {
 		ln = strings.TrimRight(ln, "\r")
 		i := strings.IndexByte(ln, ':')
 		if i < 0 {

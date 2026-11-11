@@ -25,7 +25,6 @@ import (
 
 	"github.com/0magnet/calvin"
 	ipc "github.com/0magnet/golang-ipc"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -64,14 +63,14 @@ var (
 	addr     string
 	portless bool
 	appCl    *app.Client
-	appLog   func(format string, args ...interface{}) // App logger function
+	appLog   func(format string, args ...any) // App logger function
 	// chatLog is the package-level logrus logger every code path can
 	// reach without going through appCl. In visor-launched mode it
 	// proxies through appCl.Log(); in --standalone mode appCl is nil
 	// and chatLog holds the stderr logrus instance directly. HTTP
 	// handlers + SSE pumps + accept loops use chatLog to avoid the
 	// nil-deref crash class on standalone.
-	chatLog   logrus.FieldLogger
+	chatLog   logging.FieldLogger
 	hub       *sseHub        // SSE broadcast registry; see sse.go-like helpers below
 	chatCtrl  *dm.Controller // shared 1:1 DM core (pkg/skychat/dm): conns, read loop, envelopes, send
 	appPort   uint16
@@ -421,7 +420,7 @@ func (h *sseHub) forgetMessage(pk, id string) {
 // legacySSENamesMessage reports whether a legacy /sse entry is the message id:
 // its own id, or for a file the transfer id.
 func legacySSENamesMessage(entry, id string) bool {
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal([]byte(entry), &m); err != nil {
 		return false
 	}
@@ -435,7 +434,7 @@ func legacySSENamesMessage(entry, id string) bool {
 // (channel="pair") sent by them, or this side's own outbound mirror to them.
 // Group and status envelopes carry other channel keys and stay.
 func legacySSENamesPeer(entry, pk string) bool {
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal([]byte(entry), &m); err != nil {
 		return false
 	}
@@ -606,7 +605,7 @@ func (h *sseHub) publishEvent(ev chatEvent) {
 // inline. file_url, present only on received ("in") files, is the ready-made
 // download path under /files/ so the UI needn't reconstruct the saved name.
 func renderLegacySSE(ev chatEvent) string {
-	m := map[string]interface{}{
+	m := map[string]any{
 		"sender":  ev.From,
 		"message": ev.Text,
 		"network": ev.Transport,
@@ -716,7 +715,7 @@ func parseEventChannels(csv string) map[string]bool {
 	}
 	set := make(map[string]bool)
 	onlyAll := true
-	for _, tok := range strings.Split(csv, ",") {
+	for tok := range strings.SplitSeq(csv, ",") {
 		switch strings.ToLower(strings.TrimSpace(tok)) {
 		case "", "all":
 			for c := range defaultEventChannels() {
@@ -744,7 +743,8 @@ func parseEventChannels(csv string) map[string]bool {
 
 func init() {
 	launcher.RegisterApp("skychat", RunSkychat)
-	RootCmd.Flags().StringVar(&addr, "addr", ":8001", "address to bind (default: localhost-only); use \"*:PORT\" to bind on all interfaces")
+	launcher.RegisterAppFlags("skychat", RootCmd.Flags())
+	RootCmd.Flags().StringVar(&addr, "addr", skyenv.SkychatAddr, "address to bind. \":PORT\" binds localhost only; use \"*:PORT\" or \"0.0.0.0:PORT\" for all interfaces")
 	RootCmd.Flags().BoolVar(&portless, "portless", false, "don't bind a TCP port; reach the UI only through the visor's control surface (the in-process surface is published either way)")
 	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 	RootCmd.Flags().BoolVar(&useSkynet, "skynet", true, "listen on skynet network")
@@ -818,7 +818,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	if len(args) > 0 {
 		// Create independent FlagSet for parsing without initialization cycle
 		fs := pflag.NewFlagSet("skychat", pflag.ContinueOnError)
-		fs.StringVar(&addr, "addr", ":8001", "address to bind")
+		fs.StringVar(&addr, "addr", skyenv.SkychatAddr, "address to bind")
 		fs.BoolVar(&portless, "portless", false, "no TCP port; reach the UI only through the visor's control surface")
 		fs.Uint16Var(&appPort, "port", 0, "routing port")
 		fs.BoolVar(&useSkynet, "skynet", true, "listen on skynet")
@@ -862,7 +862,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 		// listenLoop attempts don't try to acquire a nil rpcC.
 		useSkynet = false
 		useDmsg = false
-		standaloneLog := logrus.New()
+		standaloneLog := logging.New()
 		standaloneLog.SetOutput(cmdutil.Stderr())
 		standaloneLog.SetFormatter(&logging.TextFormatter{
 			FullTimestamp:      true,
@@ -874,14 +874,14 @@ func RunSkychat(ctx context.Context, args []string) error {
 			TimestampFormat:    "2006-01-02T15:04:05.0000Z07:00",
 		})
 		chatLog = standaloneLog.WithField("_module", "skychat-standalone")
-		appLog = func(format string, args ...interface{}) {
+		appLog = func(format string, args ...any) {
 			chatLog.Infof(format, args...)
 		}
 	} else {
 		appCl = app.NewClient(nil)
 		defer appCl.Close()
 		chatLog = appCl.Log()
-		appLog = func(format string, args ...interface{}) {
+		appLog = func(format string, args ...any) {
 			appCl.Log().Infof(format, args...)
 		}
 	}
@@ -898,6 +898,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	// expects to see names rather than keys.
 	openContactStore(contactStorePath())
 	openPrivacyStore(privacyStorePath())
+	openDeleteOutbox(deleteOutboxPath())
 
 	if persistEnabled {
 		if err := openHistoryStore(); err != nil {
@@ -951,6 +952,12 @@ func RunSkychat(ctx context.Context, args []string) error {
 	if appCl != nil {
 		dmClient = appCl
 	}
+	// A message no network delivers is parked on the contact's dmsg-async
+	// inbox through the visor, which also fetches what waits for this one.
+	var parker dm.Parker
+	if appCl != nil && !standalone {
+		parker = appChatParker{appCl}
+	}
 	chatCtrl = dm.New(dm.Config{
 		Client:    dmClient,
 		Store:     historyStore,
@@ -970,13 +977,17 @@ func RunSkychat(ctx context.Context, args []string) error {
 			if handlePairControlFrame(context.Background(), peer, payload) {
 				return true
 			}
-			return handleFileRequestFrame(context.Background(), peer, payload)
+			return handleFileRequestFrame(context.Background(), peer, payload) || handleFileOfferFrame(peer, payload)
 		},
 		// A receipt about a message WE sent becomes a dm-status event, which is
 		// how the browser advances a bubble's tick to received / read.
 		OnReceipt: func(peer, id, kind string) {
 			switch kind {
 			case message.TypeAck:
+				if target, ok := dm.DeletedID(id); ok {
+					deletes.acked(peer, target)
+					return
+				}
 				broadcastDMStatus(id, dmStatusReceived, peer)
 			case message.TypeRead:
 				broadcastDMStatus(id, dmStatusRead, peer)
@@ -991,12 +1002,14 @@ func RunSkychat(ctx context.Context, args []string) error {
 			broadcastDMStatus(id, dmStatusDeleted, peer)
 		},
 		StaleAckWindow: staleAckWindow,
-		Log:            func(f string, a ...interface{}) { appLog(f, a...) },
+		Parker:         parker,
+		Log:            func(f string, a ...any) { appLog(f, a...) },
 	})
 	if len(nets) > 0 && !standalone && appCl != nil {
 		if err := chatCtrl.Start(ctx); err != nil {
 			appLog("skychat: dm controller start: %v", err)
 		}
+		go chatCtrl.RunParked(ctx)
 	}
 	// TCP-direct entry point — independent of useSkynet/useDmsg.
 	// Operator opts in via --tcp-listen / --tcp-peer; nil-effect
@@ -1036,6 +1049,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	startPairPoller(ctx)
 	defer stopPairPoller()
 	startGroupPoller(ctx)
+	startDeleteRetries(ctx)
 	defer stopGroupPoller()
 
 	// Wire optional password protection. If passwordFile is empty or
@@ -1121,7 +1135,10 @@ func RunSkychat(ctx context.Context, args []string) error {
 	if len(address) >= 2 && address[:2] == "*:" {
 		url = "0.0.0.0" + address[1:]
 	} else if len(address) >= 1 && address[:1] == ":" {
+		// Unlike Go's own ":PORT", this stays on localhost so an old config
+		// holding "--addr :8001" never puts the chat UI on the LAN.
 		url = "127.0.0.1" + address
+		appLog("--addr %s binds localhost only; use *%s or 0.0.0.0%s to serve other machines", address, address, address)
 	} else if host, port, err := net.SplitHostPort(address); err == nil && host != "" && port != "" {
 		url = address
 	} else {
@@ -1328,15 +1345,25 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 			http.Error(w, sErr.Error(), http.StatusBadRequest)
 			return
 		}
+		if res.Parked {
+			// No network reached the peer. The message waits on its inbox
+			// host and the peer acks it when it comes back.
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusAccepted)
+			_ = json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+				"ok": true, "parked": true, "id": res.ID, "host": res.ParkHost.Hex(),
+			})
+			return
+		}
 		if data.WaitMS > 0 {
 			w.Header().Set("Content-Type", "application/json")
 			if res.Acked {
-				_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
+				_ = json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
 					"acked": true, "id": res.ID, "ms": res.Elapsed.Milliseconds(),
 				})
 			} else {
 				w.WriteHeader(http.StatusGatewayTimeout)
-				_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
+				_ = json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
 					"acked": false, "id": res.ID, "reason": "timeout", "ms": opt.WaitAck.Milliseconds(),
 				})
 			}
@@ -1348,7 +1375,7 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 			// moved into the controller with the conn cache — RequestAck arms
 			// it, bounded by the StaleAckWindow passed at construction.
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
+			_ = json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
 				"ok": true,
 				"id": res.ID,
 			})
@@ -1751,7 +1778,7 @@ func statusHandler(w http.ResponseWriter, _ *http.Request) {
 		sendStr = st.LastTxAt.UTC().Format(time.RFC3339Nano)
 	}
 
-	status := map[string]interface{}{
+	status := map[string]any{
 		"visor_pk":                visorPK,
 		"sse_subscribers":         subscriberCount,
 		"active_peer_conns":       connCount,
@@ -1767,6 +1794,8 @@ func statusHandler(w http.ResponseWriter, _ *http.Request) {
 		"outbound_fail_count":     st.OutboundFails,
 		"outbound_retry_count":    st.OutboundRetry,
 		"outbound_fallback_count": st.OutboundFallbk,
+		"outbound_parked_count":   st.OutboundParked,
+		"inbound_parked_count":    st.InboundParked,
 		"sse_drop_count":          sseDrops,
 		"last_rx_ts":              rxStr,
 		"last_send_ts":            sendStr,
@@ -1880,10 +1909,7 @@ func collectGroupHealth() ([]groupHealth, string) {
 			SubDropCount:    g.SubDropCount,
 		}
 		if !g.LastMessageAt.IsZero() {
-			lag := int64(now.Sub(g.LastMessageAt).Seconds())
-			if lag < 0 {
-				lag = 0
-			}
+			lag := max(int64(now.Sub(g.LastMessageAt).Seconds()), 0)
 			gh.LagSeconds = &lag
 		}
 		out = append(out, gh)
@@ -2008,7 +2034,7 @@ func loadWhitelist(path string) (map[string]bool, error) {
 		return nil, err
 	}
 	wl := make(map[string]bool)
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue

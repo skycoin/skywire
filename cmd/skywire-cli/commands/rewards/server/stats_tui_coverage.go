@@ -22,7 +22,7 @@ package clirewardsserver
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/skycoin/skywire/deployment"
@@ -67,7 +67,7 @@ func gatherServiceCoverage() coverageStats {
 	for _, e := range all {
 		registered = append(registered, e.Static)
 	}
-	sort.Strings(registered)
+	slices.Sort(registered)
 
 	// Only the dmsg-addressed services: a clearnet service has no dmsg
 	// sessions to account for.

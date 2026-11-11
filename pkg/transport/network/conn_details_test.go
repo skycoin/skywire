@@ -78,7 +78,7 @@ func TestTransportConnDetails_AddrsAndARFlag(t *testing.T) {
 
 func TestTransportConnDetails_RawContributor(t *testing.T) {
 	raw := rawStub{
-		connStub:       connStub{local: addrStub{"[::]:0"}, remote: addrStub{"9.9.9.9:443"}},
+		local: addrStub{"[::]:0"}, remote: addrStub{"9.9.9.9:443"},
 		alpn:           "skywire-quic-1",
 		cert:           "deadbeef",
 		overrideRemote: "9.9.9.9:443",

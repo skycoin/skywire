@@ -19,9 +19,9 @@ package visor
 import (
 	"bytes"
 	"hash/fnv"
+	"maps"
 	"net"
 	"slices"
-	"sort"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/ar/arfeed"
@@ -58,7 +58,7 @@ func buildSites(bindings map[string]*arfeed.PeerBindings) siteMap {
 	for ip := range byIP {
 		ips = append(ips, ip)
 	}
-	sort.Strings(ips)
+	slices.Sort(ips)
 	for _, ip := range ips {
 		pks := byIP[ip]
 		slices.SortFunc(pks, func(a, b cipher.PubKey) int { return bytes.Compare(a[:], b[:]) })
@@ -260,6 +260,7 @@ func (v *Visor) autoconnectDiag() *visorapi.DiagAutoconnect {
 	}
 	ac := v.conf.AutoconnectSettings()
 	d := &visorapi.DiagAutoconnect{SiteLinks: ac.Links(), SiteTypes: ac.SiteTypes}
+	d.DmsgServerTransports, d.DmsgServers = v.dmsgServerTransportCount()
 	bindings, ok := v.arBindingsAll()
 	if !ok {
 		return d
@@ -282,9 +283,7 @@ func (v *Visor) autoconnectDiag() *visorapi.DiagAutoconnect {
 	reach := map[cipher.PubKey]*arfeed.Reach{}
 	mgr.Walk(FeedARReach, arfeed.ReachPathPrefix, func(_ string, body []byte) bool {
 		if peers, err := arfeed.DecodeReachBucket(body); err == nil {
-			for pk, r := range peers {
-				reach[pk] = r
-			}
+			maps.Copy(reach, peers)
 		}
 		return true
 	})

@@ -11,12 +11,11 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httpauthclient"
@@ -515,7 +514,7 @@ func (c *httpClient) Get(ctx context.Context, path string) (*http.Response, erro
 }
 
 // Post performs a POST request.
-func (c *httpClient) Post(ctx context.Context, path string, payload interface{}) (*http.Response, error) {
+func (c *httpClient) Post(ctx context.Context, path string, payload any) (*http.Response, error) {
 	if err := c.awaitReady(ctx); err != nil {
 		return nil, err
 	}
@@ -693,13 +692,7 @@ func (c *httpClient) BindQUIC(ctx context.Context, port string) error {
 		if host, _, err := net.SplitHostPort(publicIP); err == nil {
 			publicIP = host
 		}
-		found := false
-		for _, addr := range addresses {
-			if addr == publicIP {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(addresses, publicIP)
 		if !found {
 			addresses = append(addresses, publicIP)
 		}
@@ -767,13 +760,7 @@ func (c *httpClient) BindWT(ctx context.Context, port, certHash, nextCertHash st
 		if host, _, err := net.SplitHostPort(publicIP); err == nil {
 			publicIP = host
 		}
-		found := false
-		for _, addr := range addresses {
-			if addr == publicIP {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(addresses, publicIP)
 		if !found {
 			addresses = append(addresses, publicIP)
 		}
@@ -849,13 +836,7 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 			publicIP = host
 		}
 		// Add public IP if not already in the list
-		found := false
-		for _, addr := range addresses {
-			if addr == publicIP {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(addresses, publicIP)
 		if !found {
 			addresses = append(addresses, publicIP)
 		}
@@ -916,7 +897,7 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 // v6 — same code path as a pre-#1525 build). Errors are logged at
 // debug and discarded: the v4 bind's success is the primary outcome
 // and a v6 hiccup shouldn't surface as a startup-fatal error.
-func (c *httpClient) postV6BindSTCPR(ctx context.Context, payload LocalAddresses, log *logrus.Entry) {
+func (c *httpClient) postV6BindSTCPR(ctx context.Context, payload LocalAddresses, log *logging.Entry) {
 	if c.httpClientV6 == nil {
 		return
 	}

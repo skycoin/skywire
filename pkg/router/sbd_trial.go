@@ -7,8 +7,9 @@
 package router
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -228,7 +229,9 @@ func (rg *RouteGroup) evaluateSBDTrials(rate float64, tps []*transport.ManagedTr
 	if len(ripe) == 0 {
 		return
 	}
-	sort.Slice(ripe, func(a, b int) bool { return ripe[a].leg < ripe[b].leg })
+	slices.SortFunc(ripe, func(x, y sbdTrialVerdict) int {
+		return cmp.Compare(x.leg, y.leg)
+	})
 
 	for _, v := range ripe {
 		switch {
@@ -275,11 +278,16 @@ func (rg *RouteGroup) undoRefutedPark(v sbdTrialVerdict, tps []*transport.Manage
 		tp = tps[v.leg]
 	}
 	rg.noteLegEvent(MuxEventParkTrialFailed, reason, MuxByAdaptive, v.leg, len(tps), tp, nil)
-	if !rg.mux.isLegStandby(v.leg) {
-		return // something already re-admitted it; nothing to undo
+	// v.leg is where the leg was when the trial was read. The unpark goes by
+	// transport ID, so a prune since then cannot move it onto another leg.
+	if standby, ok := rg.legStandbyByID(v.tpID); !ok || !standby {
+		return // gone, or something already re-admitted it; nothing to undo
 	}
-	rg.mux.setLegStandby(v.leg, false)
+	idx, tp, ok := rg.setLegStandbyByID(v.tpID, false)
+	if !ok {
+		return
+	}
 	rg.clearAdaptivePark(v.tpID)
-	rg.sendLegState(v.leg, false)
-	rg.noteLegEvent(MuxEventLegPromoted, promoted, MuxByAdaptive, v.leg, len(tps), tp, nil)
+	rg.sendLegStateByID(v.tpID, false)
+	rg.noteLegEvent(MuxEventLegPromoted, promoted, MuxByAdaptive, idx, rg.legCount(), tp, nil)
 }

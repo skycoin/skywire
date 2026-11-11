@@ -5,12 +5,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -45,7 +45,7 @@ func TestHealth(t *testing.T) {
 		}
 		v.isServicesHealthy.init()
 
-		rpc := &RPC{visor: v, log: logrus.New()}
+		rpc := &RPC{visor: v, log: logging.New()}
 		// mock initUptimeHeartbeat
 		v.isServicesHealthy.set()
 		h := &visorapi.HealthInfo{}
@@ -68,7 +68,7 @@ func TestHealth(t *testing.T) {
 		}
 
 		v.isServicesHealthy.init()
-		rpc := &RPC{visor: v, log: logrus.New()}
+		rpc := &RPC{visor: v, log: logging.New()}
 		h := &visorapi.HealthInfo{}
 		err := rpc.Health(nil, h)
 		require.NoError(t, err)
@@ -79,7 +79,7 @@ func TestHealth(t *testing.T) {
 }
 
 func TestUptime(t *testing.T) {
-	rpc := &RPC{visor: &Visor{startedAt: time.Now()}, log: logrus.New()}
+	rpc := &RPC{visor: &Visor{startedAt: time.Now()}, log: logging.New()}
 	time.Sleep(time.Second)
 
 	var res float64
@@ -95,7 +95,7 @@ func TestUptime(t *testing.T) {
 // state over RPC right after a restart — exactly what the --reconnect path does
 // — must get the error back, NOT panic the visor's RPC handler on `*reply = *app`.
 func TestApp_NilLauncherNoPanic(t *testing.T) {
-	rpc := &RPC{visor: &Visor{}, log: logrus.New()} // appL is nil
+	rpc := &RPC{visor: &Visor{}, log: logging.New()} // appL is nil
 	name := "skysocks-client"
 	var reply appserver.AppState
 
@@ -117,7 +117,7 @@ func TestApp_NilLauncherNoPanic(t *testing.T) {
 // 		procM: pm,
 // 		appL:  appL,
 // 	}
-// 	rpc := &RPC{visor: &n, log: logrus.New()}
+// 	rpc := &RPC{visor: &n, log: logging.New()}
 // 	time.Sleep(time.Second)
 
 // 	var procKey appcommon.ProcKey
@@ -165,7 +165,7 @@ func TestApp_NilLauncherNoPanic(t *testing.T) {
 //		procM:    pm,
 //	}
 //
-//	rpc := &RPC{visor: &n, log: logrus.New()}
+//	rpc := &RPC{visor: &n, log: logging.New()}
 //
 //	var reply []*AppState
 //	require.NoError(t, rpc.Apps(nil, &reply))
@@ -243,7 +243,7 @@ func TestApp_NilLauncherNoPanic(t *testing.T) {
 //
 //	visor.procM = pm
 //
-//	rpc := &RPC{visor: visor, log: logrus.New()}
+//	rpc := &RPC{visor: visor, log: logging.New()}
 //
 //	err = rpc.StartApp(&unknownApp, nil)
 //	require.Error(t, err)

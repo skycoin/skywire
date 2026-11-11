@@ -2,20 +2,20 @@
 package api
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 )
 
@@ -57,7 +57,7 @@ type rfCharts struct {
 
 // StartCharts samples the finder's counts, and those of sn when it is set,
 // into st until ctx ends and serves them as the charts page.
-func (a *API) StartCharts(ctx context.Context, st charts.Store, sn *SetupNodes, log logrus.FieldLogger) {
+func (a *API) StartCharts(ctx context.Context, st charts.Store, sn *SetupNodes, log logging.FieldLogger) {
 	c := &rfCharts{sn: sn, prevNode: map[cipher.PubKey]*setupmetrics.StatsSnapshot{}}
 	page := &charts.Page{
 		Title: "Skywire route finder",
@@ -170,10 +170,7 @@ func (c *rfCharts) collectSetupNodes(ctx context.Context, v map[string]float64) 
 			v[chartSNFail+string(reason)] += float64(n - prev.FailuresByReason[reason])
 		}
 		for hops, n := range s.RouteLengthHist {
-			b := hops
-			if b > maxCountedHops {
-				b = maxCountedHops
-			}
+			b := min(hops, maxCountedHops)
 			v[chartSNHops+strconv.Itoa(b)] += float64(n - prev.RouteLengthHist[hops])
 		}
 	}
@@ -286,7 +283,9 @@ func (a *API) buildCharts(ctx context.Context, st charts.Store, c *rfCharts, r c
 	lt.Format = ms
 	lt.Legend = []string{"Setup node and percentile", "Latency"}
 	failures := f.Group(chartSNFail, 0)
-	sort.SliceStable(failures, func(i, j int) bool { return failures[i].Name < failures[j].Name })
+	slices.SortStableFunc(failures, func(a, b charts.Series) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
 	out.Charts = append(out.Charts, sn, rt, lt,
 		chart("Route setup failures by reason", "Failed setups per 5 minutes, across all setup nodes.", charts.Stacked, failures),
 		chart("Length of routes set up", "Hops in each successful setup, across all setup nodes.", charts.Stacked, hopSeries(f, chartSNHops)))

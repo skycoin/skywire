@@ -5,8 +5,6 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
@@ -39,16 +37,16 @@ func NewProcLogger(conf ProcConfig, mLog *logging.MasterLogger) (appLog *logging
 	// preserved.
 	appLog = logging.NewMasterLogger()
 	appLog.SetLevel(mLog.GetLevel())
-	appLog.Logger.Out = mLog.Logger.Out
-	if mLog.Logger.Formatter != nil {
-		appLog.Logger.Formatter = mLog.Logger.Formatter
+	appLog.Out = mLog.Out
+	if mLog.Formatter != nil {
+		appLog.Formatter = mLog.Formatter
 	}
-	for _, hooks := range mLog.Logger.Hooks {
+	for _, hooks := range mLog.Hooks {
 		for _, h := range hooks {
-			appLog.Logger.AddHook(h)
+			appLog.AddHook(h)
 		}
 	}
-	appLog.Logger.AddHook(db)
+	appLog.AddHook(db)
 
 	return appLog, db
 }
@@ -72,7 +70,7 @@ type LogStore interface {
 	// otherwise the DB will be sequentially iterated until finding entries older than given timestamp
 	LogsSince(t time.Time) ([]string, error)
 
-	Fire(entry *log.Entry) error
-	Levels() []log.Level
+	Fire(entry *logging.Entry) error
+	Levels() []logging.Level
 	Flush() error
 }

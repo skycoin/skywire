@@ -114,10 +114,7 @@ func (t *forwardTable) enqueue(r *router, tp *transport.ManagedTransport, f forw
 	id := tp.Entry.ID
 	w, ok := t.m[id]
 	if !ok {
-		depth := routersettings.ForwardQueueDepth.Int()
-		if depth < 1 {
-			depth = 1
-		}
+		depth := max(routersettings.ForwardQueueDepth.Int(), 1)
 		w = &forwardWriter{
 			r:      r,
 			tpID:   id,

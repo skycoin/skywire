@@ -4,7 +4,7 @@ import { TabButtonData } from '../components/layout/top-bar/top-bar.component';
  * The tabs of a visor's detail page, shared by the node page and the command
  * palette. A null key gives tabs without links.
  */
-export function nodeTabsData(key: string | undefined, wasm: boolean): TabButtonData[] {
+export function nodeTabsData(key: string | undefined, wasm: boolean, remote = false): TabButtonData[] {
   const link = (seg: string) => key ? ['/nodes', key, seg] : null;
   let tabs: TabButtonData[] = [
     {
@@ -153,6 +153,32 @@ export function nodeTabsData(key: string | undefined, wasm: boolean): TabButtonD
       externalUrl: 'hostbridge/',
     });
   }
+  // The hypervisor proxies only its own visor's skychat, so a remote visor
+  // has no Chat tab (it would show this visor's chat).
+  if (remote) {
+    tabs = tabs.filter(t => t.label !== 'node.tabs.chat');
+  }
 
   return tabs;
+}
+
+/**
+ * The node tabs plus the pages inside them that the command palette can open
+ * directly, such as the Apps tab's catalog.
+ */
+export function nodePaletteTabs(key: string | undefined, wasm: boolean, remote = false): TabButtonData[] {
+  const tabs = nodeTabsData(key, wasm, remote);
+  const apps = tabs.findIndex(t => t.label === 'node.tabs.apps');
+  tabs.splice(apps + 1, 0, {
+    icon: 'view_module',
+    label: 'node.tabs.app-catalog',
+    linkParts: key ? ['/nodes', key, 'apps', 'catalog'] : null,
+  });
+
+  return tabs;
+}
+
+/** Whether key names a visor other than the one this hypervisor runs on. */
+export function isRemoteVisor(key: string | undefined, hypervisorPk: string | undefined): boolean {
+  return !!key && !!hypervisorPk && key !== hypervisorPk;
 }

@@ -18,15 +18,16 @@
 package cliuptime
 
 import (
+	"cmp"
 	"crypto/sha1" //nolint:gosec // hash used only as cache-filename key
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -210,7 +211,7 @@ and --per-day modes; --hours ignores them.`,
 				if seed == 0 {
 					seed = time.Now().UnixNano()
 				}
-				rng := rand.New(rand.NewSource(seed)) //nolint:gosec // not a security boundary
+				rng := rand.New(rand.NewPCG(uint64(seed), 0)) //nolint:gosec // not a security boundary
 				rng.Shuffle(len(filtered), func(i, j int) {
 					filtered[i], filtered[j] = filtered[j], filtered[i]
 				})
@@ -409,7 +410,7 @@ func collectDates(entries []uptimestats.VisorSummary, dr dateRange) []string {
 	for k := range seen {
 		all = append(all, k)
 	}
-	sort.Strings(all)
+	slices.Sort(all)
 	if dr.since != "" {
 		out := all[:0]
 		for _, d := range all {
@@ -461,7 +462,9 @@ func printTable(entries []uptimestats.VisorSummary, version string, dr dateRange
 
 	sorted := make([]uptimestats.VisorSummary, len(entries))
 	copy(sorted, entries)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i].PK.Hex() < sorted[j].PK.Hex() })
+	slices.SortFunc(sorted, func(a, b uptimestats.VisorSummary) int {
+		return cmp.Compare(a.PK.Hex(), b.PK.Hex())
+	})
 
 	for _, e := range sorted {
 		fields := []string{e.PK.Hex()}
@@ -537,7 +540,7 @@ func printTimelines(entries []uptimestats.VisorSummary, dr dateRange, verbose, p
 				days = append(days, d)
 			}
 		}
-		sort.Strings(days)
+		slices.Sort(days)
 		if len(days) == 0 {
 			if verbose {
 				cmdutil.Println("  (no timeline data in selected range)")
@@ -636,10 +639,7 @@ func printSingleLineTimelines(entries []uptimestats.VisorSummary, dr dateRange, 
 				dates[0], dates[len(dates)-1], len(dates))
 		}
 		b := bars[i]
-		end := len(b) - trailTrim
-		if end < trim {
-			end = trim
-		}
+		end := max(len(b)-trailTrim, trim)
 		cmdutil.Printf("%s %s\n", e.PK.Hex(), b[trim:end])
 	}
 }
@@ -690,7 +690,9 @@ func printRollingTimelines(entries []uptimestats.VisorSummary, hoursBack int, ve
 func sortByPK(entries []uptimestats.VisorSummary) []uptimestats.VisorSummary {
 	out := make([]uptimestats.VisorSummary, len(entries))
 	copy(out, entries)
-	sort.Slice(out, func(i, j int) bool { return out[i].PK.Hex() < out[j].PK.Hex() })
+	slices.SortFunc(out, func(a, b uptimestats.VisorSummary) int {
+		return cmp.Compare(a.PK.Hex(), b.PK.Hex())
+	})
 	return out
 }
 
@@ -708,14 +710,8 @@ func rollingLabels(hoursBack int) string {
 	if hoursBack <= 0 {
 		return ""
 	}
-	widest := len(fmt.Sprintf("-%dh", hoursBack-1))
-	if widest < 3 {
-		widest = 3
-	}
-	step := hoursBack / 8
-	if step < widest+1 {
-		step = widest + 1
-	}
+	widest := max(len(fmt.Sprintf("-%dh", hoursBack-1)), 3)
+	step := max(hoursBack/8, widest+1)
 	buf := make([]byte, hoursBack+widest)
 	for i := range buf {
 		buf[i] = ' '

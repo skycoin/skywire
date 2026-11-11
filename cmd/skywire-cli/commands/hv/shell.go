@@ -170,8 +170,8 @@ func (d *cdp) note(m cdpMsg) {
 		var p struct {
 			Type string `json:"type"`
 			Args []struct {
-				Value       interface{} `json:"value"`
-				Description string      `json:"description"`
+				Value       any    `json:"value"`
+				Description string `json:"description"`
 			} `json:"args"`
 		}
 		if json.Unmarshal(m.Params, &p) != nil {
@@ -224,14 +224,14 @@ func jsonQuote(s string) string {
 	return string(b)
 }
 
-func (d *cdp) send(method string, params map[string]interface{}) (json.RawMessage, error) {
+func (d *cdp) send(method string, params map[string]any) (json.RawMessage, error) {
 	d.mu.Lock()
 	d.nextID++
 	id := d.nextID
 	ch := make(chan json.RawMessage, 1)
 	d.waiters[id] = ch
 	d.mu.Unlock()
-	body, _ := json.Marshal(map[string]interface{}{"id": id, "method": method, "params": params}) //nolint:errcheck
+	body, _ := json.Marshal(map[string]any{"id": id, "method": method, "params": params}) //nolint:errcheck
 	if err := d.c.Write(d.ctx, websocket.MessageText, body); err != nil {
 		return nil, err
 	}
@@ -245,7 +245,7 @@ func (d *cdp) send(method string, params map[string]interface{}) (json.RawMessag
 
 // eval runs an expression in the page and returns its value as a string.
 func (d *cdp) eval(expr string) string {
-	res, err := d.send("Runtime.evaluate", map[string]interface{}{
+	res, err := d.send("Runtime.evaluate", map[string]any{
 		"expression": expr, "returnByValue": true, "awaitPromise": true,
 	})
 	if err != nil {
@@ -274,12 +274,12 @@ func (d *cdp) eval(expr string) string {
 // is what the terminal's key handling keys off; punctuation and space need a
 // char event as well or they never reach the line editor.
 func (d *cdp) key(name string, code int, text string) {
-	down := map[string]interface{}{"type": "keyDown", "key": name, "windowsVirtualKeyCode": code}
+	down := map[string]any{"type": "keyDown", "key": name, "windowsVirtualKeyCode": code}
 	if text != "" {
 		down["text"] = text
 	}
-	_, _ = d.send("Input.dispatchKeyEvent", down)                   //nolint:errcheck
-	_, _ = d.send("Input.dispatchKeyEvent", map[string]interface{}{ //nolint:errcheck
+	_, _ = d.send("Input.dispatchKeyEvent", down)           //nolint:errcheck
+	_, _ = d.send("Input.dispatchKeyEvent", map[string]any{ //nolint:errcheck
 		"type": "keyUp", "key": name, "windowsVirtualKeyCode": code,
 	})
 }
@@ -298,13 +298,13 @@ func (d *cdp) typeLine(s string) {
 			if r == ' ' {
 				code = 32
 			}
-			_, _ = d.send("Input.dispatchKeyEvent", map[string]interface{}{ //nolint:errcheck
+			_, _ = d.send("Input.dispatchKeyEvent", map[string]any{ //nolint:errcheck
 				"type": "keyDown", "key": string(r), "windowsVirtualKeyCode": code,
 			})
-			_, _ = d.send("Input.dispatchKeyEvent", map[string]interface{}{ //nolint:errcheck
+			_, _ = d.send("Input.dispatchKeyEvent", map[string]any{ //nolint:errcheck
 				"type": "char", "key": string(r), "text": string(r),
 			})
-			_, _ = d.send("Input.dispatchKeyEvent", map[string]interface{}{ //nolint:errcheck
+			_, _ = d.send("Input.dispatchKeyEvent", map[string]any{ //nolint:errcheck
 				"type": "keyUp", "key": string(r), "windowsVirtualKeyCode": code,
 			})
 		}
@@ -353,11 +353,11 @@ func driveShell(port, pageURL, out string, load, boot, settle int, noConsole, ke
 	for _, m := range []string{"Runtime.enable", "Page.enable", "Network.enable"} {
 		_, _ = d.send(m, nil) //nolint:errcheck
 	}
-	_, _ = d.send("Network.setCacheDisabled", map[string]interface{}{"cacheDisabled": true}) //nolint:errcheck
-	_, _ = d.send("Emulation.setDeviceMetricsOverride", map[string]interface{}{              //nolint:errcheck
+	_, _ = d.send("Network.setCacheDisabled", map[string]any{"cacheDisabled": true}) //nolint:errcheck
+	_, _ = d.send("Emulation.setDeviceMetricsOverride", map[string]any{              //nolint:errcheck
 		"width": 1700, "height": 1000, "deviceScaleFactor": 1, "mobile": false,
 	})
-	if _, err := d.send("Page.navigate", map[string]interface{}{"url": pageURL}); err != nil {
+	if _, err := d.send("Page.navigate", map[string]any{"url": pageURL}); err != nil {
 		return err
 	}
 	// Ready when the UI has painted something interactive, not when a timer
@@ -374,7 +374,7 @@ func driveShell(port, pageURL, out string, load, boot, settle int, noConsole, ke
 		cmdutil.Println("menu:   ", d.clickText("☰"))
 		time.Sleep(1500 * time.Millisecond)
 		cmdutil.Println("console:", d.clickText("console"))
-		for i := 0; i < boot; i++ {
+		for range boot {
 			time.Sleep(time.Second)
 			if t := d.eval("typeof globalThis.skywireShell"); t == "object" || t == "function" {
 				break
@@ -420,7 +420,7 @@ func driveShell(port, pageURL, out string, load, boot, settle int, noConsole, ke
 	cmdutil.Println("---- screen ----")
 	cmdutil.Println(screen)
 
-	if shot, err := d.send("Page.captureScreenshot", map[string]interface{}{"format": "png"}); err == nil {
+	if shot, err := d.send("Page.captureScreenshot", map[string]any{"format": "png"}); err == nil {
 		var s struct {
 			Data string `json:"data"`
 		}

@@ -9,10 +9,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	mathrand "math/rand"
+	mathrand "math/rand/v2"
 	"mime"
 	"net"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,7 +21,6 @@ import (
 
 	nrpc "github.com/0magnet/gobrpc"
 
-	"github.com/sirupsen/logrus"
 	"github.com/soheilhy/cmux"
 	"golang.org/x/net/proxy"
 	"google.golang.org/grpc"
@@ -42,6 +42,7 @@ import (
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/skymail"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
@@ -101,6 +102,12 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 	// where the operator has not set a skychat nickname. No other app may.
 	procM.SetContactNamesFn(v.appContactNames)
 
+	// The mailbox app seals and opens mail with the visor's key, which stays here.
+	procM.SetMailHostFn(v.appMailHost)
+
+	// Skychat parks 1:1 messages for offline contacts, sealed with the visor's key.
+	procM.SetChatHostFn(v.appChatHost)
+
 	// Synthesize Internal-app entries for visor subsystems that
 	// have moved into the launcher's lifecycle per RFC #2775
 	// (operator config wins — appsContains skips synthesis when
@@ -156,9 +163,13 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 	// The mailbox, on by default. Its enable lives in the mailbox's own
 	// settings.json, so a live `cli mail` change survives a restart.
 	if _, ok := launcher.GetApp(skymailApp); ok && !appsContains(apps, skymailApp) {
-		enabled, _, _ := skymailEffective(v.conf) //nolint:errcheck // reported by initSkymail
+		enabled, _, err := skymailEffective(v.conf)
+		if err != nil {
+			v.log.WithError(err).Warn("mailbox: unreadable " + skymail.SettingsFile + "; using the config")
+		}
 		apps = append(apps, appserver.AppConfig{
 			Name:          skymailApp,
+			Args:          skymailArgs(v.conf),
 			AutoStart:     enabled,
 			LauncherMode:  string(appcommon.RunModeInternal),
 			RestartPolicy: string(appcommon.RestartOnFailure),
@@ -257,12 +268,7 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 
 // argsContain reports whether an app's args include the given flag.
 func argsContain(args []string, flag string) bool {
-	for _, a := range args {
-		if a == flag {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(args, flag)
 }
 
 // argValue returns the value following flag in an app's args, or "" when the
@@ -344,10 +350,7 @@ func (v *Visor) autoStartProxyClient(log *logging.Logger, pinned bool) {
 		// Random order, a handful of candidates per cycle: a dead exit
 		// shouldn't pin the loop, and the whole list shouldn't be dialed.
 		idx := mathrand.Perm(len(svcs)) //nolint:gosec // exit-candidate shuffle, not cryptographic
-		tries := len(idx)
-		if tries > 4 {
-			tries = 4
-		}
+		tries := min(len(idx), 4)
 		for _, i := range idx[:tries] {
 			select {
 			case <-ctx.Done():
@@ -894,7 +897,7 @@ func (a *visorPingAdapter) GetRemoteDmsgServers(pk cipher.PubKey) ([]cipher.PubK
 	return a.v.GetRemoteDmsgServers(pk)
 }
 
-func (a *visorPingAdapter) SubscribeLogs(f logging.Filter, capacity int) (<-chan *logrus.Entry, func() uint64) {
+func (a *visorPingAdapter) SubscribeLogs(f logging.Filter, capacity int) (<-chan *logging.Entry, func() uint64) {
 	return a.v.SubscribeLogs(f, capacity)
 }
 
@@ -1429,7 +1432,7 @@ func initHypervisors(_ context.Context, v *Visor, _ *logging.Logger) error {
 		log := v.MasterLogger().PackageLogger("hypervisor_client").WithField("hypervisor_pk", hvPK)
 
 		addr := dmsg.Addr{PK: hvPK, Port: skyenv.DmsgHypervisorPort}
-		rpcS, err := newRPCServer(v, addr.PK.String()[:shortHashLen])
+		rpcS, link, err := newHypervisorRPCServer(v, addr.PK)
 		if err != nil {
 			err := fmt.Errorf("failed to start RPC server for hypervisor %s: %w", hvPK, err)
 			return err
@@ -1455,7 +1458,7 @@ func initHypervisors(_ context.Context, v *Visor, _ *logging.Logger) error {
 			v.connectedHypervisors[hvPK] = true
 			v.hypervisorCancels[hvPK] = cancel
 			v.initLock.Unlock()
-			ServeRPCClient(ctx, log, v.tpM, v.dmsgC, rpcS, addr, hvErrs)
+			ServeRPCClient(ctx, log, v.tpM, v.dmsgC, rpcS, link, addr, hvErrs)
 		}(hvPK, cancel, hvErrs)
 
 		// Background goroutine: probe the hypervisor via dmsg, then

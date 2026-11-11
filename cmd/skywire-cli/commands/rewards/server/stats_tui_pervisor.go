@@ -61,7 +61,7 @@ package clirewardsserver
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -192,7 +192,7 @@ func bucketTransportCounts(counts map[string]int) tpPerVisorStats {
 		s.Err = "every visor in the per-key index reported zero transports"
 		return s
 	}
-	sort.Ints(all)
+	slices.Sort(all)
 	s.Median = all[len(all)/2]
 	return s
 }

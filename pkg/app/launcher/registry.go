@@ -3,7 +3,11 @@ package launcher
 
 import (
 	"net/http"
+	"slices"
+	"strings"
 	"sync"
+
+	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 )
@@ -39,6 +43,64 @@ func GetApp(name string) (AppFunc, bool) {
 	defer appRegistryMu.Unlock()
 	fn, ok := appRegistry[name]
 	return fn, ok
+}
+
+// RegisteredApps returns the sorted names of every app registered in this process.
+func RegisteredApps() []string {
+	appRegistryMu.Lock()
+	names := make([]string, 0, len(appRegistry))
+	for name := range appRegistry {
+		names = append(names, name)
+	}
+	appRegistryMu.Unlock()
+	slices.Sort(names)
+	return names
+}
+
+// App kinds reported by the catalog.
+const (
+	KindServer   = "server"
+	KindClient   = "client"
+	KindService  = "service"
+	KindExternal = "external"
+)
+
+// AppInfo is the static catalog metadata for a registered app.
+type AppInfo struct {
+	Kind          string
+	Description   string
+	MultiInstance bool
+}
+
+var appInfo = map[string]AppInfo{
+	"pty":             {KindService, "Remote shell and file access over dmsg for whitelisted keys.", false},
+	"skychat":         {KindService, "Peer to peer chat over skywire.", false},
+	"skynet":          {KindServer, "Port forwarding server that exposes local ports over skynet.", false},
+	"skynet-client":   {KindClient, "Port forwarding client that reaches a remote skynet server.", true},
+	"skysocks":        {KindServer, "SOCKS5 proxy exit for other visors.", false},
+	"skysocks-client": {KindClient, "SOCKS5 proxy client that routes through a remote skysocks exit.", true},
+	"vpn-server":      {KindServer, "VPN exit for other visors.", false},
+	"vpn-client":      {KindClient, "VPN client that tunnels this host through a remote vpn-server.", false},
+	"vpn-router":      {KindService, "Shares the vpn-client tunnel with LAN or WiFi clients.", false},
+	"skydns":          {KindService, "Resolves .dmsg and .skynet names for every app on this device.", false},
+	"skycoin-web":     {KindService, "Skycoin thin client web wallet.", false},
+	"skydex-market":   {KindServer, "Decentralized exchange market backend.", false},
+	"skydex-client":   {KindClient, "Decentralized exchange trading UI.", true},
+	"skymail":         {KindService, "Mailbox that sends and receives mail over skywire.", false},
+	"dmsgweb":         {KindService, "SOCKS5 proxy that resolves .dmsg names.", false},
+	"skynetweb":       {KindService, "SOCKS5 proxy that resolves .skynet names.", false},
+}
+
+// AppMetadata returns the catalog metadata for name. Each entry of the
+// visor's resolvers config registers as resolver-<name>.
+func AppMetadata(name string) (AppInfo, bool) {
+	if info, ok := appInfo[name]; ok {
+		return info, true
+	}
+	if strings.HasPrefix(name, "resolver-") {
+		return AppInfo{KindService, "Resolving proxy from the visor's resolvers config.", false}, true
+	}
+	return AppInfo{}, false
 }
 
 // httpHandlers holds in-process HTTP handlers published by internal
@@ -93,4 +155,31 @@ func ClearHTTPHandler(name string, h http.Handler) {
 	if httpHandlers[name] == h {
 		delete(httpHandlers, name)
 	}
+}
+
+var (
+	appFlagsMu sync.Mutex
+	appFlags   = make(map[string]*pflag.FlagSet)
+)
+
+// RegisterAppFlags publishes the flag set an in-process app parses, so the
+// visor can describe the app's settings without running its --help.
+func RegisterAppFlags(name string, fs *pflag.FlagSet) {
+	appFlagsMu.Lock()
+	defer appFlagsMu.Unlock()
+	appFlags[name] = fs
+}
+
+// VisitAppFlags calls fn for each flag registered for name, sorted by name,
+// and reports whether name has a flag set. VisitAll sorts lazily, so it runs
+// under the lock.
+func VisitAppFlags(name string, fn func(*pflag.Flag)) bool {
+	appFlagsMu.Lock()
+	defer appFlagsMu.Unlock()
+	fs, ok := appFlags[name]
+	if !ok || fs == nil {
+		return false
+	}
+	fs.VisitAll(fn)
+	return true
 }

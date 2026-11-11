@@ -116,6 +116,7 @@ func TestChannel_OnlyAdminsMayPost(t *testing.T) {
 	ok, reason := r.CanPost(member)
 	require.False(t, ok, "a subscriber must not be able to post")
 	require.Contains(t, reason, "channel")
+	require.Equal(t, PostBlockChannel, r.PostBlock(member))
 
 	// Joining is still open — a channel restricts publishing, not reading.
 	require.Equal(t, JoinOpen, r.JoinPolicy())
@@ -126,12 +127,21 @@ func TestChannel_OnlyAdminsMayPost(t *testing.T) {
 	ok, reason = banned.CanPost(member)
 	require.False(t, ok)
 	require.Contains(t, reason, "banned")
+	require.Equal(t, PostBlockBanned, banned.PostBlock(member))
+
+	removed := r
+	removed.Status = StatusRemoved
+	ok, reason = removed.CanPost(member)
+	require.False(t, ok, "a removed member must not be able to post")
+	require.Equal(t, PostBlockRemoved, removed.PostBlock(member))
+	require.Contains(t, reason, "removed")
 
 	mutedAdmin := r
 	mutedAdmin.Muted = []cipher.PubKey{admin}
 	ok, reason = mutedAdmin.CanPost(admin)
 	require.False(t, ok, "an explicit mute applies even to an admin")
 	require.Contains(t, reason, "restricted")
+	require.Equal(t, PostBlockMuted, mutedAdmin.PostBlock(admin))
 }
 
 // The scaling property. Under the group rule an admin follows every
@@ -143,7 +153,7 @@ func TestChannel_TopologyFollowsAdminsOnly(t *testing.T) {
 	admin, _ := cipher.GenerateKeyPair()
 
 	subscribers := make([]cipher.PubKey, 0, 50)
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		pk, _ := cipher.GenerateKeyPair()
 		subscribers = append(subscribers, pk)
 	}
@@ -168,7 +178,7 @@ func TestChannel_TopologyFollowsAdminsOnly(t *testing.T) {
 
 	// Cost is flat in audience size: adding subscribers changes nothing.
 	bigger := channel
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		pk, _ := cipher.GenerateKeyPair()
 		bigger.Members = append(bigger.Members, pk)
 	}

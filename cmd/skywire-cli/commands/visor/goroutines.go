@@ -17,6 +17,7 @@
 package clivisor
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -24,7 +25,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -184,7 +185,7 @@ var goroutineHeaderRe = regexp.MustCompile(`^goroutine ([0-9]+) \[([^\]]+)\]:$`)
 func parseGoroutineDump(raw string) ([]goroutine, error) {
 	var out []goroutine
 	var cur *goroutine
-	for _, line := range strings.Split(raw, "\n") {
+	for line := range strings.SplitSeq(raw, "\n") {
 		if m := goroutineHeaderRe.FindStringSubmatch(line); m != nil {
 			if cur != nil {
 				cur.Top = topFrame(cur.Stack)
@@ -335,8 +336,8 @@ func buildSummary(grs []goroutine, topN int, showLocks bool) string {
 	for name, bk := range stateBuckets {
 		stateRows = append(stateRows, stateRow{name, bk})
 	}
-	sort.Slice(stateRows, func(i, j int) bool {
-		return stateRows[i].bk.count > stateRows[j].bk.count
+	slices.SortFunc(stateRows, func(a, b stateRow) int {
+		return cmp.Compare(b.bk.count, a.bk.count)
 	})
 	b.WriteString("\nby state:\n")
 	for _, r := range stateRows {
@@ -362,7 +363,9 @@ func buildSummary(grs []goroutine, topN int, showLocks bool) string {
 	for name, c := range topBuckets {
 		topRows = append(topRows, topRow{name, c})
 	}
-	sort.Slice(topRows, func(i, j int) bool { return topRows[i].count > topRows[j].count })
+	slices.SortFunc(topRows, func(a, b topRow) int {
+		return cmp.Compare(b.count, a.count)
+	})
 	limit := topN
 	if limit <= 0 || limit > len(topRows) {
 		limit = len(topRows)
@@ -383,9 +386,9 @@ func buildSummary(grs []goroutine, topN int, showLocks bool) string {
 // true). When the state has no duration tag (e.g. "running"), returns
 // (state, 0, false).
 func splitStateAge(state string) (string, int, bool) {
-	if i := strings.Index(state, ","); i >= 0 {
-		head := strings.TrimSpace(state[:i])
-		rest := strings.TrimSpace(state[i+1:])
+	if before, after, ok := strings.Cut(state, ","); ok {
+		head := strings.TrimSpace(before)
+		rest := strings.TrimSpace(after)
 		var mins int
 		if _, err := fmt.Sscanf(rest, "%d minutes", &mins); err == nil {
 			return head, mins, true
@@ -438,7 +441,9 @@ func lockSummary(grs []goroutine) string {
 		for k, v := range bk {
 			rows = append(rows, row{k, v})
 		}
-		sort.Slice(rows, func(i, j int) bool { return rows[i].b.count > rows[j].b.count })
+		slices.SortFunc(rows, func(x, y row) int {
+			return cmp.Compare(y.b.count, x.b.count)
+		})
 		fmt.Fprintf(&b, "  %s:\n", label)
 		for _, r := range rows {
 			age := ""
@@ -470,7 +475,7 @@ func recordLockBucket(into map[string]*bucket, g goroutine, _ *regexp.Regexp) {
 }
 
 func callerPastSync(stack string) string {
-	for _, line := range strings.Split(stack, "\n") {
+	for line := range strings.SplitSeq(stack, "\n") {
 		if strings.HasPrefix(line, "\t") || line == "" {
 			continue
 		}

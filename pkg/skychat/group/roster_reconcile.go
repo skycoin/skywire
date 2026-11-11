@@ -17,6 +17,7 @@ package group
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"time"
 
@@ -56,13 +57,14 @@ func (s *Session) SetRosterChangeHandler(f func(members, admins []cipher.PubKey)
 	s.onRosterChange = f
 }
 
+// SetRemovedHandler installs a callback invoked when a removal of this visor
+// applies, so the manager can end the membership instead of leaving it open.
+func (s *Session) SetRemovedHandler(f func()) {
+	s.onRemoved = f
+}
+
 func containsPK(list []cipher.PubKey, pk cipher.PubKey) bool {
-	for _, x := range list {
-		if x == pk {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(list, pk)
 }
 
 func removePK(list []cipher.PubKey, pk cipher.PubKey) []cipher.PubKey {
@@ -125,6 +127,7 @@ func (s *Session) applyRosterLeaf(body []byte) {
 	s.cfg.Record.MutationSeen = copyWatermarks(s.mutationSeen)
 	seenSnapshot := copyWatermarks(s.mutationSeen)
 	changed := false
+	removedMe := false
 	switch m.Op {
 	case RosterOpAdd:
 		// Never let an add re-admit a banned PK. Independent of the
@@ -149,6 +152,8 @@ func (s *Session) applyRosterLeaf(body []byte) {
 			s.cfg.Record.Members = removePK(s.cfg.Record.Members, m.PeerPK)
 			changed = true
 		}
+		// A removal of this visor from before it last joined is history.
+		removedMe = m.PeerPK == s.cfg.MyPK && m.PeerPK != s.cfg.Record.OwnerPK && m.IssuedAt.After(s.cfg.Record.JoinedAt)
 	}
 	members := append([]cipher.PubKey(nil), s.cfg.Record.Members...)
 	admins := append([]cipher.PubKey(nil), s.cfg.Record.Admins...)
@@ -160,6 +165,11 @@ func (s *Session) applyRosterLeaf(body []byte) {
 	// replay window for that target.
 	s.persistWatermarks(seenSnapshot)
 
+	if removedMe && s.onRemoved != nil {
+		s.log.WithField("issuer", m.IssuerPK.String()).Info("group: reconcile: an admin removed this visor")
+		s.onRemoved()
+		return
+	}
 	if !changed {
 		return
 	}

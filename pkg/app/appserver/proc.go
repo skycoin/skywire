@@ -15,7 +15,6 @@ import (
 	"time"
 
 	rpc "github.com/0magnet/gobrpc"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
@@ -48,7 +47,7 @@ type Proc struct {
 	// cmd is the external app's OS process (*exec.Cmd on native builds). Typed
 	// `any` so os/exec stays out of the TinyGo graph; nil for in-process apps.
 	cmd       any
-	isRunning int32
+	isRunning atomic.Int32
 	waitMx    sync.Mutex
 	waitErr   error
 
@@ -203,7 +202,7 @@ func (p *Proc) AwaitConn() bool {
 
 // Start starts the application.
 func (p *Proc) Start() error {
-	if !atomic.CompareAndSwapInt32(&p.isRunning, 0, 1) {
+	if !p.isRunning.CompareAndSwap(0, 1) {
 		return errProcAlreadyRunning
 	}
 
@@ -404,7 +403,7 @@ func (p *Proc) startInProcess() error {
 
 // Stop stops the application.
 func (p *Proc) Stop() error {
-	if atomic.LoadInt32(&p.isRunning) == 0 {
+	if p.isRunning.Load() == 0 {
 		return errProcNotStarted
 	}
 
@@ -435,7 +434,7 @@ func (p *Proc) Stop() error {
 
 // Wait waits for the application cmd to exit.
 func (p *Proc) Wait() error {
-	if atomic.LoadInt32(&p.isRunning) != 1 {
+	if p.isRunning.Load() != 1 {
 		return errProcNotStarted
 	}
 
@@ -448,7 +447,7 @@ func (p *Proc) Wait() error {
 
 // IsRunning checks whether application cmd is running.
 func (p *Proc) IsRunning() bool {
-	return atomic.LoadInt32(&p.isRunning) == 1
+	return p.isRunning.Load() == 1
 }
 
 // SetDetailedStatus sets proc's detailed status.
@@ -610,7 +609,7 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 	}
 
 	var summaries []ConnectionSummary
-	rpcGW.cm.DoRange(func(_ uint16, v interface{}) bool {
+	rpcGW.cm.DoRange(func(_ uint16, v any) bool {
 		if v == nil {
 			summaries = append(summaries, ConnectionSummary{})
 			return true
@@ -665,41 +664,30 @@ func sharedAppLogHook(path string) *appLogHook {
 	return actual.(*appLogHook)
 }
 
-// appLogHook writes every level of an app's log to one rotating file.
-//
-// One writer, deliberately. This was a lumberjackrus hook with a LogFile per
-// level, every one of them naming this same file. That gave each level its
-// own lumberjack.Logger over one path, and rotation is per-writer: whichever
-// level first crossed MaxSize renamed the file and opened a fresh one while
-// the others kept writing to the renamed, then reaped, inode. DEBUG has the
-// most volume so it always won, and the INFO, WARN and ERROR lines were
-// written to a file nobody could read. Same bug, same fix as
-// pkg/visor/visor.go. The hook holds its writer so that it can be closed:
-// the file is otherwise open for the life of the process, and Windows does
-// not remove an open file.
+// appLogHook writes every level of an app's log to one rotating file. It
+// holds its writer so it can be closed, since Windows does not remove an open file.
 type appLogHook struct {
+	*logging.WriteHook
 	w *lumberjack.Logger
-	f logrus.Formatter
 }
 
+// newAppLogHook builds the file hook for the app log at path.
+//
+// One writer, deliberately. This once had a lumberjack.Logger per level, all
+// over this same file. Rotation is per writer, so whichever level first
+// crossed MaxSize renamed the file while the others kept writing to the
+// renamed, then reaped, inode, and the INFO, WARN and ERROR lines were lost.
+// One writer keeps every level on a single rotating file.
 func newAppLogHook(path string) *appLogHook {
+	w := &lumberjack.Logger{Filename: path, MaxSize: 1, MaxBackups: 1, MaxAge: 1}
 	return &appLogHook{
-		w: &lumberjack.Logger{Filename: path, MaxSize: 1, MaxBackups: 1, MaxAge: 1},
-		f: &logging.TextFormatter{DisableColors: true, FullTimestamp: true, ForceFormatting: true},
+		WriteHook: logging.NewFormatterHook(w, logging.TraceLevel, &logging.TextFormatter{
+			DisableColors:   true,
+			FullTimestamp:   true,
+			ForceFormatting: true,
+		}),
+		w: w,
 	}
-}
-
-// Levels implements logrus.Hook: every level goes to the file.
-func (h *appLogHook) Levels() []logrus.Level { return logrus.AllLevels }
-
-// Fire implements logrus.Hook.
-func (h *appLogHook) Fire(e *logrus.Entry) error {
-	b, err := h.f.Format(e)
-	if err != nil {
-		return err
-	}
-	_, err = h.w.Write(b)
-	return err
 }
 
 // Close closes the log file. The next Fire opens it again.

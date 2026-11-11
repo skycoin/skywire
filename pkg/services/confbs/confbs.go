@@ -7,7 +7,9 @@ package confbs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
@@ -71,7 +73,7 @@ func readConfig(path string) (api.Config, error) {
 		return c, nil
 	}
 	data, err := os.ReadFile(path) //nolint:gosec
-	if os.IsNotExist(err) {
+	if errors.Is(err, fs.ErrNotExist) {
 		return c, nil
 	}
 	if err != nil {

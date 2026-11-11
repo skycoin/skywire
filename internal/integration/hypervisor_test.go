@@ -1,5 +1,4 @@
 //go:build !no_ci
-// +build !no_ci
 
 // Package integration_test — pkg/../internal/integration/hypervisor_test.go:
 // end-to-end coverage for the Hypervisor HTTP API (pkg/visor/hypervisor.go), the

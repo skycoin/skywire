@@ -34,6 +34,7 @@ package main
 
 import (
 	"bufio"
+	"cmp"
 	"errors"
 	"flag"
 	"fmt"
@@ -41,6 +42,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -141,7 +143,7 @@ func plackettBurman(n int) ([][]int, error) {
 func hadamard16() [][]int {
 	const n = 16
 	d := make([][]int, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		row := make([]int, n-1)
 		for j := 1; j < n; j++ {
 			bits := i & j
@@ -298,8 +300,8 @@ func parseVariants(r io.Reader) (*variantsFile, error) {
 	sc := bufio.NewScanner(r)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
-		if strings.HasPrefix(line, "#") {
-			f := strings.Fields(strings.TrimPrefix(line, "#"))
+		if after, ok := strings.CutPrefix(line, "#"); ok {
+			f := strings.Fields(after)
 			if len(f) == 4 && f[0] == "factor" && strings.HasPrefix(f[2], "low=") && strings.HasPrefix(f[3], "high=") {
 				name := f[1]
 				hdr[name] = factor{name: name, low: strings.TrimPrefix(f[2], "low="), high: strings.TrimPrefix(f[3], "high=")}
@@ -564,7 +566,9 @@ func estimate(fs []factor, level map[string][]int, byRun map[string][]float64) [
 		}
 		out = append(out, e)
 	}
-	sort.SliceStable(out, func(i, j int) bool { return math.Abs(out[i].value) > math.Abs(out[j].value) })
+	slices.SortStableFunc(out, func(a, b effect) int {
+		return cmp.Compare(math.Abs(b.value), math.Abs(a.value))
+	})
 	return out
 }
 
@@ -575,7 +579,7 @@ func cellsOf(m map[string]map[string][]float64) []string {
 	for c := range m {
 		out = append(out, c)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
@@ -646,7 +650,9 @@ func runAnalyze(args []string) error {
 	for n := range best {
 		named = append(named, n)
 	}
-	sort.Slice(named, func(i, j int) bool { return best[named[i]] > best[named[j]] })
+	slices.SortFunc(named, func(a, b string) int {
+		return cmp.Compare(best[b], best[a])
+	})
 	fmt.Println()
 	switch {
 	case len(named) == 0:

@@ -174,7 +174,7 @@ func TestPrintCommandDocs_DepthCap(t *testing.T) {
 	out := captureStdout(t, func() { PrintCommandDocs(root) })
 	require.Contains(t, out, "# l0")
 	// Never exceed six '#'.
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		if strings.HasPrefix(line, "#") {
 			hashes := len(line) - len(strings.TrimLeft(line, "#"))
 			require.LessOrEqual(t, hashes, 6)

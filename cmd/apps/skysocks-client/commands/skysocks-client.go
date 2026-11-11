@@ -17,11 +17,11 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/logging"
 
 	"github.com/0magnet/calvin"
 	ipc "github.com/0magnet/golang-ipc"
 	"github.com/elazarl/goproxy"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -160,6 +160,7 @@ func (c *clientConfig) parseArgs(args []string) error {
 
 func init() {
 	launcher.RegisterApp("skysocks-client", RunSkysocksClient)
+	launcher.RegisterAppFlags("skysocks-client", RootCmd.Flags())
 	RootCmd.Flags().StringVar(&addr, "addr", skyenv.SkysocksClientAddr, "Client address to listen on")
 	RootCmd.Flags().StringVar(&serverPK, "srv", "", "PubKey of the server to connect to")
 	RootCmd.Flags().StringVar(&httpAddr, "http", "", "http proxy mode")
@@ -713,19 +714,19 @@ func dialServer(ctx context.Context, cfg *clientConfig, appCl *app.Client, pk ci
 	return conn, nil
 }
 
-func setAppErr(appCl *app.Client, log logrus.FieldLogger, err error) {
+func setAppErr(appCl *app.Client, log logging.FieldLogger, err error) {
 	if appErr := appCl.SetError(err.Error()); appErr != nil {
 		log.WithError(appErr).WithField("original_error", err).Warn("Failed to set error")
 	}
 }
 
-func setAppStatus(appCl *app.Client, log logrus.FieldLogger, status appserver.AppDetailedStatus) {
+func setAppStatus(appCl *app.Client, log logging.FieldLogger, status appserver.AppDetailedStatus) {
 	if err := appCl.SetDetailedStatus(string(status)); err != nil {
 		log.WithError(err).WithField("status", status).Warn("Failed to set status")
 	}
 }
 
-func httpProxy(ctx context.Context, httpAddr, sockscAddr string, log logrus.FieldLogger) {
+func httpProxy(ctx context.Context, httpAddr, sockscAddr string, log logging.FieldLogger) {
 	proxy := goproxy.NewProxyHttpServer()
 
 	proxyURL, err := url.Parse(fmt.Sprintf("socks5://127.0.0.1%s", sockscAddr))
@@ -762,7 +763,7 @@ func Execute() {
 	}
 }
 
-func setAppPort(appCl *app.Client, log logrus.FieldLogger, port routing.Port) {
+func setAppPort(appCl *app.Client, log logging.FieldLogger, port routing.Port) {
 	if err := appCl.SetAppPort(port); err != nil {
 		log.WithError(err).WithField("port", port).Warn("Failed to set port")
 	}
@@ -776,7 +777,7 @@ func setAppPort(appCl *app.Client, log logrus.FieldLogger, port routing.Port) {
 // Failures are neither fatal nor loud. A visor with no resolver running has
 // nothing to publish, and either way the proxy behaves as it did before: every
 // target goes to the exit.
-func localResolvers(appCl *app.Client, log logrus.FieldLogger) *skysocks.LocalResolvers {
+func localResolvers(appCl *app.Client, log logging.FieldLogger) *skysocks.LocalResolvers {
 	if appCl == nil {
 		return nil
 	}

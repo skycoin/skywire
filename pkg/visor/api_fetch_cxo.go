@@ -113,7 +113,7 @@ func (v *Visor) FetchCXO(args visorapi.FetchCXOArgs) (*visorapi.FetchCXOResult, 
 		default:
 			return &visorapi.FetchCXOResult{Reason: "invalid path for tpd-all-transports: " + args.Path}, nil
 		}
-		body, err := v.FetchAllTransportsCXO(withSelf)
+		body, err := v.FetchAllTransportsCXO(context.Background(), withSelf, 20*time.Second)
 		if err != nil {
 			if errors.Is(err, ErrTPDAllTransportsNotReady) {
 				return &visorapi.FetchCXOResult{Reason: "tpd-all-transports: cache miss"}, nil

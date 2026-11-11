@@ -65,7 +65,7 @@ func TestTPDSnapshotCache_ReusesWithinTTL(t *testing.T) {
 		return []*transport.Entry{entry(id, 12)}, nil
 	}
 
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		snap, err := c.snapshot(context.Background(), fetch, nil)
 		require.NoError(t, err)
 		require.NotNil(t, snap)
@@ -141,7 +141,7 @@ func TestTPDSnapshotCache_StaleRefreshNeverBlocksTheCaller(t *testing.T) {
 	}
 	clk.advance(defaultTPDSnapshotTTL + time.Second)
 	start := time.Now()
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		snap, err := c.snapshot(context.Background(), hang, nil)
 		require.NoError(t, err)
 		assert.Equal(t, 1.0, latencyOf(snap))
@@ -227,14 +227,12 @@ func TestTPDSnapshotCache_ConcurrentReads(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	for i := 0; i < 50; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 50 {
+		wg.Go(func() {
 			snap, err := c.snapshot(context.Background(), fetch, nil)
 			assert.NoError(t, err)
 			assert.NotNil(t, snap)
-		}()
+		})
 	}
 	wg.Wait()
 	// The double-checked lock means at most a small number of racing
@@ -258,7 +256,7 @@ func TestTPDSnapshotCache_VersionKeyedInvalidation(t *testing.T) {
 	ver.Store(1_000)
 	version := func() (time.Time, bool) { return time.Unix(ver.Load(), 0), true }
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		_, err := c.snapshot(context.Background(), fetch, version)
 		require.NoError(t, err)
 	}

@@ -4,6 +4,7 @@ package visorconfig
 import (
 	"sync"
 
+	"github.com/skycoin/skywire/pkg/alerts"
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsgspec "github.com/skycoin/skywire/pkg/dmsg/dmsgc/spec"
 	"github.com/skycoin/skywire/pkg/proxyroute"
@@ -35,11 +36,15 @@ type V1 struct {
 	BrowseOrigin  *BrowseOriginConfig  `json:"browse_origin,omitempty"`
 	SkymailBridge *SkymailBridgeConfig `json:"skymail_bridge,omitempty"`
 	Skymail       *SkymailConfig       `json:"skymail,omitempty"`
-	Rewards       *RewardsConfig       `json:"rewards,omitempty"`
-	STCP          *tnspec.STCPConfig   `json:"skywire-tcp,omitempty"`
-	Transport     *Transport           `json:"transport"`
-	Routing       *Routing             `json:"routing"`
-	Launcher      *Launcher            `json:"launcher"`
+	// Alerts mails or posts a webhook when a watched visor goes offline and
+	// when it is back (pkg/alerts). Settings saved at runtime override it.
+	Alerts    *alerts.Settings   `json:"alerts,omitempty"`
+	DmsgAsync *DmsgAsyncConfig   `json:"dmsg_async,omitempty"`
+	Rewards   *RewardsConfig     `json:"rewards,omitempty"`
+	STCP      *tnspec.STCPConfig `json:"skywire-tcp,omitempty"`
+	Transport *Transport         `json:"transport"`
+	Routing   *Routing           `json:"routing"`
+	Launcher  *Launcher          `json:"launcher"`
 	// EmbeddedServices are deployment services (transport-discovery,
 	// address-resolver, route-finder, service-discovery) this visor runs
 	// in-process, each mounted under a path prefix on its dmsg HTTP port
@@ -131,18 +136,20 @@ type V1 struct {
 	Hypervisor *HypervisorConfig `json:"hypervisor,omitempty"`
 }
 
+// GroupHistoryOff as Skychat.GroupHistoryDB turns group history off.
+const GroupHistoryOff = "off"
+
 // Skychat carries chat-app-related visor-side configuration. Optional —
-// nil disables all knobs (the visor still runs chat groups in-memory).
+// nil leaves every knob at its default.
 type Skychat struct {
-	// GroupHistoryDB, when non-empty, enables persistent group-message
-	// history at the visor layer. Each inbound group message is mirrored
-	// into a bolt store at this path. The Visor.GroupHistory RPC (and
-	// `skywire cli skychat group history`) read from the same store.
+	// GroupHistoryDB is the bolt store every group message is mirrored
+	// into. The Visor.GroupHistory RPC, the skychat UI and
+	// `skywire cli skychat group history` read from it.
 	//
 	// Path may be absolute (used verbatim) or relative — relative paths
-	// resolve under <LocalPath>/skychat/. Empty (default) disables
-	// persistence: groups remain in-memory-only, bounded by the inbox
-	// ring buffer (~1024 messages).
+	// resolve under <LocalPath>/skychat/. Empty means group-history.db,
+	// and GroupHistoryOff ("off") keeps groups in memory only, bounded by
+	// the inbox ring buffer (~1024 messages).
 	//
 	// Limits track history.DefaultLimits() with a couple of group-
 	// aware overrides (rate-limit disabled, larger per-group cap).
@@ -638,6 +645,46 @@ type SkymailConfig struct {
 	MaxAge         Duration `json:"max_age,omitempty"`
 }
 
+// DmsgAsyncConfig configures dmsg-async, store and forward for offline keys
+// (pkg/dmsg/dmsgasync, docs/design/dmsg-async.md).
+type DmsgAsyncConfig struct {
+	Host  DmsgAsyncHostConfig  `json:"host,omitzero"`
+	Inbox DmsgAsyncInboxConfig `json:"inbox,omitzero"`
+}
+
+// DmsgAsyncHostConfig makes this visor an inbox host for other keys.
+type DmsgAsyncHostConfig struct {
+	// Enable starts the host. Unset, it is on for a hypervisor, which then
+	// holds for the visors it manages.
+	Enable *bool `json:"enable,omitempty"`
+	// Store is "disk" (the default) or "memory".
+	Store string `json:"store,omitempty"`
+	// Dir holds the disk store. Default: "dmsg-async" beside the local path.
+	Dir string `json:"dir,omitempty"`
+	// Hosted are further keys the host holds for, beyond its own and the
+	// visors it manages.
+	Hosted []cipher.PubKey `json:"hosted,omitempty"`
+	// Limits. 0 means the default.
+	MaxMessage        int      `json:"max_message,omitempty"`
+	MaxPerRecipient   int      `json:"max_per_recipient,omitempty"`
+	MaxRecipientBytes int64    `json:"max_recipient_bytes,omitempty"`
+	MaxTotalSize      int64    `json:"max_total_size,omitempty"`
+	TTL               Duration `json:"ttl,omitempty"`
+}
+
+// DmsgAsyncInboxConfig names where this visor's own messages wait while it is
+// offline.
+type DmsgAsyncInboxConfig struct {
+	// Hosts are this visor's inbox hosts. Unset, they are its hypervisors.
+	Hosts []cipher.PubKey `json:"hosts,omitempty"`
+	// Disable turns the inbox off even when hosts are known.
+	Disable bool `json:"disable,omitempty"`
+	// Publish posts the inbox record to dmsg discovery. Unset means on.
+	Publish *bool `json:"publish,omitempty"`
+	// Allow lists the senders that may deposit. Empty allows every key.
+	Allow []cipher.PubKey `json:"allow,omitempty"`
+}
+
 // Transport defines a transport config.
 type Transport struct {
 	Discovery           string `json:"discovery"`
@@ -653,6 +700,9 @@ type Transport struct {
 	// so configs written before this field existed keep the prior always-on
 	// behavior; set it to false to keep the hypervisor link on the dmsg relay only.
 	HypervisorAutoconnect *bool `json:"hypervisor_autoconnect,omitempty"`
+	// DmsgServerTransports keeps one automatic transport to each dmsg server
+	// the visor holds a session with, when the server is also a visor. Nil is on.
+	DmsgServerTransports *bool `json:"dmsg_server_transports,omitempty"`
 	// TCPNotSentLowat caps the unsent bytes the kernel holds for each stcpr or
 	// stcp transport (TCP_NOTSENT_LOWAT). Unset is 128 KiB, 0 is the kernel's
 	// default. Linux and Android only; it applies to transports opened after it.
@@ -981,6 +1031,14 @@ func (v1 *V1) UpdateHypervisors(pks []cipher.PubKey) error {
 	v1.mu.Unlock()
 
 	return v1.flush(v1)
+}
+
+// GetHypervisors returns a copy of the configured hypervisor PKs, read under
+// the lock UpdateHypervisors writes them with.
+func (v1 *V1) GetHypervisors() []cipher.PubKey {
+	v1.mu.RLock()
+	defer v1.mu.RUnlock()
+	return append([]cipher.PubKey(nil), v1.Hypervisors...)
 }
 
 // GetPersistentTransports gets persistent_transports from config

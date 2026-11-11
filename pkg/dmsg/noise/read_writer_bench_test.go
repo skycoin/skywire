@@ -66,7 +66,7 @@ func BenchmarkReadWriterIdleHeap(b *testing.B) {
 		runtime.GC()
 		runtime.ReadMemStats(&before)
 		keep := make([]*ReadWriter, 0, 2*streams)
-		for i := 0; i < streams; i++ {
+		for range streams {
 			nI, err := KKAndSecp256k1(Config{LocalPK: pkI, LocalSK: skI, RemotePK: pkR, Initiator: true})
 			if err != nil {
 				b.Fatal(err)

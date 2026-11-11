@@ -41,7 +41,7 @@ type latOverlay struct {
 
 func newLatOverlay(v *glView) *latOverlay {
 	o := &latOverlay{view: v}
-	o.tick = js.FuncOf(func(js.Value, []js.Value) interface{} {
+	o.tick = js.FuncOf(func(js.Value, []js.Value) any {
 		o.frame()
 		return nil
 	})
@@ -202,7 +202,7 @@ func (o *latOverlay) frame() {
 // jsSetLatencyCells hands the projected tessellation to the overlay.
 // Passing an empty array turns the cells off, which is how the view
 // toggle leaves latency mode.
-func jsSetLatencyCells(_ js.Value, args []js.Value) interface{} {
+func jsSetLatencyCells(_ js.Value, args []js.Value) any {
 	if view == nil || view.latCells == nil {
 		return nil
 	}

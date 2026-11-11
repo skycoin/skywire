@@ -21,15 +21,6 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 )
 
-// testStoreSK is the store-sealing key every test store opens with.
-// Deterministic per call is not required — records are only read back by
-// the same Store instance — but a real key is, since the sealer refuses
-// the zero value.
-func testStoreSK() cipher.SecKey {
-	_, sk := cipher.GenerateKeyPair()
-	return sk
-}
-
 // onDiskForm returns the key as it would APPEAR in a record on disk.
 //
 // Not the raw bytes: encoding/json renders []byte as base64, so searching

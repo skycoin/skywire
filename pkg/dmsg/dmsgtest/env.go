@@ -60,12 +60,12 @@ func (env *Env) Startup(entryTimeout time.Duration, servers, clients int, conf *
 
 	env.d = disc.NewMock(entryTimeout)
 
-	for i := 0; i < servers; i++ {
+	for range servers {
 		if _, err := env.newServer(ctx, dmsg.DefaultUpdateInterval); err != nil {
 			return err
 		}
 	}
-	for i := 0; i < clients; i++ {
+	for range clients {
 		pk, sk := cipher.GenerateKeyPair()
 		if _, err := env.newClientWithKeys(ctx, pk, sk, conf); err != nil {
 			return err
@@ -167,15 +167,13 @@ func (env *Env) NewClientWithKeys(pk cipher.PubKey, sk cipher.SecKey, conf *dmsg
 func (env *Env) newClientWithKeys(ctx context.Context, pk cipher.PubKey, sk cipher.SecKey, conf *dmsg.Config) (*dmsg.Client, error) {
 	c := dmsg.NewClient(pk, sk, env.d, conf)
 	env.c[pk] = c
-	env.cWg.Add(1)
 
-	go func() { //nolint:gosec
+	env.cWg.Go(func() { //nolint:gosec
 		c.Serve(context.Background())
 		env.mx.Lock()
 		delete(env.c, pk)
 		env.mx.Unlock()
-		env.cWg.Done()
-	}()
+	})
 
 	select {
 	case <-ctx.Done():

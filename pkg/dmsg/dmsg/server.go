@@ -4,6 +4,7 @@ package dmsg
 import (
 	"context"
 	"errors"
+	"maps"
 	"net"
 	"sync"
 	"time"
@@ -238,9 +239,7 @@ func (s *Server) GetSessions() map[cipher.PubKey]*SessionCommon {
 	defer s.sessionsMx.Unlock()
 
 	sessions := make(map[cipher.PubKey]*SessionCommon, len(s.sessions))
-	for pk, session := range s.sessions {
-		sessions[pk] = session
-	}
+	maps.Copy(sessions, s.sessions)
 
 	return sessions
 }
@@ -306,13 +305,11 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 	// updateServerEntry (PutEntry) can land AFTER delEntry, leaving a zombie
 	// discovery entry that advertises a now-dead server — the exact
 	// "advertised but unreachable" shape that starves route setup.
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
+	s.wg.Go(func() {
 		if err := s.startUpdateEntryLoop(ctx); err != nil {
 			s.log.WithError(err).Error("server entry-publish loop exited")
 		}
-	}()
+	})
 
 	s.connectToPeers(ctx)
 
@@ -370,11 +367,9 @@ func (s *Server) startUpdateEntryLoop(ctx context.Context) error {
 	// (the wg-tracked goroutine in Serve) is still running, so the count never
 	// reaches zero between the handoff — Close's Wait joins this loop before
 	// delEntry, so a periodic PutEntry can't resurrect a just-deleted entry.
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
+	s.wg.Go(func() {
 		s.updateServerEntryLoop(ctx, s.AdvertisedAddr(), s.AdvertisedAddrV6(), s.maxSessions, s.authPassphrase)
-	}()
+	})
 	return nil
 }
 
@@ -468,11 +463,9 @@ func (s *Server) connectToPeers(ctx context.Context) {
 	}
 
 	// Periodically discover other servers from discovery and peer with them.
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
+	s.wg.Go(func() {
 		s.discoverAndConnectPeers(ctx)
-	}()
+	})
 }
 
 // discoverAndConnectPeers periodically queries discovery for all servers
@@ -523,11 +516,9 @@ func (s *Server) discoverAndConnectPeers(ctx context.Context) {
 				activePeers[pk] = peerCancel
 
 				peer := PeerEntry{PK: pk, Addr: entry.Server.Address}
-				s.wg.Add(1)
-				go func() {
-					defer s.wg.Done()
+				s.wg.Go(func() {
 					s.maintainPeerConnection(peerCtx, peer)
-				}()
+				})
 			}
 		}
 

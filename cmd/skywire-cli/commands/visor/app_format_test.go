@@ -32,10 +32,8 @@ func TestFormatAppList_RendersEveryAppStatus(t *testing.T) {
 		t.Run(tc.wantStatus, func(t *testing.T) {
 			states := []*appserver.AppState{
 				{
-					AppConfig: appserver.AppConfig{
-						Name: "test-app",
-						Port: 42,
-					},
+					Name:           "test-app",
+					Port:           42,
 					Status:         tc.status,
 					DetailedStatus: "any-detail",
 				},
@@ -62,8 +60,8 @@ func TestFormatAppList_UnknownStatusFallsBackToStopped(t *testing.T) {
 	// refactor doesn't accidentally panic on an unknown int.
 	states := []*appserver.AppState{
 		{
-			AppConfig: appserver.AppConfig{Name: "test", Port: 1},
-			Status:    appserver.AppStatus(99), // bogus
+			Name: "test", Port: 1,
+			Status: appserver.AppStatus(99), // bogus
 		},
 	}
 	rows, _ := formatAppList(states)

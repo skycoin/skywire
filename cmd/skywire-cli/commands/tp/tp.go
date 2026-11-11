@@ -3,12 +3,13 @@ package clitp
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"text/tabwriter"
@@ -327,7 +328,7 @@ var tpCmd = &cobra.Command{
 			for t := range byType {
 				typeNames = append(typeNames, t)
 			}
-			sort.Strings(typeNames)
+			slices.Sort(typeNames)
 			for _, t := range typeNames {
 				ts := byType[t]
 				fmt.Fprintf(&b, "  %-10s %-7d %s%s\n", t, ts.Total, inC(ts.Incoming), outC(ts.Outgoing))
@@ -471,7 +472,7 @@ func printNetworkTransportSummary(cmd *cobra.Command, baseURL string) {
 	for t := range ns.ByType {
 		typeNames = append(typeNames, t)
 	}
-	sort.Strings(typeNames)
+	slices.Sort(typeNames)
 	for _, t := range typeNames {
 		fmt.Fprintf(&b, "  %-10s %d\n", t, ns.ByType[t])
 	}
@@ -585,7 +586,7 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visorapi.TransportSummary)
 		err := json.Unmarshal([]byte(proxyData), &proxyEntries)
 		internal.Catch(cmdFlags, err)
 		for _, e := range proxyEntries {
-			pk := strings.SplitN(e.Address, ":", 2)[0]
+			pk, _, _ := strings.Cut(e.Address, ":")
 			proxyByPK[pk] = e.Geo.Country
 		}
 	}
@@ -595,7 +596,7 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visorapi.TransportSummary)
 		err := json.Unmarshal([]byte(vpnData), &vpnEntries)
 		internal.Catch(cmdFlags, err)
 		for _, e := range vpnEntries {
-			pk := strings.SplitN(e.Address, ":", 2)[0]
+			pk, _, _ := strings.Cut(e.Address, ":")
 			vpnByPK[pk] = e.Geo.Country
 		}
 	}
@@ -605,7 +606,7 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visorapi.TransportSummary)
 		err := json.Unmarshal([]byte(visorData), &visorEntries)
 		internal.Catch(cmdFlags, err)
 		for _, e := range visorEntries {
-			pk := strings.SplitN(e.Address, ":", 2)[0]
+			pk, _, _ := strings.Cut(e.Address, ":")
 			visorByPK[pk] = e.Geo.Country
 		}
 	}
@@ -754,8 +755,8 @@ func formatLatencyMS(ms float64) string {
 }
 
 func sortTransports(tps ...*visorapi.TransportSummary) {
-	sort.Slice(tps, func(i, j int) bool {
-		return tps[i].ID.String() < tps[j].ID.String()
+	slices.SortFunc(tps, func(a, b *visorapi.TransportSummary) int {
+		return cmp.Compare(a.ID.String(), b.ID.String())
 	})
 }
 
@@ -816,7 +817,7 @@ func PrintTransportsWithBandwidth(cmdFlags *pflag.FlagSet, bwByTpID map[string]s
 		err := json.Unmarshal([]byte(proxyData), &proxyEntries)
 		internal.Catch(cmdFlags, err)
 		for _, e := range proxyEntries {
-			pk := strings.SplitN(e.Address, ":", 2)[0]
+			pk, _, _ := strings.Cut(e.Address, ":")
 			proxyByPK[pk] = e.Geo.Country
 		}
 	}
@@ -826,7 +827,7 @@ func PrintTransportsWithBandwidth(cmdFlags *pflag.FlagSet, bwByTpID map[string]s
 		err := json.Unmarshal([]byte(vpnData), &vpnEntries)
 		internal.Catch(cmdFlags, err)
 		for _, e := range vpnEntries {
-			pk := strings.SplitN(e.Address, ":", 2)[0]
+			pk, _, _ := strings.Cut(e.Address, ":")
 			vpnByPK[pk] = e.Geo.Country
 		}
 	}
@@ -836,7 +837,7 @@ func PrintTransportsWithBandwidth(cmdFlags *pflag.FlagSet, bwByTpID map[string]s
 		err := json.Unmarshal([]byte(visorData), &visorEntries)
 		internal.Catch(cmdFlags, err)
 		for _, e := range visorEntries {
-			pk := strings.SplitN(e.Address, ":", 2)[0]
+			pk, _, _ := strings.Cut(e.Address, ":")
 			visorByPK[pk] = e.Geo.Country
 		}
 	}

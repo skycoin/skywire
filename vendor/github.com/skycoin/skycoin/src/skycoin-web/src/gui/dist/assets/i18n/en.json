@@ -30,6 +30,7 @@
     "error": "Error",
     "fetch-version": "Unable to fetch latest release version from Github",
     "incorrect-password": "Incorrect password",
+    "insecure-context": "The wallet needs a secure page, and this browser tab is not one. Open it at http://localhost on the machine that serves it, reach that machine through an SSH tunnel (for example ssh -L 8000:localhost:8000 user@host, then http://localhost:8000), use https, or add the address under \"Insecure origins treated as secure\" in chrome://flags.",
     "api-disabled": "API disabled",
     "no-wallet": "Wallet does not exist",
     "no-outputs": "No unspent outputs",
@@ -94,7 +95,19 @@
     "button": "Proceed",
     "cancel-button": "Cancel",
     "mismatch": "The passwords do not match",
-    "save-seed-text": "Set a password to unlock this wallet without its seed next time. Leave it empty to skip."
+    "save-seed-text": "Set a password to unlock this wallet without its seed next time. Leave it empty to skip.",
+    "reset-link": "I forgot my password"
+  },
+  "reset": {
+    "title": "Reset Password",
+    "wallet-label": "Wallet",
+    "seed-label": "Wallet seed",
+    "passphrase-label": "Seed passphrase (leave empty if the wallet has none)",
+    "password-label": "New password (leave empty if you want the wallet not to be encrypted)",
+    "confirm-label": "Confirm new password",
+    "confirm-error-info": "The two passwords must match.",
+    "reset-button": "Reset",
+    "done": "Password successfully changed."
   },
   "buy": {
     "deposit-address": "Choose an address to generate a BTC deposit link for:",
@@ -151,6 +164,7 @@
     "decrypt": "Decrypt Wallet",
     "edit": "Edit Wallet",
     "delete": "Delete Wallet",
+    "scan-addresses": "Scan Addresses",
     "unlock-wallet": "Unlock Wallet",
     "options": "Options",
     "add": "Add Wallet",
@@ -197,15 +211,20 @@
       "seed-passphrase-label": "Seed passphrase (optional)",
       "seed-passphrase-placeholder": "Enter an optional passphrase",
       "seed-passphrase-info": "An optional passphrase adds an extra layer of security. You will need both the seed and the passphrase to recover the wallet.",
+      "seed-passphrase-space-warning": "This passphrase starts or ends with a space. It is used exactly as typed, so the space must be entered every time you restore this wallet.",
       "segwit-label": "Native Segwit (bech32)",
       "segwit-info": "Generate bc1q... addresses (BIP84). Recommended for lower fees. Uncheck for legacy P2PKH addresses.",
-      "wallet-created": "The wallet has been added to the list."
+      "wallet-created": "The wallet has been added to the list.",
+      "temporary-check": "Load temporarily",
+      "temporary-info": "The wallet will be kept in memory only and deleted as soon as you close or reload the wallet page.",
+      "temporary-warning": "The wallet will be deleted when you close or reload the wallet page, and it will not have a password. You will need the seed to recover access to the funds. Are you sure you want to continue?"
     },
     "scan": {
       "connection-error": "It is not possible to connect to the server. Please try again later.",
       "unsynchronized-node-error": "It is not possible to restore the addresses because the server is not synchronized. Please try again later.",
       "title": "Restoring addresses",
-      "message": "Restored until now:"
+      "message": "Restored until now:",
+      "done": "Found {{ count }} new used address(es)."
     },
     "unlock": {
       "unlock-title": "Unlock Wallet",
@@ -230,8 +249,19 @@
       "outputs": "Unspent Outputs",
       "history": "History",
       "exposed": "This address has sent coins before, so its public key is on the blockchain. A future quantum computer could use it to steal coins sent to it. Do not receive coins at it again.",
-      "exposed-funded": "This address has sent coins before and still holds coins. Its public key is on the blockchain, so a future quantum computer could steal them. Move these coins to a new address."
-    }
+      "exposed-funded": "This address has sent coins before and still holds coins. Its public key is on the blockchain, so a future quantum computer could steal them. Move these coins to a new address.",
+      "confirm": "Confirm Address"
+    },
+    "scan-help": "Finds the already used addresses of this wallet which are missing from the list.",
+    "add-addresses": {
+      "title": "New Addresses",
+      "quantity-label": "How many addresses to create",
+      "quantity-error-info": "You must enter a whole number from 1 to 100.",
+      "cancel-button": "Cancel",
+      "create-button": "Create"
+    },
+    "add-many-confirmation": "WARNING: If you add too many addresses without using the previous ones, some addresses may not be found automatically if you restore the wallet using the seed, and you will have to add them by hand. Do you want to continue?",
+    "temporary": "Temporary wallet."
   },
   "qr": {
     "title": "Address",
@@ -249,6 +279,26 @@
     "gateway-confirm-eth": "Send {{ amount }} {{ symbol }} to {{ to }}? The network fee is at most {{ fee }} ETH.",
     "gateway-confirm-btc": "Send {{ amount }} {{ symbol }} to {{ to }}? The network fee is {{ rate }} satoshis per byte.",
     "gateway-sent": "Sent. Transaction {{ txid }}",
+    "fill-with-link": {
+      "title": "Use a Payment Link",
+      "button": "Use a payment link",
+      "link-info": "Paste a link sent to you requesting coins, such as skycoin:ADDRESS?amount=1. The form will be filled in with its data.",
+      "link-label": "Payment link",
+      "invalid-link-error": "This is not a valid payment link.",
+      "data-overwritten-alert": "Some data you have entered will be overwritten. Are you sure you want to continue?",
+      "confirmation": "The form has been filled in with the data of the payment link.",
+      "link-hours": "The link requests {{ hours }} {{ name }}, which will be sent with the coins.",
+      "process-button": "Process",
+      "cancel-button": "Cancel"
+    },
+    "signed-button": "Signed",
+    "unsigned-button": "Unsigned",
+    "unsigned-confirmation": "The unsigned form does not send transactions. It only creates the text of a transaction from the addresses you enter, which must be signed before it can be sent to the network. This is useful for a wallet whose keys are kept on an offline device. Do you want to continue?",
+    "addresses-manual-help": "The addresses the coins will be sent from, separated by commas. All of them must belong to the wallet that will sign the transaction.",
+    "manual-addresses-error": "The outputs of these addresses could not be loaded. Check the addresses.",
+    "personal-note-label": "Personal note",
+    "personal-note-help": "A text to help you identify the transaction later. It is saved in this browser only, so it is not visible from other devices.",
+    "saving-note-error": "The transaction was sent, but the note could not be saved.",
     "fee-label": "Network fee",
     "fee-slow": "Slow",
     "fee-normal": "Normal",
@@ -272,6 +322,8 @@
     "wallet-label": "Wallet",
     "addresses-label": "Addresses",
     "invalid-amount": "Please enter a valid amount",
+    "send-all-available-coins-link": "send all available coins",
+    "no-coins-left-error": "There are no coins left to send",
     "addresses-help": "Limit the addresses from where the coins and hours could be sent",
     "all-addresses": "All the addresses of the selected wallet",
     "outputs-label": "Unspent outputs",
@@ -283,7 +335,7 @@
     "available-msg-part4": "must be used for the transaction fee).",
     "change-address-label": "Custom change address",
     "change-address-select": "Select",
-    "change-address-help": "Address to receive change. If it's not provided, it will be chosen automatically. Click on the \"Select\" link to choose an address from one of your wallets",
+    "change-address-help": "Address to receive change. It starts as a new address of the selected wallet, so change does not go back to an address that has spent. You can type another or click the \"Select\" link to choose an address from one of your wallets",
     "destinations-label": "Destinations",
     "destinations-help1": "Destination addresses and their coins",
     "destinations-help2": "Destination addresses, their coins and coin hours",
@@ -319,6 +371,12 @@
     "hours-sent": "sent",
     "hours-received": "received",
     "hours-burned": "burned",
+    "note": "Note",
+    "without-note": "Without note",
+    "edit-note": "Edit note",
+    "save-note": "Save note",
+    "cancel-note": "Cancel",
+    "note-error": "The note could not be saved.",
     "inputs": "Inputs",
     "outputs": "Outputs",
     "confirmed": "Confirmed",
@@ -432,6 +490,7 @@
   },
   "history": {
     "tx-detail": "Transaction Detail",
+    "note": "Note",
     "moving": "Internally moving",
     "moved": "Internally moved",
     "sending": "Sending",
@@ -490,6 +549,7 @@
     },
     "wallet": {
       "address-without-seed": "trying to generate address without seed!",
+      "change-address-not-added": "the change address could not be added to the wallet, try again",
       "unknown-address": "trying to update the wallet with unknown address!",
       "wallet-exists": "A wallet already exists with this seed",
       "not-enough-hours1": "Not enough available",
@@ -589,6 +649,10 @@
       "and": "and",
       "hours": "coin hours",
       "to": "to"
+    },
+    "confirm-address": {
+      "instructions": "Please confirm on the Skywallet that the address is {{ address }}",
+      "confirmation": "Address confirmed."
     }
   },
   "app-lock": {
@@ -610,7 +674,9 @@
     "hide-seed": "Hide seed",
     "hw-wallet-info": "A hardware wallet keeps its seed on the device. Back it up from the device.",
     "unencrypted-info": "The wallet service shows the seed only of an encrypted wallet. Encrypt the wallet first.",
-    "no-seed-info": "This browser does not hold the seed of this wallet."
+    "no-seed-info": "This browser does not hold the seed of this wallet.",
+    "passphrase": "Seed passphrase",
+    "passphrase-info": "This wallet has a seed passphrase. You need both the seed and this passphrase to recover it. The seed alone opens a different, empty wallet."
   },
   "app-password": {
     "help-none": "Set a password to store the wallets in this browser encrypted. The wallet will ask for it each time it opens. The password stays in this browser and cannot be recovered.",
@@ -653,5 +719,55 @@
     "broadcast-done": "The transaction was sent.",
     "not-in-wallet": "This wallet does not hold the keys of every input of the transaction.",
     "node-too-old": "This node is too old to create unsigned transactions."
+  },
+  "joint-tx": {
+    "link": "Joint transaction",
+    "title": "Joint Transaction",
+    "create-mode": "Create",
+    "cosign-mode": "Co-sign",
+    "create-text": "Spend your outputs and the other party's in one transaction, with the coins and coin hours of every output set by hand. Each party then signs only their own inputs.",
+    "cosign-text": "Paste a joint transaction to review it, sign the inputs your wallet owns, and broadcast it once every input is signed.",
+    "your-wallet": "Your wallet",
+    "your-outputs": "Your outputs to spend",
+    "select-outputs": "Select outputs",
+    "their-outputs": "The other party's outputs",
+    "their-outputs-hint": "Paste their output hashes, separated by commas or spaces",
+    "unknown-output": "Not an unspent output on this node:",
+    "outputs": "Outputs",
+    "inputs": "Inputs",
+    "address": "Address",
+    "coins": "Coins",
+    "hours": "Hours",
+    "add-output": "Add output",
+    "change-address": "Change address",
+    "change-hint": "Needed only when the outputs do not use all input coins",
+    "inputs-total": "Inputs hold",
+    "outputs-total": "Outputs get",
+    "fee": "Fee burned:",
+    "minimum": "minimum",
+    "change-coins": "Coins left for the change address:",
+    "need-inputs": "Choose at least one output to spend.",
+    "unknown-outputs": "Some of the other party's outputs are not unspent outputs on this node.",
+    "need-outputs": "Every output needs an address, coins above zero and a whole number of hours.",
+    "not-enough-coins": "The outputs send more coins than the inputs hold.",
+    "fee-too-low": "The outputs leave fewer hours than the minimum fee shown, which the network burns.",
+    "need-change": "The outputs leave coins over. Add them to an output or set a change address, so they cannot go to the other party.",
+    "input-left-out": "The node left out some of the outputs because fewer were enough. Raise the output coins or hours so every output is needed.",
+    "created": "Unsigned transaction. Send it to the other party, and review and sign it yourself.",
+    "create-button": "Create",
+    "review-button": "Review",
+    "review-warning": "Check every output before signing. Your signature commits you to exactly these outputs, and anyone may broadcast the transaction once every input is signed.",
+    "signed": "Signed",
+    "unsigned": "Unsigned",
+    "yours": "Yours",
+    "signed-count": "{{signed}} of {{total}} inputs signed",
+    "ready": "Every input is signed. The transaction can be broadcast.",
+    "sign-button": "Sign my inputs",
+    "nothing-to-sign": "This wallet owns none of the unsigned inputs.",
+    "owns-none": "This wallet owns none of the inputs, so it has nothing to sign. Choose the wallet that holds your outputs.",
+    "own-signed": "This wallet has already signed its inputs. Send the transaction to the other party to sign theirs.",
+    "invalid-tx": "This is not a valid transaction.",
+    "invalid-signature": "The cipher returned an invalid signature.",
+    "broadcast-done": "The joint transaction was sent."
   }
 }

@@ -55,8 +55,8 @@ func TestConfinedForwardTakesLowestLatencyLeg(t *testing.T) {
 
 	burst := func() map[int]int {
 		seen := map[int]int{}
-		for i := 0; i < 500; i++ {
-			_, _, idx, err := m.selectTransportRaw(tps, fwd, []byte("payload"))
+		for i := range 500 {
+			_, _, idx, err := m.selectTransportRaw(testLegs(tps, fwd, nil), []byte("payload"))
 			if err != nil {
 				t.Fatalf("iteration %d: selectTransportRaw: %v", i, err)
 			}
@@ -156,8 +156,8 @@ func TestConfinedForwardKeepsDirectLeg(t *testing.T) {
 		return 200
 	})
 
-	for i := 0; i < 200; i++ {
-		_, _, idx, err := m.selectTransportRaw(tps, fwd, []byte("payload"))
+	for i := range 200 {
+		_, _, idx, err := m.selectTransportRaw(testLegs(tps, fwd, nil), []byte("payload"))
 		if err != nil {
 			t.Fatalf("iteration %d: selectTransportRaw: %v", i, err)
 		}

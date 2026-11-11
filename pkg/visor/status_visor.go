@@ -1,12 +1,13 @@
 package visor
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"math"
 	"net/http"
-	"sort"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -218,11 +219,11 @@ func (c *visorCharts) sampleTransports(out map[string]float64, tps []tpSample) {
 	for n := range busy {
 		names = append(names, n)
 	}
-	sort.Slice(names, func(i, j int) bool {
-		if busy[names[i]] != busy[names[j]] {
-			return busy[names[i]] > busy[names[j]]
-		}
-		return names[i] < names[j]
+	slices.SortFunc(names, func(a, b string) int {
+		return cmp.Or(
+			cmp.Compare(busy[b], busy[a]),
+			cmp.Compare(a, b),
+		)
 	})
 	for i, n := range names {
 		if i >= topTransports {

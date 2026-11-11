@@ -81,18 +81,18 @@ func TestMemoryTableConcurrentAccess(t *testing.T) {
 	const workers = 16
 	pks := make([]cipher.PubKey, workers)
 	addrs := make([]string, workers)
-	for i := 0; i < workers; i++ {
+	for i := range workers {
 		pk, _ := cipher.GenerateKeyPair()
 		pks[i] = pk
 		addrs[i] = "127.0.0.1:" + string(rune('0'+i%10)) + "000"
 	}
 
 	var wg sync.WaitGroup
-	for i := 0; i < workers; i++ {
+	for i := range workers {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			for j := 0; j < 200; j++ {
+			for range 200 {
 				mt.SetAddr(pks[i], addrs[i])
 				_, _ = mt.Addr(pks[i])
 				_, _ = mt.PubKey(addrs[i])
@@ -103,7 +103,7 @@ func TestMemoryTableConcurrentAccess(t *testing.T) {
 	wg.Wait()
 
 	// Every writer's entry must be resolvable after the storm.
-	for i := 0; i < workers; i++ {
+	for i := range workers {
 		_, ok := mt.Addr(pks[i])
 		assert.True(t, ok, "entry %d missing after concurrent writes", i)
 	}

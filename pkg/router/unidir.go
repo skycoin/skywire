@@ -2,8 +2,9 @@
 package router
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -381,7 +382,7 @@ func (m *routeMux) noteFanoutChange(on bool, reason string) {
 // noteForwardLoad feeds the writer's view of the confined leg's send window to
 // the fan-out latch. Called from waitSendWindow, which runs on the writer with
 // the route group's mu DROPPED and has just refreshed the in-flight estimates.
-func (m *routeMux) noteForwardLoad(tps []*transport.ManagedTransport) {
+func (m *routeMux) noteForwardLoad(legs []groupLeg) {
 	if !m.forwardSender() || m.tpSelector == nil {
 		return
 	}
@@ -396,7 +397,7 @@ func (m *routeMux) noteForwardLoad(tps []*transport.ManagedTransport) {
 	// stable, and it still cannot outlive the upload: this is the writer's own
 	// path, so when the application stops writing the observations stop with it
 	// and forwardFanoutActive expires the latch on the clock.
-	qualifies := idx >= 0 && len(m.forwardFanoutLegs(tps, idx)) > 0 &&
+	qualifies := idx >= 0 && len(m.forwardFanoutLegs(legs, idx)) > 0 &&
 		(m.fwdFan.on.Load() || m.tpSelector.Saturated(idx))
 	on, changed := m.forwardFanoutStep(time.Now().UnixNano(), qualifies,
 		m.knDur(routersettings.UnidirFanoutEngage), m.knDur(routersettings.UnidirFanoutRelease))
@@ -406,7 +407,7 @@ func (m *routeMux) noteForwardLoad(tps []*transport.ManagedTransport) {
 	if on {
 		m.noteFanoutChange(true, fmt.Sprintf(
 			"leg %d kept filling its send window for %v — the upload is now striding %d legs within %.1fx of its latency",
-			idx, m.knDur(routersettings.UnidirFanoutEngage), len(m.forwardFanoutLegs(tps, idx)), m.knRatio(routersettings.UnidirFanoutMaxSkew)))
+			idx, m.knDur(routersettings.UnidirFanoutEngage), len(m.forwardFanoutLegs(legs, idx)), m.knRatio(routersettings.UnidirFanoutMaxSkew)))
 		return
 	}
 	m.noteFanoutChange(false, "the forward direction has written nothing for the whole release interval — the upload is back on its single leg")
@@ -427,17 +428,17 @@ func (m *routeMux) noteForwardLoad(tps []*transport.ManagedTransport) {
 // 44 ms leg's traffic striped onto a 166 ms one measured x0.24, because the
 // peer's no-skip reorder frontier waits out the skew. A direct leg far faster
 // than every sibling therefore has an EMPTY band and stays confined.
-func (m *routeMux) forwardFanoutLegs(tps []*transport.ManagedTransport, cur int) []int {
-	if cur < 0 || cur >= len(tps) {
+func (m *routeMux) forwardFanoutLegs(legs []groupLeg, cur int) []int {
+	if cur < 0 || cur >= len(legs) {
 		return nil
 	}
-	cand := make([]int, 0, len(tps))
+	cand := make([]int, 0, len(legs))
 	cand = append(cand, cur)
-	for idx := range tps {
+	for idx := range legs {
 		if idx == cur {
 			continue
 		}
-		tp := tps[idx]
+		tp := legs[idx].tp
 		if tp == nil || tp.IsClosed() || !m.legReadyAt(idx) {
 			continue
 		}
@@ -446,7 +447,7 @@ func (m *routeMux) forwardFanoutLegs(tps []*transport.ManagedTransport, cur int)
 	if len(cand) < 2 {
 		return nil
 	}
-	lat, measured := m.forwardLatencies(tps, cand)
+	lat, measured := m.forwardLatencies(legs, cand)
 	if !measured || lat[0] <= 0 {
 		return nil
 	}
@@ -472,7 +473,9 @@ func (m *routeMux) forwardFanoutLegs(tps []*transport.ManagedTransport, cur int)
 	if len(ranked) < 2 {
 		return nil
 	}
-	sort.Slice(ranked, func(a, b int) bool { return ranked[a].lat < ranked[b].lat })
+	slices.SortFunc(ranked, func(x, y bandLeg) int {
+		return cmp.Compare(x.lat, y.lat)
+	})
 	band := make([]int, len(ranked))
 	for i := range ranked {
 		band[i] = ranked[i].idx
@@ -491,18 +494,13 @@ func (m *routeMux) forwardFanoutLegs(tps []*transport.ManagedTransport, cur int)
 // it (16 MB over a 120 ms and a 150 ms leg: 63 %/37 %, x1.28 of one leg alone).
 // Striding the band evenly is what the download direction has always done, and
 // it is what the aggregation number comes from.
-func (m *routeMux) pickFanoutLeg(tps []*transport.ManagedTransport, payload []byte, cur int) int {
-	band := m.forwardFanoutLegs(tps, cur)
+func (m *routeMux) pickFanoutLeg(legs []groupLeg, payload []byte, cur int) int {
+	band := m.forwardFanoutLegs(legs, cur)
 	if len(band) == 0 {
 		return -1
 	}
 	inBand := func(idx int) bool {
-		for _, b := range band {
-			if b == idx {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(band, idx)
 	}
 	// Ask the SCHEDULER first, bounded to the band. ECF (the default mode)
 	// places a frame on the leg that will deliver it soonest and charges the
@@ -512,7 +510,7 @@ func (m *routeMux) pickFanoutLeg(tps []*transport.ManagedTransport, payload []by
 	// bottleneck (measured 37 %/62 % at x1.34 against 48 %/52 % at x1.6). This is
 	// the same selector the download direction has always used; the band is the
 	// only thing the forward direction adds.
-	if idx := m.tpSelector.SelectForPayload(payload); idx >= 0 && idx < len(tps) && inBand(idx) &&
+	if idx := m.tpSelector.SelectForPayload(payload); idx >= 0 && idx < len(legs) && inBand(idx) &&
 		!m.legProbeExhausted(idx) && !m.tpSelector.Saturated(idx) {
 		return idx
 	}
@@ -532,8 +530,8 @@ func (m *routeMux) pickFanoutLeg(tps []*transport.ManagedTransport, payload []by
 // A pure query: it neither advances the round-robin cursor nor charges the
 // scheduler, because the parked writer asks it on every poll and the frame it
 // is waiting to send has not been placed yet.
-func (m *routeMux) forwardFanoutRoom(tps []*transport.ManagedTransport, cur int) bool {
-	for _, idx := range m.forwardFanoutLegs(tps, cur) {
+func (m *routeMux) forwardFanoutRoom(legs []groupLeg, cur int) bool {
+	for _, idx := range m.forwardFanoutLegs(legs, cur) {
 		if !m.tpSelector.Saturated(idx) {
 			return true
 		}
@@ -576,27 +574,27 @@ func (m *routeMux) forwardFanoutRoom(tps []*transport.ManagedTransport, cur int)
 // Returns ok=false only when there is genuinely NO leg of the wanted class at
 // all — then selectTransport falls through and may use the direct leg, because
 // there is no reverse leg to confine the download to.
-func (m *routeMux) selectByDirection(tps []*transport.ManagedTransport, fwd []routing.Rule, wantDirect bool, dst, src cipher.PubKey) (*transport.ManagedTransport, routing.Rule, int, bool) {
-	n := len(tps)
-	if n == 0 || len(fwd) == 0 {
+func (m *routeMux) selectByDirection(legs []groupLeg, wantDirect bool, dst, src cipher.PubKey) (*transport.ManagedTransport, routing.Rule, int, bool) {
+	n := len(legs)
+	if n == 0 {
 		return nil, nil, -1, false
 	}
 	// Base gate: a live, ruled leg whose CLASS (direct vs multihop) matches this
 	// end's send direction. The tiers below layer readiness/standby on top.
 	classOK := func(idx int) bool {
-		tp := tps[idx]
-		return idx < len(fwd) && tp != nil && !tp.IsClosed() &&
+		tp := legs[idx].tp
+		return tp != nil && !tp.IsClosed() &&
 			legIsDirect(tp, dst, src) == wantDirect
 	}
-	start := int(atomic.AddUint32(&m.tpIndex, 1) - 1)
+	start := int(m.tpIndex.Add(1) - 1)
 	scan := func(match func(idx int) bool) (*transport.ManagedTransport, routing.Rule, int, bool) {
-		for i := 0; i < n; i++ {
+		for i := range n {
 			idx := ((start % n) + i) % n
 			if idx < 0 {
 				idx += n
 			}
 			if match(idx) {
-				return tps[idx], fwd[idx], idx, true
+				return legs[idx].tp, legs[idx].fwd, idx, true
 			}
 		}
 		return nil, nil, -1, false
@@ -618,7 +616,7 @@ func (m *routeMux) selectByDirection(tps []*transport.ManagedTransport, fwd []ro
 	withBudget := func(idx int) bool { return activeReady(idx) && !m.legProbeExhausted(idx) }
 	if m.tpSelector != nil && m.tpSelector.Len() > 0 {
 		if idx := m.tpSelector.Select(); idx >= 0 && idx < n && withBudget(idx) {
-			return tps[idx], fwd[idx], idx, true
+			return legs[idx].tp, legs[idx].fwd, idx, true
 		}
 	}
 	if tp, rule, idx, ok := scan(withBudget); ok {

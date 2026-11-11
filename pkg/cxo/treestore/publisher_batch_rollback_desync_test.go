@@ -196,7 +196,7 @@ func collectTreeNodeHashes(up registry.Pack, nodeHash skycipher.SHA256, path str
 	if err != nil {
 		return nil //nolint:nilerr
 	}
-	for i := 0; i < ln; i++ {
+	for i := range ln {
 		var te TreeEntry
 		if _, err := node.Children.ValueByIndex(up, i, &te); err != nil {
 			continue

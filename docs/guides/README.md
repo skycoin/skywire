@@ -18,7 +18,10 @@ cobra subcommand tree.
 - [config-gen.md](config-gen.md) — how the JSON config is produced, and every SKYENV variable with its default
 - [config-runtime.md](config-runtime.md) — changing a running visor without editing the config, and what persists across a restart
 - [docker.md](docker.md) — running a visor in a container: build, run, generate or change its config
-- [hypervisor.md](hypervisor.md) — the hypervisor web UI and its password, pairing a desk tab, the terminal UI, adding a remote hypervisor
+- [hypervisor.md](hypervisor.md) — the hypervisor web UI, serving it on the LAN, its password, pairing a desk tab, the terminal UI, adding a remote hypervisor
+- [visor-alerts.md](visor-alerts.md) — mail or webhook alerts when a visor the hypervisor manages goes offline, the visor states and the offline delay
+- [reward-xpub.md](reward-xpub.md) — create a Skycoin BIP44 wallet and set its account xpub as the visor's reward address
+- [skycoin-wallet.md](skycoin-wallet.md) — run a Skycoin node and wallet with `skywire skycoin`, check an address with the cli, fiber coins, a public node as a service
 - [../wasm-visor-ui-tour.md](../wasm-visor-ui-tour.md) — a screenshot tour of the desk, the wasm-visor UI: its windows, the dashboard as a browser tab, netscrape, websh
 - [network-visualizer.md](network-visualizer.md) — the transport-graph UI (`cli tp viz`), which is not the hypervisor interface
 - [visor.md](visor.md) — running `skywire visor`, process control / while-loop pattern, transport setup, runtime files

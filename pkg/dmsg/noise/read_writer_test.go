@@ -68,13 +68,13 @@ func TestNewReadWriter(t *testing.T) {
 		rCh := make(chan Result, msgCount)
 		defer close(rCh)
 
-		for i := 0; i < msgCount; i++ {
+		for i := range msgCount {
 			writes[i] = []byte(fmt.Sprintf("this is message: %d", i))
 		}
 
-		for i := 0; i < totalGroups; i++ {
+		for i := range totalGroups {
 			go func(i int) {
-				for j := 0; j < groupSize; j++ {
+				for j := range groupSize {
 					go func(i, j int) {
 						b := writes[i*j]
 						n, err := aRW.Write(b)
@@ -89,7 +89,7 @@ func TestNewReadWriter(t *testing.T) {
 			}(i)
 		}
 
-		for i := 0; i < msgCount; i++ {
+		for i := range msgCount {
 			w := <-wCh
 			t.Logf("write_result[%d]: b(%s) err(%v)\n", i, string(w.b), w.err)
 			assert.NoError(t, w.err)

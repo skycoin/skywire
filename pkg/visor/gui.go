@@ -16,7 +16,6 @@ import (
 
 	"fyne.io/systray"
 	"github.com/gen2brain/dlgs"
-	"github.com/sirupsen/logrus"
 	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -45,7 +44,7 @@ var (
 )
 
 var (
-	guiStopped int32
+	guiStopped atomic.Int32
 )
 
 var (
@@ -81,7 +80,7 @@ type appTray struct {
 func getOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 	doneCh := make(chan bool, 1)
 	logger := logging.NewMasterLogger()
-	logger.SetLevel(logrus.InfoLevel)
+	logger.SetLevel(logging.InfoLevel)
 
 	httpC := getSystrayHTTPClient(context.Background(), conf, logger)
 
@@ -114,7 +113,7 @@ func readSysTrayIcon() (contents []byte, err error) {
 
 // Stop stops visor and quits GUI app.
 func Stop() {
-	if !atomic.CompareAndSwapInt32(&guiStopped, 0, 1) {
+	if !guiStopped.CompareAndSwap(0, 1) {
 		return
 	}
 	stopVisor()

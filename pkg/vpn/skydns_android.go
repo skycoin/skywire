@@ -10,8 +10,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skydns"
 )
 
@@ -28,7 +27,7 @@ const (
 func RunSkyDNS(ctx context.Context, cfg SkyDNSConfig) error {
 	log := cfg.Log
 	if log == nil {
-		log = logrus.StandardLogger()
+		log = logging.StandardLogger()
 	}
 	// With no --dns, other names go to the phone's own resolvers, which the app
 	// reports with each reply; shareDefaultDNS only until the first one.
@@ -142,7 +141,7 @@ func serveSkyDNSTUN(ctx context.Context, tun *androidTUN, sky *skydns.Engine, ch
 
 // followNetworkDNS points up at the resolver the app last reported for the
 // phone's network, so a move between networks moves it too.
-func followNetworkDNS(tun *androidTUN, up *skydns.Upstream, log logrus.FieldLogger) {
+func followNetworkDNS(tun *androidTUN, up *skydns.Upstream, log logging.FieldLogger) {
 	server := tun.networkDNS()
 	if net.ParseIP(server) == nil || server == up.Server() {
 		return

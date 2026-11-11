@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
@@ -16,12 +15,13 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
-func testLogger() logrus.FieldLogger {
-	l := logrus.New()
+func testLogger() logging.FieldLogger {
+	l := logging.New()
 	l.SetOutput(os.Stderr)
-	l.SetLevel(logrus.PanicLevel) // keep test output quiet
+	l.SetLevel(logging.PanicLevel) // keep test output quiet
 	return l
 }
 

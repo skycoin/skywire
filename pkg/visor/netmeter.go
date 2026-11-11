@@ -313,10 +313,11 @@ func (v *Visor) tpMLocked() *transport.Manager {
 }
 
 // NetworkEvent takes an app's report: a move refreshes what the visor
-// advertises, and a metered flag may change the mode.
+// advertises, a metered flag may change the mode, and "offline" or "online"
+// set the connectivity state.
 func (v *Visor) NetworkEvent(ev visorapi.NetworkEvent) error {
 	switch ev.Event {
-	case "moved", "changed", "":
+	case "moved", "changed", "", "offline", "lost", "online":
 	default:
 		return fmt.Errorf("unknown network event %q", ev.Event)
 	}
@@ -332,8 +333,13 @@ func (v *Visor) NetworkEvent(ev visorapi.NetworkEvent) error {
 	}
 	s.reportedIf = ev.Interface
 	s.mu.Unlock()
-	if ev.Event == "moved" {
-		v.networkMoved(src)
+	switch ev.Event {
+	case "moved":
+		v.reportNetwork(true, src, src)
+	case "online":
+		v.reportNetwork(true, src, src+" online")
+	case "offline", "lost":
+		v.reportNetwork(false, src, "")
 	}
 	v.meterEvaluate()
 	return nil

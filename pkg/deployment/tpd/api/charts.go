@@ -2,23 +2,23 @@
 package api
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"math"
 	"net/http"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
 	"github.com/skycoin/skywire/pkg/deployment/netgraph"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // Series keys TPD samples.
@@ -45,7 +45,7 @@ type tpdCharts struct {
 
 // StartCharts samples TPD's counts into st until ctx ends and serves them
 // as the charts page.
-func (api *API) StartCharts(ctx context.Context, st charts.Store, log logrus.FieldLogger) {
+func (api *API) StartCharts(ctx context.Context, st charts.Store, log logging.FieldLogger) {
 	c := &tpdCharts{st: st}
 	charts.SetVersionLookup(api.versionOf)
 	c.page = &charts.Page{
@@ -219,7 +219,7 @@ func dailyBandwidthChart(daily []store.DailyAggregate) charts.Chart {
 	for t := range byType {
 		types = append(types, t)
 	}
-	sort.Strings(types)
+	slices.Sort(types)
 	series := make([]charts.Series, 0, len(types))
 	for _, t := range types {
 		series = append(series, charts.Series{Name: t, Vals: byType[t]})
@@ -286,7 +286,7 @@ func dailyLatencyChart(daily []store.DailyAggregate) charts.Chart {
 	for t := range byType {
 		types = append(types, t)
 	}
-	sort.Strings(types)
+	slices.Sort(types)
 	for _, t := range types {
 		series = append(series, charts.Series{Name: t, Vals: byType[t]})
 	}
@@ -314,7 +314,9 @@ func sortedDays(daily []store.DailyAggregate) []store.DailyAggregate {
 			days = append(days, d)
 		}
 	}
-	sort.Slice(days, func(i, j int) bool { return days[i].Date < days[j].Date })
+	slices.SortFunc(days, func(a, b store.DailyAggregate) int {
+		return cmp.Compare(a.Date, b.Date)
+	})
 	return days
 }
 
@@ -366,11 +368,11 @@ func visorBWTable(day *store.VisorBWDay, roles, versions map[string]string) char
 		}
 		rows = append(rows, r)
 	}
-	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].total != rows[j].total {
-			return rows[i].total > rows[j].total
-		}
-		return rows[i].pk < rows[j].pk
+	slices.SortFunc(rows, func(a, b row) int {
+		return cmp.Or(
+			cmp.Compare(b.total, a.total),
+			cmp.Compare(a.pk, b.pk),
+		)
 	})
 	t := charts.Table{Title: "Top visors by bytes sent, " + day.Date + " (UTC day)",
 		Note: fmt.Sprintf("%d visors sent bytes over %d transports, each counted only as far as the other edge confirms receiving it. %d transports only one edge reported are not counted, and %d between visors on the same network are left out, as in rewards pool 2. Visors that run a dmsg server are tinted, blue when it is registered in dmsg discovery and green when it serves a hypervisor's LAN.",
@@ -389,11 +391,11 @@ func visorBWTable(day *store.VisorBWDay, roles, versions map[string]string) char
 	for typ := range byType {
 		types = append(types, typ)
 	}
-	sort.Slice(types, func(a, b int) bool {
-		if byType[types[a]] != byType[types[b]] {
-			return byType[types[a]] > byType[types[b]]
-		}
-		return types[a] < types[b]
+	slices.SortFunc(types, func(x, y string) int {
+		return cmp.Or(
+			cmp.Compare(byType[y], byType[x]),
+			cmp.Compare(x, y),
+		)
 	})
 	t.Head = []string{"Public key", "Version", "Role", "Sent"}
 	for _, typ := range types {

@@ -4,6 +4,7 @@ package rewards
 import (
 	"net"
 	"net/http"
+	"slices"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 )
@@ -33,12 +34,7 @@ func IsWhitelisted(r *http.Request, wlkeys []cipher.PubKey) bool {
 	if remotePK.Null() {
 		return false
 	}
-	for _, pk := range wlkeys {
-		if pk == remotePK {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(wlkeys, remotePK)
 }
 
 // RemotePK returns the DMSG-authenticated source public key of the current

@@ -45,7 +45,7 @@ func probeOnlyMux(t *testing.T, fast, slow legReading) (*routeMux, []*transport.
 	// The schedule selectByDirection's tier 1 reads: an unweighted round-robin
 	// over the live legs, which is what Rebuild builds for every predictive mode.
 	m.tpSelector.SetMode(WeightModeECF)
-	m.tpSelector.Rebuild(tps)
+	m.tpSelector.Rebuild(tpLegs(tps))
 
 	rule(t, m, tps, fast, slow)
 	return m, tps, fwd
@@ -62,7 +62,7 @@ func rule(t *testing.T, m *routeMux, tps []*transport.ManagedTransport, fast, sl
 	m.legMu.Lock()
 	rulings := m.ruleProbeOnlyLegsLocked(states)
 	m.legMu.Unlock()
-	m.reportProbeRulings(tps, rulings)
+	m.reportProbeRulings(tpLegs(tps), rulings)
 }
 
 // download runs n frames of frameBytes through the reverse-direction pick,
@@ -72,8 +72,8 @@ func download(t *testing.T, m *routeMux, tps []*transport.ManagedTransport, fwd 
 	t.Helper()
 	dst, src, _, _, _ := endpointsForTest(t)
 	carried := map[int]uint64{}
-	for i := 0; i < n; i++ {
-		_, _, idx, ok := m.selectByDirection(tps, fwd, false, dst, src)
+	for i := range n {
+		_, _, idx, ok := m.selectByDirection(testLegs(tps, fwd, nil), false, dst, src)
 		if !ok {
 			t.Fatalf("frame %d: selectByDirection returned ok=false with two ready reverse legs", i)
 		}
@@ -252,7 +252,7 @@ func TestDelivEWMADecaysWhenSilent(t *testing.T) {
 	if v != 4_000_000 {
 		t.Fatalf("first sample should seed the EWMA; got %g", v)
 	}
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		v = foldDeliv(v, 0)
 	}
 	if v > 40_000 {

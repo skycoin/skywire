@@ -92,7 +92,7 @@ func WriteTimelineArchive(path, date string, recs []TimelineRecord) error {
 	}
 	base := uint64(timelineHeaderSize + nblocks*timelineIndexEntrySize) //nolint:gosec
 	raw := make([]byte, 0, timelineBlockRecords*timelineRecordSize)
-	for b := 0; b < nblocks; b++ {
+	for b := range nblocks {
 		block := recs[b*timelineBlockRecords : min(len(recs), (b+1)*timelineBlockRecords)]
 		raw = raw[:0]
 		for _, r := range block {

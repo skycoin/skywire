@@ -10,12 +10,11 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -94,7 +93,7 @@ type KeepaliveSink interface {
 
 // HTTPClient is responsible for interacting with the service-discovery
 type HTTPClient struct {
-	log            logrus.FieldLogger
+	log            logging.FieldLogger
 	mLog           *logging.MasterLogger
 	conf           Config
 	entry          Service
@@ -111,7 +110,7 @@ type HTTPClient struct {
 }
 
 // NewClient creates a new HTTPClient.
-func NewClient(log logrus.FieldLogger, mLog *logging.MasterLogger, conf Config, client *http.Client, clientPublicIP string) *HTTPClient {
+func NewClient(log logging.FieldLogger, mLog *logging.MasterLogger, conf Config, client *http.Client, clientPublicIP string) *HTTPClient {
 	return &HTTPClient{
 		log:  log,
 		mLog: mLog,
@@ -286,13 +285,7 @@ func (c *HTTPClient) registerEntry(ctx context.Context) (Service, error) {
 		// Service discovery server checks that remote IP is in local IPs
 		if pub != "" {
 			// Check if public IP is already in the list
-			found := false
-			for _, ip := range c.entry.LocalIPs {
-				if ip == pub {
-					found = true
-					break
-				}
-			}
+			found := slices.Contains(c.entry.LocalIPs, pub)
 			if !found {
 				c.entry.LocalIPs = append(c.entry.LocalIPs, pub)
 			}

@@ -80,7 +80,7 @@ func readArchivedUptimes(a *store.TimelineArchive, idStrs []string, timeline boo
 	row := func(id uuid.UUID, bm []byte) archivedUptime {
 		set := 0
 		var line strings.Builder
-		for slot := 0; slot < 288; slot++ {
+		for slot := range 288 {
 			up := bm[slot/8]&(1<<uint(7-slot%8)) != 0
 			if up {
 				line.WriteByte('.')

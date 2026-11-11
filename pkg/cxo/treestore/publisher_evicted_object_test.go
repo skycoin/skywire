@@ -240,7 +240,7 @@ func staticTreeEntryHash(t *testing.T, c *skyobject.Container, skyPK skycipher.P
 	if err != nil {
 		t.Fatalf("Children.Len: %v", err)
 	}
-	for i := 0; i < ln; i++ {
+	for i := range ln {
 		var te TreeEntry
 		h, err := rootNode.Children.ValueByIndex(up, i, &te)
 		if err != nil {

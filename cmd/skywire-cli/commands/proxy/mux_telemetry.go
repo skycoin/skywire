@@ -2,12 +2,13 @@
 package skysocksc
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
@@ -117,7 +118,9 @@ func (mt *muxTelemetry) build(rgs []muxRouteGroupInfo, now time.Time) []muxTeleR
 	for _, rg := range rgs {
 		rgKey := rgDescKey(rg)
 		legs := append([]muxLegInfo(nil), rg.Legs...)
-		sort.SliceStable(legs, func(i, j int) bool { return legs[i].Index < legs[j].Index })
+		slices.SortStableFunc(legs, func(a, b muxLegInfo) int {
+			return cmp.Compare(a.Index, b.Index)
+		})
 
 		var events []muxTeleRecord
 		sample := muxTeleRecord{Ts: ts, Type: "sample", App: mt.app, RG: rgKey}
@@ -189,7 +192,7 @@ func (mt *muxTelemetry) build(rgs []muxRouteGroupInfo, now time.Time) []muxTeleR
 			droppedKeys = append(droppedKeys, key)
 		}
 	}
-	sort.Strings(droppedKeys)
+	slices.Sort(droppedKeys)
 	for _, key := range droppedKeys {
 		st := mt.prev[key]
 		out = append(out, muxTeleRecord{

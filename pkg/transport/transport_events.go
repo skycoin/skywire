@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"maps"
 	"sync"
 	"time"
 
@@ -117,9 +118,7 @@ func (c *tpLastCloseMap) snapshot() map[uuid.UUID]TransportEvent {
 		return nil
 	}
 	out := make(map[uuid.UUID]TransportEvent, len(c.m))
-	for id, e := range c.m {
-		out[id] = e
-	}
+	maps.Copy(out, c.m)
 	return out
 }
 

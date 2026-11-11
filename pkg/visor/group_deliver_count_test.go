@@ -41,8 +41,11 @@ func TestDeliverCountSurvivesRingOverflow(t *testing.T) {
 	in := newGroupInbox(2)
 	pk, _ := cipher.GenerateKeyPair()
 
-	for i := 0; i < 5; i++ {
-		in.deliver("g", pk, skychatgroup.Message{Text: "x", TS: time.Now().UTC()})
+	// Distinct TSs: the ring keeps one copy of a repeat, and a coarse clock
+	// (Windows) gives time.Now the same value across this loop.
+	now := time.Now().UTC()
+	for i := range 5 {
+		in.deliver("g", pk, skychatgroup.Message{Text: "x", TS: now.Add(time.Duration(i) * time.Second)})
 	}
 	if got := in.deliverCount.Load(); got != 5 {
 		t.Fatalf("deliverCount: want 5 (regardless of ring cap=2 drops), got %d", got)
@@ -63,7 +66,7 @@ func TestDeliverCountSurvivesSubDrop(t *testing.T) {
 	defer in.unsubscribe(sub)
 
 	pk, _ := cipher.GenerateKeyPair()
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		in.deliver("g", pk, skychatgroup.Message{Text: "x", TS: time.Now().UTC()})
 	}
 

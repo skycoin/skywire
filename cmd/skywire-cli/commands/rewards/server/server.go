@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	htmpl "html/template"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -50,8 +52,8 @@ func buildRouter() http.Handler {
 	}
 
 	if wl != "" {
-		wlk := strings.Split(wl, ",")
-		for _, key := range wlk {
+		wlk := strings.SplitSeq(wl, ",")
+		for key := range wlk {
 			var pk1 cipher.PubKey
 			err := pk1.Set(key)
 			if err == nil {
@@ -877,9 +879,9 @@ func buildRouter() http.Handler {
 			l += "</tr>\n"
 			l += "</thead>\n"
 			l += "<tbody>\n"
-			rewardtxncsvs, _ := script.FindFiles(wd+`/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Replace(wd+"/hist/", "").Replace("_rewardtxn0.csv", "").Slice() //nolint:errcheck,gosec
-			for i := len(rewardtxncsvs) - 1; i >= 0; i-- {
-				statsFile := wd + "/hist/" + rewardtxncsvs[i] + "_stats.txt"
+			rewardtxncsvs, _ := histRewardDates(wd + `/hist`) //nolint:errcheck
+			for _, rewardtxncsv := range slices.Backward(rewardtxncsvs) {
+				statsFile := wd + "/hist/" + rewardtxncsv + "_stats.txt"
 				skycoinpershare1 := ""
 				skycoinpershare2 := ""
 				pool2Label := ""
@@ -910,13 +912,13 @@ func buildRouter() http.Handler {
 				}
 
 				var distributedIcon string
-				if _, err := os.Stat(wd + "/hist/" + rewardtxncsvs[i] + ".txt"); err == nil {
+				if _, err := os.Stat(wd + "/hist/" + rewardtxncsv + ".txt"); err == nil {
 					distributedIcon = "<span style='color: green;'>&#10004;</span>"
 				} else {
 					distributedIcon = "<span style='color: red;'>&#10060;</span>"
 				}
 				l += "<tr style='border-bottom: 1px solid #333;'>\n"
-				l += "<td style='padding: 4px 12px; text-align: left;'><a href='/skycoin-rewards/hist/" + rewardtxncsvs[i] + "'>" + rewardtxncsvs[i] + "</a></td>\n"
+				l += "<td style='padding: 4px 12px; text-align: left;'><a href='/skycoin-rewards/hist/" + rewardtxncsv + "'>" + rewardtxncsv + "</a></td>\n"
 				l += "<td style='padding: 4px 12px; text-align: right; font-family: monospace;'>" + skycoinpershare1 + "</td>\n"
 				if skycoinpershare2 != "" {
 					l += "<td style='padding: 4px 12px; text-align: right; font-family: monospace;'>" + skycoinpershare2 + pool2Label + "</td>\n"
@@ -943,7 +945,7 @@ func buildRouter() http.Handler {
 				Description: "Daily Skycoin reward calculation and distribution history for the Skywire Network.",
 				Content:     htmpl.HTML(l), //nolint:gosec
 			}).withCanonical("/skycoin-rewards")
-			tmplData := map[string]interface{}{
+			tmplData := map[string]any{
 				"Page": htmlPageTemplateData1,
 			}
 			var result bytes.Buffer
@@ -1020,20 +1022,16 @@ func buildRouter() http.Handler {
 				w.Write([]byte("skywire skycoin cli status:\n\n" + status + "\n\nskywire skycoin cli status error:\n\n" + err.Error())) //nolint:errcheck,gosec
 				return
 			}
-			// Find all combined transaction CSVs. Anchored to
-			// YYYY-MM-DD_rewardtxn0.csv so the per-pool variants
-			// (_pool1_rewardtxn0.csv / _pool2_rewardtxn0.csv) from
-			// PR #2946 are NOT listed here — those are informational
-			// only, not broadcast inputs, and would derail the
-			// distribution flow.
-			f, err := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(`[0-9]{4}-[0-9]{2}-[0-9]{2}_rewardtxn0\.csv$`)).Slice()
+			// Find all combined transaction CSVs, the broadcast inputs.
+			dates, err := histRewardDates(wd + `/hist`)
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte("script.FindFiles(wd + /hist/).MatchRegexp(combined rewardtxn0).Slice():\n\n" + strings.Join(f, "\n") + "\n\nError:\n\n" + err.Error())) //nolint:errcheck,gosec
+				w.Write([]byte("histRewardDates(wd + /hist):\n\nError:\n\n" + err.Error())) //nolint:errcheck,gosec
 				return
 			}
 			//and range through the results
-			for _, f1 := range f {
+			for _, d := range dates {
+				f1 := wd + `/hist/` + d + "_rewardtxn0.csv"
 				//look for .txt file with the same date
 				g, err := script.File(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String()
 				//error is expected here - file does not exist when rewards have not been distributed for that _rewardtxn0.csv
@@ -1046,18 +1044,27 @@ func buildRouter() http.Handler {
 						w.Write([]byte("skywire skycoin cli decodeRawTransaction:\n\n" + decoded + "\n\nskywire skycoin cli decodeRawTransaction error:\n\n" + err.Error())) //nolint:errcheck,gosec
 						return
 					}
-					//if all is well, broadcast the transaction
-					txid, err := script.Exec("skywire skycoin cli broadcastTransaction " + string(body)).String()
-					if err != nil {
-						w.WriteHeader(http.StatusInternalServerError)
-						w.Write([]byte("skywire skycoin cli broadcastTransaction:\n\n" + txid + "\n\nskywire skycoin cli broadcastTransaction error:\n\n" + err.Error())) //nolint:errcheck,gosec
+					// Never send to a single reward address that has sent coins, whatever the day.
+					if err := checkPayoutTxn(wd+`/hist`, d, string(body)); err != nil {
+						log.Warnf("reward transaction for %s refused: %v", d, err)
+						w.WriteHeader(http.StatusBadRequest)
+						w.Write([]byte("reward transaction for " + d + " refused:\n\n" + err.Error() + "\n\nBuild it from GET /skycoin-rewards/payout instead.")) //nolint:errcheck,gosec
 						return
 					}
-					//record the transaction ID for that day's reward
-					_, err = script.Echo(txid).WriteFile(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1))
+					// Broadcast, and record the transaction id for that day's reward.
+					marker := strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)
+					txid, err := broadcastAndRecord(marker, func() (string, error) {
+						return script.Exec("skywire skycoin cli broadcastTransaction " + string(body)).String()
+					})
+					if errors.Is(err, errUnrecorded) {
+						log.Errorf("reward transaction %s for %s was broadcast but not recorded: %v", strings.TrimSpace(txid), d, err)
+						w.WriteHeader(http.StatusInternalServerError)
+						w.Write([]byte("THE TRANSACTION WAS BROADCAST. Do not send it again.\n\nWrite this transaction id to " + marker + " by hand:\n\n" + txid + "\n\nerror:\n\n" + err.Error())) //nolint:errcheck,gosec
+						return
+					}
 					if err != nil {
 						w.WriteHeader(http.StatusInternalServerError)
-						w.Write([]byte(`script.Echo(txid).WriteFile(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1))\n\n` + txid + "\n\n" + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1) + "\n\nerror:\n\n" + err.Error())) //nolint:errcheck,gosec
+						w.Write([]byte("skywire skycoin cli broadcastTransaction:\n\n" + txid + "\n\nerror:\n\n" + err.Error())) //nolint:errcheck,gosec
 						return
 					}
 					//record the transaction ID for the reward notification system - append the file!
@@ -1079,6 +1086,35 @@ func buildRouter() http.Handler {
 			w.Write([]byte("No undistributed rewards csv found.\n\n" + h)) //nolint:errcheck,gosec
 		})
 
+		// The oldest undistributed day's reward transaction CSV, without the
+		// payouts to single addresses that have sent coins. sendrewards.sh
+		// builds the transaction from it.
+		handleAuth("GET /skycoin-rewards/payout", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Server", "")
+			active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String() //nolint:errcheck,gosec
+			if strings.TrimRight(active, "\n") == "active" {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				w.Write([]byte("reward calculation running")) //nolint:errcheck,gosec
+				return
+			}
+			day, csv, err := nextPayout(wd + `/hist`)
+			switch {
+			case errors.Is(err, errNoPayout):
+				w.WriteHeader(http.StatusNotFound)
+				w.Write([]byte(err.Error())) //nolint:errcheck,gosec
+				return
+			case err != nil:
+				log.Errorf("payout csv for %s: %v", day, err)
+				w.WriteHeader(http.StatusServiceUnavailable)
+				w.Write([]byte("payout csv for " + day + ": " + err.Error())) //nolint:errcheck,gosec
+				return
+			}
+			w.Header().Set("Content-Type", "text/plain")
+			w.Header().Set("X-Reward-Day", day)
+			w.WriteHeader(http.StatusOK)
+			w.Write(csv) //nolint:errcheck,gosec
+		})
+
 		r1.HandleFunc("GET /skycoin-rewards/csv", func(w http.ResponseWriter, r *http.Request) {
 			active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String() //nolint:errcheck,gosec
 			if strings.TrimRight(active, "\n") == "active" {
@@ -1087,12 +1123,9 @@ func buildRouter() http.Handler {
 				return
 			}
 			w.Header().Set("Server", "")
-			// Anchored to YYYY-MM-DD_rewardtxn0.csv so per-pool variants
-			// (_pool1_rewardtxn0.csv / _pool2_rewardtxn0.csv from PR
-			// #2946) are excluded — they are informational, not
-			// broadcast inputs.
-			f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(`[0-9]{4}-[0-9]{2}-[0-9]{2}_rewardtxn0\.csv$`)).Basename().Slice() //nolint:errcheck,gosec
-			for _, f1 := range f {
+			dates, _ := histRewardDates(wd + `/hist`) //nolint:errcheck
+			for _, d := range dates {
+				f1 := d + "_rewardtxn0.csv"
 				g, err := script.File(wd + `/hist/` + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String()
 				if err != nil || g == "" || g == "\n" || g == "test" || g == "test\n" {
 					w.Header().Set("Content-Type", "text/plain")
@@ -1119,12 +1152,9 @@ func buildRouter() http.Handler {
 			}
 			w.Header().Set("Server", "")
 			w.Header().Set("Content-Type", "text/plain")
-			// Anchored to YYYY-MM-DD_rewardtxn0.csv so per-pool variants
-			// (_pool1_rewardtxn0.csv / _pool2_rewardtxn0.csv from PR
-			// #2946) are excluded — they are informational, not
-			// broadcast inputs.
-			f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(`[0-9]{4}-[0-9]{2}-[0-9]{2}_rewardtxn0\.csv$`)).Basename().Slice() //nolint:errcheck,gosec
-			for _, f1 := range f {
+			dates, _ := histRewardDates(wd + `/hist`) //nolint:errcheck
+			for _, d := range dates {
+				f1 := d + "_rewardtxn0.csv"
 				g, _ := script.File(wd + `/hist/` + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String() //nolint:errcheck,gosec
 				if g != "" && g != "\n" {
 					http.Redirect(w, r, "/skycoin-rewards/hist/"+f1, http.StatusFound)
@@ -1448,9 +1478,9 @@ func buildRouter() http.Handler {
 				// Derive the address if an xpub appears in historical data.
 				displayAddr := strings.TrimRight(skyaddr, "\n")
 				if strings.HasPrefix(displayAddr, "xpub") {
-					derived, dErr := rewardconfig.DeriveExternalAddressFromXpub(displayAddr, 0)
+					derived, dErr := rewardconfig.RewardAddresses(displayAddr, 1)
 					if dErr == nil {
-						displayAddr = derived
+						displayAddr = derived[0]
 					} else {
 						displayAddr = displayAddr[:12] + "..." // truncate xpub for safety
 					}
@@ -1499,7 +1529,7 @@ func buildRouter() http.Handler {
 				Content:     htmpl.HTML(l),      //nolint:gosec
 				JSONLD:      htmpl.HTML(jsonLD), //nolint:gosec
 			}).withCanonical("/skycoin-rewards/hist/" + r.PathValue("date"))
-			tmplData := map[string]interface{}{
+			tmplData := map[string]any{
 				"Page": htmlPageTemplateData1,
 			}
 			var result bytes.Buffer
@@ -1553,21 +1583,21 @@ func buildRouter() http.Handler {
 
 		r1.HandleFunc("GET /skycoin-rewards.json", func(w http.ResponseWriter, r *http.Request) {
 			data := rewards{}
-			rewardtxncsvs, err := script.FindFiles(wd+`/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Basename().Replace("_rewardtxn0.csv", "").Slice()
+			rewardtxncsvs, err := histRewardDates(wd + `/hist`)
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 				w.Write([]byte("500 Internal Server Error #1 " + err.Error())) //nolint:errcheck,gosec
 				return
 			}
 			counter := 0
-			for i := len(rewardtxncsvs) - 1; i >= 0; i-- {
+			for _, rewardtxncsv := range slices.Backward(rewardtxncsvs) {
 				if counter >= 90 {
 					break
 				}
 				counter++
 				var rdata reward
-				rdata.Date = rewardtxncsvs[i]
-				statsFile := wd + `/hist/` + rewardtxncsvs[i] + "_stats.txt"
+				rdata.Date = rewardtxncsv
+				statsFile := wd + `/hist/` + rewardtxncsv + "_stats.txt"
 
 				// Detect reward mode
 				rewardMode, _ := script.File(statsFile).Match("reward mode: ").Replace("reward mode: ", "").String() //nolint:errcheck,gosec
@@ -1614,7 +1644,7 @@ func buildRouter() http.Handler {
 				}
 				//			rdata.Sent = "❌"
 				rdata.Sent = "false"
-				if _, err := os.Stat(wd + `/hist/` + rewardtxncsvs[i] + ".txt"); err == nil {
+				if _, err := os.Stat(wd + `/hist/` + rewardtxncsv + ".txt"); err == nil {
 					//				rdata.Sent = "✔"
 					rdata.Sent = "true"
 				}
@@ -1905,24 +1935,20 @@ func serveStandalone(h http.Handler, bindAddr string) {
 
 	wg := new(sync.WaitGroup)
 	// Start serving
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		cmdutil.Printf("listening on http://%s\n", bindAddr)
 		srv := &http.Server{Addr: bindAddr, Handler: h, ReadHeaderTimeout: 10 * time.Second}
 		if err := srv.ListenAndServe(); err != nil {
 			log.WithError(err).Error("HTTP listener stopped")
 		}
-		wg.Done()
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		log.WithField("dmsg_addr", lis.Addr().String()).Info("Serving...")
 		if err := serve.Serve(lis); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Serve: %v", err)
 		}
-		wg.Done()
-	}()
+	})
 
 	// Graceful shutdown handler
 	go func() {

@@ -32,6 +32,9 @@ export class Node {
   // cache rather than a live fetch. Convenience flag derived from
   // offlineSince — saves repeating the truthiness check in templates.
   isStale?: boolean;
+  // The hypervisor's state for the visor: online, reconnecting,
+  // restarting, detached or offline. Undefined from older hypervisors.
+  linkState?: string;
   secondsOnline?: number;
   health?: HealthInfo;
   dmsgServerPk?: string;
@@ -55,6 +58,9 @@ export class Node {
   // undefined = no verdict yet (never pushed / no reward address).
   rewardEligible?: boolean;
   rewardIneligibleReason?: string;
+  // The visor's own connectivity state, "connecting", "online", "dmsg-only" or "offline"
+  // (visorapi.Connectivity). undefined from visors older than the field.
+  connectivity?: string;
   countryCode?: string;
   regionName?: string;
   cityName?: string;

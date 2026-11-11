@@ -8,15 +8,13 @@ import (
 
 	rpc "github.com/0magnet/gobrpc"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // PtyClient represents the client end of a dmsgpty session.
 type PtyClient struct {
-	log  logrus.FieldLogger
+	log  logging.FieldLogger
 	rpcC *rpc.Client
 	done chan struct{}
 	once sync.Once
@@ -112,7 +110,13 @@ func (*PtyClient) rpcMethod(m string) string {
 
 // call returns io.ErrClosedPipe as soon as the client closes, while the RPC
 // client may still decode a late reply into reply. Callers read reply only on nil.
-func (sc *PtyClient) call(method string, args, reply interface{}) error {
+func (sc *PtyClient) call(method string, args, reply any) error {
+	// A call after close never starts, or a quick reply could win the select below.
+	select {
+	case <-sc.done:
+		return io.ErrClosedPipe
+	default:
+	}
 	call := sc.rpcC.Go(sc.rpcMethod(method), args, reply, nil)
 	select {
 	case <-sc.done:

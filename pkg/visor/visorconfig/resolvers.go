@@ -24,8 +24,9 @@
 package visorconfig
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -367,7 +368,7 @@ func validResolverName(name string) error {
 //	dmsg:4447;addr=0.0.0.0;name=lan;sk=<64-hex>;chain=false
 //	skynet:4448;suffix=.skynet;upstream=127.0.0.1:1080
 //
-// Recognized keys: name, addr, suffix, sk, upstream, chain, alias. An
+// Recognized keys: name, addr, suffix, sk, upstream, chain, alias, enable. An
 // unrecognized key is an ERROR, not a shrug — a typo'd "adrr=0.0.0.0" that
 // parsed silently would hand the operator a loopback-only resolver they
 // believe is serving the LAN. Everything else (TLS interception, route
@@ -439,11 +440,57 @@ func ParseResolverSpec(spec string) (ResolverConfig, error) {
 			out.Chain = &b
 		case "alias":
 			out.Alias = val
+		case "enable":
+			b, err := strconv.ParseBool(val)
+			if err != nil {
+				return out, fmt.Errorf("resolver spec %q: enable= wants true/false, got %q", spec, val)
+			}
+			out.Enable = b
 		default:
-			return out, fmt.Errorf("resolver spec %q: unknown option %q (want name, addr, suffix, sk, upstream, chain or alias)", spec, key)
+			return out, fmt.Errorf("resolver spec %q: unknown option %q (want name, addr, suffix, sk, upstream, chain, alias or enable)", spec, key)
 		}
 	}
 	return out, nil
+}
+
+// FormatResolverSpec writes r in the grammar ParseResolverSpec reads, so a
+// live change can be saved back to RESOLVERS. JSON-only fields are not kept.
+func FormatResolverSpec(r ResolverConfig) string {
+	kind := r.Kind
+	if kind == "" {
+		kind = ResolverKindDmsg
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s:%d", kind, r.ProxyPort)
+	opt := func(key, val string) {
+		if val != "" {
+			fmt.Fprintf(&b, ";%s=%s", key, val)
+		}
+	}
+	opt("name", r.Name)
+	opt("addr", r.ProxyAddr)
+	opt("suffix", r.DomainSuffix)
+	if r.SecretKey != nil {
+		opt("sk", r.SecretKey.Hex())
+	}
+	opt("upstream", r.UpstreamSOCKS)
+	if r.Chain != nil {
+		opt("chain", strconv.FormatBool(*r.Chain))
+	}
+	opt("alias", r.Alias)
+	if !r.Enable {
+		opt("enable", "false")
+	}
+	return b.String()
+}
+
+// FormatResolverSpecs is the comma-separated form of rs, for RESOLVERS.
+func FormatResolverSpecs(rs []ResolverConfig) string {
+	specs := make([]string, len(rs))
+	for i, r := range rs {
+		specs[i] = FormatResolverSpec(r)
+	}
+	return strings.Join(specs, ",")
 }
 
 // ParseResolverSpecs parses a comma-separated list of specs — the shape
@@ -451,7 +498,7 @@ func ParseResolverSpec(spec string) (ResolverConfig, error) {
 // unnamed entry a stable default name.
 func ParseResolverSpecs(csv string) ([]ResolverConfig, error) {
 	var out []ResolverConfig
-	for _, spec := range strings.Split(csv, ",") {
+	for spec := range strings.SplitSeq(csv, ",") {
 		if strings.TrimSpace(spec) == "" {
 			continue
 		}
@@ -465,7 +512,9 @@ func ParseResolverSpecs(csv string) ([]ResolverConfig, error) {
 	// regen of the same skywire.conf produces a byte-identical config. Sort
 	// BEFORE naming, or the generated r0/r1 names would not match the order
 	// they end up in and would shuffle between regens.
-	sort.SliceStable(out, func(i, j int) bool { return out[i].ProxyPort < out[j].ProxyPort })
+	slices.SortStableFunc(out, func(a, b ResolverConfig) int {
+		return cmp.Compare(a.ProxyPort, b.ProxyPort)
+	})
 	NormalizeResolvers(out)
 	return out, nil
 }

@@ -11,18 +11,18 @@
         "ignoreVary": true
       },
       "urls": [
-        "/chunk-BWbK6Op7.js",
-        "/chunk-Bx1uBFN5.js",
+        "/chunk-B_d6r9qD.js",
+        "/chunk-Bf4uwvS2.js",
         "/chunk-CiEGkYHw.js",
-        "/chunk-RMmRBH6b.js",
-        "/chunk-dxDbLOez.js",
+        "/chunk-CtEDDUrS.js",
+        "/chunk-D0cKLhGT.js",
         "/favicon.ico",
         "/index.html",
-        "/main-7NQ2GSSV.js",
+        "/main-3PLCRGR7.js",
         "/manifest.webmanifest",
         "/polyfills-MLCYDCP3.js",
         "/scripts-LEJVCTYY.js",
-        "/styles-ODQAORB2.css"
+        "/styles-AVBDVB4I.css"
       ],
       "patterns": []
     },
@@ -157,9 +157,9 @@
     "/assets/i18n/app1.png": "60ac462f84ab81b578185602122b797c6ef531e4",
     "/assets/i18n/app2.png": "cc4d6de75505b0f3f155642dbf01055c5696f967",
     "/assets/i18n/check.js": "e2abd5e52eed9649059406b80a13ad4bbe6b339c",
-    "/assets/i18n/en.json": "92d6c5d756fda538de8353013d8592fc4c745b36",
-    "/assets/i18n/es.json": "b1323d0e71d59f72eaa4a1c59f88bf654442fbc3",
-    "/assets/i18n/es_base.json": "4687ee0d97d563092d2901233009b6f6713cf9b9",
+    "/assets/i18n/en.json": "8ddf8d4fbfc3acf46faa733d10baee20c83246a0",
+    "/assets/i18n/es.json": "e1c446269c511ae93d6754a583a5992e314c7845",
+    "/assets/i18n/es_base.json": "f52ca53b30c3409067ff5f18585c2ba3a73cb8a1",
     "/assets/icons/icon-192.png": "8720df6e666f8a3d4ba899391b04ea42c0552f3f",
     "/assets/icons/icon-512.png": "5e306f23818d01260d52ff6ce5fb48a6a1b8dec6",
     "/assets/scripts/index-scripts.js": "7afbc0ec7f11646f4f408fcccb0b2fcbc3877e38",
@@ -230,14 +230,14 @@
     "/assets/skycoin-wallet/logo-splash.png": "6504b2e6297bce2cd9979f853b06a2f04ee264f3",
     "/assets/skycoin-wallet/logo-white.png": "dc2ab41d9120f46de3463790287088188f0dfb50",
     "/assets/skycoin-wallet/spinner.png": "aeb7af051425aba2367b2f3222affece2031c3ac",
-    "/chunk-BWbK6Op7.js": "c09d883a306799b5a05ce3a77bb3e0275615e491",
-    "/chunk-Bx1uBFN5.js": "83f61979558a76f63571e337f9804c326af7561a",
+    "/chunk-B_d6r9qD.js": "103ecd28a326684da186fa95ce73ed78e7476793",
+    "/chunk-Bf4uwvS2.js": "c2377a1717efb85665cf5024fbee937fe63f180f",
     "/chunk-CiEGkYHw.js": "25b6b5e58884460d340ddfb5f9b7d05de901fe67",
-    "/chunk-RMmRBH6b.js": "7454d96b5dc03aa13c4d10a7f21f796214c8e823",
-    "/chunk-dxDbLOez.js": "582ab33c28220ad2b9af58dfb6efbf4373194373",
+    "/chunk-CtEDDUrS.js": "f06e05f3273589508209b960b5916696e0b9aac6",
+    "/chunk-D0cKLhGT.js": "564bb1e1a07ef83ea4416a32a4491cf3a225110f",
     "/favicon.ico": "25579a8f5d48320216a8fceb497ce1829650edf5",
-    "/index.html": "f086e236d63a40768a9b3e28d09d631b47366124",
-    "/main-7NQ2GSSV.js": "3b51a4ec7044d5ee1ebc44dc5b6c64b50cfcc2f2",
+    "/index.html": "2e6c54ff5676011f3e86d87e1cc2d03122cbd5d4",
+    "/main-3PLCRGR7.js": "8cf74b46b39d50cae139488d0fcb36228cebed2e",
     "/manifest.webmanifest": "b7dd4150bcb7d07266d96bf93bc8608bfa7da755",
     "/media/MaterialIcons-Regular-3OCSKOJA.woff": "c6c953c2ccb2ca9abb21db8dbf473b5a435f0082",
     "/media/MaterialIcons-Regular-DFX2JKJN.ttf": "fc05de31234e0090f7ddc28ce1b23af4026cb1da",
@@ -275,7 +275,7 @@
     "/media/unlock-grey-IQ4WNHIS.png": "d4483fa1d9b81ca67e33e0415c37ab505498cbc1",
     "/polyfills-MLCYDCP3.js": "ace41b92ad605c7018c56db5ca82786eeec21b12",
     "/scripts-LEJVCTYY.js": "4bf89c7615dd722ccaa0a896e3c0bc171b1a584a",
-    "/styles-ODQAORB2.css": "d0faf7810f16a0954e8b9f0d7348843440269110"
+    "/styles-AVBDVB4I.css": "0bbcb91acc48f92b3734a12bce9fb451468874dc"
   },
   "navigationUrls": [
     {
@@ -293,6 +293,14 @@
     {
       "positive": false,
       "regex": "^\\/(?:.+\\/)?[^/]*__[^/]*\\/.*$"
+    },
+    {
+      "positive": false,
+      "regex": "^\\/ui2$"
+    },
+    {
+      "positive": false,
+      "regex": "^\\/ui2\\/.*$"
     }
   ],
   "navigationRequestStrategy": "performance"

@@ -116,7 +116,7 @@ func newRSGatedClient(t *testing.T, backendAddr string, release <-chan struct{},
 	proxyAddr := probe.Addr().String()
 	probe.Close()                                        //nolint:errcheck,gosec
 	go func() { _ = client.ListenAndServe(proxyAddr) }() //nolint:errcheck
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		if cc, err := net.Dial("tcp", proxyAddr); err == nil {
 			cc.Close() //nolint:errcheck,gosec
 			break

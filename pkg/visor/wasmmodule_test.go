@@ -5,7 +5,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -96,7 +98,7 @@ func TestWasmModuleRefreshRejectsAMismatch(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "old module", string(got), "a module that does not match its manifest is not installed")
 	_, err = os.Stat(execwasm.ManifestPath(m.path))
-	require.True(t, os.IsNotExist(err))
+	require.True(t, errors.Is(err, fs.ErrNotExist))
 	left, err := filepath.Glob(filepath.Join(filepath.Dir(m.path), ".skywire.wasm.gz-*"))
 	require.NoError(t, err)
 	require.Empty(t, left, "the download is cleaned up")

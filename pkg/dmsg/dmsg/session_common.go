@@ -15,11 +15,11 @@ import (
 
 	"github.com/0magnet/yamux"
 	"github.com/chen3feng/safecast"
-	"github.com/sirupsen/logrus"
 	"github.com/xtaci/smux"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/noise"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // SessionCommon contains the common fields and methods used by a session, whether it be it from the client or server
@@ -111,7 +111,7 @@ type SessionCommon struct {
 	// session count never actually falling.
 	reaped atomic.Bool
 
-	log logrus.FieldLogger
+	log logging.FieldLogger
 }
 
 // SessionManager holds the active multiplexer for a session. Exactly one of

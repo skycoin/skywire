@@ -12,14 +12,13 @@
 package api
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"sync"
 	"time"
-
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
@@ -61,7 +60,7 @@ type VisorBWCXOPublisher struct {
 
 // StartVisorBWCXOPublisher starts the per-visor bandwidth feed on
 // DmsgTPDVisorBWCXOPort.
-func StartVisorBWCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, logger logrus.FieldLogger) (*VisorBWCXOPublisher, error) {
+func StartVisorBWCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, logger logging.FieldLogger) (*VisorBWCXOPublisher, error) {
 	log := logging.MustGetLogger("tpd-cxo-visorbw-pub")
 	pub, err := treestore.NewWithDMSG(dmsgC, sk, treestore.PubConfig{
 		Logger:     log,
@@ -171,7 +170,9 @@ func (p *VisorBWCXOPublisher) publishOnce(ctx context.Context, now time.Time) {
 	if len(ops) == 0 {
 		return
 	}
-	sort.Slice(ops, func(i, j int) bool { return ops[i].Path < ops[j].Path })
+	slices.SortFunc(ops, func(a, b treestore.PutOp) int {
+		return cmp.Compare(a.Path, b.Path)
+	})
 	if err := p.putBatch(ops); err != nil {
 		p.recordError(err)
 		p.log.WithError(err).Warn("per-visor bandwidth PutBatch failed")

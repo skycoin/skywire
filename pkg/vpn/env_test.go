@@ -50,7 +50,7 @@ func TestParseIP(t *testing.T) {
 		ip, ok, err := ParseIP("")
 		require.NoError(t, err)
 		require.False(t, ok)
-		require.Nil(t, ip)
+		require.False(t, ip.IsValid())
 	})
 
 	t.Run("bare IP", func(t *testing.T) {
@@ -97,7 +97,7 @@ func TestIPFromEnv(t *testing.T) {
 	ip, ok, err = IPFromEnv(key)
 	require.NoError(t, err)
 	require.False(t, ok)
-	require.Nil(t, ip)
+	require.False(t, ip.IsValid())
 }
 
 // The visor writes a count of 0 when dmsg is up but every session is

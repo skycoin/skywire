@@ -348,7 +348,7 @@ func closeResponseBody(resp *http.Response) {
 func parseOutputFile(output string, replace bool) (*os.File, error) {
 	_, statErr := os.Stat(output)
 	if statErr != nil {
-		if os.IsNotExist(statErr) {
+		if errors.Is(statErr, fs.ErrNotExist) {
 			if err := os.MkdirAll(filepath.Dir(output), fs.ModePerm); err != nil {
 				return nil, err
 			}
@@ -383,14 +383,14 @@ func cancellableCopy(ctx context.Context, w io.Writer, body io.ReadCloser, lengt
 }
 
 type progressWriter struct {
-	Current int64
+	Current atomic.Int64
 	Total   int64
 }
 
 func (pw *progressWriter) Write(p []byte) (int, error) {
 	n := len(p)
-	current := atomic.AddInt64(&pw.Current, int64(n))
-	total := atomic.LoadInt64(&pw.Total)
+	current := pw.Current.Add(int64(n))
+	total := pw.Total
 	var pc string
 	if total > 0 {
 		pc = fmt.Sprintf("%d%%", current*100/total)

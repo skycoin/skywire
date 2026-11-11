@@ -138,7 +138,7 @@ func (v *specView) push(samples []float32) {
 
 		mags := spectrogram.ComputeFFT(v.overlap)
 		col := make([]color.Color, specBufferHeight)
-		for y := 0; y < specBufferHeight; y++ {
+		for y := range specBufferHeight {
 			freq := float64(y) / float64(specBufferHeight) * specMaxFreqHz
 			bin := int(freq * float64(v.dftSize) / float64(v.rate))
 			if bin < len(mags) {
@@ -180,9 +180,9 @@ func (v *specView) draw(screen tcell.Screen, x0, w, h int) {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 	start := (v.head - w + specBufferWidth) % specBufferWidth
-	for x := 0; x < w; x++ {
+	for x := range w {
 		idx := (start + x) % specBufferWidth
-		for y := 0; y < h; y++ {
+		for y := range h {
 			by := int(float64(y) / float64(h) * float64(specBufferHeight))
 			if by >= specBufferHeight {
 				continue
@@ -221,7 +221,7 @@ func runSpectrogramTUI(src skycall.Source) error {
 			if rerr != nil {
 				return
 			}
-			for i := 0; i < n; i++ {
+			for i := range n {
 				fbuf[i] = float32(frame[i]) / 32768.0
 			}
 			view.push(fbuf[:n])
@@ -301,7 +301,7 @@ func runCallSpectrogramTUI(rpc callAudioRPC, callID string) error {
 		leftW := max(mid-1, 1)
 		sent.draw(f.Screen, 0, leftW, specH)
 		recv.draw(f.Screen, mid, w-mid, specH)
-		for y := 0; y < specH; y++ { // divider
+		for y := range specH { // divider
 			f.Screen.SetContent(mid-1, y, '│', nil, tcell.StyleDefault.Foreground(tcolor.Gray))
 		}
 		drawCallHint(f.Screen, h-1, w, callID)
@@ -347,7 +347,7 @@ func int16Tail(s []int16, n int) []float32 {
 func drawCallHint(screen tcell.Screen, y, w int, callID string) {
 	hint := []rune(" call " + callID + " — left: sent   right: received — q/Esc to quit ")
 	st := tcell.StyleDefault.Foreground(tcolor.White).Background(tcolor.Black)
-	for x := 0; x < w; x++ {
+	for x := range w {
 		r := ' '
 		if x < len(hint) {
 			r = hint[x]
@@ -375,7 +375,7 @@ func drawHint(screen tcell.Screen, y, w int, monitor bool) {
 	}
 	hint := []rune(" skychat voice spectrogram — source: " + src + " — q/Esc to quit ")
 	st := tcell.StyleDefault.Foreground(tcolor.White).Background(tcolor.Black)
-	for x := 0; x < w; x++ {
+	for x := range w {
 		r := ' '
 		if x < len(hint) {
 			r = hint[x]

@@ -106,7 +106,7 @@ func TestConnectionWriterExitsWhenIdle(t *testing.T) {
 	go func() { _, _ = io.Copy(io.Discard, b) }() //nolint
 
 	require.False(t, c.writing.Load(), "a new connection starts no writer")
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		c.QueueFrame(Frame{Body: []byte("x")})
 	}
 	require.Eventually(t, func() bool { return !c.writing.Load() && c.queued() == 0 },

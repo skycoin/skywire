@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/0magnet/yamux"
-	"github.com/sirupsen/logrus"
 	"github.com/xtaci/smux"
 
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg/metrics"
@@ -206,7 +205,7 @@ func (ss *ServerSession) closeRefused(str io.Closer, err error) {
 
 // struct
 
-func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCloser, addr net.Addr) error {
+func (ss *ServerSession) serveStream(log logging.FieldLogger, yStr io.ReadWriteCloser, addr net.Addr) error {
 	// Set a deadline for the initial stream request read so a slow or
 	// malicious client cannot hold a goroutine and semaphore slot indefinitely.
 	// Asserted on SetReadDeadline (not net.Conn) so QUIC streams — which have
@@ -288,7 +287,14 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 	// the server. Strict monotonic enforcement would reject valid
 	// concurrent requests. The noise encryption layer already prevents
 	// replay at the session level via nonce tracking.
-	if err := req.Verify(0); err != nil {
+	relayed := req.SrcAddr.PK != ss.rPK
+	// A request from this session's own key needs no signature check here: the
+	// session handshake authenticated it, and the destination checks it again.
+	verifyReq := req.verifyFields
+	if relayed {
+		verifyReq = req.Verify
+	}
+	if err := verifyReq(0); err != nil {
 		ss.m.RecordStream(metrics.DeltaFailed) // record failed stream
 		return err
 	}
@@ -299,7 +305,6 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 	// envelope to the claimed source key, so the relaying session cannot
 	// impersonate anyone; what it spends is this server's relay capacity,
 	// charged in bridgeStream.
-	relayed := req.SrcAddr.PK != ss.rPK
 	if relayed {
 		ss.settleFiling(filedAsBefore)
 	} else {
@@ -392,7 +397,7 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 }
 
 // bridgeStream forwards a request to a destination session and bridges the two streams.
-func (ss *ServerSession) bridgeStream(log logrus.FieldLogger, yStr io.ReadWriteCloser, dst ServerSession, req StreamRequest) error {
+func (ss *ServerSession) bridgeStream(log logging.FieldLogger, yStr io.ReadWriteCloser, dst ServerSession, req StreamRequest) error {
 	_, err := ss.bridge(log, yStr, dst, req)
 	return err
 }
@@ -400,7 +405,7 @@ func (ss *ServerSession) bridgeStream(log logrus.FieldLogger, yStr io.ReadWriteC
 // bridge is bridgeStream that also reports whether dst accepted the request.
 // Before acceptance yStr is untouched and the caller may try another session;
 // after it, yStr belongs to the bridge.
-func (ss *ServerSession) bridge(log logrus.FieldLogger, yStr io.ReadWriteCloser, dst ServerSession, req StreamRequest) (forwarded bool, err error) {
+func (ss *ServerSession) bridge(log logging.FieldLogger, yStr io.ReadWriteCloser, dst ServerSession, req StreamRequest) (forwarded bool, err error) {
 	// A bridge where either side is a peer session, or whose request arrived
 	// over a client session on another key's behalf, is a *relayed* stream —
 	// this server carrying traffic for someone that is not its own client.
@@ -522,7 +527,7 @@ func (c *idleTimeoutConn) SetWriteDeadline(t time.Time) error {
 
 // forwardViaPeer tries to forward a stream request through peer server sessions.
 // This is only called for client-originated requests (not peer-originated, enforcing 1-hop max).
-func (ss *ServerSession) forwardViaPeer(log logrus.FieldLogger, yStr io.ReadWriteCloser, req StreamRequest) error {
+func (ss *ServerSession) forwardViaPeer(log logging.FieldLogger, yStr io.ReadWriteCloser, req StreamRequest) error {
 	dst := req.DstAddr.PK
 	// Every peer said "not here" moments ago: answer at once. An offline
 	// hypervisor or signaling peer is redialed by every visor that names it,
@@ -657,7 +662,10 @@ func (ss *ServerSession) forwardRequest(req StreamRequest) (mStr io.ReadWriteClo
 	if resp, err = respObj.ObtainStreamResponse(); err != nil {
 		return mStr, respObj, err
 	}
-	if err = resp.Verify(req); err != nil {
+	// The response comes over the destination's own session, which its handshake
+	// authenticated, so only a response relayed by a peer needs the signature
+	// check here. The initiator checks it again either way.
+	if err = resp.verify(req, ss.rPK != req.DstAddr.PK); err != nil {
 		return mStr, respObj, err
 	}
 	return mStr, respObj, nil

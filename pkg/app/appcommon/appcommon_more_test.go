@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/logging"
@@ -220,7 +219,7 @@ func TestBBoltLogStore_HookSurface(t *testing.T) {
 	store, err := NewBBoltLogStore(filepath.Join(t.TempDir(), "log.db"), "app")
 	require.NoError(t, err)
 
-	require.Equal(t, log.AllLevels, store.Levels())
+	require.Equal(t, logging.AllLevels, store.Levels())
 	require.NoError(t, store.Flush())
 
 	// Write: short buffer is rejected, a full line is stored.
@@ -233,9 +232,9 @@ func TestBBoltLogStore_HookSurface(t *testing.T) {
 	require.Equal(t, len(line), n)
 
 	// Fire: a real logrus entry is persisted.
-	entry := log.NewEntry(log.New())
+	entry := logging.NewEntry(logging.New())
 	entry.Time = time.Now()
-	entry.Level = log.InfoLevel
+	entry.Level = logging.InfoLevel
 	entry.Message = "fired entry message that is sufficiently long"
 	require.NoError(t, store.Fire(entry))
 }

@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/logging"
@@ -27,9 +26,9 @@ func legTpID(t *testing.T, rg *RouteGroup, idx int) uuid.UUID {
 	t.Helper()
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	require.Greater(t, len(rg.tps), idx, "the group has no leg %d", idx)
-	require.NotNil(t, rg.tps[idx])
-	return rg.tps[idx].Entry.ID
+	require.Greater(t, len(rg.legs), idx, "the group has no leg %d", idx)
+	require.NotNil(t, rg.legs[idx].tp)
+	return rg.legs[idx].tp.Entry.ID
 }
 
 // TestEmuSplitReleasedLegBackIntoTheStandbyPool is the gate: the pool arbiter's
@@ -111,7 +110,7 @@ func TestEmuReleasedLegClosesWhenTheExitNeverAcks(t *testing.T) {
 	})
 
 	ml := logging.NewMasterLogger()
-	ml.SetLevel(logrus.PanicLevel)
+	ml.SetLevel(logging.PanicLevel)
 	rig := newEmuRig(t, emuOpts{Legs: []emuLegSpec{
 		symmetric("leg-a", 2*emuMB, 120*time.Millisecond, 2*emuMB),
 		symmetric("leg-b", 2*emuMB, 150*time.Millisecond, 2*emuMB),

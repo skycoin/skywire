@@ -21,7 +21,7 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -177,7 +177,7 @@ func runCurlX(_ context.Context, _ *shell.Shell, hc *interp.HandlerContext, args
 		for k := range resp.Header {
 			keys = append(keys, k)
 		}
-		sort.Strings(keys)
+		slices.Sort(keys)
 		for _, k := range keys {
 			lines = append(lines, k+": "+resp.Header.Get(k))
 		}

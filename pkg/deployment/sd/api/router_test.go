@@ -8,8 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/deployment"
@@ -17,14 +15,15 @@ import (
 	sdmetrics "github.com/skycoin/skywire/pkg/deployment/sd/metrics"
 	"github.com/skycoin/skywire/pkg/deployment/sd/store"
 	"github.com/skycoin/skywire/pkg/httpauth"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // quietAPI builds an API whose request logging is silenced, so allocation
 // counts and benchmark timings measure the router rather than log formatting.
 func quietAPI() *API {
-	log := logrus.New()
+	log := logging.New()
 	log.SetOutput(io.Discard)
-	log.SetLevel(logrus.PanicLevel)
+	log.SetLevel(logging.PanicLevel)
 	return New(log, &store.MockStore{}, nil, false,
 		sdmetrics.NewEmpty(), "bench-dmsg-addr", deployment.Prod.GeoIP)
 }
@@ -95,7 +94,7 @@ func TestRouterBuiltOnce(t *testing.T) {
 	require.NotNil(t, api.Handler, "router must be built in New")
 
 	before := api.Handler
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		rr := httptest.NewRecorder()
 		api.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/health", nil))
 		require.Equal(t, http.StatusOK, rr.Code)

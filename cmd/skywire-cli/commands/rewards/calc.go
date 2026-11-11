@@ -3,16 +3,21 @@ package clirewards
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"math"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
-	"sort"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
@@ -128,7 +133,21 @@ func parseSurvey(path string) (*surveyData, error) {
 	if err := json.Unmarshal(data, &s); err != nil {
 		return nil, err
 	}
+	for _, f := range []*string{&s.IPAddr, &s.SkyAddr, &s.Arch, &s.UUID, &s.SysInfo.Node.Hypervisor} {
+		*f = csvSafe(*f)
+	}
 	return &s, nil
+}
+
+// csvSafe drops what would break a row of the reward CSVs or hide an address
+// from its checks. Survey fields are reported by the visor itself.
+func csvSafe(s string) string {
+	return strings.TrimSpace(strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f || r == ',' {
+			return -1
+		}
+		return r
+	}, s))
 }
 
 // extractInterfaces returns the interface list string and MAC addresses from a survey.
@@ -256,6 +275,63 @@ func perIPShareLimit(t time.Time) int {
 		return 12
 	}
 	return 8
+}
+
+// spentCache holds, per run, whether each single address has sent coins.
+var spentCache = struct {
+	sync.Mutex
+	m map[string]bool
+}{m: map[string]bool{}}
+
+// addressSpent asks the skycoin node whether addr has ever sent coins.
+func addressSpent(addr string) (bool, error) {
+	spentCache.Lock()
+	defer spentCache.Unlock()
+	if s, ok := spentCache.m[addr]; ok {
+		return s, nil
+	}
+	e, err := rewardconfig.FetchAddressExposure(&http.Client{Timeout: 30 * time.Second}, skycoinNodeURL, addr)
+	if err != nil {
+		return false, err
+	}
+	spentCache.m[addr] = e.Spent
+	return e.Spent, nil
+}
+
+// checkRewardAddress checks a visor's reward address for the reward day t.
+// ineligible is the reason it is not paid. failed means the node could not
+// say whether a single address has sent coins, so the calculation must stop.
+func checkRewardAddress(addr string, t time.Time) (ineligible, failed error) {
+	canonical, isXpub, err := rewardconfig.ValidateRewardAddress(addr)
+	if err != nil || isXpub || t.Before(deprewards.SingleAddressCutoff) {
+		return err, nil
+	}
+	spent, err := addressSpent(canonical)
+	if err != nil {
+		return nil, fmt.Errorf("check whether reward address %s has sent coins (skycoin node %s): %w", canonical, skycoinNodeURL, err)
+	}
+	if spent {
+		return rewardconfig.ErrAddressSpent, nil
+	}
+	return nil, nil
+}
+
+// rewardAddressError is checkRewardAddress, stopping the calculation when the
+// node cannot be asked, rather than paying or leaving out the visor.
+func rewardAddressError(addr string, t time.Time) error {
+	ineligible, failed := checkRewardAddress(addr, t)
+	if failed != nil {
+		log.Fatal(failed)
+	}
+	return ineligible
+}
+
+// addressReason is the ineligibility reason for an addrErr from rewardAddressError.
+func addressReason(err error) string {
+	if errors.Is(err, rewardconfig.ErrAddressSpent) {
+		return "Reward address has sent coins"
+	}
+	return "Invalid Skycoin address"
 }
 
 // calcPresenceShare computes a visor's share after IP cap and MAC dedup.
@@ -402,7 +478,9 @@ func sumRewardsByAddress(nodes []nodeinfo) []rewardData {
 	for addr, reward := range sums {
 		result = append(result, rewardData{SkyAddr: addr, Reward: reward})
 	}
-	sort.Slice(result, func(i, j int) bool { return result[i].Reward > result[j].Reward })
+	slices.SortFunc(result, func(a, b rewardData) int {
+		return cmp.Compare(b.Reward, a.Reward)
+	})
 	return result
 }
 
@@ -422,7 +500,9 @@ func aggregateBy(nodes []nodeinfo, field func(nodeinfo) float64) []rewardData {
 		}
 		result = append(result, rewardData{SkyAddr: addr, Reward: reward})
 	}
-	sort.Slice(result, func(i, j int) bool { return result[i].Reward > result[j].Reward })
+	slices.SortFunc(result, func(a, b rewardData) int {
+		return cmp.Compare(b.Reward, a.Reward)
+	})
 	return result
 }
 
@@ -578,7 +658,9 @@ func printSaturationStats(nodes []nodeinfo, dayReward, totalShares float64) {
 	for c := range cVisors {
 		stats = append(stats, countryStat{c, cVisors[c], len(cIPs[c]), cShares[c]})
 	}
-	sort.Slice(stats, func(i, j int) bool { return stats[i].shares > stats[j].shares })
+	slices.SortFunc(stats, func(a, b countryStat) int {
+		return cmp.Compare(b.shares, a.shares)
+	})
 
 	cmdutil.Printf("%-4s %7s %5s %10s %10s\n", "CC", "Visors", "IPs", "Shares", "SKY/visor")
 	for _, cs := range stats {
@@ -702,13 +784,7 @@ func init() {
 	RootCmd.Flags().StringSliceVarP(&disallowArchitectures, "noarch", "n", []string{"null", "wasm"}, "disallowed architectures, comma separated")
 	RootCmd.Flags().StringSliceVarP(&allowArchitectures1, "a1", "w", func(all []string, dis []string) (res []string) {
 		for _, v := range all {
-			allow := true
-			for _, d := range dis {
-				if v == d {
-					allow = false
-					break
-				}
-			}
+			allow := !slices.Contains(dis, v)
 			if allow {
 				res = append(res, v)
 			}
@@ -718,13 +794,7 @@ func init() {
 
 	RootCmd.Flags().StringSliceVarP(&allowArchitectures2, "a2", "x", func(all []string, dis []string) (res []string) {
 		for _, v := range all {
-			allow := true
-			for _, d := range dis {
-				if v == d {
-					allow = false
-					break
-				}
-			}
+			allow := !slices.Contains(dis, v)
 			if allow {
 				res = append(res, v)
 			}
@@ -804,7 +874,7 @@ Architectures:
 			return
 		}
 		_, err = os.Stat(hwSurveyPath)
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			log.Fatal("the path to the surveys does not exist\n", err, "\nfetch the surveys with:\n$ skywire-cli log")
 		}
 
@@ -821,7 +891,7 @@ Architectures:
 		}
 
 		_, err = os.Stat(utfile)
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			log.Fatal("uptime tracker data file not found\n", err, "\nfetch the uptime tracker data with:\n$ skywire-cli ut > ut.txt")
 		}
 
@@ -859,7 +929,7 @@ Architectures:
 		if requireTransports {
 			transportFile := fmt.Sprintf("%s/%s_transports.txt", transportHistPath, wdate)
 			if data, err := os.ReadFile(transportFile); err == nil { //nolint:gosec
-				for _, line := range strings.Split(string(data), "\n") {
+				for line := range strings.SplitSeq(string(data), "\n") {
 					line = strings.TrimSpace(line)
 					if line != "" {
 						transportMap[line] = struct{}{}
@@ -957,24 +1027,27 @@ Architectures:
 		}
 
 		// Get public keys that met uptime requirement
-		var res []string
-		if pubkey == "" {
-			//nolint:errcheck
-			res, _ = script.File(utfile).Match(strings.TrimRight(wdate, "\n")).Column(1).Slice()
-			if len(res) == 0 {
-				log.Fatal("No keys achieved minimum uptime on " + wdate + " !")
-			}
-		} else {
-			//nolint:errcheck
-			res, _ = script.File(utfile).Match(strings.TrimRight(wdate, "\n")).Column(1).Match(pubkey).Slice()
+		res, belowUptime, err := uptimeKeys(utfile, strings.TrimRight(wdate, "\n"))
+		if err != nil {
+			log.Fatal("Failed to read uptime file " + utfile + ": " + err.Error())
+		}
+		if pubkey != "" {
+			keep := func(pk string) bool { return strings.Contains(pk, pubkey) }
+			res = slices.DeleteFunc(res, func(pk string) bool { return !keep(pk) })
+			belowUptime = slices.DeleteFunc(belowUptime, func(pk string) bool { return !keep(pk) })
 			if len(res) == 0 {
 				log.Fatal("Specified key " + pubkey + "\n did not achieve minimum uptime on " + wdate + " !")
 			}
+		} else if len(res) == 0 {
+			log.Fatal("No keys achieved minimum uptime on " + wdate + " !")
 		}
 
 		// Collect eligible nodes by parsing surveys
 		var nodesInfos1 []nodeinfo // every eligible visor: presence, and bandwidth when there is data
 		var grrInfos []nodeinfo    // ineligible nodes (for error reporting)
+		for _, pk := range belowUptime {
+			grrInfos = append(grrInfos, nodeinfo{PK: pk, Reason: uptimeBelowReason})
+		}
 
 		for _, pk := range res {
 			surveyPath := fmt.Sprintf("%s/%s/node-info.json", hwSurveyPath, pk)
@@ -1001,7 +1074,7 @@ Architectures:
 			}
 			uu := survey.UUID
 
-			_, _, addrErr := rewardconfig.ValidateRewardAddress(sky)
+			addrErr := rewardAddressError(sky, wDate)
 
 			_, hasTransports := transportMap[pk]
 			meetsTransportReq := !requireTransports || hasTransports
@@ -1040,7 +1113,7 @@ Architectures:
 					case hv != "null":
 						return hv
 					case addrErr != nil:
-						return "Invalid Skycoin address"
+						return addressReason(addrErr)
 					case !meetsTransportReq:
 						return "No transports"
 					default:
@@ -1346,7 +1419,7 @@ func resolveRewardAddress(addr, date string) string {
 
 func mustExist(path string) {
 	_, err := os.Stat(path)
-	if os.IsNotExist(err) {
+	if errors.Is(err, fs.ErrNotExist) {
 		log.Fatal("the path to the file does not exist: ", path, "\n", err)
 	}
 	if err != nil {
@@ -1441,8 +1514,8 @@ comparison. Detects both http and dmsghttp service configs.`,
 }
 
 func compareAndPrintDiffs(nodeInfoData, configData []byte, noLogging bool) bool {
-	var nodeInfoServices map[string]interface{}
-	var configServices map[string]interface{}
+	var nodeInfoServices map[string]any
+	var configServices map[string]any
 
 	if err := json.Unmarshal(nodeInfoData, &nodeInfoServices); err != nil {
 		if !noLogging {
@@ -1460,7 +1533,7 @@ func compareAndPrintDiffs(nodeInfoData, configData []byte, noLogging bool) bool 
 	return compareMaps(nodeInfoServices, configServices, noLogging)
 }
 
-func compareMaps(nodeInfoServices, configServices map[string]interface{}, noLogging bool) bool {
+func compareMaps(nodeInfoServices, configServices map[string]any, noLogging bool) bool {
 	for key, value1 := range nodeInfoServices {
 		if value2, ok := configServices[key]; ok {
 			// Skip nil values (JSON null) — reflect.TypeOf(nil) panics
@@ -1474,8 +1547,8 @@ func compareMaps(nodeInfoServices, configServices map[string]interface{}, noLogg
 				continue
 			}
 			if reflect.TypeOf(value1).Kind() == reflect.Slice && reflect.TypeOf(value2).Kind() == reflect.Slice {
-				slice1 := value1.([]interface{})
-				slice2 := value2.([]interface{})
+				slice1 := value1.([]any)
+				slice2 := value2.([]any)
 				if !sliceContains(slice1, slice2) {
 					if !noLogging {
 						printDifference(key, value1, value2)
@@ -1493,7 +1566,7 @@ func compareMaps(nodeInfoServices, configServices map[string]interface{}, noLogg
 	return true
 }
 
-func sliceContains(slice1, slice2 []interface{}) bool {
+func sliceContains(slice1, slice2 []any) bool {
 	for _, v2 := range slice2 {
 		found := false
 		for _, v1 := range slice1 {
@@ -1509,7 +1582,7 @@ func sliceContains(slice1, slice2 []interface{}) bool {
 	return true
 }
 
-func toJSON(value interface{}) string {
+func toJSON(value any) string {
 	jsonData, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
 		return fmt.Sprintf("%v", value)
@@ -1517,7 +1590,7 @@ func toJSON(value interface{}) string {
 	return string(jsonData)
 }
 
-func printDifference(key string, value1, value2 interface{}) {
+func printDifference(key string, value1, value2 any) {
 	red := color.New(color.FgRed).SprintFunc()
 	cmdutil.Eprintf("%s: %s != %s\n", key, red(toJSON(value1)), red(toJSON(value2))) //nolint:errcheck,gosec
 }

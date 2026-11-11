@@ -114,7 +114,7 @@ func TestAcceptLoopKeepsAcceptingWhileAnOpenIsBlocked(t *testing.T) {
 			_ = cc.Close() //nolint:errcheck
 		}
 	})
-	for i := 0; i < n; i++ {
+	for i := range n {
 		conn, derr := net.DialTimeout("tcp", addr, 2*time.Second)
 		require.NoError(t, derr, "dial %d", i)
 		conns = append(conns, conn)

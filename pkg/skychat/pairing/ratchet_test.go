@@ -195,7 +195,7 @@ func TestObservePeerAdvancesOnlyForward(t *testing.T) {
 func TestRingIsBoundedAndDropsOldest(t *testing.T) {
 	rt := newRatchetState(time.Now().UTC())
 	var firstID EpochID
-	for i := 0; i < ratchetRingCap+5; i++ {
+	for i := range ratchetRingCap + 5 {
 		peerPK, _ := cipher.GenerateKeyPair()
 		id, key, err := deriveEpochKey(rt.mySK, rt.myPK, peerPK)
 		require.NoError(t, err)
@@ -228,7 +228,7 @@ func TestRotationDuePolicy(t *testing.T) {
 	rt2 := newRatchetState(now)
 	_, err = rt2.observePeer(a, now)
 	require.NoError(t, err)
-	for i := 0; i < ratchetMaxMessages; i++ {
+	for range ratchetMaxMessages {
 		rt2.noteSent()
 	}
 	require.True(t, rt2.rotationDue(now), "the volume threshold did not trip")

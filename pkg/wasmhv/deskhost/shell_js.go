@@ -78,9 +78,9 @@ func sharedShellFS() afero.Fs {
 // installShell publishes globalThis.skywireShell for browse.js: open(el) mounts
 // a terminal; fs.* is the file-browser bridge onto the SAME shared filesystem.
 func installShell() {
-	js.Global().Set("skywireShell", js.ValueOf(map[string]interface{}{
+	js.Global().Set("skywireShell", js.ValueOf(map[string]any{
 		"open": js.FuncOf(jsOpenShell),
-		"fs": js.ValueOf(map[string]interface{}{
+		"fs": js.ValueOf(map[string]any{
 			"readDir":   js.FuncOf(jsFsReadDir),
 			"readFile":  js.FuncOf(jsFsReadFile),
 			"writeFile": js.FuncOf(jsFsWriteFile),
@@ -90,7 +90,7 @@ func installShell() {
 	}))
 }
 
-func fsErr(e error) any { return map[string]interface{}{"error": e.Error()} }
+func fsErr(e error) any { return map[string]any{"error": e.Error()} }
 
 func fsArgPath(args []js.Value) string {
 	if len(args) == 0 || args[0].Type() != js.TypeString {
@@ -113,7 +113,7 @@ func fsArgPath(args []js.Value) string {
 // jsFsReadDir(path) → Promise<[{name,dir,size,mtime}]> sorted dirs-first.
 func jsFsReadDir(_ js.Value, args []js.Value) any {
 	path := fsArgPath(args)
-	return promise(func() (interface{}, error) {
+	return promise(func() (any, error) {
 		infos, err := afero.ReadDir(sharedShellFS(), path)
 		if err != nil {
 			return fsErr(err), nil
@@ -124,9 +124,9 @@ func jsFsReadDir(_ js.Value, args []js.Value) any {
 			}
 			return infos[i].Name() < infos[j].Name()
 		})
-		out := make([]interface{}, 0, len(infos))
+		out := make([]any, 0, len(infos))
 		for _, fi := range infos {
-			out = append(out, map[string]interface{}{
+			out = append(out, map[string]any{
 				"name": fi.Name(), "dir": fi.IsDir(),
 				"size": float64(fi.Size()), "mtime": fi.ModTime().UnixMilli(),
 			})
@@ -139,48 +139,48 @@ func jsFsReadDir(_ js.Value, args []js.Value) any {
 // 2 MiB so a huge file can't wedge the single-threaded runtime rendering it.
 func jsFsReadFile(_ js.Value, args []js.Value) any {
 	path := fsArgPath(args)
-	return promise(func() (interface{}, error) {
+	return promise(func() (any, error) {
 		b, err := afero.ReadFile(sharedShellFS(), path)
 		if err != nil {
 			return fsErr(err), nil
 		}
 		if len(b) > 2<<20 {
-			return map[string]interface{}{"error": "file too large to view (>2 MiB)"}, nil
+			return map[string]any{"error": "file too large to view (>2 MiB)"}, nil
 		}
-		return map[string]interface{}{"text": string(b), "size": float64(len(b))}, nil
+		return map[string]any{"text": string(b), "size": float64(len(b))}, nil
 	})
 }
 
 func jsFsWriteFile(_ js.Value, args []js.Value) any {
 	if len(args) < 2 || args[1].Type() != js.TypeString {
-		return promise(func() (interface{}, error) { return fsErr(errors.New("writeFile(path, text)")), nil })
+		return promise(func() (any, error) { return fsErr(errors.New("writeFile(path, text)")), nil })
 	}
 	path, text := fsArgPath(args), args[1].String()
-	return promise(func() (interface{}, error) {
+	return promise(func() (any, error) {
 		if err := afero.WriteFile(sharedShellFS(), path, []byte(text), 0o644); err != nil {
 			return fsErr(err), nil
 		}
-		return map[string]interface{}{"ok": true}, nil
+		return map[string]any{"ok": true}, nil
 	})
 }
 
 func jsFsMkdir(_ js.Value, args []js.Value) any {
 	path := fsArgPath(args)
-	return promise(func() (interface{}, error) {
+	return promise(func() (any, error) {
 		if err := sharedShellFS().MkdirAll(path, 0o755); err != nil {
 			return fsErr(err), nil
 		}
-		return map[string]interface{}{"ok": true}, nil
+		return map[string]any{"ok": true}, nil
 	})
 }
 
 func jsFsRemove(_ js.Value, args []js.Value) any {
 	path := fsArgPath(args)
-	return promise(func() (interface{}, error) {
+	return promise(func() (any, error) {
 		if err := sharedShellFS().RemoveAll(path); err != nil {
 			return fsErr(err), nil
 		}
-		return map[string]interface{}{"ok": true}, nil
+		return map[string]any{"ok": true}, nil
 	})
 }
 
@@ -518,15 +518,15 @@ func openShell(el js.Value) (*web.Session, error) {
 // wedges the tab (or, with same-tick callbacks, nests _resume until g0
 // overflows). Handle calls that arrive before the session is up are queued
 // (run) or dropped (fit/focus — the next resize refits anyway).
-func jsOpenShell(_ js.Value, args []js.Value) interface{} {
+func jsOpenShell(_ js.Value, args []js.Value) any {
 	if len(args) == 0 || !args[0].Truthy() {
-		return js.ValueOf(map[string]interface{}{"error": "open(el): missing mount element"})
+		return js.ValueOf(map[string]any{"error": "open(el): missing mount element"})
 	}
 	el := args[0]
 	if el.Type() == js.TypeString {
 		el = js.Global().Get("document").Call("getElementById", el.String())
 		if !el.Truthy() {
-			return js.ValueOf(map[string]interface{}{"error": "open(id): no such element"})
+			return js.ValueOf(map[string]any{"error": "open(id): no such element"})
 		}
 	}
 

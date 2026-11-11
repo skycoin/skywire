@@ -10,7 +10,7 @@ package cxoaggregate
 
 import (
 	"hash/fnv"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -76,7 +76,7 @@ func FeedConsumerServices() []string {
 	for s := range consumers.m {
 		out = append(out, s)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
@@ -137,8 +137,8 @@ func (h *Hub) Deliver(reporter cipher.PubKey, leaves map[string][]byte) {
 		}
 		own := make(map[string][]byte)
 		for name, b := range leaves {
-			if strings.HasPrefix(name, prefix) {
-				own[strings.TrimPrefix(name, prefix)] = b
+			if after, ok := strings.CutPrefix(name, prefix); ok {
+				own[after] = b
 			}
 		}
 		if len(own) == 0 || !h.due(hubKey{reporter, c.Service}, sumLeaves(own), time.Now()) {
@@ -185,7 +185,7 @@ func sumLeaves(m map[string][]byte) uint64 {
 	for n := range m {
 		names = append(names, n)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	f := fnv.New64a()
 	for _, n := range names {
 		f.Write([]byte(n))    //nolint:errcheck,gosec
@@ -204,7 +204,7 @@ func RegistrationLeaves(pack registry.Pack, n *treestore.TreeNode) map[string][]
 		return nil
 	}
 	var out map[string][]byte
-	for i := 0; i < count; i++ {
+	for i := range count {
 		var entry treestore.TreeEntry
 		if _, err := n.Children.ValueByIndex(pack, i, &entry); err != nil {
 			continue

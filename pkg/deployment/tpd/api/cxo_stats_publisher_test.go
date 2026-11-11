@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"sort"
+	"slices"
 	"testing"
 	"time"
 
@@ -57,7 +57,7 @@ func pkFromByte(b byte) cipher.PubKey {
 // testEntries builds n transports across two types over n+1 visors.
 func testEntries(n int) []*transport.Entry {
 	out := make([]*transport.Entry, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		tp := types.Type("stcpr")
 		if i%3 == 0 {
 			tp = types.Type("sudph")
@@ -85,7 +85,7 @@ func testUptimes() []store.VisorSummary {
 // forgets Gzip silently ships an uncompressed body that every reader's
 // Gunzip then passes through — the feed "works" while costing several
 // times what it should.
-func decodePut(t *testing.T, p capturedPut) map[string]interface{} {
+func decodePut(t *testing.T, p capturedPut) map[string]any {
 	t.Helper()
 	if len(p.body) < 2 || p.body[0] != 0x1f || p.body[1] != 0x8b {
 		t.Fatalf("%s: body is not gzipped (first bytes %x)", p.path, p.body[:min(2, len(p.body))])
@@ -94,25 +94,18 @@ func decodePut(t *testing.T, p capturedPut) map[string]interface{} {
 	if len(raw) == 0 || len(raw) == len(p.body) {
 		t.Fatalf("%s: Gunzip did not decompress the body", p.path)
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal(raw, &out); err != nil {
 		t.Fatalf("%s: published body is not JSON: %v", p.path, err)
 	}
 	return out
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // lastPutTo returns the most recent leaf written to path.
 func lastPutTo(puts []capturedPut, path string) (capturedPut, bool) {
-	for i := len(puts) - 1; i >= 0; i-- {
-		if puts[i].path == path {
-			return puts[i], true
+	for _, put := range slices.Backward(puts) {
+		if put.path == path {
+			return put, true
 		}
 	}
 	return capturedPut{}, false
@@ -133,7 +126,7 @@ func TestNetworkStatsMatchesHTTPHandler(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("handler status = %d, want 200", rec.Code)
 	}
-	var handlerBody map[string]interface{}
+	var handlerBody map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &handlerBody); err != nil {
 		t.Fatalf("handler body not JSON: %v", err)
 	}
@@ -191,7 +184,7 @@ func TestVersionStatsMatchesHTTPHandler(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("handler status = %d, want 200", rec.Code)
 	}
-	var handlerBody map[string]interface{}
+	var handlerBody map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &handlerBody); err != nil {
 		t.Fatalf("handler body not JSON: %v", err)
 	}
@@ -205,7 +198,7 @@ func TestVersionStatsMatchesHTTPHandler(t *testing.T) {
 	}
 	published := decodePut(t, p)
 
-	versions, ok := published["versions"].(map[string]interface{})
+	versions, ok := published["versions"].(map[string]any)
 	if !ok {
 		t.Fatalf("published versions is %T, want object", published["versions"])
 	}
@@ -222,7 +215,7 @@ func TestVersionStatsMatchesHTTPHandler(t *testing.T) {
 	}
 }
 
-func jsonEqual(a, b interface{}) bool {
+func jsonEqual(a, b any) bool {
 	ab, err1 := json.Marshal(a)
 	bb, err2 := json.Marshal(b)
 	if err1 != nil || err2 != nil {
@@ -243,7 +236,7 @@ func TestStatsPublisherWritesOnlyFixedPaths(t *testing.T) {
 	sp, puts := newTestStatsPublisher(t, api, start.Add(-time.Hour))
 
 	now := start
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		// Vary the data so a data-dependent path would show up.
 		api.transportsCache = testEntries(20 + i)
 		sp.publishNetwork(context.Background(), now)
@@ -259,7 +252,7 @@ func TestStatsPublisherWritesOnlyFixedPaths(t *testing.T) {
 	for p := range seen {
 		paths = append(paths, p)
 	}
-	sort.Strings(paths)
+	slices.Sort(paths)
 	want := []string{StatsPathNetwork, StatsPathVersions}
 	if len(paths) != len(want) || paths[0] != want[0] || paths[1] != want[1] {
 		t.Fatalf("published paths = %v, want exactly %v", paths, want)
@@ -373,7 +366,7 @@ func TestStatsPublisherHoldsLastCompleteSample(t *testing.T) {
 
 	// TPD restarts; the aggregate now reads a fraction of the set.
 	api.transportsCache = testEntries(300)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		now = now.Add(statsPublishInterval)
 		sp.publishNetwork(context.Background(), now)
 	}

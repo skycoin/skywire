@@ -76,7 +76,7 @@ type Conn struct {
 	mx sync.RWMutex // locks all fields below
 
 	// request - response
-	seq  uint32                    // message seq number (for request-response)
+	seq  atomic.Uint32             // message seq number (for request-response)
 	reqs map[uint32]chan<- msg.Msg // requests
 }
 
@@ -118,13 +118,11 @@ func (c *Conn) run() {
 	// OnConnect may wait for replies, so it runs beside the receive loop. If
 	// it returns an error, the connection is closed.
 	var occErr error
-	c.await.Add(1)
-	go func() {
-		defer c.await.Done()
+	c.await.Go(func() {
 		if occErr = c.n.onConnect(c); occErr != nil {
 			c.signalClose()
 		}
-	}()
+	})
 
 	// Receive messages on this goroutine until close is signaled or an
 	// error occurs.
@@ -591,7 +589,7 @@ func (c *Conn) Done() <-chan struct{} {
 }
 
 func (c *Conn) nextSeq() uint32 {
-	return atomic.AddUint32(&c.seq, 1)
+	return c.seq.Add(1)
 }
 
 // msgHead builds the 8-byte per-message header (seq + rseq).
@@ -1037,26 +1035,21 @@ func (c *Conn) handleRqObject(seq uint32, rq *msg.RqObject) {
 		tc <-chan time.Time
 	)
 
-	if err := c.n.c.Want(rq.Key, gc, 0); err != nil {
-		// A peer requested an object we can't provide (a "not found" DB miss is
-		// the common case — we simply don't hold it, or don't hold it yet).
-		// This is recoverable: tell the requesting peer we can't serve it and
-		// move on. A peer's object request must NEVER crash this visor.
+	ok, err := c.n.c.WantArriving(rq.Key, gc)
+	if err != nil {
+		// A peer's object request must NEVER crash this visor.
 		c.n.Errorf(err, "[%s] handleRqObject: cannot serve %s",
 			c.String(), rq.Key.Hex()[:7])
 		c.sendMsg(c.nextSeq(), seq, &msg.Err{}) //nolint:errcheck,gosec
 		return
 	}
-	defer c.n.c.Unwant(rq.Key, gc) // to be memory safe
-
-	select {
-	case obj := <-gc:
-		// got
-		c.sendSharedBody(c.nextSeq(), seq, c.n.objBodies.body(rq.Key, obj.Val)) //nolint:errcheck,gosec
+	if !ok {
+		// Neither stored nor wanted by a filler of ours, so it is an object
+		// we swept. Answer now and let the peer move on to a newer Root.
+		c.sendMsg(c.nextSeq(), seq, &msg.Err{}) //nolint:errcheck,gosec
 		return
-	default:
-		// wait
 	}
+	defer c.n.c.Unwant(rq.Key, gc) // to be memory safe
 
 	if rt := c.responseTimeout(); rt > 0 {
 		tm = time.NewTimer(rt)

@@ -1,7 +1,6 @@
 package store
 
 import (
-	"context"
 	"os"
 	"testing"
 	"time"
@@ -23,8 +22,7 @@ func TestRedisStoreWithoutTTL(t *testing.T) {
 	require.NoError(t, err)
 	client := redis.NewClient(opt)
 	defer client.Close() //nolint:errcheck
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	_, err = NewStore(ctx, client, logging.MustGetLogger("test"), 0)
 	require.NoError(t, err)
 	time.Sleep(50 * time.Millisecond)

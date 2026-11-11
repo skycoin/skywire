@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -26,8 +25,8 @@ type announceFailHook struct {
 	settled map[string]map[string]bool // _module -> message seen
 }
 
-func (h *announceFailHook) Levels() []logrus.Level { return logrus.AllLevels }
-func (h *announceFailHook) Fire(e *logrus.Entry) error {
+func (h *announceFailHook) Levels() []logging.Level { return logging.AllLevels }
+func (h *announceFailHook) Fire(e *logging.Entry) error {
 	switch e.Message {
 	case "Failed to announce as peer.":
 		h.n.Add(1)
@@ -83,8 +82,8 @@ func TestPeerServers_MutualConfigAnnounceAccepted(t *testing.T) {
 
 	hook := &announceFailHook{}
 	mkLog := func(name string) *logging.Logger {
-		l := logrus.New()
-		l.SetLevel(logrus.DebugLevel)
+		l := logging.New()
+		l.SetLevel(logging.DebugLevel)
 		l.AddHook(hook)
 		return &logging.Logger{FieldLogger: l.WithField("_module", name)}
 	}

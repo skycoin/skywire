@@ -1,6 +1,8 @@
 // Package visorconfig pkg/visor/visorconfig/autoconnect.go c3-vis-core
 package visorconfig
 
+import "maps"
+
 import "slices"
 
 // DefaultAutoconnectSiteLinks is how many transports of each site type
@@ -57,9 +59,7 @@ func (v1 *V1) AutoconnectSettings() Autoconnect {
 	a.SiteTypes = slices.Clone(a.SiteTypes)
 	if a.MaxPerType != nil {
 		m := make(map[string]int, len(a.MaxPerType))
-		for k, n := range a.MaxPerType {
-			m[k] = n
-		}
+		maps.Copy(m, a.MaxPerType)
 		a.MaxPerType = m
 	}
 	return a
@@ -71,4 +71,12 @@ func (v1 *V1) UpdateAutoconnect(set func(*Autoconnect)) error {
 	set(&v1.Transport.Autoconnect)
 	v1.mu.Unlock()
 	return v1.flush(v1)
+}
+
+// DmsgServerTransportsOn reports whether the visor keeps a transport to each
+// dmsg server it holds a session with. Unset is on.
+func (v1 *V1) DmsgServerTransportsOn() bool {
+	v1.mu.RLock()
+	defer v1.mu.RUnlock()
+	return v1.Transport == nil || v1.Transport.DmsgServerTransports == nil || *v1.Transport.DmsgServerTransports
 }

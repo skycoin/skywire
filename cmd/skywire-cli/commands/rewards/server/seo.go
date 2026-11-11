@@ -83,7 +83,7 @@ func parseRewardStats(wd, date string) rewardStats {
 			tail = tail[nl+1:]
 		}
 		ccLine := regexp.MustCompile(`^[A-Z]{2}\s+\d+`)
-		for _, line := range strings.Split(tail, "\n") {
+		for line := range strings.SplitSeq(tail, "\n") {
 			line = strings.TrimRight(line, "\r")
 			if line == "" || strings.HasPrefix(line, "Total Reward Amount") {
 				break
@@ -99,7 +99,7 @@ func parseRewardStats(wd, date string) rewardStats {
 	// feature; absent is a 0 count, not an error.
 	if ineligibleData, err := os.ReadFile(filepath.Join(wd, "hist", date+"_ineligible.csv")); err == nil { //nolint:gosec
 		// Count non-empty lines.
-		for _, line := range strings.Split(string(ineligibleData), "\n") {
+		for line := range strings.SplitSeq(string(ineligibleData), "\n") {
 			if strings.TrimSpace(line) != "" {
 				stats.IneligibleVisors++
 			}
@@ -173,10 +173,10 @@ func (s rewardStats) jsonLD(canonicalURL, date string) string {
 	}
 
 	type propVal struct {
-		Type     string      `json:"@type"`
-		Name     string      `json:"name"`
-		Value    interface{} `json:"value"`
-		UnitText string      `json:"unitText,omitempty"`
+		Type     string `json:"@type"`
+		Name     string `json:"name"`
+		Value    any    `json:"value"`
+		UnitText string `json:"unitText,omitempty"`
 	}
 	type dataDl struct {
 		Type           string `json:"@type"`
@@ -194,7 +194,7 @@ func (s rewardStats) jsonLD(canonicalURL, date string) string {
 		Name string `json:"name"`
 		URL  string `json:"url"`
 	}
-	doc := map[string]interface{}{
+	doc := map[string]any{
 		"@context":    "https://schema.org",
 		"@type":       "Dataset",
 		"name":        fmt.Sprintf("Skycoin Rewards %s", date),

@@ -311,8 +311,7 @@ func TestRefreshIPGroupsCache_BadSurveyDir(t *testing.T) {
 
 // ---- embedded visor refresh ------------------------------------------------
 
-func u64(v uint64) *uint64 { return &v }
-
+//go:fix inline
 func TestRefreshVisorData_Transports(t *testing.T) {
 	id1 := uuid.New()
 	fv := &fakeVisorAPI{
@@ -323,7 +322,7 @@ func TestRefreshVisorData_Transports(t *testing.T) {
 					ID:    id1,
 					Type:  "stcpr",
 					Label: "skycoin",
-					Log:   &transport.LogEntry{SentBytes: u64(100), RecvBytes: u64(200)},
+					Log:   &transport.LogEntry{SentBytes: new(uint64(100)), RecvBytes: new(uint64(200))},
 				},
 				{ID: uuid.New(), Type: "dmsg"}, // nil Log
 			},
@@ -345,7 +344,7 @@ func TestRefreshVisorData_Transports(t *testing.T) {
 	require.Equal(t, uint64(0), c1.TotalSentDelta)
 
 	// Bump bandwidth and refresh again -> deltas computed against snapshot.
-	fv.overview.Transports[0].Log = &transport.LogEntry{SentBytes: u64(150), RecvBytes: u64(260)}
+	fv.overview.Transports[0].Log = &transport.LogEntry{SentBytes: new(uint64(150)), RecvBytes: new(uint64(260))}
 	s.refreshVisorData()
 	s.visorMu.RLock()
 	c2 := s.visorCache
@@ -579,20 +578,20 @@ func TestAppHandlers_ErrorPaths(t *testing.T) {
 			s := testServer(t)
 			rec := httptest.NewRecorder()
 			s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, p, nil))
-			require.Equal(t, "POST required", decodeMap(t, rec.Body.Bytes())["error"])
+			require.Equal(t, "method not allowed", decodeMap(t, rec.Body.Bytes())["error"])
 		})
 
 		t.Run("invalid body "+p, func(t *testing.T) {
 			s := testServer(t)
 			rec := httptest.NewRecorder()
-			s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, p, strings.NewReader("{bad")))
+			s.Handler().ServeHTTP(rec, postJSON(p, "{bad"))
 			require.Equal(t, "invalid request body", decodeMap(t, rec.Body.Bytes())["error"])
 		})
 
 		t.Run("not connected "+p, func(t *testing.T) {
 			s := testServer(t)
 			rec := httptest.NewRecorder()
-			s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, p, strings.NewReader(`{"name":"x"}`)))
+			s.Handler().ServeHTTP(rec, postJSON(p, `{"name":"x"}`))
 			require.Equal(t, "visor not connected", decodeMap(t, rec.Body.Bytes())["error"])
 		})
 	}
@@ -602,21 +601,21 @@ func TestAppHandlers_ErrorPaths(t *testing.T) {
 		s := testServer(t)
 		s.SetVisorAPI(&fakeVisorAPI{stopErr: errBoom}, "PK")
 		rec := httptest.NewRecorder()
-		s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/apps/stop", strings.NewReader(`{"name":"x"}`)))
+		s.Handler().ServeHTTP(rec, postJSON("/api/apps/stop", `{"name":"x"}`))
 		require.Equal(t, "boom", decodeMap(t, rec.Body.Bytes())["error"])
 	})
 	t.Run("autostart error", func(t *testing.T) {
 		s := testServer(t)
 		s.SetVisorAPI(&fakeVisorAPI{autoErr: errBoom}, "PK")
 		rec := httptest.NewRecorder()
-		s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/apps/autostart", strings.NewReader(`{"name":"x","auto_start":true}`)))
+		s.Handler().ServeHTTP(rec, postJSON("/api/apps/autostart", `{"name":"x","auto_start":true}`))
 		require.Equal(t, "boom", decodeMap(t, rec.Body.Bytes())["error"])
 	})
 	t.Run("set-pk error", func(t *testing.T) {
 		s := testServer(t)
 		s.SetVisorAPI(&fakeVisorAPI{setPKErr: errBoom}, "PK")
 		rec := httptest.NewRecorder()
-		s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/apps/set-pk", strings.NewReader(`{"name":"x","pk":"y"}`)))
+		s.Handler().ServeHTTP(rec, postJSON("/api/apps/set-pk", `{"name":"x","pk":"y"}`))
 		require.Equal(t, "boom", decodeMap(t, rec.Body.Bytes())["error"])
 	})
 }

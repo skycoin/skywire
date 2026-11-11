@@ -143,14 +143,14 @@ type browseWSMessage struct {
 // browseWSCodec reads a message keeping whether it was text or binary, which
 // websocket.Message folds away.
 var browseWSCodec = websocket.Codec{
-	Marshal: func(v interface{}) ([]byte, byte, error) {
+	Marshal: func(v any) ([]byte, byte, error) {
 		m := v.(browseWSMessage)
 		if m.binary {
 			return m.data, websocket.BinaryFrame, nil
 		}
 		return m.data, websocket.TextFrame, nil
 	},
-	Unmarshal: func(data []byte, payloadType byte, v interface{}) error {
+	Unmarshal: func(data []byte, payloadType byte, v any) error {
 		m := v.(*browseWSMessage)
 		m.data = data
 		m.binary = payloadType == websocket.BinaryFrame
@@ -268,7 +268,7 @@ func (v *Visor) serveBrowseWS(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	req := BrowseWebSocketRequest{URL: q.Get("url"), Proxy: q.Get("proxy"), Origin: q.Get("origin")}
 	if p := strings.TrimSpace(q.Get("protocols")); p != "" {
-		for _, s := range strings.Split(p, ",") {
+		for s := range strings.SplitSeq(p, ",") {
 			if s = strings.TrimSpace(s); s != "" {
 				req.Protocols = append(req.Protocols, s)
 			}

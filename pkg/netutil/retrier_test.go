@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/stretchr/testify/require"
 )
 
 func TestRetrier_Do(t *testing.T) {
-	r := NewRetrier(logrus.New(), time.Millisecond*100, 0, 3, 2)
+	r := NewRetrier(logging.New(), time.Millisecond*100, 0, 3, 2)
 	c := 0
 	threshold := 2
 	f := func() error {
@@ -44,7 +44,7 @@ func TestRetrier_Do(t *testing.T) {
 
 	t.Run("should return whitelisted errors if any instead of retry", func(t *testing.T) {
 		bar := errors.New("bar")
-		wR := NewRetrier(logrus.New(), 50*time.Millisecond, 0, 1, 2).WithErrWhitelist(bar)
+		wR := NewRetrier(logging.New(), 50*time.Millisecond, 0, 1, 2).WithErrWhitelist(bar)
 		barF := func() error {
 			return bar
 		}
@@ -55,7 +55,7 @@ func TestRetrier_Do(t *testing.T) {
 
 	t.Run("if times is 0, should retry until success", func(t *testing.T) {
 		c = 0
-		loopR := NewRetrier(logrus.New(), 50*time.Millisecond, 0, 0, 1)
+		loopR := NewRetrier(logging.New(), 50*time.Millisecond, 0, 0, 1)
 		err := loopR.Do(context.TODO(), f)
 		require.NoError(t, err)
 

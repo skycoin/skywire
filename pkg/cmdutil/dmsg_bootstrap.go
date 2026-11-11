@@ -235,11 +235,9 @@ func BootstrapDmsg(
 	}
 
 	wg := new(sync.WaitGroup)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		dmsgDC.Serve(ctx)
-	}()
+	})
 	closeDmsgDC := func() {
 		if err := dmsgDC.Close(); err != nil {
 			log.WithError(err).Debug("Disconnected from dmsg network.")

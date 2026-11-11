@@ -2,17 +2,18 @@
 package api
 
 import (
+	"cmp"
 	"context"
+	"maps"
 	"net/http"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/deployment/charts"
+	"github.com/skycoin/skywire/pkg/logging"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
@@ -55,9 +56,7 @@ func (c *arCounters) snapshot() map[string]uint64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	out := make(map[string]uint64, len(c.n))
-	for k, v := range c.n {
-		out[k] = v
-	}
+	maps.Copy(out, c.n)
 	return out
 }
 
@@ -69,7 +68,7 @@ func (a *API) countBind(t types.Type) { a.counters.add(chartBinds + typeName(str
 
 // StartCharts samples the resolver's bindings and lookups into st until ctx
 // ends and serves them as the charts page.
-func (a *API) StartCharts(ctx context.Context, st charts.Store, log logrus.FieldLogger) {
+func (a *API) StartCharts(ctx context.Context, st charts.Store, log logging.FieldLogger) {
 	page := &charts.Page{
 		Title: "Skywire address resolver",
 		About: strings.Split(a.dmsgAddr, ":")[0],
@@ -152,7 +151,9 @@ func buildCharts(ctx context.Context, st charts.Store, r charts.Range, now time.
 		{Name: "found", Vals: sumSeries(found, len(f.Times))},
 		{Name: "not found", Vals: sumSeries(notFound, len(f.Times))},
 	}
-	sort.SliceStable(found, func(i, j int) bool { return found[i].Name < found[j].Name })
+	slices.SortStableFunc(found, func(a, b charts.Series) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
 
 	return charts.Content{Charts: []charts.Chart{
 		chart("Visors with a binding, by type",

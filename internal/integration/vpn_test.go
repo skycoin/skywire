@@ -1,5 +1,4 @@
 //go:build !no_ci
-// +build !no_ci
 
 package integration_test
 
@@ -51,7 +50,7 @@ func TestVPN(t *testing.T) {
 			}
 			// Filter to relevant lines
 			var filtered []string
-			for _, line := range strings.Split(logs, "\n") {
+			for line := range strings.SplitSeq(logs, "\n") {
 				lower := strings.ToLower(line)
 				if strings.Contains(lower, "error") || strings.Contains(lower, "dmsg") ||
 					strings.Contains(lower, "transport") || strings.Contains(lower, "handshake") ||
@@ -380,7 +379,7 @@ func getServerTUNIP(env *TestEnv) (string, error) {
 	outputSplits := strings.Split(output, "\n")
 	if len(outputSplits) >= 3 {
 		fourthLine := strings.TrimSpace(outputSplits[2])
-		serverTUNIP := strings.Split(strings.Split(fourthLine, " ")[1], "/")[0]
+		serverTUNIP, _, _ := strings.Cut(strings.Split(fourthLine, " ")[1], "/")
 		return serverTUNIP, nil
 	}
 

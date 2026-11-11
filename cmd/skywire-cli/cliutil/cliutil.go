@@ -102,8 +102,8 @@ func ParseUUID(cmdFlags *pflag.FlagSet, name, v string) uuid.UUID {
 // callers that imported the type don't break. New code should not
 // construct it; PrintOutput emits raw JSON values directly.
 type CLIOutput struct {
-	Output interface{} `json:"output,omitempty"`
-	Err    string      `json:"error,omitempty"`
+	Output any    `json:"output,omitempty"`
+	Err    string `json:"error,omitempty"`
 }
 
 // PrintOutput prints the value as raw JSON (no `{"output": ...}`
@@ -119,7 +119,7 @@ type CLIOutput struct {
 // values, and an interrupted pipe sees only errors.
 //
 //nolint:errcheck
-func PrintOutput(cmdFlags *pflag.FlagSet, outputJSON, output interface{}) {
+func PrintOutput(cmdFlags *pflag.FlagSet, outputJSON, output any) {
 	// --shape / --jq are handled by the canonical cliout package so this
 	// legacy helper and cliout.Print behave identically. Flags are read off
 	// the passed set (they are registered persistently on the root, so they
@@ -230,7 +230,7 @@ func PrintPipe(cmdFlags *pflag.FlagSet, p *script.Pipe) {
 		return
 	}
 	lines := []string{}
-	for _, l := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+	for l := range strings.SplitSeq(strings.TrimRight(out, "\n"), "\n") {
 		if strings.TrimSpace(l) != "" {
 			lines = append(lines, l)
 		}

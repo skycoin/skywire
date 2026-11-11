@@ -96,8 +96,7 @@ func contains(s, sub string) bool {
 func TestV1JSONMirrorsEveryField(t *testing.T) {
 	tags := func(typ reflect.Type) map[string]bool {
 		out := map[string]bool{}
-		for i := 0; i < typ.NumField(); i++ {
-			f := typ.Field(i)
+		for f := range typ.Fields() {
 			name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
 			if f.Anonymous || name == "" || name == "-" {
 				continue
@@ -106,8 +105,8 @@ func TestV1JSONMirrorsEveryField(t *testing.T) {
 		}
 		return out
 	}
-	mirror := tags(reflect.TypeOf(v1JSON{}))
-	for name := range tags(reflect.TypeOf(V1{})) {
+	mirror := tags(reflect.TypeFor[v1JSON]())
+	for name := range tags(reflect.TypeFor[V1]()) {
 		require.True(t, mirror[name], "v1JSON lacks %q, so loading a config drops it", name)
 	}
 }

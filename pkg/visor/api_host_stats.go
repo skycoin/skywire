@@ -1,4 +1,4 @@
-//go:build !mobile
+//go:build !mobile && !(tinygo && darwin)
 
 // Package visor pkg/visor/api_host_stats.go c3-vis-core
 //
@@ -32,6 +32,7 @@ import (
 	gnet "github.com/shirou/gopsutil/v3/net"
 	"github.com/shirou/gopsutil/v3/process"
 
+	"github.com/skycoin/skywire/pkg/alerts"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
@@ -52,6 +53,10 @@ func collectLoadStats() *visorapi.LoadStats {
 	if du, err := disk.Usage("/"); err == nil && du != nil {
 		ls.DiskUsedPercent = du.UsedPercent
 	}
+	if up, err := host.Uptime(); err == nil {
+		ls.HostUptime = up
+	}
+	ls.RootReadOnly, ls.StorageIOErrors, ls.LastStorageIOError = alerts.CheckStorage()
 	return ls
 }
 

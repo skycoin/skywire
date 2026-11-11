@@ -57,10 +57,7 @@ func TestRenderStatsANSINamesTheNewPanelsWhenUnpopulated(t *testing.T) {
 		}
 		// The rule that follows the title is 78 box-drawing runes at three
 		// bytes each, so the window has to be generous in bytes.
-		end := i + 600
-		if end > len(out) {
-			end = len(out)
-		}
+		end := min(i+600, len(out))
 		if !strings.Contains(out[i:end], "unavailable") {
 			t.Errorf("panel %q rendered without data and without saying so", title)
 		}
@@ -138,7 +135,7 @@ func TestTUIWrapBreaksATokenWiderThanThePanel(t *testing.T) {
 	pk := "0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557"
 	out := tuiWrap(`      Get "dmsg://` + pk + `:80/stats": EOF`)
 	var joined string
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		plain := stripANSI(line)
 		if len([]rune(plain)) > tuiWidth {
 			t.Errorf("line runs to %d columns: %q", len([]rune(plain)), plain)

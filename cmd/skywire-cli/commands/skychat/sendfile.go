@@ -76,6 +76,10 @@ Examples:
 		}
 		defer func() { _ = resp.Body.Close() }() //nolint:errcheck
 		body, _ := io.ReadAll(resp.Body)         //nolint:errcheck
+		if resp.StatusCode == http.StatusAccepted {
+			cmdutil.Printf("%s is offline. The file was offered on its inbox, and it can ask for it when you are both online.\n", form.Get("pk"))
+			return
+		}
 		if resp.StatusCode != http.StatusOK {
 			cliutil.PrintFatalError(cmd.Flags(), fmt.Errorf("send-file failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(body))))
 		}

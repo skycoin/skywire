@@ -310,7 +310,7 @@ type routerSkynetDialer struct {
 	tpM          *transport.Manager     // for direct transport dialing
 	skynetMuxPtr **transport.VStreamMux // shared with forwarding server; deref at dial time
 	routeTimeout time.Duration          // 0 = use DefaultRouteKeepAlive
-	nextPort     uint32                 // ephemeral port counter for route fallback
+	nextPort     atomic.Uint32          // ephemeral port counter for route fallback
 	pool         *skyroute.Pool         // holds+reuses multihop routes per dest (nil = disabled)
 	// service, when set, is a service the dialed visor hosts under the
 	// service's own key: the handshake names it and checks the host's proof.
@@ -329,7 +329,7 @@ func (d *routerSkynetDialer) dialRouteForPool(ctx context.Context, dest cipher.P
 		opts = router.DefaultDialOptions()
 		opts.KeepAlive = d.routeTimeout
 	}
-	lPort := routing.Port(atomic.AddUint32(&d.nextPort, 1)) //nolint:gosec
+	lPort := routing.Port(d.nextPort.Add(1)) //nolint:gosec
 	return d.router.DialRoutes(ctx, dest, lPort, routing.Port(muxPort), opts)
 }
 
@@ -432,7 +432,7 @@ func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKe
 		opts = router.DefaultDialOptions()
 		opts.KeepAlive = d.routeTimeout
 	}
-	lPort := routing.Port(atomic.AddUint32(&d.nextPort, 1)) //nolint:gosec // overflow wraps intentionally
+	lPort := routing.Port(d.nextPort.Add(1)) //nolint:gosec // overflow wraps intentionally
 	conn, err := d.router.DialRoutes(ctx, remote, lPort, routing.Port(skyenv.SkyForwardingServerPort), opts)
 	if err != nil {
 		return nil, err
@@ -501,7 +501,7 @@ func (d *routerSkynetDialer) dialSourceRouteConn(ctx context.Context, dest ciphe
 	}
 	opts.ForwardHops = fwd
 	opts.ReverseHops = rev
-	lPort := routing.Port(atomic.AddUint32(&d.nextPort, 1)) //nolint:gosec
+	lPort := routing.Port(d.nextPort.Add(1)) //nolint:gosec
 	return d.router.DialRoutes(ctx, dest, lPort, routing.Port(fwdPort), opts)
 }
 

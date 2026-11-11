@@ -3,11 +3,16 @@ package visor
 
 import (
 	"fmt"
+	"maps"
 	"net/http"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 func (hv *Hypervisor) visorConn(pk cipher.PubKey) (Conn, bool) {
@@ -33,9 +38,7 @@ func (hv *Hypervisor) visorConn(pk cipher.PubKey) (Conn, bool) {
 func (hv *Hypervisor) proxiedVisorConn(pk cipher.PubKey) (Conn, bool) {
 	hv.mu.RLock()
 	remotes := make(map[cipher.PubKey]Conn, len(hv.remoteVisors))
-	for hk, hc := range hv.remoteVisors {
-		remotes[hk] = hc
-	}
+	maps.Copy(remotes, hv.remoteVisors)
 	hv.mu.RUnlock()
 
 	for _, hyperConn := range remotes {
@@ -81,6 +84,10 @@ func (hv *Hypervisor) withCtx(vFunc valuesFunc, hFunc handlerFunc) http.HandlerF
 		// Skip the timeout wrapper for WebSocket upgrades — the buffered writer
 		// doesn't implement http.Hijacker, which websocket.Accept requires.
 		isWebSocket := r.Header.Get("Upgrade") == "websocket"
+		if rv.rec != nil {
+			hv.parkOrRefuse(w, r, rv, hFunc)
+			return
+		}
 		if rv.isRemote && !isWebSocket {
 			tw := newTimeoutResponseWriter()
 			done := make(chan struct{})
@@ -157,6 +164,10 @@ func (hv *Hypervisor) visorCtx(w http.ResponseWriter, r *http.Request) (*httpCtx
 		cached, hasCache := hv.summaryCache[pk]
 		hv.summaryCacheMx.RUnlock()
 		if hasCache {
+			if r.Method != http.MethodGet && hv.visor != nil && hv.visor.dmsgC != nil {
+				api, rec := visorapi.NewRecordingRPCClient(hvParkAllows)
+				return &httpCtx{Conn: Conn{Addr: dmsg.Addr{PK: pk, Port: skyenv.DmsgHypervisorPort}, API: api}, rec: rec}, true
+			}
 			elapsed := time.Since(cached.seenAt).Round(time.Second)
 			httputil.WriteJSON(w, r, http.StatusServiceUnavailable,
 				fmt.Errorf("visor '%s' is currently disconnected (last seen %s ago) — retrying", pk, elapsed))
@@ -182,6 +193,11 @@ func (hv *Hypervisor) appCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, 
 	}
 
 	appName := r.PathValue("app")
+
+	if ctx.rec != nil {
+		ctx.App = &appserver.AppState{AppConfig: appserver.AppConfig{Name: appName}}
+		return ctx, true
+	}
 
 	app, err := ctx.API.App(appName)
 	if err != nil {

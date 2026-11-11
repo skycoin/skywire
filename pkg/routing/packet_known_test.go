@@ -14,7 +14,7 @@ import (
 // frame and logged as "peer framing off" on every hop that carried a leg
 // re-home. Adding a type without moving the bound fails here instead.
 func TestPacketTypeKnownTracksString(t *testing.T) {
-	for i := 0; i < int(LegRehomePacket)+8; i++ {
+	for i := range int(LegRehomePacket) + 8 {
 		pt := PacketType(i) //nolint:gosec
 		named := !strings.HasPrefix(pt.String(), "Unknown(")
 		require.Equalf(t, named, pt.Known(),

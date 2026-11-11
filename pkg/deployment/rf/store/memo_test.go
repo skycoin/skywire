@@ -47,14 +47,12 @@ func TestGetRouteWeightedMemoized(t *testing.T) {
 
 	// Concurrent identical requests are race-free and deduped (run with -race).
 	var wg sync.WaitGroup
-	for i := 0; i < 40; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 40 {
+		wg.Go(func() {
 			rr, e := g.GetRouteWeighted(context.Background(), src, dst, 0, 5, 1, true)
 			require.NoError(t, e)
 			require.NotEmpty(t, rr)
-		}()
+		})
 	}
 	wg.Wait()
 

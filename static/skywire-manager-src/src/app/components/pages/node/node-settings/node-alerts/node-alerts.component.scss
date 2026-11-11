@@ -1,0 +1,55 @@
+.title {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.field input,
+.field select {
+  width: 100%;
+}
+
+.relay {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 8px 4px 12px;
+  border-bottom: 1px solid rgba(var(--sw-fg-rgb), 0.08);
+
+  label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+  }
+
+  .port { width: 70px; }
+}
+
+.hint {
+  opacity: 0.85;
+}
+
+.device {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px;
+  font-size: 13px;
+
+  .this {
+    font-size: 11px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: rgba(var(--sw-fg-rgb), 0.12);
+  }
+
+  .since { opacity: 0.7; }
+  .spacer { flex: 1; }
+}
+
+.watched {
+  margin-top: 8px;
+  margin-bottom: 0;
+}

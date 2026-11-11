@@ -13,7 +13,6 @@ import (
 	ipc "github.com/0magnet/golang-ipc"
 	"github.com/0magnet/yamux"
 	"github.com/armon/go-socks5"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -29,7 +28,7 @@ type Server struct {
 	sMu       sync.Mutex
 	socks     *socks5.Server
 	listener  net.Listener
-	closed    uint32
+	closed    atomic.Uint32
 	whitelist map[cipher.PubKey]struct{}
 	useWL     bool
 }
@@ -50,7 +49,7 @@ func NewServer(whitelist []cipher.PubKey, appCl *app.Client, opts ...ServerOptio
 	// Debug: a SOCKS proxy failing a *client-requested* dial is a routine,
 	// client-driven condition, not a proxy error.
 	cfg := &socks5.Config{
-		Logger: logging.NewStdLoggerLevel(logging.MustGetLogger("skysocks"), logrus.DebugLevel),
+		Logger: logging.NewStdLoggerLevel(logging.MustGetLogger("skysocks"), logging.DebugLevel),
 	}
 	for _, o := range opts {
 		o(cfg)
@@ -287,11 +286,11 @@ func (s *Server) Close() error {
 }
 
 func (s *Server) close() {
-	atomic.StoreUint32(&s.closed, 1)
+	s.closed.Store(1)
 }
 
 func (s *Server) isClosed() bool {
-	return atomic.LoadUint32(&s.closed) != 0
+	return s.closed.Load() != 0
 }
 
 // IsPublic returns true if whitelist is not enabled (server is public)

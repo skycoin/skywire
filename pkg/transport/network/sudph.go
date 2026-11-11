@@ -9,7 +9,7 @@ import (
 	"time"
 
 	kcp "github.com/0magnet/kcp-go/v5"
-	"github.com/0magnet/pfilter"
+	"github.com/AudriusButkevicius/pfilter"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"

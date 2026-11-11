@@ -48,7 +48,7 @@ func TestVisor_GroupStreamSendCount_IncrementsViaAdapter(t *testing.T) {
 	v := &Visor{}
 	a := &visorPingAdapter{v: v}
 
-	for i := 0; i < 13; i++ {
+	for range 13 {
 		a.IncGroupStreamSend()
 	}
 	if got := v.groupStreamSendCount(); got != 13 {
@@ -70,10 +70,10 @@ func TestVisor_GroupStreamSendCount_IsAtomicUnderConcurrency(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
-	for i := 0; i < goroutines; i++ {
+	for range goroutines {
 		go func() {
 			defer wg.Done()
-			for j := 0; j < perG; j++ {
+			for range perG {
 				a.IncGroupStreamSend()
 			}
 		}()

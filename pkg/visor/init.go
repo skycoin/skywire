@@ -21,7 +21,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"net/http"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -141,7 +141,6 @@ type modules struct {
 	meshProxy vinit.Module
 	// Embedded SMTP→skywire bridge (localhost SMTP listener for *.skynet recipients)
 	embSkymailBridge vinit.Module
-	skymail          vinit.Module
 	// UI server module (serves tp-viz)
 	// Node health tracking for TPS and RSN
 	nodeHealth vinit.Module
@@ -158,7 +157,8 @@ type modules struct {
 	pairingMod vinit.Module
 	// Chat-group feed manager (D1 owner-centric CXO feeds with
 	// multi-PK allowlist).
-	groupingMod vinit.Module
+	groupingMod  vinit.Module
+	dmsgAsyncMod vinit.Module
 	// Skychat 1:1 voice-call manager (dmsg+skynet signaling, RTP media).
 	voiceMod vinit.Module
 	// coinNodesMod forwards + advertises configured fibercoin nodes
@@ -175,6 +175,8 @@ type modules struct {
 	sdRegCXOMod vinit.Module
 	// netWatch reacts to a move to another network
 	netWatch vinit.Module
+	// alertsMod mails when a watched visor goes offline (alerts.go)
+	alertsMod vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
 }

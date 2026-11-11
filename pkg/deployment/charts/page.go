@@ -12,9 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // Range is one of the windows a page can show.
@@ -86,7 +85,7 @@ type Page struct {
 	Stats *ServiceStats
 	Store Store
 	// Log, when set, records why a render failed; the client only sees a 503.
-	Log logrus.FieldLogger
+	Log logging.FieldLogger
 
 	mu    sync.Mutex
 	cache map[string]cached
@@ -107,7 +106,7 @@ func (p *Page) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // serveRendered answers r with what render gives for its ?range=.
-func serveRendered(w http.ResponseWriter, r *http.Request, render func(context.Context, Range) (cached, error), log logrus.FieldLogger) {
+func serveRendered(w http.ResponseWriter, r *http.Request, render func(context.Context, Range) (cached, error), log logging.FieldLogger) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return

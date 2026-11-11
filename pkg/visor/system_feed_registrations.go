@@ -11,6 +11,7 @@ package visor
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -93,10 +94,8 @@ func (v *Visor) readsSystemFeed(tpdPK, servicePK cipher.PubKey) bool {
 func (v *Visor) noteSystemFeedService(service string) {
 	v.cxoUserFeedsMu.Lock()
 	defer v.cxoUserFeedsMu.Unlock()
-	for _, s := range v.systemFeedServices {
-		if s == service {
-			return
-		}
+	if slices.Contains(v.systemFeedServices, service) {
+		return
 	}
 	v.systemFeedServices = append(v.systemFeedServices, service)
 }

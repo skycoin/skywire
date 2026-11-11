@@ -26,8 +26,8 @@ import (
 	"time"
 
 	rpc "github.com/0magnet/gobrpc"
-	"github.com/sirupsen/logrus"
 
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -55,7 +55,7 @@ func isUnimplementedRPC(err error) bool {
 // the caller can fall back to the legacy DMSG path.
 func runSourceCascade(
 	ctx context.Context,
-	log logrus.FieldLogger,
+	log logging.FieldLogger,
 	rpcC *rpc.Client,
 	originProc cascadeOriginProcessor,
 	biRt routing.BidirectionalRoute,
@@ -126,7 +126,7 @@ func runSourceCascade(
 }
 
 // rpcCall performs a context-aware net/rpc call.
-func rpcCall(ctx context.Context, rpcC *rpc.Client, serviceMethod string, args, reply interface{}) error {
+func rpcCall(ctx context.Context, rpcC *rpc.Client, serviceMethod string, args, reply any) error {
 	call := rpcC.Go(serviceMethod, args, reply, nil)
 	select {
 	case <-ctx.Done():

@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/logging"
@@ -50,7 +49,7 @@ func rehomeRigPair(t *testing.T, gLeg, sLeg emuLegSpec, rehome bool) (g, s *emuR
 	t.Helper()
 	sbdOffForEmu(t)
 	ml := logging.NewMasterLogger()
-	ml.SetLevel(logrus.PanicLevel)
+	ml.SetLevel(logging.PanicLevel)
 	shared := newEmuShared(ml)
 	g = newEmuRig(t, emuOpts{
 		Legs: []emuLegSpec{gLeg}, LegRehome: rehome,

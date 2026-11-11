@@ -4,8 +4,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -38,7 +40,7 @@ func xpubKey(xpub string) string {
 func LoadXpubIndex(path string) (*XpubIndex, error) {
 	x := &XpubIndex{path: path, m: map[string]map[string]uint32{}}
 	b, err := os.ReadFile(path) //nolint:gosec
-	if os.IsNotExist(err) {
+	if errors.Is(err, fs.ErrNotExist) {
 		return x, nil
 	}
 	if err != nil {
@@ -75,6 +77,9 @@ func (x *XpubIndex) Assign(xpub, date string, used func(addr string) (bool, erro
 	}
 	for i := start; i < start+maxXpubScan; i++ {
 		addr, err := rewardconfig.DeriveExternalAddressFromXpub(xpub, i)
+		if errors.Is(err, rewardconfig.ErrNoAddressAtIndex) {
+			continue
+		}
 		if err != nil {
 			return 0, err
 		}

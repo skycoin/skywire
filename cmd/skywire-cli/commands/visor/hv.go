@@ -15,6 +15,7 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/pkg/alerts"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -47,6 +48,7 @@ func init() {
 	hvLsCmd.Flags().BoolVar(&hvLsFlat, "flat", false, "single flat table instead of one section per hypervisor")
 	hvLsCmd.Flags().BoolVar(&hvLsLoad, "load", false, "add LOAD (1m/cores), MEM%, and DISK% columns per visor")
 	hvCmd.AddCommand(hvTreeCmd)
+	hvCmd.AddCommand(hvForgetCmd)
 	hvCmd.AddCommand(hvPasswdCmd)
 	hvPasswdCmd.Flags().StringVar(&hvPasswdOld, "old", "", "current password (required unless --force)")
 	hvPasswdCmd.Flags().StringVar(&hvPasswdNew, "new", "", "new password")
@@ -358,6 +360,30 @@ is required.`,
 	},
 }
 
+var hvForgetCmd = &cobra.Command{
+	Use:   "forget <public-key>",
+	Short: "Drop an offline visor from this hypervisor's remembered list",
+	Long: `The hypervisor remembers every visor it has managed, in
+known-visors.json beside its users.db, and lists one that disconnects
+as offline with its last seen time. forget removes an offline visor
+from that list. A connected visor cannot be forgotten.`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		var pk cipher.PubKey
+		if err := pk.Set(args[0]); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid public key: %w", err))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		if err := rpcClient.HVForgetVisor(pk); err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		internal.PrintOutput(cmd.Flags(), pk, fmt.Sprintf("Forgot visor %s\n", pk))
+	},
+}
+
 var hvPasswdCmd = &cobra.Command{
 	Use:   "passwd",
 	Short: "Set the hypervisor UI admin password",
@@ -440,6 +466,10 @@ func formatHVVisorRow(tw *tabwriter.Writer, e visorapi.HVVisorEntry, indent stri
 		if len(status) > 25 {
 			status = status[:25] + "..."
 		}
+	}
+	// The hypervisor's state wins: the same one its alerts use.
+	if e.State != "" && e.State != alerts.StateOnline && (e.State != alerts.StateOffline || e.Error == "") {
+		status = e.State
 	}
 	ver := e.Version
 	if ver == "" {

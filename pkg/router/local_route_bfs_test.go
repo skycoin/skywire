@@ -164,7 +164,7 @@ func newBFSFixture(seed int64, visors, degree int, reachable bool) bfsFixture {
 		limit = visors - 1
 	}
 	for i := 0; i < limit; i++ {
-		for d := 0; d < degree; d++ {
+		for range degree {
 			j := rng.Intn(limit)
 			if j == i {
 				continue
@@ -412,7 +412,7 @@ func TestLocalTpSignatureOrderIndependent(t *testing.T) {
 	want := localTpSignature(tps)
 
 	rng := rand.New(rand.NewSource(5)) //nolint:gosec // deterministic shuffle
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		shuffled := append([]localTpRef(nil), tps...)
 		rng.Shuffle(len(shuffled), func(a, b int) { shuffled[a], shuffled[b] = shuffled[b], shuffled[a] })
 		assert.Equal(t, want, localTpSignature(shuffled), "signature must not depend on collection order")

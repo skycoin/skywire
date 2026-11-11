@@ -171,7 +171,7 @@ func TestStream(t *testing.T) {
 		lis, err := clientA.Listen(port)
 		require.NoError(t, err)
 
-		for i := 0; i < rounds; i++ {
+		for i := range rounds {
 			go func(i int) {
 				connB, err := clientB.Dial(context.TODO(), lis.DmsgAddr())
 				if err != nil {

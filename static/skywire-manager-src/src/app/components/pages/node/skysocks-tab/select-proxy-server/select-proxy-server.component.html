@@ -1,7 +1,7 @@
-<h1 mat-dialog-title>{{ 'skysocks-tab.select-server.title' | translate }}</h1>
+<h1 mat-dialog-title>{{ (isVpn ? 'skysocks-tab.select-server.title-vpn' : 'skysocks-tab.select-server.title') | translate }}</h1>
 
 <div mat-dialog-content class="sps-content">
-  <p class="sps-sub">{{ 'skysocks-tab.select-server.help' | translate:{ client: data.clientName } }}</p>
+  <p class="sps-sub">{{ (isVpn ? 'skysocks-tab.select-server.help-vpn' : 'skysocks-tab.select-server.help') | translate:{ client: data.clientName } }}</p>
 
   <!-- Manual PK entry -->
   <div class="sps-manual">
@@ -15,21 +15,33 @@
   </div>
 
   <!-- Discovery list -->
-  <mat-form-field class="sps-filter">
-    <mat-label>{{ 'skysocks-tab.select-server.filter' | translate }}</mat-label>
-    <input matInput [(ngModel)]="filterText" (ngModelChange)="applyFilter()" spellcheck="false" autocomplete="off">
-  </mat-form-field>
+  <div class="sps-filters">
+    <mat-form-field class="sps-filter">
+      <mat-label>{{ 'skysocks-tab.select-server.filter' | translate }}</mat-label>
+      <input matInput [(ngModel)]="filterText" (ngModelChange)="applyFilter()" spellcheck="false" autocomplete="off">
+    </mat-form-field>
+    <label class="sps-country">
+      <span class="sps-country-label">{{ 'skysocks-tab.select-server.country' | translate }}</span>
+      <select [(ngModel)]="country" (ngModelChange)="applyFilter()">
+        <option value="">{{ 'skysocks-tab.select-server.all-countries' | translate }}</option>
+        @for (c of countries; track c.code) {
+          <option [value]="c.code">{{ c.name }} ({{ c.count }})</option>
+        }
+      </select>
+    </label>
+  </div>
 
   @if (loading) {
     <div class="sps-msg">{{ 'common.loading' | translate }}</div>
   } @else if (loadError) {
     <div class="sps-msg sps-error">{{ 'skysocks-tab.select-server.load-error' | translate }}</div>
   } @else if (!filtered.length) {
-    <div class="sps-msg">{{ 'skysocks-tab.select-server.empty' | translate }}</div>
+    <div class="sps-msg">{{ (isVpn ? 'skysocks-tab.select-server.empty-vpn' : 'skysocks-tab.select-server.empty') | translate }}</div>
   } @else {
+    <div class="sps-count small">{{ 'skysocks-tab.select-server.count' | translate:{ shown: filtered.length, total: servers.length } }}</div>
     <div class="sps-list">
       @for (s of filtered; track s.pk) {
-        <button class="sps-row" (click)="select(s)">
+        <button class="sps-row" [attr.data-pk]="s.pk" (click)="select(s)">
           @if (s.country) {
             <span class="sps-flag" [style.background-image]="'url(' + countryFlag(s.country) + ')'"></span>
           } @else {
@@ -39,6 +51,9 @@
             <span class="sps-loc">{{ s.location || ('skysocks-tab.select-server.unknown-location' | translate) }}</span>
             <span class="sps-pk mono">{{ s.pk }}</span>
           </span>
+          @if (latency.has(s.pk)) {
+            <span class="sps-latency" [title]="'skysocks-tab.select-server.latency-hint' | translate">{{ latency.get(s.pk) | number:'1.0-0' }} ms</span>
+          }
           <mat-icon class="sps-go">chevron_right</mat-icon>
         </button>
       }

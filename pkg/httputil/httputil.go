@@ -11,8 +11,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
@@ -20,13 +18,13 @@ var log = logging.MustGetLogger("httputil")
 
 // WriteJSON writes a json object on a http.ResponseWriter with the given code.
 // A value that cannot be encoded answers 500. Write errors are only logged.
-func WriteJSON(w http.ResponseWriter, r *http.Request, code int, v interface{}) {
+func WriteJSON(w http.ResponseWriter, r *http.Request, code int, v any) {
 	pretty, err := BoolFromQuery(r, "pretty", false)
 	if err != nil {
 		log.WithError(err).Warn("Failed to get bool from query")
 	}
 	if err, ok := v.(error); ok {
-		v = map[string]interface{}{"error": err.Error()}
+		v = map[string]any{"error": err.Error()}
 	}
 	// Marshal before writing the header, so a value that cannot be encoded
 	// answers 500 instead of a status with an empty or truncated body.
@@ -98,7 +96,7 @@ func isIOError(err error) bool {
 }
 
 // ReadJSON reads the request body to a json object.
-func ReadJSON(r *http.Request, v interface{}) error {
+func ReadJSON(r *http.Request, v any) error {
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	return dec.Decode(v)
@@ -131,13 +129,13 @@ const LoggerKey ctxKeyLogger = -1
 //
 // The miss is the common case, not an edge case: SetLoggerMiddleware only
 // puts a logger in the context when a request ID is present. This used to
-// return logging.NewMasterLogger(), which built a whole logrus.Logger,
+// return logging.NewMasterLogger(), which built a whole logging.MasterLogger,
 // TextFormatter and hook map per call, and whose entries then bypassed the
 // process hooks and configured level because it was its own master. The
 // package logger is created once and routes through the master logger, so
 // hooks and level apply.
-func GetLogger(r *http.Request) logrus.FieldLogger {
-	if ctxLog, ok := r.Context().Value(LoggerKey).(logrus.FieldLogger); ok && ctxLog != nil {
+func GetLogger(r *http.Request) logging.FieldLogger {
+	if ctxLog, ok := r.Context().Value(LoggerKey).(logging.FieldLogger); ok && ctxLog != nil {
 		return ctxLog
 	}
 
@@ -148,7 +146,7 @@ func GetLogger(r *http.Request) logrus.FieldLogger {
 // remove and use structured logging
 
 // SetLoggerMiddleware sets logger to context of HTTP requests.
-func SetLoggerMiddleware(log logrus.FieldLogger) func(next http.Handler) http.Handler {
+func SetLoggerMiddleware(log logging.FieldLogger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()

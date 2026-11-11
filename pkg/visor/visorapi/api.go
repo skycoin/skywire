@@ -47,7 +47,9 @@ type API interface {
 	Routing
 	Transports
 	Mail
+	Alerts
 	Contacts
+	DmsgAsync
 }
 
 // Node is the visor itself: status, lifecycle, configuration, rewards and
@@ -84,6 +86,8 @@ type Node interface {
 	NetworkView() (*NetworkViewResponse, error)
 	Ports() (map[string]PortDetail, error)
 	SetRewardAddress(string) (string, error)
+	// SetSingleRewardAddress sets a single address with the opt-in, refusing one that has sent coins.
+	SetSingleRewardAddress(string) (string, error)
 	GetRewardAddress() (string, error)
 	RewardAddressExposure(addr string) (rewardconfig.AddressExposure, error)
 	DeleteRewardAddress() error
@@ -133,6 +137,10 @@ type Hypervisors interface {
 	NewPairCode(ttl time.Duration) (PairCode, error)
 	RemoveHypervisor(pk cipher.PubKey) error
 	RemoveAllHypervisors() (int, error)
+	// HypervisorNotice waits up to 15s for the goodbye this visor owes the
+	// calling hypervisor: "", "detached" or "restarting". Served only to a
+	// hypervisor, over the link it manages the visor on.
+	HypervisorNotice() (string, error)
 	SetHypervisorPassword(oldPassword, newPassword string) error
 	SetHypervisorPasswordForce(newPassword string) error
 	TransportRPCCall(remotePK cipher.PubKey, method string, args json.RawMessage) (json.RawMessage, error)
@@ -140,10 +148,14 @@ type Hypervisors interface {
 	HVListDirectVisors() ([]HVVisorEntry, error)
 	HVListVisorsTree() (*HVVisorTree, error)
 	HVVisorSummary(pk cipher.PubKey) (*Summary, error)
+	HVForgetVisor(pk cipher.PubKey) error
 	HVStartApp(pk cipher.PubKey, appName string) error
 	HVStopApp(pk cipher.PubKey, appName string) error
+	HVAppCatalog(pk cipher.PubKey) ([]CatalogEntry, error)
+	HVAddApp(pk cipher.PubKey, appName, binaryName string) error
 	HVSetMinHops(pk cipher.PubKey, hops uint16) error
 	HVSetRewardAddress(pk cipher.PubKey, addr string) (string, error)
+	HVSetSingleRewardAddress(pk cipher.PubKey, addr string) (string, error)
 	HVRemoveTransport(pk cipher.PubKey, tid uuid.UUID) error
 	HVRemoveRoutingRule(pk cipher.PubKey, key routing.RouteID) error
 	HVAddTransport(pk, remote cipher.PubKey, tpType, label string, timeout time.Duration) (*TransportSummary, error)
@@ -256,6 +268,8 @@ type Chat interface {
 	// call plays, once it has arrived (VoiceDialingInfo.Ringback).
 	VoiceDialRingback(callID string) (VoiceRingback, error)
 	VoiceCallAudio(callID string) (sent, recv []int16, err error)
+	// VoiceCallDevices reports whether an active call has a real mic and speaker.
+	VoiceCallDevices(callID string) (VoiceDevices, error)
 	VoiceMute(callID string, mic, speaker bool) error
 }
 
@@ -292,6 +306,8 @@ type Proxies interface {
 type Apps interface {
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
+	// AppCatalog lists every app this visor can run, merged with its configured instances.
+	AppCatalog() ([]CatalogEntry, error)
 	StartApp(appName string) error
 	StartAppWithMode(appName, launcherMode string) error
 	// SetAppRoutingPolicy installs (or clears, when path is "" /
@@ -335,6 +351,8 @@ type Apps interface {
 	SetAppEnvFull(appName string, env []string) error
 	SetAppLauncherMode(appName, mode string) error
 	AppHelp(appName string) (string, error)
+	// AppFlags describes the flags an app accepts and the values its args set.
+	AppFlags(appName string) (AppFlags, error)
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
 	RecentAppLog(appName, level string) ([]string, error)
 	GetAppStats(appName string) (appserver.AppStats, error)
@@ -678,6 +696,9 @@ type Summary struct {
 	ConnectedDmsgServers []string                       `json:"connected_dmsg_servers"` // Deprecated: use DMSGServers instead
 	DMSGServers          []DMSGServerInfo               `json:"dmsg_servers"`           // Connected DMSG servers with latencies
 	Online               bool                           `json:"online"`
+	// State is one of the alerts.State values for a managed visor, as
+	// HVVisorEntry.State.
+	State string `json:"state,omitempty"`
 	// OfflineSince is set on cached summaries served when the live
 	// RPC fails. Lets the UI render a "offline since X" indicator
 	// alongside the otherwise-stale fields. nil when Online=true.
@@ -704,6 +725,9 @@ type Summary struct {
 	// for the `hv ls --load` view. omitempty so the field is absent on
 	// summaries from older visors that don't populate it.
 	Load *LoadStats `json:"load,omitempty"`
+	// Connectivity is whether the visor can reach the skywire network, nil
+	// from visors older than the field.
+	Connectivity *Connectivity `json:"connectivity,omitempty"`
 }
 
 // HealthInfo carries information about visor's services health.

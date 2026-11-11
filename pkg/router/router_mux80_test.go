@@ -53,7 +53,7 @@ func newLegTestRouter(t *testing.T) *router {
 		datagramPorts: make(map[routing.Port]struct{}),
 		pending:       newPendingPackets(),
 		pendingLegs:   newPendingLegs(),
-		accept:        make(chan routing.EdgeRules, acceptSize),
+		accept:        make(chan acceptEntry, acceptSize),
 		done:          make(chan struct{}),
 	}
 }
@@ -133,7 +133,7 @@ func (r *router) registerPrimary(rg *RouteGroup, desc routing.RouteDescriptor) {
 func legCount(rg *RouteGroup) int {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	return len(rg.tps)
+	return len(rg.legs)
 }
 
 // TestIntroduceRules_AuxLegDuringInitialization is the core Fix A regression:
@@ -181,7 +181,7 @@ func TestAcceptRoutes_DuplicateDescDoesNotDeleteLeg(t *testing.T) {
 
 	aux := r.makeAuxRules(t, desc, 1)
 	// Drive the (pre-Fix-A) path directly: hand the aux leg to the accept loop.
-	r.accept <- aux
+	r.accept <- acceptEntry{rules: aux}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -207,22 +207,20 @@ func TestMuxSetup_ConcurrentLegsNoCollapse(t *testing.T) {
 	srcPortBefore := rg.desc.SrcPort()
 
 	auxRules := make([]routing.EdgeRules, nAux)
-	for i := 0; i < nAux; i++ {
+	for i := range nAux {
 		auxRules[i] = r.makeAuxRules(t, desc, i+1)
 	}
 
 	var wg sync.WaitGroup
 
 	// Registration races the aux arrivals.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		time.Sleep(15 * time.Millisecond)
 		r.registerPrimary(rg, desc)
-	}()
+	})
 
 	// Aux legs arrive from parallel goroutines, straddling the registration.
-	for i := 0; i < nAux; i++ {
+	for i := range nAux {
 		wg.Add(1)
 		go func(rules routing.EdgeRules) {
 			defer wg.Done()

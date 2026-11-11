@@ -3,14 +3,17 @@ package clirewardsserver
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"html"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -392,8 +395,8 @@ func writeCountryStats(countryCount map[string]int, countryNames map[string]stri
 	}
 
 	// Sort by count descending
-	sort.Slice(stats, func(i, j int) bool {
-		return stats[i].Count > stats[j].Count
+	slices.SortFunc(stats, func(a, b CountryStat) int {
+		return cmp.Compare(b.Count, a.Count)
 	})
 
 	// Generate plaintext output
@@ -517,8 +520,8 @@ func ParseHistoricUptimeData(histDir string, minUptime float64) ([]VersionHistor
 	histCache.Unlock()
 
 	// Sort files by date (newest first) so we use most recent data for each visor+date
-	sort.Slice(files, func(i, j int) bool {
-		return files[i] > files[j]
+	slices.SortFunc(files, func(a, b string) int {
+		return cmp.Compare(b, a)
 	})
 
 	// Track which visor+date combinations we've already processed to avoid double-counting
@@ -577,7 +580,7 @@ func ParseHistoricUptimeData(histDir string, minUptime float64) ([]VersionHistor
 	for d := range dateVersionCounts {
 		dates = append(dates, d)
 	}
-	sort.Strings(dates)
+	slices.Sort(dates)
 
 	var history []VersionHistoryEntry
 	for _, date := range dates {
@@ -833,7 +836,7 @@ func ParseHistoricBandwidthData(histDir string) ([]BandwidthHistoryEntry, error)
 		return nil, err
 	}
 
-	sort.Strings(files) // chronological order
+	slices.Sort(files) // chronological order
 
 	var history []BandwidthHistoryEntry
 	for _, file := range files {
@@ -912,10 +915,7 @@ func GenerateBandwidthHistoryChartHTML(history []BandwidthHistoryEntry, chartWid
 	}
 
 	// Calculate bar width
-	barWidth := chartWidth / len(history)
-	if barWidth < 4 {
-		barWidth = 4
-	}
+	barWidth := max(chartWidth/len(history), 4)
 
 	// Draw bars
 	for i, entry := range history {
@@ -934,10 +934,7 @@ func GenerateBandwidthHistoryChartHTML(history []BandwidthHistoryEntry, chartWid
 	sb.WriteString("</div>\n") // flex container
 
 	// X-axis labels
-	labelInterval := len(history) / 10
-	if labelInterval < 1 {
-		labelInterval = 1
-	}
+	labelInterval := max(len(history)/10, 1)
 
 	sb.WriteString(fmt.Sprintf("<div style='display: flex; margin-left: 40px; font-size: 10px; color: #888; min-width: %dpx;'>\n", chartWidth))
 	for i, entry := range history {
@@ -994,8 +991,8 @@ func GenerateVisorBandwidthChartHTML(history []BandwidthHistoryEntry, chartWidth
 	for pk, total := range visorTotals {
 		sorted = append(sorted, visorBW{PK: pk, Total: total})
 	}
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].Total > sorted[j].Total
+	slices.SortFunc(sorted, func(a, b visorBW) int {
+		return cmp.Compare(b.Total, a.Total)
 	})
 
 	// Top N visors shown individually, rest grouped as "Other"
@@ -1060,10 +1057,7 @@ func GenerateVisorBandwidthChartHTML(history []BandwidthHistoryEntry, chartWidth
 		sb.WriteString(fmt.Sprintf("<div style='position: absolute; left: 0; right: 0; top: %dpx; border-top: 1px dashed #333;'></div>\n", y))
 	}
 
-	barWidth := chartWidth / len(history)
-	if barWidth < 2 {
-		barWidth = 2
-	}
+	barWidth := max(chartWidth/len(history), 2)
 
 	// Draw stacked bars
 	for i, entry := range history {
@@ -1076,10 +1070,9 @@ func GenerateVisorBandwidthChartHTML(history []BandwidthHistoryEntry, chartWidth
 			if bw == 0 {
 				continue
 			}
-			segmentHeight := int(bw * uint64(chartHeight) / maxTotal) //nolint:gosec
-			if segmentHeight < 1 {
-				segmentHeight = 1
-			}
+			segmentHeight := max(
+				//nolint:gosec
+				int(bw*uint64(chartHeight)/maxTotal), 1)
 			color := labelColors[pk]
 			sb.WriteString(fmt.Sprintf("<div style='position: absolute; left: %dpx; bottom: %dpx; width: %dpx; height: %dpx; background: %s;' title='%s: %s (%s)'></div>\n",
 				x, currentY, barWidth-1, segmentHeight, color, entry.Date, pk, formatBytesChart(bw)))
@@ -1095,10 +1088,9 @@ func GenerateVisorBandwidthChartHTML(history []BandwidthHistoryEntry, chartWidth
 				}
 			}
 			if otherBW > 0 {
-				segmentHeight := int(otherBW * uint64(chartHeight) / maxTotal) //nolint:gosec
-				if segmentHeight < 1 {
-					segmentHeight = 1
-				}
+				segmentHeight := max(
+					//nolint:gosec
+					int(otherBW*uint64(chartHeight)/maxTotal), 1)
 				color := labelColors["Other"]
 				sb.WriteString(fmt.Sprintf("<div style='position: absolute; left: %dpx; bottom: %dpx; width: %dpx; height: %dpx; background: %s;' title='%s: Other (%s)'></div>\n",
 					x, currentY, barWidth-1, segmentHeight, color, entry.Date, formatBytesChart(otherBW)))
@@ -1110,10 +1102,7 @@ func GenerateVisorBandwidthChartHTML(history []BandwidthHistoryEntry, chartWidth
 	sb.WriteString("</div>\n") // flex container
 
 	// X-axis labels
-	labelInterval := len(history) / 10
-	if labelInterval < 1 {
-		labelInterval = 1
-	}
+	labelInterval := max(len(history)/10, 1)
 	sb.WriteString(fmt.Sprintf("<div style='display: flex; margin-left: 40px; font-size: 10px; color: #888; min-width: %dpx;'>\n", chartWidth))
 	for i, entry := range history {
 		if i%labelInterval == 0 || i == len(history)-1 {
@@ -1249,7 +1238,7 @@ func renderTPDBandwidthTable(metrics []tpdstore.TransportMetric, src statsSource
 	for d := range dateSet {
 		dates = append(dates, d)
 	}
-	sort.Strings(dates)
+	slices.Sort(dates)
 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("<p>Showing %d transports with bandwidth data over %d days</p>\n", len(metrics), len(dates)))
@@ -1407,9 +1396,7 @@ func fillTPDCounts(tpdURL string, summary *tpdNetworkSummary) error {
 	if cxoErr == nil {
 		summary.TotalTransports = stats.Total
 		summary.UniqueVisors = stats.UniqueVisors
-		for k, v := range stats.ByType {
-			summary.ByType[k] = v
-		}
+		maps.Copy(summary.ByType, stats.ByType)
 		summary.CountsSrc = src.String()
 		return nil
 	}
@@ -1441,9 +1428,7 @@ func fillTPDCountsHTTP(tpdURL string, summary *tpdNetworkSummary) error {
 	}
 	summary.TotalTransports = stats.TotalTransports
 	summary.UniqueVisors = stats.UniqueVisors
-	for k, v := range stats.ByType {
-		summary.ByType[k] = v
-	}
+	maps.Copy(summary.ByType, stats.ByType)
 	return nil
 }
 
@@ -1486,14 +1471,8 @@ func accumulateVerifiedBandwidth(metrics []tpdstore.TransportMetric, summary *tp
 			bReported := daily.B != nil && (daily.B.Sent > 0 || daily.B.Recv > 0)
 			switch {
 			case aReported && bReported:
-				aToB := daily.A.Sent
-				if daily.B.Recv < aToB {
-					aToB = daily.B.Recv
-				}
-				bToA := daily.A.Recv
-				if daily.B.Sent < bToA {
-					bToA = daily.B.Sent
-				}
+				aToB := min(daily.B.Recv, daily.A.Sent)
+				bToA := min(daily.B.Sent, daily.A.Recv)
 				summary.TotalBandwidth += aToB + bToA
 			case aReported:
 				summary.TotalBandwidth += daily.A.Sent + daily.A.Recv
@@ -1593,11 +1572,11 @@ func sortedTransportTypes(byType map[string]int) []string {
 	for tpType := range byType {
 		types = append(types, tpType)
 	}
-	sort.Slice(types, func(i, j int) bool {
-		if byType[types[i]] != byType[types[j]] {
-			return byType[types[i]] > byType[types[j]]
-		}
-		return types[i] < types[j]
+	slices.SortFunc(types, func(a, b string) int {
+		return cmp.Or(
+			cmp.Compare(byType[b], byType[a]),
+			cmp.Compare(a, b),
+		)
 	})
 	return types
 }

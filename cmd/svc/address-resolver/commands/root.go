@@ -65,21 +65,21 @@ DEL /deregister/{network} (NM auth headers: NM-PK, NM-Sign)
 
 GET /security/nonces/{pk}
   %s`,
-		cmdutil.ExampleJSON(map[string]interface{}{
+		cmdutil.ExampleJSON(map[string]any{
 			"build_info":   map[string]string{"version": "v1.3.29"},
 			"started_at":   "2024-01-15T10:00:00Z",
 			"dmsg_address": pk1 + ":80",
 			"dmsg_servers": []string{pk2},
 		}),
-		cmdutil.ExampleJSON(map[string]interface{}{"port": 30178}),
+		cmdutil.ExampleJSON(map[string]any{"port": 30178}),
 		cmdutil.ExampleJSON(map[string]string{"addr": "192.168.1.100:30178"}),
-		cmdutil.ExampleJSON(map[string]interface{}{
+		cmdutil.ExampleJSON(map[string]any{
 			"addr":      "192.168.1.100:30178",
 			"handshake": "<base64_handshake_data>",
 		}),
 		cmdutil.ExampleJSON(api.ArData{Sudph: []string{pk1}, Stcpr: []string{pk1, pk2}}),
 		cmdutil.ExampleJSON([]string{pk1, pk2}),
-		cmdutil.ExampleJSON(map[string]interface{}{"nonce": 12345}),
+		cmdutil.ExampleJSON(map[string]any{"nonce": 12345}),
 	)
 }
 

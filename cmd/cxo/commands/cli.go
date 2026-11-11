@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -1163,7 +1164,7 @@ func loadHistory(line *liner.State) error {
 	hf := histroyFilePath()
 	fl, err := os.Open(hf) //nolint:gosec
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return nil
 		}
 		return err

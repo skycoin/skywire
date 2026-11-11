@@ -9,14 +9,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
 	routeFinder "github.com/skycoin/skywire/pkg/deployment/rf/store"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -57,7 +56,7 @@ type HealthCheckResponse = httputil.HealthCheckResponse
 const maxBodyBytes = 1 << 20
 
 // New creates a new api
-func New(s store.Store, logger logrus.FieldLogger, enableMetrics bool, dmsgAddr string) *API {
+func New(s store.Store, logger logging.FieldLogger, enableMetrics bool, dmsgAddr string) *API {
 	api := &API{
 		reqsInFlightCountMiddleware: metricsutil.NewRequestsInFlightCountMiddleware(),
 		store:                       s,
@@ -94,7 +93,7 @@ func New(s store.Store, logger logrus.FieldLogger, enableMetrics bool, dmsgAddr 
 	return api
 }
 
-func (a *API) log(r *http.Request) logrus.FieldLogger {
+func (a *API) log(r *http.Request) logging.FieldLogger {
 	return httputil.GetLogger(r)
 }
 
@@ -155,10 +154,7 @@ func (a *API) getPairedRoutes(w http.ResponseWriter, r *http.Request) {
 		// Honor the caller's requested route count (mux degree +
 		// headroom), bounded by routesCeiling. Zero keeps the default.
 		if grr.Opts.NumRoutes > 0 {
-			numRoutes = int(grr.Opts.NumRoutes)
-			if numRoutes > routesCeiling {
-				numRoutes = routesCeiling
-			}
+			numRoutes = min(int(grr.Opts.NumRoutes), routesCeiling)
 		}
 	}
 

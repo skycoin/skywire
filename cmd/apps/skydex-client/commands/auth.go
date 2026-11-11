@@ -37,7 +37,9 @@ package commands
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -47,9 +49,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 var (
@@ -72,7 +73,7 @@ func loadUIPassword(path string) error {
 	}
 	data, err := os.ReadFile(path) //nolint:gosec
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return nil
 		}
 		return err
@@ -153,7 +154,7 @@ func unauthorized(w http.ResponseWriter, reason string) {
 //
 // With no password configured it returns uiAddr unchanged and starts nothing —
 // the desktop default stays exactly what it was, one server on one port.
-func gatedServer(ctx context.Context, uiAddr string, log logrus.FieldLogger) (string, error) {
+func gatedServer(ctx context.Context, uiAddr string, log logging.FieldLogger) (string, error) {
 	if !uiPasswordSet() {
 		return uiAddr, nil
 	}

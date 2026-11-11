@@ -1,4 +1,5 @@
 import { TabButtonData } from '../components/layout/top-bar/top-bar.component';
+import { ThemeChoice, themeChoices } from '../services/theme.service';
 
 /** A visor as the command palette sees it. */
 export interface PaletteVisor {
@@ -29,6 +30,7 @@ export interface PaletteItem {
   externalUrl?: string;
   action?: PaletteAction;
   visor?: PaletteVisor;
+  theme?: ThemeChoice;
   score: number;
 }
 
@@ -56,6 +58,8 @@ export interface PaletteContext {
   homeTabs: TabButtonData[];
   tabsFor: (v: PaletteVisor) => TabButtonData[];
   translate: (key: string) => string;
+  // The theme choice in effect, marked in its entry.
+  themeChoice?: ThemeChoice;
 }
 
 const actionIcons: { [a in PaletteAction]: string } = {
@@ -193,6 +197,19 @@ function actionEntries(v: PaletteVisor, ctx: PaletteContext, combined: boolean):
     });
 }
 
+function themeEntries(ctx: PaletteContext): PaletteEntry[] {
+  return themeChoices.map(c => ({
+    item: {
+      group: 'actions',
+      icon: c === 'light' ? 'wb_sunny' : c === 'dark' ? 'brightness_2' : 'brightness_auto',
+      title: ctx.translate('palette.theme.' + c),
+      detail: c === ctx.themeChoice ? ctx.translate('palette.theme.current') : undefined,
+      theme: c,
+    },
+    required: [[ctx.translate('palette.theme.' + c), 'appearance', 'color', 'colour']],
+  } as PaletteEntry));
+}
+
 /**
  * Builds every entry for a query. Entries pairing another visor with one of its
  * tabs or actions are only built for queries of two words or more.
@@ -224,6 +241,9 @@ export function paletteEntries(ctx: PaletteContext, tokens: string[]): PaletteEn
       onEmpty: true,
     });
   });
+  if (ctx.themeChoice) {
+    entries.push(...themeEntries(ctx));
+  }
   if (tokens.length >= 2) {
     ctx.visors.filter(v => !ctx.current || v.pk !== ctx.current.pk).forEach(v => {
       entries.push(...tabEntries(v, ctx, true));

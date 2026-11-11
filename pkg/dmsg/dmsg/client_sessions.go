@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"slices"
 	"strings"
 	"time"
 
@@ -224,12 +225,7 @@ func (ce *Client) canDialTCP() bool {
 }
 
 func hasCarrier(carriers []string, c string) bool {
-	for _, x := range carriers {
-		if x == c {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(carriers, c)
 }
 
 // prefersWTOverWS reports whether the carrier preference lists WebTransport

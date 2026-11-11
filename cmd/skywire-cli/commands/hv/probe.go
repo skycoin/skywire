@@ -134,13 +134,13 @@ func probeRun() error {
 
 	id := 0
 	start := time.Now()
-	send := func(method string, params map[string]interface{}) int {
+	send := func(method string, params map[string]any) int {
 		id++
 		if params == nil {
-			params = map[string]interface{}{}
+			params = map[string]any{}
 		}
-		b, _ := json.Marshal(map[string]interface{}{"id": id, "method": method, "params": params}) //nolint:errcheck
-		_ = c.Write(ctx, websocket.MessageText, b)                                                 //nolint:errcheck
+		b, _ := json.Marshal(map[string]any{"id": id, "method": method, "params": params}) //nolint:errcheck
+		_ = c.Write(ctx, websocket.MessageText, b)                                         //nolint:errcheck
 		return id
 	}
 	at := func() string { return fmt.Sprintf("[%6dms]", time.Since(start).Milliseconds()) }
@@ -150,11 +150,11 @@ func probeRun() error {
 	send("Log.enable", nil)
 	send("Inspector.enable", nil)
 	if probeNavigate != "" {
-		send("Page.navigate", map[string]interface{}{"url": probeNavigate})
+		send("Page.navigate", map[string]any{"url": probeNavigate})
 	}
 	wantID := 0
 	if probeEval != "" {
-		wantID = send("Runtime.evaluate", map[string]interface{}{
+		wantID = send("Runtime.evaluate", map[string]any{
 			"expression": probeEval, "returnByValue": true, "awaitPromise": true,
 		})
 	}
@@ -240,8 +240,8 @@ type probeMsg struct {
 	Params struct {
 		Type string `json:"type"`
 		Args []struct {
-			Value       interface{} `json:"value"`
-			Description string      `json:"description"`
+			Value       any    `json:"value"`
+			Description string `json:"description"`
 		} `json:"args"`
 		ExceptionDetails struct {
 			Text      string `json:"text"`

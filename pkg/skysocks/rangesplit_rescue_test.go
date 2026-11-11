@@ -175,7 +175,7 @@ func TestCopyWithIdleTimeout_ProgressBeatsIdle(t *testing.T) {
 	defer src.Close()    //nolint:errcheck
 	defer feeder.Close() //nolint:errcheck
 	go func() {
-		for i := 0; i < 4; i++ {
+		for i := range 4 {
 			time.Sleep(30 * time.Millisecond)
 			feeder.Write([]byte{byte(i), byte(i), byte(i)}) //nolint:errcheck,gosec
 		}

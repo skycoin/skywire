@@ -10,7 +10,7 @@ import (
 
 // The "app <name>" pair has to lead the args whatever order the map gives.
 func TestBatchArgsPutAppFirst(t *testing.T) {
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		conf := &Launcher{Apps: []appserver.AppConfig{{Name: "proxy-2"}}}
 		_, err := applyBatchArgs(conf, "proxy-2", map[string]any{"--srv": "PK", "app": "skysocks-client", "--addr": ":1081", "--reconnect": true})
 		require.NoError(t, err)

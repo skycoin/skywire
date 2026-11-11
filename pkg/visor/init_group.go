@@ -11,6 +11,7 @@ package visor
 import (
 	"context"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -19,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skychat/history"
 	skychatprofile "github.com/skycoin/skywire/pkg/skychat/profile"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // groupState holds the visor-side runtime state for chat groups.
@@ -36,7 +38,7 @@ type groupState struct {
 	// history is non-nil when group-message persistence is enabled.
 	// The visor's GroupHistory RPC reads from this; the inbox's
 	// deliver fans messages to it on the write side. nil when
-	// persistence is off (the default).
+	// persistence is off.
 	history GroupHistoryFetcher
 }
 
@@ -44,6 +46,20 @@ type groupState struct {
 // hundred messages a minute under burst, hard cap before unbounded
 // growth if the consumer is slow or absent.
 const groupInboxCap = 1024
+
+// defaultGroupHistoryDB is the group history store used when the config
+// names none, relative to <LocalPath>/skychat.
+const defaultGroupHistoryDB = "group-history.db"
+
+// groupStorePath is where the group records live. The wasm visor keeps them
+// in skychat/groups.json beside the local path, as it does mail and contacts,
+// because the page never persists local/ or a *.db file.
+func groupStorePath(localPath string) string {
+	if runtime.GOOS == "js" {
+		return filepath.Join(filepath.Dir(filepath.Clean(localPath)), "skychat", "groups.json")
+	}
+	return filepath.Join(localPath, "skychat", "groups.db")
+}
 
 // initGrouping brings up the per-visor chat-group feed manager. Best
 // effort: a failure here logs and disables group chat for this run
@@ -55,7 +71,7 @@ func initGrouping(_ context.Context, v *Visor, log *logging.Logger) error {
 		return nil
 	}
 	dataDir := filepath.Join(v.conf.LocalPath, "skychat")
-	storePath := filepath.Join(dataDir, "groups.db")
+	storePath := groupStorePath(v.conf.LocalPath)
 
 	// The visor SK derives the key that seals each group's AES key inside
 	// groups.db. Without it the store refuses to open rather than writing
@@ -112,14 +128,14 @@ func initGrouping(_ context.Context, v *Visor, log *logging.Logger) error {
 	inbox := newGroupInbox(groupInboxCap)
 	inbox.setManager(mgr)
 
-	// Group history persistence — opt-in via Skychat.GroupHistoryDB
-	// (when non-empty). Defaults to disabled: groups are usually
-	// ephemeral within a session, and the in-memory ring (groupInboxCap
-	// = 1024) is enough for the live-message use case. Operators who
-	// want cross-restart recall set the DB path explicitly.
+	// The skychat UI keeps no copy of group messages and reads them back
+	// from this store, so it is on unless Skychat.GroupHistoryDB is "off".
 	var histFetcher GroupHistoryFetcher
+	dbPath := defaultGroupHistoryDB
 	if v.conf.Skychat != nil && v.conf.Skychat.GroupHistoryDB != "" {
-		dbPath := v.conf.Skychat.GroupHistoryDB
+		dbPath = v.conf.Skychat.GroupHistoryDB
+	}
+	if dbPath != visorconfig.GroupHistoryOff {
 		// Use the same limits the chat-app's 1:1 store uses by
 		// default. Operators can tune via a future config knob —
 		// for now defaults are a sensible starting point that
@@ -152,6 +168,7 @@ func initGrouping(_ context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	mgr.SetMessageHandler(inbox.deliver)
+	v.parkGroupJoins(mgr)
 
 	v.initLock.Lock()
 	v.grouping.store = store

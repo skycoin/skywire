@@ -14,12 +14,12 @@
 }
 
 .section-desc {
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(var(--sw-fg-rgb), var(--sw-a60));
   font-size: 13px;
   margin-bottom: 16px;
 
   code {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(var(--sw-fg-rgb), 0.1);
     padding: 1px 4px;
     border-radius: 3px;
     font-size: 12px;
@@ -34,11 +34,11 @@
   th, td {
     padding: 8px 12px;
     text-align: left;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(var(--sw-fg-rgb), 0.08);
   }
 
   th {
-    color: rgba(255, 255, 255, 0.5);
+    color: rgba(var(--sw-fg-rgb), var(--sw-a50));
     font-weight: 500;
     font-size: 13px;
   }
@@ -49,7 +49,7 @@
 
   .small {
     font-size: 12px;
-    color: rgba(255, 255, 255, 0.7);
+    color: rgba(var(--sw-fg-rgb), 0.7);
     word-break: break-all;
   }
 
@@ -60,7 +60,7 @@
 }
 
 .empty-msg {
-  color: rgba(255, 255, 255, 0.38);
+  color: rgba(var(--sw-fg-rgb), var(--sw-a38));
   font-style: italic;
   margin-bottom: 16px;
 }
@@ -112,7 +112,7 @@
 }
 
 .whitelist-edit-row td {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--sw-fg-rgb), 0.03);
   padding: 12px 16px !important;
 }
 
@@ -124,7 +124,7 @@
 
 .whitelist-help {
   margin: 0;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(var(--sw-fg-rgb), var(--sw-a60));
   font-size: 12px;
 }
 
@@ -142,26 +142,26 @@
 // Input styling for dark background
 :host ::ng-deep {
   .mat-mdc-text-field-wrapper {
-    background: rgba(255, 255, 255, 0.08) !important;
+    background: rgba(var(--sw-fg-rgb), 0.08) !important;
   }
   .mdc-text-field--outlined .mdc-notched-outline__leading,
   .mdc-text-field--outlined .mdc-notched-outline__notch,
   .mdc-text-field--outlined .mdc-notched-outline__trailing {
-    border-color: rgba(255, 255, 255, 0.3) !important;
+    border-color: rgba(var(--sw-fg-rgb), 0.3) !important;
   }
   .mat-mdc-input-element,
   .mdc-text-field__input {
-    color: white !important;
-    caret-color: white !important;
+    color: var(--sw-input-text) !important;
+    caret-color: var(--sw-input-text) !important;
   }
   .mdc-floating-label {
-    color: rgba(255, 255, 255, 0.6) !important;
+    color: rgba(var(--sw-fg-rgb), var(--sw-a60)) !important;
   }
   // Checkbox label text on dark background
   .mdc-label,
   .mdc-form-field > label,
   .mat-mdc-checkbox label {
-    color: rgba(255, 255, 255, 0.87) !important;
+    color: rgba(var(--sw-fg-rgb), 0.87) !important;
   }
 }
 
@@ -179,9 +179,9 @@
   text-transform: uppercase;
 }
 .mode-forward {
-  background-color: rgba(76, 175, 80, 0.18);
-  color: #81c784;
-  border: 1px solid rgba(76, 175, 80, 0.35);
+  background-color: rgba(var(--sw-green-rgb), 0.18);
+  color: rgb(var(--sw-leaf-rgb));
+  border: 1px solid rgba(var(--sw-green-rgb), 0.35);
 }
 .mode-proxy {
   background-color: rgba(3, 169, 244, 0.18);
@@ -201,12 +201,12 @@
   letter-spacing: 0.3px;
 }
 .wl-open {
-  background-color: rgba(76, 175, 80, 0.18);
-  color: #81c784;
-  border: 1px solid rgba(76, 175, 80, 0.35);
+  background-color: rgba(var(--sw-green-rgb), 0.18);
+  color: rgb(var(--sw-leaf-rgb));
+  border: 1px solid rgba(var(--sw-green-rgb), 0.35);
 }
 .wl-restricted {
-  background-color: rgba(255, 152, 0, 0.18);
-  color: #ffb74d;
-  border: 1px solid rgba(255, 152, 0, 0.35);
+  background-color: rgba(var(--sw-orange-rgb), 0.18);
+  color: rgb(var(--sw-amber-rgb));
+  border: 1px solid rgba(var(--sw-orange-rgb), 0.35);
 }

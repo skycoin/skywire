@@ -99,7 +99,7 @@ func TestSACKTracker_FullWindowBitmap(t *testing.T) {
 
 func TestRetxBuffer_StoreAndPurge(t *testing.T) {
 	rb := newRetxBuffer(128)
-	for i := uint32(0); i < 10; i++ {
+	for i := range uint32(10) {
 		assert.True(t, rb.Store(i, []byte{byte(i)}, uuid.Nil))
 	}
 	assert.Equal(t, 10, rb.Len())
@@ -112,7 +112,7 @@ func TestRetxBuffer_StoreAndPurge(t *testing.T) {
 
 func TestRetxBuffer_RetransmitList(t *testing.T) {
 	rb := newRetxBuffer(128)
-	for i := uint32(0); i < 8; i++ {
+	for i := range uint32(8) {
 		rb.Store(i, []byte{byte(i)}, uuid.Nil)
 	}
 
@@ -168,7 +168,7 @@ func TestRetxBuffer_RetxBackoffSuppressesDuplicates(t *testing.T) {
 
 	// The cap: retxCount keeps growing but the wait is bounded at
 	// threshold<<retxBackoffMaxShiftDefault.
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		backdate(retxMinAgeDefault << (retxBackoffMaxShiftDefault + 1))
 		assert.Equal(t, []uint32{3}, sack(), "capped backoff stays retryable")
 	}
@@ -327,7 +327,7 @@ func TestRackThresholdTracksAckDelay(t *testing.T) {
 	}
 
 	// Fast samples decay it gently (α=0.125), never below the idle-RTT basis.
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		m.recordAckDelay(20 * time.Millisecond)
 	}
 	relaxed := m.rackThreshold()

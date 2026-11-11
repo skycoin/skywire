@@ -2,18 +2,18 @@
 package clivisor
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/0magnet/bitree"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -21,6 +21,7 @@ import (
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
@@ -75,7 +76,9 @@ branch lists the published keys none of them embeds.`,
 			_ = pk.Set(a) //nolint:errcheck // checked above
 			order[pk] = i
 		}
-		sort.SliceStable(m.Visors, func(i, j int) bool { return order[m.Visors[i].PK] < order[m.Visors[j].PK] })
+		slices.SortStableFunc(m.Visors, func(a, b mapVisor) int {
+			return cmp.Compare(order[a.PK], order[b.PK])
+		})
 		roles := map[cipher.PubKey]string{}
 		switch hvMapEnv {
 		case "prod":
@@ -187,9 +190,7 @@ func collectHVMap(local visorapi.API, tree visorapi.HVVisorTree, only map[cipher
 		if !v.Online {
 			continue
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			client := local
@@ -199,13 +200,13 @@ func collectHVMap(local visorapi.API, tree visorapi.HVVisorTree, only map[cipher
 					v.Error = err.Error()
 					return
 				}
-				quiet := logrus.New()
+				quiet := logging.New()
 				quiet.SetOutput(io.Discard)
 				client = visorapi.NewRPCClient(quiet, conn, visorapi.RPCPrefix, time.Duration(clirpc.Timeout)*time.Second)
 				defer client.Close() //nolint:errcheck
 			}
 			v.fill(client)
-		}()
+		})
 	}
 	wg.Wait()
 	return m
@@ -311,9 +312,11 @@ func (m *hvMap) applyRoles(roles map[cipher.PubKey]string) {
 			m.Unplaced = append(m.Unplaced, mapKey{PK: pk, Role: r})
 		}
 	}
-	sort.Slice(m.Unplaced, func(i, j int) bool {
-		a, b := m.Unplaced[i], m.Unplaced[j]
-		return a.Role < b.Role || a.Role == b.Role && a.PK.Hex() < b.PK.Hex()
+	slices.SortFunc(m.Unplaced, func(a, b mapKey) int {
+		return cmp.Or(
+			cmp.Compare(a.Role, b.Role),
+			cmp.Compare(a.PK.Hex(), b.PK.Hex()),
+		)
 	})
 }
 
@@ -534,7 +537,7 @@ func appWhitelist(name string, args []string) string {
 		return "N/A"
 	}
 	n := 0
-	for _, k := range strings.Split(argValue(args, "whitelist"), ",") {
+	for k := range strings.SplitSeq(argValue(args, "whitelist"), ",") {
 		if strings.TrimSpace(k) != "" {
 			n++
 		}

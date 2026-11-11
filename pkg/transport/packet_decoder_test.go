@@ -12,7 +12,7 @@ func TestPacketDecoderSplitsAnyChunking(t *testing.T) {
 	rng := rand.New(rand.NewSource(2)) //nolint:gosec
 	var want []routing.Packet
 	var stream []byte
-	for i := 0; i < 500; i++ {
+	for i := range 500 {
 		payload := make([]byte, rng.Intn(3000)) // includes empty payloads
 		_, _ = rng.Read(payload)
 		p, err := routing.MakeDataPacket(routing.RouteID(i), payload)

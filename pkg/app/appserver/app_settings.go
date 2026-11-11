@@ -29,6 +29,8 @@
 // sequence, so a missed tick delays an op but never loses or repeats it.
 package appserver
 
+import "maps"
+
 import "sync"
 
 // appSettings is the visor's per-app knob store. Values are the int64 payloads
@@ -186,9 +188,7 @@ func copyValues(in map[string]int64) map[string]int64 {
 		return nil
 	}
 	out := make(map[string]int64, len(in))
-	for k, v := range in {
-		out[k] = v
-	}
+	maps.Copy(out, in)
 	return out
 }
 
@@ -197,9 +197,7 @@ func copyText(in map[string]string) map[string]string {
 		return nil
 	}
 	out := make(map[string]string, len(in))
-	for k, v := range in {
-		out[k] = v
-	}
+	maps.Copy(out, in)
 	return out
 }
 

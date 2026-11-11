@@ -136,7 +136,7 @@ func TestController_RequestAckDoesNotBlock(t *testing.T) {
 // instead of writing into the void again.
 func TestController_RequestAckEvictsSilentConn(t *testing.T) {
 	pk := mustPK(t)
-	c := New(Config{StaleAckWindow: 20 * time.Millisecond, Log: func(string, ...interface{}) {}})
+	c := New(Config{StaleAckWindow: 20 * time.Millisecond, Log: func(string, ...any) {}})
 
 	// Seed the cache with a conn nobody is reading from.
 	raw, peerEnd := net.Pipe()
@@ -147,7 +147,7 @@ func TestController_RequestAckEvictsSilentConn(t *testing.T) {
 	c.mu.Unlock()
 
 	never := make(chan struct{})
-	c.watchAck(pk, conn, never, nil, c.cfg.StaleAckWindow)
+	c.watchAck(pk, conn, nil, "", never, nil, c.cfg.StaleAckWindow)
 
 	if c.HasConn(pk) {
 		t.Error("a conn whose ack never came back should be evicted after the window")
@@ -158,7 +158,7 @@ func TestController_RequestAckEvictsSilentConn(t *testing.T) {
 // conn, the late watcher must leave the new one alone.
 func TestController_RequestAckLeavesReplacedConn(t *testing.T) {
 	pk := mustPK(t)
-	c := New(Config{StaleAckWindow: 20 * time.Millisecond, Log: func(string, ...interface{}) {}})
+	c := New(Config{StaleAckWindow: 20 * time.Millisecond, Log: func(string, ...any) {}})
 
 	oldRaw, oldPeer := net.Pipe()
 	newRaw, newPeer := net.Pipe()
@@ -176,7 +176,7 @@ func TestController_RequestAckLeavesReplacedConn(t *testing.T) {
 	c.mu.Unlock()
 
 	never := make(chan struct{})
-	c.watchAck(pk, oldConn, never, nil, c.cfg.StaleAckWindow) // watching the OLD conn
+	c.watchAck(pk, oldConn, nil, "", never, nil, c.cfg.StaleAckWindow) // watching the OLD conn
 
 	c.mu.Lock()
 	got := c.conns[pk]
@@ -189,7 +189,7 @@ func TestController_RequestAckLeavesReplacedConn(t *testing.T) {
 // An ack that arrives in time keeps the conn and releases the waiter.
 func TestController_WatchAckKeepsAckedConn(t *testing.T) {
 	pk := mustPK(t)
-	c := New(Config{StaleAckWindow: 5 * time.Second, Log: func(string, ...interface{}) {}})
+	c := New(Config{StaleAckWindow: 5 * time.Second, Log: func(string, ...any) {}})
 
 	raw, peerEnd := net.Pipe()
 	t.Cleanup(func() { _ = raw.Close(); _ = peerEnd.Close() }) //nolint:errcheck
@@ -202,7 +202,7 @@ func TestController_WatchAckKeepsAckedConn(t *testing.T) {
 	acked <- struct{}{}
 	unregistered := false
 	start := time.Now()
-	c.watchAck(pk, conn, acked, func() { unregistered = true }, c.cfg.StaleAckWindow)
+	c.watchAck(pk, conn, nil, "", acked, func() { unregistered = true }, c.cfg.StaleAckWindow)
 
 	if took := time.Since(start); took > time.Second {
 		t.Errorf("watchAck returned after %v — an ack should release it at once", took)

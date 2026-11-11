@@ -73,6 +73,7 @@ func NewListDirStream(list []fuse.DirEntry) DirStream {
 type dirStreamAsFile struct {
 	creator func(context.Context) (DirStream, syscall.Errno)
 	ds      DirStream
+	cur     fuse.DirEntry
 }
 
 func (d *dirStreamAsFile) Releasedir(ctx context.Context, releaseFlags uint32) {
@@ -92,11 +93,15 @@ func (d *dirStreamAsFile) Readdirent(ctx context.Context) (de *fuse.DirEntry, er
 		return nil, 0
 	}
 
-	e, errno := d.ds.Next()
-	return &e, errno
+	d.cur, errno = d.ds.Next()
+	return &d.cur, errno
 }
 
 func (d *dirStreamAsFile) Seekdir(ctx context.Context, off uint64) syscall.Errno {
+	if off == 0 && d.ds != nil {
+		d.ds.Close()
+		d.ds = nil
+	}
 	if d.ds == nil {
 		var errno syscall.Errno
 		d.ds, errno = d.creator(ctx)

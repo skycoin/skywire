@@ -21,6 +21,7 @@ import (
 
 	"github.com/0magnet/desk"
 
+	"github.com/skycoin/skywire/pkg/skywireconfig/skyenvform"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
@@ -30,7 +31,7 @@ func registerSettingsApp() {
 		Help:  "this tab's skywire.conf: what every reload generates the visor's config from",
 		Width: 820, Height: 600,
 		Open: func(_ []string) (desk.Pane, error) {
-			return &settingsPane{visorRPC: visorRPC{timeout: 30 * time.Second}}, nil
+			return &settingsPane{timeout: 30 * time.Second}, nil
 		},
 	})
 }
@@ -44,7 +45,7 @@ type settingsPane struct {
 	status js.Value
 	funcs  []js.Func
 
-	rows   []settingRow
+	rows   []skyenvform.Row
 	inputs map[string]js.Value // variable → its <input> or <select>
 	lines  []settingLine       // for the filter
 	folds  []js.Value          // the collapsible sections
@@ -147,12 +148,12 @@ func (p *settingsPane) showForm() {
 	}
 	p.body.Call("appendChild", bar)
 
-	var main, deskRows, hostRows []settingRow
+	var main, deskRows, hostRows []skyenvform.Row
 	for _, r := range p.rows {
 		switch {
-		case r.Desk:
+		case r.Locked:
 			deskRows = append(deskRows, r)
-		case r.HostOnly:
+		case hostOnly(r.Key):
 			hostRows = append(hostRows, r)
 		default:
 			main = append(main, r)
@@ -167,7 +168,7 @@ func (p *settingsPane) showForm() {
 	p.section("Host only", "no effect in a browser tab, which cannot listen on a port, open a TUN device or run a separate daemon", hostRows, st.Writable)
 }
 
-func (p *settingsPane) section(title, help string, rows []settingRow, editable bool) {
+func (p *settingsPane) section(title, help string, rows []skyenvform.Row, editable bool) {
 	if len(rows) == 0 {
 		return
 	}
@@ -182,7 +183,7 @@ func (p *settingsPane) section(title, help string, rows []settingRow, editable b
 }
 
 // rowEl draws one variable: its name and flag, what it does, and a field.
-func (p *settingsPane) rowEl(r settingRow, editable bool) js.Value {
+func (p *settingsPane) rowEl(r skyenvform.Row, editable bool) js.Value {
 	row := paneEl(p.doc, "div", "display:flex;flex-wrap:wrap;gap:4px 12px;align-items:flex-start;padding:8px 0;border-bottom:1px solid #221e2c", "")
 	left := paneEl(p.doc, "div", "flex:1 1 220px;min-width:0", "")
 	name := paneEl(p.doc, "div", "font:13px ui-monospace,monospace;color:#e6e9ee;word-break:break-all", r.Key)
@@ -200,7 +201,7 @@ func (p *settingsPane) rowEl(r settingRow, editable bool) js.Value {
 	row.Call("appendChild", left)
 
 	field := p.fieldEl(r)
-	field.Set("disabled", !editable || r.Desk)
+	field.Set("disabled", !editable || r.Locked)
 	p.inputs[r.Key] = field
 	row.Call("appendChild", field)
 
@@ -209,9 +210,9 @@ func (p *settingsPane) rowEl(r settingRow, editable bool) js.Value {
 	return row
 }
 
-func (p *settingsPane) fieldEl(r settingRow) js.Value {
+func (p *settingsPane) fieldEl(r skyenvform.Row) js.Value {
 	const css = "flex:none;width:260px;max-width:100%;box-sizing:border-box;padding:6px;font:13px ui-monospace,monospace;background:#0f0d15;color:#e6e9ee;border:1px solid #2a2535"
-	def := defaultShown(r)
+	def := skyenvform.DefaultShown(r)
 	if r.Format == "bool" {
 		sel := paneEl(p.doc, "select", css, "")
 		for _, o := range [][2]string{{"", def}, {"true", "on"}, {"false", "off"}} {
@@ -238,22 +239,22 @@ func (p *settingsPane) fieldEl(r settingRow) js.Value {
 }
 
 // form reads every field back.
-func (p *settingsPane) form() map[string]settingInput {
-	out := map[string]settingInput{}
+func (p *settingsPane) form() map[string]skyenvform.Input {
+	out := map[string]skyenvform.Input{}
 	for key, in := range p.inputs {
 		v := in.Get("value").String()
 		if in.Get("tagName").String() == "SELECT" && v == "" {
-			out[key] = settingInput{Unset: true}
+			out[key] = skyenvform.Input{Unset: true}
 			continue
 		}
-		out[key] = settingInput{Value: v}
+		out[key] = skyenvform.Input{Value: v}
 	}
 	return out
 }
 
 // review shows what Save would change and asks before writing.
 func (p *settingsPane) review() {
-	edits, changes, err := settingsEdits(p.rows, p.form())
+	edits, changes, err := skyenvform.Edits(p.rows, p.form())
 	if err != nil {
 		p.setStatus("not saved: " + err.Error())
 		return

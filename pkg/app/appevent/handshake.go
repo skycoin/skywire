@@ -8,9 +8,9 @@ import (
 	"os"
 
 	rpc "github.com/0magnet/gobrpc"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // DoReqHandshake performs a request handshake which is initiated from an app.
@@ -28,7 +28,7 @@ func DoReqHandshake(conf appcommon.ProcConfig, subs *Subscriber) (net.Conn, []io
 			return nil, nil, fmt.Errorf("failed to create listener for RPC egress: %w", err)
 		}
 
-		l := logrus.New()
+		l := logging.New()
 		l.SetOutput(os.Stderr)
 		log := l.WithField("src", "events_gateway")
 

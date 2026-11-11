@@ -5,14 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"os"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/logging"
 )
@@ -92,7 +91,7 @@ func bootReportHandler(log *logging.Logger, file string) http.HandlerFunc {
 			http.Error(w, "not a JSON object", http.StatusBadRequest)
 			return
 		}
-		fields := logrus.Fields{"kind": bootReportField(rep, "kind", 40)}
+		fields := logging.Fields{"kind": bootReportField(rep, "kind", 40)}
 		for _, k := range []string{"stage", "version", "ua", "error", "src", "tag", "url", "visible"} {
 			if v := bootReportField(rep, k, bootReportFieldMax); v != "" {
 				fields[k] = v
@@ -126,14 +125,12 @@ type bootReportFile struct {
 	path string
 }
 
-func (f *bootReportFile) add(fields logrus.Fields, now time.Time) error {
+func (f *bootReportFile) add(fields logging.Fields, now time.Time) error {
 	if f.path == "" {
 		return nil
 	}
 	line := make(map[string]any, len(fields)+1)
-	for k, v := range fields {
-		line[k] = v
-	}
+	maps.Copy(line, fields)
 	line["time"] = now.UTC().Format(time.RFC3339)
 	b, err := json.Marshal(line)
 	if err != nil {

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -45,7 +45,7 @@ func TestSkillsMatchCommandTree(t *testing.T) {
 			problems = append(problems, checkSkillSegment(skill, seg)...)
 		}
 	}
-	sort.Strings(problems)
+	slices.Sort(problems)
 	for _, p := range problems {
 		t.Error(p)
 	}
@@ -57,7 +57,7 @@ func skillSegments(text string) []string {
 	var spans []string
 	inCode := false
 	var cont string
-	for _, line := range strings.Split(text, "\n") {
+	for line := range strings.SplitSeq(text, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "```") {
 			inCode = !inCode
 			cont = ""
@@ -65,8 +65,8 @@ func skillSegments(text string) []string {
 		}
 		if inCode {
 			l := strings.TrimSpace(line)
-			if strings.HasSuffix(l, "\\") {
-				cont += strings.TrimSuffix(l, "\\") + " "
+			if before, ok := strings.CutSuffix(l, "\\"); ok {
+				cont += before + " "
 				continue
 			}
 			spans = append(spans, cont+l)
@@ -189,7 +189,7 @@ func TestSkillFlagsExistSomewhere(t *testing.T) {
 			t.Fatal(err)
 		}
 		inCode := false
-		for _, line := range strings.Split(string(data), "\n") {
+		for line := range strings.SplitSeq(string(data), "\n") {
 			if strings.HasPrefix(strings.TrimSpace(line), "```") {
 				inCode = !inCode
 				continue

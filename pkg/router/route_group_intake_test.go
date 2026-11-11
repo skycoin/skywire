@@ -39,7 +39,7 @@ func TestRouteGroupIntake_StalledGroupDoesNotStallOthers(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		for i := 0; i < intakeChBufSize+16; i++ {
+		for range intakeChBufSize + 16 {
 			if herr := stuck.handlePacket(pkt); herr != nil {
 				t.Errorf("stalled group handlePacket: %v", herr)
 				return

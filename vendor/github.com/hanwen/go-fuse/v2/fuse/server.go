@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
 	"strconv"
@@ -54,9 +55,6 @@ type Server struct {
 	// maxReaders is the maximum number of goroutines reading requests
 	maxReaders int
 
-	// Pools for []byte
-	buffers bufferPool
-
 	// Pool for request structs.
 	reqPool sync.Pool
 
@@ -74,31 +72,16 @@ type Server struct {
 	requestProcessingMu sync.Mutex
 }
 
-// SetDebug is deprecated. Use MountOptions.Debug instead.
-func (ms *Server) SetDebug(dbg bool) {
-	// This will typically trigger the race detector.
-	ms.opts.Debug = dbg
-}
-
 // KernelSettings returns the Init message from the kernel, so
 // filesystems can adapt to availability of features of the kernel
 // driver. The message should not be altered.
 func (ms *Server) KernelSettings() *InitIn {
-	s := ms.kernelSettings
+	s := ms.conn.in
 
 	return &s
 }
 
 const _MAX_NAME_LEN = 20
-
-// This type is deprecated.
-type LatencyMap interface {
-	Add(name string, dt time.Duration)
-}
-
-// RecordLatencies is deprecated. It is provided for backward compatibility but does not do anything.
-func (ms *Server) RecordLatencies(l LatencyMap) {
-}
 
 // Unmount calls fusermount -u on the mount. This has the effect of
 // shutting down the filesystem. After the Server is unmounted, it
@@ -169,7 +152,16 @@ func (o *MountOptions) setDefaults(fs RawFileSystem) {
 		o.MaxStackDepth = 1
 	}
 	if o.Name == "" {
-		name := fs.String()
+		var name string
+		if s, ok := fs.(fmt.Stringer); ok {
+			name = s.String()
+		} else {
+			t := reflect.TypeOf(fs)
+			for t.Kind() == reflect.Pointer {
+				t = t.Elem()
+			}
+			name = t.Name()
+		}
 		l := min(len(name), _MAX_NAME_LEN)
 		o.Name = strings.Replace(name[:l], ",", ";", -1)
 	}
@@ -227,9 +219,9 @@ func NewServer(fs RawFileSystem, mountPoint string, opts *MountOptions) (*Server
 
 	ms := &Server{
 		protocolServer: protocolServer{
-			fileSystem:  fs,
-			retrieveTab: make(map[uint64]*retrieveCacheRequest),
-			opts:        &o,
+			fileSystem: fs,
+			opts:       &o,
+			conn:       &Conn{},
 		},
 		opts:         &o,
 		maxReaders:   maxReaders,
@@ -237,11 +229,7 @@ func NewServer(fs RawFileSystem, mountPoint string, opts *MountOptions) (*Server
 		ready:        make(chan error, 1),
 	}
 	ms.reqPool.New = func() any {
-		return &requestAlloc{
-			request: request{
-				cancel: make(chan struct{}),
-			},
-		}
+		return &requestAlloc{}
 	}
 	ms.readPool.New = func() any {
 		// O_DIRECT typically requires buffers aligned to
@@ -270,7 +258,8 @@ func NewServer(fs RawFileSystem, mountPoint string, opts *MountOptions) (*Server
 	if err != nil {
 		return nil, err
 	}
-	ms.protocolServer.writev = ms.fuseFD.writev
+	ms.conn.notify = newNotify(ms.fuseFD.writev, &o)
+	ms.conn.backing = ms.fdBacking()
 
 	if code := ms.handleInit(); !code.Ok() {
 		ms.fuseFD.close()
@@ -384,20 +373,8 @@ func (ms *Server) Serve() {
 	ms.fuseFD.close()
 
 	// shutdown in-flight cache retrieves.
-	//
-	// It is possible that umount comes in the middle - after retrieve
-	// request was sent to kernel, but corresponding kernel reply has not
-	// yet been read. We unblock all such readers and wake them up with ENODEV.
-	ms.retrieveMu.Lock()
-	rtab := ms.retrieveTab
-	// retrieve attempts might be erroneously tried even after close
-	// we have to keep retrieveTab !nil not to panic.
-	ms.retrieveTab = make(map[uint64]*retrieveCacheRequest)
-	ms.retrieveMu.Unlock()
-	for _, reading := range rtab {
-		reading.n = 0
-		reading.st = ENODEV
-		close(reading.ready)
+	if ms.conn.notify.notifier != nil {
+		ms.conn.notify.notifier.abort()
 	}
 
 	ms.fileSystem.OnUnmount()
@@ -424,13 +401,10 @@ func (ms *Server) handleInit() Status {
 		return code
 	}
 
-	if ms.kernelSettings.Minor >= 13 {
+	if ms.conn.in.Minor >= 13 {
 		ms.setSplice()
 	}
 
-	// INIT is handled. Init the file system, but don't accept
-	// incoming requests, so the file system can setup itself.
-	ms.fileSystem.Init(ms)
 	return OK
 }
 
@@ -502,13 +476,17 @@ func (ms *Server) handleRequest(req *requestAlloc) Status {
 		defer ms.requestProcessingMu.Unlock()
 	}
 
-	h, inSize, outSize, outPayloadSize, code := parseRequest(req.inputBuf, &ms.kernelSettings)
+	h, inSize, outSize, outPayloadSize, code := parseRequest(req.inputBuf, ms.conn.out.Flags64())
 	req.request.status = code
 	if !code.Ok() && code != ENOSYS {
 		ms.opts.Logger.Printf("parseRequest: %v", code)
 	}
-	req.inPayload = req.inputBuf[inSize:]
-	req.inputBuf = req.inputBuf[:inSize]
+	if code.Ok() {
+		req.request.status = req.splitPayload(inSize, int(h.InputSize))
+		if !req.request.status.Ok() {
+			ms.opts.Logger.Printf("op %s: bad request extension: %v", h.Name, req.request.status)
+		}
+	}
 	req.outHeaderBuf = req.outHeaderInline[:]
 	req.outDataBuf = req.outDataInline[:outSize]
 	clear(req.outHeaderBuf)
@@ -521,7 +499,7 @@ func (ms *Server) handleRequest(req *requestAlloc) Status {
 	if req.suppressReply {
 		return OK
 	}
-	errno := ms.fuseFD.write(&req.request)
+	errno := ms.fuseFD.write(req)
 	if errno != 0 {
 		// Ignore ENOENT for INTERRUPT responses which
 		// indicates that the referred request is no longer
@@ -542,265 +520,6 @@ func (ms *Server) handleRequest(req *requestAlloc) Status {
 		}
 	}
 	return errno
-}
-
-func notifyWrite(writev func([][]byte) (int, syscall.Errno), opts *MountOptions, req *request) Status {
-	req.serializeHeader(req.outPayloadSize())
-
-	if opts.Debug {
-		opts.Logger.Println(req.OutputDebug())
-	}
-
-	_, errno := writev([][]byte{req.outHeaderBuf, req.outDataBuf, req.outPayload})
-
-	if opts.Debug {
-		h := getHandler(req.inHeader().Opcode)
-		opts.Logger.Printf("Response %s: %v", h.Name, errno)
-	}
-
-	return Status(errno)
-}
-
-func (ms *protocolServer) notifyWrite(req *request) Status {
-	if ms.writev == nil {
-		return ENOSYS
-	}
-	errno := notifyWrite(ms.writev, ms.opts, req)
-	return Status(errno)
-}
-
-func newNotifyRequest(opcode uint32) *request {
-	r := &request{
-		inputBuf:     make([]byte, unsafe.Sizeof(InHeader{})),
-		outHeaderBuf: make([]byte, sizeOfOutHeader),
-		outDataBuf:   make([]byte, getHandler(opcode).OutputSize),
-		status: map[uint32]Status{
-			_OP_NOTIFY_INVAL_INODE:    NOTIFY_INVAL_INODE,
-			_OP_NOTIFY_INVAL_ENTRY:    NOTIFY_INVAL_ENTRY,
-			_OP_NOTIFY_STORE_CACHE:    NOTIFY_STORE_CACHE,
-			_OP_NOTIFY_RETRIEVE_CACHE: NOTIFY_RETRIEVE_CACHE,
-			_OP_NOTIFY_DELETE:         NOTIFY_DELETE,
-			_OP_NOTIFY_PRUNE:          NOTIFY_PRUNE,
-		}[opcode],
-	}
-	r.inHeader().Opcode = opcode
-	return r
-}
-
-// InodeNotify invalidates the information associated with the inode
-// (ie. data cache, attributes, etc.)
-func (ms *protocolServer) InodeNotify(node uint64, off int64, length int64) Status {
-	req := newNotifyRequest(_OP_NOTIFY_INVAL_INODE)
-
-	entry := (*NotifyInvalInodeOut)(req.outData())
-	entry.Ino = node
-	entry.Off = off
-	entry.Length = length
-
-	return ms.notifyWrite(req)
-}
-
-func (ms *Server) PruneNotify(nodes []uint64) Status {
-	if !ms.kernelSettings.SupportsNotify(NOTIFY_PRUNE) {
-		return ENOSYS
-	}
-	if len(nodes) == 0 {
-		return OK
-	}
-
-	req := newNotifyRequest(_OP_NOTIFY_PRUNE)
-
-	entry := (*NotifyPruneOut)(req.outData())
-	entry.Count = uint32(len(nodes))
-
-	req.outPayload = unsafe.Slice((*byte)(unsafe.Pointer(&nodes[0])), 8*len(nodes))
-
-	return ms.notifyWrite(req)
-}
-
-// InodeNotifyStoreCache tells kernel to store data into inode's cache.
-//
-// This call is similar to InodeNotify, but instead of only invalidating a data
-// region, it gives updated data directly to the kernel.
-func (ms *protocolServer) InodeNotifyStoreCache(node uint64, offset int64, data []byte) Status {
-	for len(data) > 0 {
-		size := min(len(data),
-			// NotifyStoreOut has only uint32 for size.
-			// we check for max(int32), not max(uint32), because on 32-bit
-			// platforms int has only 31-bit for positive range.
-			math.MaxInt32)
-
-		st := ms.inodeNotifyStoreCache32(node, offset, data[:size])
-		if st != OK {
-			return st
-		}
-
-		data = data[size:]
-		offset += int64(size)
-	}
-
-	return OK
-}
-
-// inodeNotifyStoreCache32 is internal worker for InodeNotifyStoreCache which
-// handles data chunks not larger than 2GB.
-func (ms *protocolServer) inodeNotifyStoreCache32(node uint64, offset int64, data []byte) Status {
-	req := newNotifyRequest(_OP_NOTIFY_STORE_CACHE)
-
-	store := (*NotifyStoreOut)(req.outData())
-	store.Nodeid = node
-	store.Offset = uint64(offset) // NOTE not int64, as it is e.g. in NotifyInvalInodeOut
-	store.Size = uint32(len(data))
-
-	req.outPayload = data
-
-	return ms.notifyWrite(req)
-}
-
-// InodeRetrieveCache retrieves data from kernel's inode cache.
-//
-// InodeRetrieveCache asks kernel to return data from its cache for inode at
-// [offset:offset+len(dest)) and waits for corresponding reply. If kernel cache
-// has fewer consecutive data starting at offset, that fewer amount is returned.
-// In particular if inode data at offset is not cached (0, OK) is returned.
-//
-// The kernel returns ENOENT if it does not currently have entry for this inode
-// in its dentry cache.
-func (ms *protocolServer) InodeRetrieveCache(node uint64, offset int64, dest []byte) (n int, st Status) {
-	// the kernel won't send us in one go more then what we negotiated as MaxWrite.
-	// retrieve the data in chunks.
-	// TODO spawn some number of readahead retrievers in parallel.
-	ntotal := 0
-	for {
-		chunkSize := min(len(dest), ms.opts.MaxWrite)
-		n, st = ms.inodeRetrieveCache1(node, offset, dest[:chunkSize])
-		if st != OK || n == 0 {
-			break
-		}
-
-		ntotal += n
-		offset += int64(n)
-		dest = dest[n:]
-	}
-
-	// if we could retrieve at least something - it is ok.
-	// if ntotal=0 - st will be st returned from first inodeRetrieveCache1.
-	if ntotal > 0 {
-		st = OK
-	}
-	return ntotal, st
-}
-
-// inodeRetrieveCache1 is internal worker for InodeRetrieveCache which
-// actually talks to kernel and retrieves chunks not larger than ms.opts.MaxWrite.
-func (ms *protocolServer) inodeRetrieveCache1(node uint64, offset int64, dest []byte) (n int, st Status) {
-	req := newNotifyRequest(_OP_NOTIFY_RETRIEVE_CACHE)
-
-	// retrieve up to 2GB not to overflow uint32 size in NotifyRetrieveOut.
-	// see InodeNotifyStoreCache in similar place for why it is only 2GB, not 4GB.
-	//
-	// ( InodeRetrieveCache calls us with chunks not larger than
-	//   ms.opts.MaxWrite, but MaxWrite is int, so let's be extra cautious )
-	size := min(len(dest), math.MaxInt32)
-	dest = dest[:size]
-
-	q := (*NotifyRetrieveOut)(req.outData())
-	q.Nodeid = node
-	q.Offset = uint64(offset) // not int64, as it is e.g. in NotifyInvalInodeOut
-	q.Size = uint32(len(dest))
-
-	reading := &retrieveCacheRequest{
-		nodeid: q.Nodeid,
-		offset: q.Offset,
-		dest:   dest,
-		ready:  make(chan struct{}),
-	}
-
-	ms.retrieveMu.Lock()
-	q.NotifyUnique = ms.retrieveNext
-	ms.retrieveNext++
-	ms.retrieveTab[q.NotifyUnique] = reading
-	ms.retrieveMu.Unlock()
-
-	// Protect against concurrent close.
-	result := ms.notifyWrite(req)
-	if result != OK {
-		ms.retrieveMu.Lock()
-		r := ms.retrieveTab[q.NotifyUnique]
-		if r == reading {
-			delete(ms.retrieveTab, q.NotifyUnique)
-		} else if r == nil {
-			// ok - might be dequeued by umount
-		} else {
-			// although very unlikely, it is possible that kernel sends
-			// unexpected NotifyReply with our notifyUnique, then
-			// retrieveNext wraps, makes full cycle, and another
-			// retrieve request is made with the same notifyUnique.
-			ms.opts.Logger.Printf("W: INODE_RETRIEVE_CACHE: request with notifyUnique=%d mutated", q.NotifyUnique)
-		}
-		ms.retrieveMu.Unlock()
-		return 0, result
-	}
-
-	// NotifyRetrieveOut sent to the kernel successfully. Now the kernel
-	// have to return data in a separate write-style NotifyReply request.
-	// Wait for the result.
-	<-reading.ready
-	return reading.n, reading.st
-}
-
-// retrieveCacheRequest represents in-flight cache retrieve request.
-type retrieveCacheRequest struct {
-	nodeid uint64
-	offset uint64
-	dest   []byte
-
-	// reply status
-	n     int
-	st    Status
-	ready chan struct{}
-}
-
-// DeleteNotify notifies the kernel that an entry is removed from a
-// directory.  In many cases, this is equivalent to EntryNotify,
-// except when the directory is in use, eg. as working directory of
-// some process. You should not hold any FUSE filesystem locks, as that
-// can lead to deadlock.
-func (ms *protocolServer) DeleteNotify(parent uint64, child uint64, name string) Status {
-	req := newNotifyRequest(_OP_NOTIFY_DELETE)
-
-	entry := (*NotifyInvalDeleteOut)(req.outData())
-	entry.Parent = parent
-	entry.Child = child
-	entry.NameLen = uint32(len(name))
-
-	// Many versions of FUSE generate stacktraces if the
-	// terminating null byte is missing.
-	nameBytes := make([]byte, len(name)+1)
-	copy(nameBytes, name)
-	nameBytes[len(nameBytes)-1] = '\000'
-	req.outPayload = nameBytes
-
-	return ms.notifyWrite(req)
-}
-
-// EntryNotify should be used if the existence status of an entry
-// within a directory changes. You should not hold any FUSE filesystem
-// locks, as that can lead to deadlock.
-func (ms *protocolServer) EntryNotify(parent uint64, name string) Status {
-	req := newNotifyRequest(_OP_NOTIFY_INVAL_ENTRY)
-	entry := (*NotifyInvalEntryOut)(req.outData())
-	entry.Parent = parent
-	entry.NameLen = uint32(len(name))
-
-	// Many versions of FUSE generate stacktraces if the
-	// terminating null byte is missing.
-	nameBytes := make([]byte, len(name)+1)
-	copy(nameBytes, name)
-	nameBytes[len(nameBytes)-1] = '\000'
-	req.outPayload = nameBytes
-
-	return ms.notifyWrite(req)
 }
 
 // SupportsVersion returns true if the kernel supports the given
@@ -825,12 +544,6 @@ func (in *InitIn) SupportsNotify(notifyType int) bool {
 		return in.SupportsVersion(7, 45)
 	}
 	return false
-}
-
-// supportsRenameSwap returns whether the kernel supports the
-// renamex_np(2) syscall. This is only supported on OS X.
-func (in *InitIn) supportsRenameSwap() bool {
-	return in.Flags&CAP_RENAME_SWAP != 0
 }
 
 // WaitMount waits for the first request to be served. Use this to

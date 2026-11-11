@@ -23,12 +23,12 @@ func (h dropHook) OnTick(_ DialInfo, _ []LegInfo) RotationAction {
 // through the normal SACK path.
 func TestMuxDropFlushesInFlightSeqs(t *testing.T) {
 	rg, conns := createCapturingMuxRouteGroup(t)
-	leg0ID := rg.tps[0].Entry.ID
-	leg1ID := rg.tps[1].Entry.ID
+	leg0ID := rg.legs[0].tp.Entry.ID
+	leg1ID := rg.legs[1].tp.Entry.ID
 
 	const nPkts = 16
 	want := make([]uint32, 0, nPkts)
-	for i := 0; i < nPkts; i++ {
+	for i := range nPkts {
 		_, seq, err := rg.mux.wrapPayload(routing.RouteID(2), []byte{byte(i), 0xAA}, leg1ID)
 		if err != nil {
 			t.Fatalf("wrapPayload: %v", err)
@@ -36,7 +36,7 @@ func TestMuxDropFlushesInFlightSeqs(t *testing.T) {
 		want = append(want, seq)
 	}
 	survivor := make(map[uint32]bool)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		_, seq, err := rg.mux.wrapPayload(routing.RouteID(2), []byte{0xCC, byte(i)}, leg0ID)
 		if err != nil {
 			t.Fatalf("wrapPayload(leg0): %v", err)
@@ -48,7 +48,7 @@ func TestMuxDropFlushesInFlightSeqs(t *testing.T) {
 	rg.rotationServiceFn(0)
 
 	rg.mu.Lock()
-	legs := len(rg.tps)
+	legs := len(rg.legs)
 	rg.mu.Unlock()
 	if legs != 1 {
 		t.Fatalf("route group has %d legs after the drop, want 1", legs)
@@ -73,11 +73,11 @@ func TestMuxDropFlushesInFlightSeqs(t *testing.T) {
 // prune, not left to age out of the retx buffer before a SACK asks for them.
 func TestMuxPruneFlushesInFlightSeqs(t *testing.T) {
 	rg, conns := createCapturingMuxRouteGroup(t)
-	leg1ID := rg.tps[1].Entry.ID
+	leg1ID := rg.legs[1].tp.Entry.ID
 
 	const nPkts = 12
 	want := make([]uint32, 0, nPkts)
-	for i := 0; i < nPkts; i++ {
+	for i := range nPkts {
 		_, seq, err := rg.mux.wrapPayload(routing.RouteID(2), []byte{byte(i), 0xDD}, leg1ID)
 		if err != nil {
 			t.Fatalf("wrapPayload: %v", err)

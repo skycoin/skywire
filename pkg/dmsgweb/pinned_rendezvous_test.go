@@ -94,7 +94,7 @@ func TestSOCKS5PinnedRendezvous_ParallelFetchesKeepOneSession(t *testing.T) {
 		bodies = make([]string, fetches)
 		errs   = make([]error, fetches)
 	)
-	for i := 0; i < fetches; i++ {
+	for i := range fetches {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -123,7 +123,7 @@ func TestSOCKS5PinnedRendezvous_ParallelFetchesKeepOneSession(t *testing.T) {
 	close(start)
 	wg.Wait()
 
-	for i := 0; i < fetches; i++ {
+	for i := range fetches {
 		require.NoError(t, errs[i], "pinned fetch %d", i)
 		require.Equal(t, "pinned-ok", bodies[i], "pinned fetch %d", i)
 	}

@@ -15,7 +15,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -115,7 +115,9 @@ func (p *hvPairing) list() []visorapi.PendingHypervisor {
 		out = append(out, *e)
 	}
 	p.mu.Unlock()
-	sort.Slice(out, func(i, j int) bool { return out[i].LastSeen.After(out[j].LastSeen) })
+	slices.SortFunc(out, func(a, b visorapi.PendingHypervisor) int {
+		return b.LastSeen.Compare(a.LastSeen)
+	})
 	return out
 }
 
@@ -226,10 +228,8 @@ func (v *Visor) isTrustedPeer(pk cipher.PubKey) bool {
 	if v.conf != nil && pk == v.conf.PK {
 		return true
 	}
-	for _, hv := range v.configuredHypervisors() {
-		if hv == pk {
-			return true
-		}
+	if slices.Contains(v.configuredHypervisors(), pk) {
+		return true
 	}
 	if v.peerWhitelist != nil {
 		if ok, err := v.peerWhitelist.Get(pk); err == nil && ok {

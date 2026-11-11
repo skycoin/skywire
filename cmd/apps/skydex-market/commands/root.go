@@ -20,9 +20,10 @@ import (
 	"os/signal"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/logging/logrusbridge"
 
 	"github.com/0magnet/calvin"
-	"github.com/sirupsen/logrus"
+	"github.com/0magnet/logrus"
 	skydexmarket "github.com/skycoin/skycoin/cmd/skydex-market/commands"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -48,6 +49,7 @@ var (
 
 func init() {
 	launcher.RegisterApp(skyenv.SkydexMarketName, RunSkydexMarket)
+	launcher.RegisterAppFlags(skyenv.SkydexMarketName, RootCmd.Flags())
 	RootCmd.Flags().StringVar(&dbPath, "db", "", "path to SQLite database file (default: <work-dir>/skydex-market.db)")
 	RootCmd.Flags().Uint16Var(&port, "port", 0, "routing port for communication between app and visor")
 	RootCmd.Flags().StringVar(&uiAddr, "addr", skyenv.SkydexMarketAddr, "address to serve the operator UI on")
@@ -78,9 +80,12 @@ func Execute() {
 // appHost adapts the visor app client to the engine's Host: it supplies the
 // logger, publishes the operator OTP to the visor app list, and reports the
 // market's own identity (the visor public key).
-type appHost struct{ appCl *app.Client }
+type appHost struct {
+	appCl *app.Client
+	log   logrus.FieldLogger
+}
 
-func (h appHost) Log() logrus.FieldLogger { return h.appCl.Log() }
+func (h appHost) Log() logrus.FieldLogger { return h.log }
 func (h appHost) PublishOTP(otp string)   { h.appCl.SetOTPOrLog(otp) }
 func (h appHost) PubKey() string          { return h.appCl.VisorPubKey() }
 
@@ -142,7 +147,9 @@ func RunSkydexMarket(ctx context.Context, args []string) error {
 	}
 
 	errCh := make(chan error, 1)
-	go func() { errCh <- skydexmarket.Run(ctx, cfg, lis, identify, appHost{appCl}) }()
+	go func() {
+		errCh <- skydexmarket.Run(ctx, cfg, lis, identify, appHost{appCl: appCl, log: logrusbridge.New(appCl.Log())})
+	}()
 
 	termCh := make(chan os.Signal, 1)
 	signal.Notify(termCh, os.Interrupt)

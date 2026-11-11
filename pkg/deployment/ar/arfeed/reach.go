@@ -33,7 +33,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -145,12 +145,7 @@ func (v Verdict) String() string {
 }
 
 func has(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(list, s)
 }
 
 // PunchCompatible reports whether two NAT classes can hole-punch to each
@@ -274,7 +269,7 @@ func EncodeReachBucket(peers map[cipher.PubKey]*Reach) ([]byte, error) {
 		pks = append(pks, h)
 		idx[h] = r
 	}
-	sort.Strings(pks)
+	slices.Sort(pks)
 	payload := make([]byte, 0, 16+len(pks)*128)
 	payload = append(payload, '{')
 	for i, h := range pks {

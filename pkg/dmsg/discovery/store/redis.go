@@ -2,9 +2,10 @@
 package store
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"time"
 
@@ -278,8 +279,8 @@ func (r *redisStore) AvailableServers(ctx context.Context, maxCount int) ([]*dis
 		entries = append(entries, entry)
 	}
 
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Server.AvailableSessions > entries[j].Server.AvailableSessions
+	slices.SortFunc(entries, func(a, b *disc.Entry) int {
+		return cmp.Compare(b.Server.AvailableSessions, a.Server.AvailableSessions)
 	})
 
 	return entries, nil
@@ -572,7 +573,7 @@ func (r *redisStore) getDailyUptime(ctx context.Context, pkHex string, now time.
 	dates := make([]string, uptimeHistoryDays)
 	cmds := make([]*redis.StringCmd, uptimeHistoryDays)
 	pipe := r.client.Pipeline()
-	for i := 0; i < uptimeHistoryDays; i++ {
+	for i := range uptimeHistoryDays {
 		dates[i] = now.AddDate(0, 0, -i).Format("2006-01-02")
 		cmds[i] = pipe.HGet(ctx, uptimeKey(pkHex, dates[i]), "count")
 	}
@@ -610,7 +611,7 @@ func (r *redisStore) GetDailyTimeline(ctx context.Context, pkHex string, now tim
 	// hang past 60s; this collapses it to one MGET per visor.
 	keys := make([]string, uptimeHistoryDays)
 	dates := make([]string, uptimeHistoryDays)
-	for i := 0; i < uptimeHistoryDays; i++ {
+	for i := range uptimeHistoryDays {
 		dates[i] = now.AddDate(0, 0, -i).Format("2006-01-02")
 		keys[i] = uptimeTimelineKey(pkHex, dates[i])
 	}
@@ -628,7 +629,7 @@ func (r *redisStore) GetDailyTimeline(ctx context.Context, pkHex string, now tim
 		raw := []byte(s)
 		var buf [timelineSlots]byte
 		hasAny := false
-		for slot := 0; slot < timelineSlots; slot++ {
+		for slot := range timelineSlots {
 			// Redis bit ordering: offset 0 is the MSB of byte 0 (matches GETBIT).
 			byteIdx := slot / 8
 			var bit byte
@@ -647,4 +648,27 @@ func (r *redisStore) GetDailyTimeline(ctx context.Context, pkHex string, now tim
 		}
 	}
 	return timelines
+}
+
+func inboxKey(pk cipher.PubKey) string { return "inbox:" + pk.Hex() }
+
+// SetInbox implements InboxStore.
+func (r *redisStore) SetInbox(ctx context.Context, pk cipher.PubKey, record []byte, ttl time.Duration) error {
+	if err := r.client.Set(ctx, inboxKey(pk), record, ttl).Err(); err != nil {
+		log.WithError(err).Error("Failed to set inbox record in redis")
+		return disc.ErrUnexpected
+	}
+	return nil
+}
+
+// Inbox implements InboxStore.
+func (r *redisStore) Inbox(ctx context.Context, pk cipher.PubKey) ([]byte, error) {
+	b, err := r.client.Get(ctx, inboxKey(pk)).Bytes()
+	if err == redis.Nil {
+		return nil, disc.ErrKeyNotFound
+	}
+	if err != nil {
+		return nil, disc.ErrUnexpected
+	}
+	return b, nil
 }

@@ -40,7 +40,7 @@ func makeClientSession(entity *EntityCommon, porter *netutil.Porter, conn net.Co
 func (cs *ClientSession) Close() error {
 	if cs != nil && cs.porter != nil && cs.SessionCommon != nil {
 		var toFree []*Stream
-		cs.porter.RangePortValues(func(_ uint16, v interface{}) bool {
+		cs.porter.RangePortValues(func(_ uint16, v any) bool {
 			if s, ok := v.(*Stream); ok && s != nil && s.ses != nil &&
 				s.ses.SessionCommon == cs.SessionCommon {
 				toFree = append(toFree, s)

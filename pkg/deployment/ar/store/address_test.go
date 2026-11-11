@@ -59,8 +59,8 @@ func (s *AddressSuite) TestRegister() {
 	// rides VisorData via the embedded LocalAddresses, so a bind→resolve must
 	// preserve it. Guards both store backends + the WT type in the switch.
 	wtData := addrresolver.VisorData{
-		RemoteAddr:     "[::1]:5678",
-		LocalAddresses: addrresolver.LocalAddresses{CertHash: "deadbeefcafe"},
+		RemoteAddr: "[::1]:5678",
+		CertHash:   "deadbeefcafe",
 	}
 	t.Run(".BindWT", func(t *testing.T) {
 		require.NoError(t, s.Bind(ctx, types.WT, pk, wtData))

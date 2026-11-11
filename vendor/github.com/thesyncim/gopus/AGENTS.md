@@ -30,7 +30,7 @@ uses…", "removed…"); describe what the code does today.
 
 ## Paired scalar and SIMD references
 
-- Go 1.27 is the minimum version. All codec kernels are Go implementations.
+- Go 1.27.3 is the minimum version. All codec kernels are Go implementations.
 - The ordinary build uses scalar Go. The `nosimd` and `purego` build tags force
   that path, including when `GOEXPERIMENT=simd` is set.
 - `GOEXPERIMENT=simd` selects Go `archsimd` kernels where implemented, with

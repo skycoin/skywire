@@ -140,7 +140,7 @@ func TestRunConfigPathError(t *testing.T) {
 func TestRunLocalAddressParseError(t *testing.T) {
 	// "8081" has no host:port form, so Run returns the parse-local_address
 	// error before any networking.
-	svc := New(&Config{Config: dmsgserver.Config{LocalAddress: "8081"}}, testLog()).(*service)
+	svc := New(&Config{LocalAddress: "8081"}, testLog()).(*service)
 	err := svc.Run(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "local_address") {
 		t.Fatalf("expected local_address parse error, got %v", err)
@@ -149,7 +149,7 @@ func TestRunLocalAddressParseError(t *testing.T) {
 
 func TestRunLocalAddressPortError(t *testing.T) {
 	// "127.0.0.1:x" splits but its port is not a number.
-	svc := New(&Config{Config: dmsgserver.Config{LocalAddress: "127.0.0.1:x"}}, testLog()).(*service)
+	svc := New(&Config{LocalAddress: "127.0.0.1:x"}, testLog()).(*service)
 	err := svc.Run(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "port") {
 		t.Fatalf("expected local_address port error, got %v", err)
@@ -161,10 +161,9 @@ func TestRunNoDiscoveryDmsg(t *testing.T) {
 	// early Run path (MaxSessions default, HTTPAddress derivation,
 	// metrics, router, ServerAPI, peer + deployment folding) and then
 	// fails the strict dmsg-only check — all without opening a socket.
-	svc := New(&Config{Config: dmsgserver.Config{
+	svc := New(&Config{
 		Discovery:    "http://disc.example.com",
-		LocalAddress: "//127.0.0.1:8081",
-	}}, testLog()).(*service)
+		LocalAddress: "//127.0.0.1:8081"}, testLog()).(*service)
 	err := svc.Run(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "discovery_dmsg") {
 		t.Fatalf("expected discovery_dmsg error, got %v", err)
@@ -179,14 +178,13 @@ func newTestService(t *testing.T) (*service, []dmsgserver.Deployment, []cipher.P
 	t.Helper()
 	pk, sk := cipher.GenerateKeyPair()
 	discPK, _ := cipher.GenerateKeyPair()
-	cfg := &Config{Config: dmsgserver.Config{
+	cfg := &Config{
 		PubKey:        pk,
 		SecKey:        sk,
 		PublicAddress: "127.0.0.1:8081",
 		MaxSessions:   100,
 		Discovery:     "http://disc.example.com",
-		DiscoveryDmsg: "dmsg://" + discPK.Hex() + ":80",
-	}}
+		DiscoveryDmsg: "dmsg://" + discPK.Hex() + ":80"}
 	svc := &service{cfg: cfg, log: testLog()}
 	deployments := []dmsgserver.Deployment{{
 		Discovery:     cfg.Discovery,
@@ -197,8 +195,7 @@ func newTestService(t *testing.T) (*service, []dmsgserver.Deployment, []cipher.P
 
 func TestBuildTransitDmsg(t *testing.T) {
 	svc, deployments, discPKs := newTestService(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	dmsgC, dClient, closeFn := svc.buildTransitDmsg(ctx, deployments, discPKs)
 	defer closeFn()
@@ -212,8 +209,7 @@ func TestBuildTransitDmsg(t *testing.T) {
 
 func TestNewDmsgOnly(t *testing.T) {
 	svc, deployments, discPKs := newTestService(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	dmsgC, _, closeFn := svc.buildTransitDmsg(ctx, deployments, discPKs)
 	defer closeFn()
 

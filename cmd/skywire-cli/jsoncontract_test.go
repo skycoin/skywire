@@ -18,9 +18,10 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
+	"io/fs"
+	"maps"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -194,12 +195,8 @@ func TestEveryPrintingCommandHonoursJSON(t *testing.T) {
 		}
 	})
 	allowed := map[string]string{}
-	for k, v := range streamingCommands {
-		allowed[k] = v
-	}
-	for k, v := range pendingJSON {
-		allowed[k] = v
-	}
+	maps.Copy(allowed, streamingCommands)
+	maps.Copy(allowed, pendingJSON)
 	report(t, found, allowed,
 		"prints without ever consulting --json, so a caller asking for JSON gets prose",
 		"render through cliout.Print, or add it to streamingCommands with a reason")
@@ -216,11 +213,11 @@ func forEachFile(t *testing.T, fn func(path string, file *ast.File, fset *token.
 
 func walkOne(t *testing.T, dir string, fn func(path string, file *ast.File, fset *token.FileSet), fset *token.FileSet) {
 	t.Helper()
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if info.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
 		parsed, perr := parser.ParseFile(fset, path, nil, parser.ParseComments)
@@ -247,13 +244,13 @@ func report(t *testing.T, found []string, allow map[string]string, problem, fix 
 	var unexpected []string
 	seen := map[string]bool{}
 	for _, f := range found {
-		key := strings.SplitN(f, ":", 2)[0]
+		key, _, _ := strings.Cut(f, ":")
 		seen[key] = true
 		if _, ok := allow[key]; !ok {
 			unexpected = append(unexpected, f)
 		}
 	}
-	sort.Strings(unexpected)
+	slices.Sort(unexpected)
 	if len(unexpected) > 0 {
 		t.Errorf("%d file(s) %s.\nFix: %s.\n  %s",
 			len(unexpected), problem, fix, strings.Join(unexpected, "\n  "))
@@ -264,7 +261,7 @@ func report(t *testing.T, found []string, allow map[string]string, problem, fix 
 			stale = append(stale, k)
 		}
 	}
-	sort.Strings(stale)
+	slices.Sort(stale)
 	if len(stale) > 0 {
 		t.Errorf("%d allowlist entr(ies) no longer apply — delete them:\n  %s",
 			len(stale), strings.Join(stale, "\n  "))

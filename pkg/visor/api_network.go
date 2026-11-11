@@ -11,13 +11,13 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/0magnet/bottle/vnet"
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -383,13 +383,7 @@ func (v *Visor) ListTCPPorts() ([]int, error) {
 	// Also include legacy allowed ports not yet in forwardedPorts
 	v.allowed.mu.RLock()
 	for p := range v.allowed.ports {
-		found := false
-		for _, fp := range ports {
-			if fp == p {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(ports, p)
 		if !found {
 			ports = append(ports, p)
 		}
@@ -463,12 +457,7 @@ func (v *Visor) isPeerAllowed(port int, pk cipher.PubKey) bool {
 	if fp == nil || len(fp.Whitelist) == 0 {
 		return true
 	}
-	for _, wl := range fp.Whitelist {
-		if wl == pk {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(fp.Whitelist, pk)
 }
 
 func isPortAvailable(log *logging.Logger, port int) bool {
@@ -489,12 +478,7 @@ func isPortRegistered(port int, v *Visor) bool {
 	if err != nil {
 		return false
 	}
-	for _, p := range ports {
-		if p == port {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ports, port)
 }
 
 // ReinitiateModule implements API.
@@ -564,13 +548,7 @@ func shutdownDmsgDependentComponents(v *Visor, log *logging.Logger) error {
 	newCloseStack := make([]closer, 0, len(v.closeStack))
 
 	for _, c := range v.closeStack {
-		shouldClose := false
-		for _, component := range components {
-			if c.src == component {
-				shouldClose = true
-				break
-			}
-		}
+		shouldClose := slices.Contains(components, c.src)
 
 		if shouldClose {
 			if err := c.fn(); err != nil {
@@ -723,7 +701,7 @@ func (v *Visor) vhostSites(log *logging.Logger) []logserver.Vhost {
 
 // serveForwardConn bridges one caller of a forwarded port to its local target,
 // applying the port's whitelist and, when set, the caller-key header.
-func (v *Visor) serveForwardConn(conn net.Conn, port, localPort int, transport string, log logrus.FieldLogger) {
+func (v *Visor) serveForwardConn(conn net.Conn, port, localPort int, transport string, log logging.FieldLogger) {
 	defer conn.Close() //nolint:errcheck
 	// Identify the peer once (used for the whitelist gate AND,
 	// when enabled, the X-Skywire-Remote-PK header injection).

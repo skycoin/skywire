@@ -1,6 +1,7 @@
 package com.skycoin.skywire.ui.chat
 
 import android.text.format.DateFormat
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -13,7 +14,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -81,6 +81,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.skycoin.skywire.R
@@ -159,6 +160,8 @@ fun ThreadScreen(vm: ChatViewModel, key: String, onBack: () -> Unit) {
     val saved = key == SAVED_KEY
     val group = groups.firstOrNull { it.id == key }
     val isGroup = !saved && repo.isGroupKey(key)
+    // Fresh roles and rules on open, for the header and the message box.
+    LaunchedEffect(key) { if (isGroup) repo.syncGroups() }
     val title = when {
         saved -> stringResource(R.string.chat_saved_messages)
         group != null -> group.name.ifEmpty { group.id }
@@ -174,6 +177,10 @@ fun ThreadScreen(vm: ChatViewModel, key: String, onBack: () -> Unit) {
     var qr by remember { mutableStateOf<QrSpec?>(null) }
     var confirm by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
     var sheetFor by remember { mutableStateOf<ChatMessage?>(null) }
+    // Message keys picked by a long press; while any are, a tap picks too.
+    var selected by remember(key) { mutableStateOf(emptySet<String>()) }
+    val toggle = { m: ChatMessage -> selected = if (m.key in selected) selected - m.key else selected + m.key }
+    BackHandler(enabled = selected.isNotEmpty()) { selected = emptySet() }
     var highlight by remember { mutableStateOf<String?>(null) }
 
     val rows = remember(messages) { buildRows(messages) }
@@ -231,7 +238,28 @@ fun ThreadScreen(vm: ChatViewModel, key: String, onBack: () -> Unit) {
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
-        topBar = {
+        topBar = topBar@{
+            if (selected.isNotEmpty()) {
+                Row(
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 4.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = { selected = emptySet() }) { Icon(Icons.Rounded.Close, stringResource(R.string.chat_clear_selection)) }
+                    Text(
+                        stringResource(R.string.chat_selected_count, selected.size),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f).padding(start = 8.dp),
+                    )
+                    IconButton(onClick = {
+                        confirm = context.getString(R.string.chat_confirm_delete_selected) to {
+                            messages.filter { it.key in selected }.forEach { repo.deleteForMe(key, it) }
+                            selected = emptySet()
+                        }
+                    }) { Icon(Icons.Rounded.Delete, stringResource(R.string.chat_delete_selected), tint = MaterialTheme.colorScheme.error) }
+                }
+                return@topBar
+            }
             Row(
                 Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 4.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -395,7 +423,7 @@ fun ThreadScreen(vm: ChatViewModel, key: String, onBack: () -> Unit) {
             }
         },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).imePadding()) {
+        Column(Modifier.fillMaxSize().padding(padding)) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 LazyColumn(
                     state = listState,
@@ -406,13 +434,14 @@ fun ThreadScreen(vm: ChatViewModel, key: String, onBack: () -> Unit) {
                     items(rows, key = { it.id }) { row ->
                         when (row) {
                             is Row2.Day -> DayDivider(row.day)
-                            is Row2.Msg -> MessageRow(
+                            is Row2.Msg -> if (row.m.notice.isNotEmpty()) NoticeRow(noticeText(row.m.notice, noticeName(vm, row.m.from))) else MessageRow(
                                 vm = vm,
                                 key = key,
                                 m = row.m,
                                 group = isGroup,
-                                highlighted = highlight == row.m.key,
-                                onTap = { sheetFor = row.m },
+                                highlighted = highlight == row.m.key || row.m.key in selected,
+                                onTap = { if (selected.isNotEmpty()) toggle(row.m) else sheetFor = row.m },
+                                onLongPress = { toggle(row.m) },
                                 onQuote = { r -> parseTime(r.ts)?.let { scrollToTs(it) } },
                             )
                         }
@@ -447,12 +476,29 @@ fun ThreadScreen(vm: ChatViewModel, key: String, onBack: () -> Unit) {
             }
             if (group != null && !group.postable) {
                 Text(
-                    group.cannotPostReason.ifEmpty { stringResource(R.string.chat_cannot_post) },
+                    cannotPostRes(group.cannotPostCode)?.let { stringResource(it) }
+                        ?: group.cannotPostReason.ifEmpty { stringResource(R.string.chat_cannot_post) },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainer).padding(16.dp),
                 )
             } else {
+                // Admins can post, but should see what everyone else is told.
+                val rule = when {
+                    group == null -> null
+                    group.isChannel -> R.string.chat_cannot_post_channel
+                    group.readOnly -> R.string.chat_cannot_post_read_only
+                    else -> null
+                }
+                rule?.let {
+                    Text(
+                        stringResource(it),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainer).padding(horizontal = 16.dp, vertical = 6.dp),
+                    )
+                }
                 Composer(vm, key)
             }
         }
@@ -472,14 +518,50 @@ fun ThreadScreen(vm: ChatViewModel, key: String, onBack: () -> Unit) {
 private fun buildRows(messages: List<ChatMessage>): List<Row2> {
     val zone = ZoneId.systemDefault()
     val out = ArrayList<Row2>(messages.size + 8)
+    // The list keys its rows, and a key used twice crashes it. A message can
+    // arrive twice, by a replayed feed or by history and the live stream racing.
+    val placed = HashSet<String>()
     for (i in messages.indices.reversed()) {
         val m = messages[i]
+        if (!placed.add(m.key)) continue
         out += Row2.Msg(m)
         val day = Instant.ofEpochMilli(m.ts).atZone(zone).toLocalDate()
         val prev = messages.getOrNull(i - 1)?.let { Instant.ofEpochMilli(it.ts).atZone(zone).toLocalDate() }
-        if (prev != day) out += Row2.Day(day)
+        if (prev != day && placed.add("day-$day")) out += Row2.Day(day)
     }
     return out
+}
+
+/** A group notice: a change to who is in the group, their roles or its rules. */
+@Composable
+private fun NoticeRow(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp),
+    )
+}
+
+@Composable
+private fun noticeName(vm: ChatViewModel, pk: String): String =
+    if (pk.equals(vm.repo.myPk.value, ignoreCase = true)) stringResource(R.string.chat_you) else vm.repo.displayName(pk)
+
+/** What a group notice says, about the member named [name] where it is about one. */
+@Composable
+fun noticeText(kind: String, name: String): String = when (kind) {
+    "joined" -> stringResource(R.string.chat_notice_joined, name)
+    "left" -> stringResource(R.string.chat_notice_left, name)
+    "admin_added" -> stringResource(R.string.chat_notice_admin_added, name)
+    "admin_removed" -> stringResource(R.string.chat_notice_admin_removed, name)
+    "muted" -> stringResource(R.string.chat_notice_muted, name)
+    "unmuted" -> stringResource(R.string.chat_notice_unmuted, name)
+    "banned" -> stringResource(R.string.chat_notice_banned, name)
+    "unbanned" -> stringResource(R.string.chat_notice_unbanned, name)
+    "read_only_on" -> stringResource(R.string.chat_notice_read_only_on)
+    "read_only_off" -> stringResource(R.string.chat_notice_read_only_off)
+    else -> ""
 }
 
 @Composable
@@ -617,4 +699,14 @@ private fun MessageSheet(vm: ChatViewModel, key: String, m: ChatMessage, group: 
             action(Icons.Rounded.DeleteForever, R.string.chat_delete_for_all, danger = true) { repo.deleteForEveryone(key, m) }
         }
     }
+}
+
+/** The visor's reason a group refuses this phone's posts, in the app's language (pkg/skychat/group PostBlock*). */
+internal fun cannotPostRes(code: String): Int? = when (code) {
+    "banned" -> R.string.chat_cannot_post_banned
+    "removed" -> R.string.chat_cannot_post_removed
+    "muted" -> R.string.chat_cannot_post_muted
+    "channel" -> R.string.chat_cannot_post_channel
+    "read_only" -> R.string.chat_cannot_post_read_only
+    else -> null
 }

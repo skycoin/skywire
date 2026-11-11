@@ -22,9 +22,10 @@
 package proxystatus
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -216,7 +217,9 @@ func buildRouteGraph(snap Snapshot) rgGraph {
 		// refreshes — otherwise a churning leg set reshuffled node first-encounter
 		// order and jittered the graph as the pool grew.
 		legs := append([]Leg(nil), t.Legs...)
-		sort.SliceStable(legs, func(i, j int) bool { return legStableKey(legs[i]) < legStableKey(legs[j]) })
+		slices.SortStableFunc(legs, func(a, b Leg) int {
+			return cmp.Compare(legStableKey(a), legStableKey(b))
+		})
 		for _, l := range legs {
 			if !l.Alive {
 				continue
@@ -358,10 +361,9 @@ func seedRouteLayout(order []*nodeAcc, nStreams int) {
 			maxLevel = a.level
 		}
 	}
-	maxCol := maxLevel + 1 // the exit sits one column past the deepest hop
-	if maxCol < 1 {
-		maxCol = 1
-	}
+	maxCol := max(
+		// the exit sits one column past the deepest hop
+		maxLevel+1, 1)
 	const (
 		center = rgSpaceSize / 2
 		xLeft  = rgSpaceSize * 0.18
@@ -392,10 +394,7 @@ func seedRouteLayout(order []*nodeAcc, nStreams int) {
 			col = maxCol
 		default: // hop
 			hop = true
-			col = a.level
-			if col < 1 {
-				col = 1
-			}
+			col = max(a.level, 1)
 			y = laneY(a.streamOrd)
 		}
 		x := colX(col)

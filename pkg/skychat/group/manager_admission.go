@@ -264,7 +264,13 @@ func (m *Manager) admissionHandler(id string) JoinRequestHandler {
 		// never admitted — the only shape a Sybil flood can take — so it
 		// pays before it consumes anything that costs us.
 		if bits := r.JoinPoWRequired(); bits > 0 {
-			if ok, why := VerifyJoinPoW(id, req.PK, req.PoW, bits, time.Now().UTC()); !ok {
+			// Checked at the time the request was asked, which for one left on
+			// the inbox is when this visor's host took it.
+			asked := req.AskedAt
+			if asked.IsZero() {
+				asked = time.Now().UTC()
+			}
+			if ok, why := VerifyJoinPoW(id, req.PK, req.PoW, bits, asked); !ok {
 				// A challenge, not a refusal: the requester solves and comes
 				// straight back. Nothing is stored, so an attacker that
 				// never solves costs us one hash per attempt.
@@ -414,11 +420,9 @@ func (m *Manager) PendingJoins(id string) ([]JoinRequest, error) {
 // ApproveJoin admits a queued requester. Idempotent: approving an
 // already-admitted PK returns the current record.
 //
-// The requester is NOT notified — they have no allowlist seat yet, so
-// there is no channel to reach them on. They learn on their next poll,
-// within pendingJoinRetryInterval. Approving a previously-denied
-// request works, but that requester has stopped polling, so they see it
-// only when they ask again.
+// The requester learns on its next poll, within pendingJoinRetryInterval,
+// or from the decision left on its dmsg-async inbox when it is offline.
+// The decision carries the group key, sealed to the requester.
 func (m *Manager) ApproveJoin(id string, pk cipher.PubKey) (Record, error) {
 	r, ok, err := m.store.Get(id)
 	if err != nil {
@@ -449,11 +453,15 @@ func (m *Manager) ApproveJoin(id string, pk cipher.PubKey) (Record, error) {
 	if err := m.store.PutJoinRequest(req); err != nil {
 		m.log.WithError(err).Debug("group: ApproveJoin: recording decision failed")
 	}
+	if found {
+		resp := m.admittedResponse(updated)
+		m.parkDecision(pk, resp)
+	}
 	return updated, nil
 }
 
 // DenyJoin declines a queued request. The requester is told on its next
-// poll and then stops asking.
+// poll or from its inbox, and then stops asking.
 func (m *Manager) DenyJoin(id string, pk cipher.PubKey) error {
 	r, ok, err := m.store.Get(id)
 	if err != nil {
@@ -472,7 +480,13 @@ func (m *Manager) DenyJoin(id string, pk cipher.PubKey) error {
 	req.Status = JoinStatusDenied
 	req.DecidedAt = time.Now().UTC()
 	req.DecidedBy = m.myPK
-	return m.store.PutJoinRequest(req)
+	if err := m.store.PutJoinRequest(req); err != nil {
+		return err
+	}
+	if found {
+		m.parkDecision(pk, JoinResponseMsg{Status: JoinStatusDenied, GroupID: id, Reason: "request was declined"})
+	}
+	return nil
 }
 
 // RemoveMember evicts a peer from the roster — the kick the gossip
@@ -809,6 +823,7 @@ func (m *Manager) requestJoin(inv Invite, note string, askAgain bool) (Record, e
 	if inv.OwnerPK == m.myPK {
 		return Record{}, errors.New("group: RequestJoin: refusing to join own group")
 	}
+	m.stopLeaving(inv.ID)
 	if existing, ok, err := m.store.Get(inv.ID); err == nil && ok && existing.Status == StatusActive {
 		return existing, nil // already in — idempotent
 	}
@@ -826,7 +841,23 @@ func (m *Manager) requestJoin(inv Invite, note string, askAgain bool) (Record, e
 				Info("group: join: no admission response; falling back to legacy direct-subscribe join")
 			return m.legacyJoin(inv)
 		}
-		return Record{}, err
+		if !joinUnreachable(err) {
+			return Record{}, err
+		}
+		// No admin is online. Leave the request on their inboxes and
+		// wait for the decision, as for a group that queues requests.
+		req := NewJoinRequest(inv.ID, m.myPK, note, inv.PoWBits)
+		req.AskAgain = askAgain
+		if m.parkJoinRequest(targets, req) == 0 {
+			return Record{}, err
+		}
+		r := m.recordFromInvite(inv, JoinResponseMsg{})
+		r.Status = StatusAwaitingApproval
+		if err := m.store.Put(r); err != nil {
+			return Record{}, fmt.Errorf("group: RequestJoin: store: %w", err)
+		}
+		m.log.WithField("id", inv.ID).Info("group: join: no admin is online; request left on their inboxes")
+		return r, nil
 	}
 
 	switch resp.Status {
@@ -1059,6 +1090,13 @@ func (m *Manager) retryPendingJoins(ctx context.Context) {
 // by the background retry loop and the deliberate ask-again path, so both
 // handle an admit / deny / ban / still-pending identically.
 func (m *Manager) applyJoinResponse(r Record, resp JoinResponseMsg) {
+	m.joinMu.Lock()
+	defer m.joinMu.Unlock()
+	// The same decision can arrive by poll and from the inbox. Only the
+	// first one applies.
+	if cur, ok, err := m.store.Get(r.ID); err != nil || !ok || cur.Status != r.Status {
+		return
+	}
 	switch resp.Status {
 	case JoinStatusAdmitted:
 		admitted := r

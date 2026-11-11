@@ -189,10 +189,7 @@ func TestEmuCutOfBusiestLegCompletes(t *testing.T) {
 				break
 			}
 		}
-		idx := rig.busiestSendLeg()
-		if idx < 0 {
-			idx = 0
-		}
+		idx := max(rig.busiestSendLeg(), 0)
 		before := rig.downProgress()
 		at := time.Now()
 		rig.Leg(idx).CutDown()
@@ -234,7 +231,6 @@ func TestEmuCutOfBusiestLegCompletes(t *testing.T) {
 // Two legs, so the survivor must carry everything, in both directions.
 func TestEmuBothWayCutOfALegCompletes(t *testing.T) {
 	for _, dir := range []emuDir{emuDown, emuUp} {
-		dir := dir
 		t.Run(string(dir), func(t *testing.T) {
 			const bytes = 8 * emuMB
 			legs := []emuLegSpec{
@@ -381,10 +377,7 @@ func TestEmuTransportRemovedUnderLegCompletes(t *testing.T) {
 				break
 			}
 		}
-		idx := rig.busiestSendLeg()
-		if idx < 0 {
-			idx = 0
-		}
+		idx := max(rig.busiestSendLeg(), 0)
 		before := rig.downProgress()
 		legsBefore := rig.LegsOn(false)
 		at := time.Now()

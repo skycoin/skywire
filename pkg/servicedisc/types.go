@@ -103,7 +103,7 @@ func (a *SWAddr) UnmarshalBinary(data []byte) error {
 }
 
 // Scan implement a scanner to get data from database
-func (a *SWAddr) Scan(value interface{}) error {
+func (a *SWAddr) Scan(value any) error {
 	str, ok := value.(string)
 	if !ok {
 		return errors.New("provided value not of type string")
@@ -204,7 +204,7 @@ func (p Service) Check() error {
 }
 
 func (p Service) String() string {
-	var serviceMap map[string]interface{}
+	var serviceMap map[string]any
 
 	data, _ := json.Marshal(p)            // nolint:errcheck
 	_ = json.Unmarshal(data, &serviceMap) // nolint:errcheck

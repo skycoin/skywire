@@ -6,8 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
 )
@@ -22,9 +20,9 @@ const maxTempLogLevelTTL = time.Hour
 type tempLogLevel struct {
 	mu    sync.Mutex
 	timer *time.Timer
-	gen   uint64       // bumped per set or clear, so a stale timer does nothing
-	base  logrus.Level // restored when the timer fires
-	level logrus.Level
+	gen   uint64        // bumped per set or clear, so a stale timer does nothing
+	base  logging.Level // restored when the timer fires
+	level logging.Level
 	until time.Time
 }
 
@@ -41,7 +39,7 @@ func (v *Visor) LogLevelStatus() logserver.LogLevelStatus {
 // SetTempLogLevel implements logserver.LogLevelController. Setting a level
 // while one is already in force replaces its level and ttl but keeps the
 // original base.
-func (v *Visor) SetTempLogLevel(level logrus.Level, ttl time.Duration) (logserver.LogLevelStatus, error) {
+func (v *Visor) SetTempLogLevel(level logging.Level, ttl time.Duration) (logserver.LogLevelStatus, error) {
 	if ttl <= 0 || ttl > maxTempLogLevelTTL {
 		return logserver.LogLevelStatus{}, fmt.Errorf("ttl %s out of range (0, %s]", ttl, maxTempLogLevelTTL)
 	}
@@ -120,7 +118,7 @@ func (v *Visor) logLevelStatusLocked() logserver.LogLevelStatus {
 
 // setLogLevel sets the visor's level and the process-wide one that the
 // embedded services and library packages log through.
-func setLogLevel(ml *logging.MasterLogger, level logrus.Level) {
+func setLogLevel(ml *logging.MasterLogger, level logging.Level) {
 	if ml != nil {
 		ml.SetLevel(level)
 	}

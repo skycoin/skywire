@@ -88,10 +88,7 @@ func TestLoadtestUploadInOrderMatchesPlainPost(t *testing.T) {
 
 	var last *httptest.ResponseRecorder
 	for off := 0; off < total; off += chunk {
-		end := off + chunk
-		if end > total {
-			end = total
-		}
+		end := min(off+chunk, total)
 		rec := uploadPut("obj", body[off:end], uint64(off), total)
 		require.Equal(t, http.StatusOK, rec.Code)
 		require.Equal(t, uint64(end), uploadReceived(t, rec), "the ack is the durable prefix")
@@ -348,7 +345,7 @@ func TestLoadtestUploadSealedSessionFreesItsSlot(t *testing.T) {
 	body := uploadBody(total)
 	sum := sha256.Sum256(body)
 
-	for i := 0; i < 2*uploadSealedMemo; i++ {
+	for i := range 2 * uploadSealedMemo {
 		id := fmt.Sprintf("obj%d", i)
 		rec := uploadPut(id, body, 0, total)
 		require.Equal(t, http.StatusOK, rec.Code, "upload %d is refused by nothing", i)
@@ -572,7 +569,7 @@ func TestLoadtestUploadEvictionNamesTheOffsets(t *testing.T) {
 // without limit however many chunks are dropped.
 func TestLoadtestUploadEvictionNoticeIsBounded(t *testing.T) {
 	s := &uploadSession{held: map[uint64][]byte{}}
-	for i := 0; i < uploadEvictNotices*3; i++ {
+	for i := range uploadEvictNotices * 3 {
 		s.held[uint64(i)] = []byte{0}
 		s.heldBytes++
 		s.evictFurthest()

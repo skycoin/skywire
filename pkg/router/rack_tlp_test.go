@@ -112,7 +112,7 @@ func TestDSACKGrowDecay(t *testing.T) {
 	if got, want := m.rackFactorMilli.Load(), m.rackFactorMin()+rackDSACKGrowStepDefault; got != want {
 		t.Fatalf("after 1 DSACK factor = %d, want %d", got, want)
 	}
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		m.growRackFactor(uint32(i))
 	}
 	if got := m.rackFactorMilli.Load(); got != rackFactorMaxDefault {
@@ -120,7 +120,7 @@ func TestDSACKGrowDecay(t *testing.T) {
 	}
 
 	// Clean SACKs decay it back down, never below the baseline.
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		m.decayRackFactor()
 	}
 	if got := m.rackFactorMilli.Load(); got != m.rackFactorMin() {
@@ -260,7 +260,7 @@ func TestPerLegThresholdSparesSlowLegHoles(t *testing.T) {
 	setLegRTTs(m, []float64{20}) // group-wide basis: a 20 ms fast leg → threshold at the 60 ms floor
 	slow, fast := uuid.New(), uuid.New()
 	// The slow leg has been acking its never-retransmitted frames after ~2 s.
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		m.recordAckDelayTp(slow, 2*time.Second)
 	}
 	if th := m.rackThresholdFor(slow); th < 1900*time.Millisecond {
@@ -312,13 +312,13 @@ func TestRefreshWindowsAndSACKNoLockInversion(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		for i := 0; i < rounds; i++ {
-			m.refreshLegWindows(tps)
+		for range rounds {
+			m.refreshLegWindows(tpLegs(tps))
 		}
 	}()
 	go func() {
 		defer wg.Done()
-		for i := 0; i < rounds; i++ {
+		for range rounds {
 			// seq 63 acked, 1..62 holes below it: every hole is judged per leg
 			m.onSACKReceived(0, []uint64{1 << 63}, 0, false)
 		}

@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -422,7 +422,7 @@ func (m *muxBwTUIModel) renderRttBlock() string {
 		// Running approximation; Done will replace with the
 		// authoritative server-computed distribution.
 		sorted := append([]float64(nil), values...)
-		sort.Float64s(sorted)
+		slices.Sort(sorted)
 		p50 = sorted[len(sorted)/2]
 		p99 = sorted[(len(sorted)*99)/100]
 		var sum float64
@@ -534,10 +534,7 @@ func sparkline(values []float64, width int) string {
 
 	var sb strings.Builder
 	for _, v := range window {
-		idx := int(v / maxV * float64(len(sparkRunes)-1))
-		if idx < 0 {
-			idx = 0
-		}
+		idx := max(int(v/maxV*float64(len(sparkRunes)-1)), 0)
 		if idx >= len(sparkRunes) {
 			idx = len(sparkRunes) - 1
 		}

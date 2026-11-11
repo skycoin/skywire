@@ -6,8 +6,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
 )
@@ -22,7 +20,7 @@ func TestMain(m *testing.M) {
 
 		logging.SetLevel(lvl)
 	} else {
-		logging.SetLevel(logrus.TraceLevel)
+		logging.SetLevel(logging.TraceLevel)
 	}
 
 	os.Exit(m.Run())

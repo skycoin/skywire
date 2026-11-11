@@ -1,5 +1,4 @@
 //go:build linux && !nftfw
-// +build linux,!nftfw
 
 // Package vpn pkg/vpn/firewall_iptables_linux.go c4-app-vpn
 //
@@ -12,22 +11,22 @@ package vpn
 
 import (
 	"net"
+	"slices"
 	"strconv"
 	"strings"
 
-	"github.com/sirupsen/logrus"
-
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/util/osutil"
 )
 
 type iptablesFirewall struct {
-	log   logrus.FieldLogger
+	log   logging.FieldLogger
 	added [][]string // full iptables argv (incl. -t <table> -A <chain>) per rule
 }
 
 // newFirewall builds the iptables backend. It never fails (rules are added
 // lazily); errors surface per-operation.
-func newFirewall(log logrus.FieldLogger) (firewall, error) {
+func newFirewall(log logging.FieldLogger) (firewall, error) {
 	return &iptablesFirewall{log: log}, nil
 }
 
@@ -77,10 +76,10 @@ func (f *iptablesFirewall) redirectTCP(hook fwHook, iif string, dst *net.IPNet, 
 
 // teardown removes each rule (newest first) by flipping its `-A` to `-D`.
 func (f *iptablesFirewall) teardown() {
-	for i := len(f.added) - 1; i >= 0; i-- {
-		del := deleteArgv(f.added[i])
+	for _, v := range slices.Backward(f.added) {
+		del := deleteArgv(v)
 		if err := osutil.RunElevated("iptables", del...); err != nil {
-			f.log.WithError(err).Warnf("firewall teardown: remove %s", strings.Join(f.added[i], " "))
+			f.log.WithError(err).Warnf("firewall teardown: remove %s", strings.Join(v, " "))
 		}
 	}
 	f.added = nil

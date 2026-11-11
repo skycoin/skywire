@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/contacts"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgasync"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/pty"
@@ -119,8 +120,8 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, AP
 			BuildInfo:       buildinfo.Get(),
 			AppProtoVersion: SupportedProtocolVersion,
 			Apps: []*appserver.AppState{
-				{AppConfig: appserver.AppConfig{Name: "foo.v1.0", Binary: "foo.v1.0", AutoStart: false, Port: 10}},
-				{AppConfig: appserver.AppConfig{Name: "bar.v2.0", Binary: "bar.v2.0", AutoStart: false, Port: 20}},
+				{Name: "foo.v1.0", Binary: "foo.v1.0", AutoStart: false, Port: 10},
+				{Name: "bar.v2.0", Binary: "bar.v2.0", AutoStart: false, Port: 20},
 			},
 			Transports:  tps,
 			RoutesCount: rt.Count(),
@@ -149,14 +150,8 @@ func (mc *mockRPCClient) Overview() (*Overview, error) {
 	var out Overview
 	err := mc.do(false, func() error {
 		out = *mc.o
-		for _, a := range mc.o.Apps {
-			a := a
-			out.Apps = append(out.Apps, a)
-		}
-		for _, tp := range mc.o.Transports {
-			tp := tp
-			out.Transports = append(out.Transports, tp)
-		}
+		out.Apps = append(out.Apps, mc.o.Apps...)
+		out.Transports = append(out.Transports, mc.o.Transports...)
 		out.RoutesCount = mc.o.RoutesCount
 		return nil
 	})
@@ -302,14 +297,14 @@ func (mc *mockRPCClient) DeleteRewardAddress() error {
 	return nil
 }
 
+// AppCatalog implements API.
+func (*mockRPCClient) AppCatalog() ([]CatalogEntry, error) { return nil, nil }
+
 // Apps implements API.
 func (mc *mockRPCClient) Apps() ([]*appserver.AppState, error) {
 	var apps []*appserver.AppState
 	err := mc.do(false, func() error {
-		for _, a := range mc.o.Apps {
-			a := a
-			apps = append(apps, a)
-		}
+		apps = append(apps, mc.o.Apps...)
 		return nil
 	})
 	return apps, err
@@ -590,6 +585,9 @@ func (*mockRPCClient) SetAppEnvFull(string, []string) error { return nil }
 // SetAppLauncherMode implements API.
 func (*mockRPCClient) SetAppLauncherMode(string, string) error { return nil }
 
+// AppFlags implements API.
+func (*mockRPCClient) AppFlags(string) (AppFlags, error) { return AppFlags{}, nil }
+
 // AppHelp implements API.
 func (*mockRPCClient) AppHelp(string) (string, error) { return "", nil }
 
@@ -633,7 +631,6 @@ func (mc *mockRPCClient) Transports(types []string, pks []cipher.PubKey, logs bo
 	var summaries []*TransportSummary
 	err := mc.do(false, func() error {
 		for _, tp := range mc.o.Transports {
-			tp := tp
 			if types != nil {
 				for _, reqT := range types {
 					if string(tp.Type) == reqT {
@@ -1558,6 +1555,11 @@ func (mc *mockRPCClient) VoiceCallAudio(_ string) (sent, recv []int16, err error
 	return nil, nil, nil
 }
 
+// VoiceCallDevices implements API.
+func (mc *mockRPCClient) VoiceCallDevices(_ string) (VoiceDevices, error) {
+	return VoiceDevices{}, nil
+}
+
 // VoiceMute implements API.
 func (mc *mockRPCClient) VoiceMute(_ string, _, _ bool) error {
 	return nil
@@ -1679,6 +1681,11 @@ func (mc *mockRPCClient) HVVisorSummary(_ cipher.PubKey) (*Summary, error) {
 	return nil, fmt.Errorf("not supported in mock")
 }
 
+// HVForgetVisor implements API.
+func (mc *mockRPCClient) HVForgetVisor(_ cipher.PubKey) error {
+	return fmt.Errorf("not supported in mock")
+}
+
 // HVStartApp implements API.
 func (mc *mockRPCClient) HVStartApp(_ cipher.PubKey, _ string) error {
 	return fmt.Errorf("not supported in mock")
@@ -1686,6 +1693,16 @@ func (mc *mockRPCClient) HVStartApp(_ cipher.PubKey, _ string) error {
 
 // HVStopApp implements API.
 func (mc *mockRPCClient) HVStopApp(_ cipher.PubKey, _ string) error {
+	return fmt.Errorf("not supported in mock")
+}
+
+// HVAppCatalog implements API.
+func (mc *mockRPCClient) HVAppCatalog(_ cipher.PubKey) ([]CatalogEntry, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
+// HVAddApp implements API.
+func (mc *mockRPCClient) HVAddApp(_ cipher.PubKey, _, _ string) error {
 	return fmt.Errorf("not supported in mock")
 }
 
@@ -1844,6 +1861,11 @@ func (mc *mockRPCClient) RemoveAllHypervisors() (int, error) {
 	return 0, nil
 }
 
+// HypervisorNotice implements API. A mock visor never says goodbye.
+func (mc *mockRPCClient) HypervisorNotice() (string, error) {
+	return "", nil
+}
+
 // SetHypervisorPassword implements API.
 func (mc *mockRPCClient) SetHypervisorPassword(string, string) error {
 	return nil
@@ -1900,6 +1922,9 @@ func (mc *mockRPCClient) MailSend(skymail.Outgoing) (*skymail.SendResult, error)
 
 // MailDelete implements API.
 func (mc *mockRPCClient) MailDelete(string, string) error { return nil }
+
+// MailRetry implements API.
+func (mc *mockRPCClient) MailRetry(string) error { return nil }
 
 // MailSetWhitelist implements API.
 func (mc *mockRPCClient) MailSetWhitelist([]cipher.PubKey) error { return nil }
@@ -1975,4 +2000,36 @@ func (mc *mockRPCClient) NetworkSet(_ NetworkSettings) error {
 // NetworkEvent implements API.
 func (mc *mockRPCClient) NetworkEvent(_ NetworkEvent) error {
 	return nil
+}
+
+// DmsgAsyncStatus implements API.
+func (mc *mockRPCClient) DmsgAsyncStatus() (*DmsgAsyncStatus, error) { return &DmsgAsyncStatus{}, nil }
+
+// DmsgAsyncSend implements API.
+func (mc *mockRPCClient) DmsgAsyncSend(DmsgAsyncSendRequest) (*DmsgAsyncSendResult, error) {
+	return &DmsgAsyncSendResult{}, nil
+}
+
+// DmsgAsyncTake implements API.
+func (mc *mockRPCClient) DmsgAsyncTake([]uint16) ([]dmsgasync.Message, error) { return nil, nil }
+
+// DmsgAsyncSync implements API.
+func (mc *mockRPCClient) DmsgAsyncSync() error { return nil }
+
+// DmsgAsyncSettings implements API.
+func (mc *mockRPCClient) DmsgAsyncSettings() (*DmsgAsyncSettings, error) {
+	return &DmsgAsyncSettings{}, nil
+}
+
+// DmsgAsyncSetSettings implements API.
+func (mc *mockRPCClient) DmsgAsyncSetSettings(map[string]string) error { return nil }
+
+// SetSingleRewardAddress implements API.
+func (mc *mockRPCClient) SetSingleRewardAddress(_ string) (string, error) {
+	return "", nil
+}
+
+// HVSetSingleRewardAddress implements API.
+func (mc *mockRPCClient) HVSetSingleRewardAddress(_ cipher.PubKey, _ string) (string, error) {
+	return "", fmt.Errorf("not supported in mock")
 }

@@ -2,8 +2,9 @@
 package cliroute
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -118,11 +119,11 @@ func formatRSNStats(s *setupmetrics.StatsSnapshot) string {
 		for k, v := range s.FailuresByReason {
 			rs = append(rs, reasonKV{k, v})
 		}
-		sort.Slice(rs, func(i, j int) bool {
-			if rs[i].n != rs[j].n {
-				return rs[i].n > rs[j].n
-			}
-			return string(rs[i].r) < string(rs[j].r)
+		slices.SortFunc(rs, func(a, b reasonKV) int {
+			return cmp.Or(
+				cmp.Compare(b.n, a.n),
+				cmp.Compare(string(a.r), string(b.r)),
+			)
 		})
 		for _, kv := range rs {
 			fmt.Fprintf(&b, "  %-22s %d\n", kv.r, kv.n)
@@ -137,7 +138,7 @@ func formatRSNStats(s *setupmetrics.StatsSnapshot) string {
 		for k := range s.RouteLengthHist {
 			keys = append(keys, k)
 		}
-		sort.Ints(keys)
+		slices.Sort(keys)
 		for _, k := range keys {
 			fmt.Fprintf(&b, "  %d hops: %d\n", k, s.RouteLengthHist[k])
 		}
@@ -151,7 +152,7 @@ func formatRSNStats(s *setupmetrics.StatsSnapshot) string {
 		for pk := range s.Breakers {
 			pks = append(pks, pk)
 		}
-		sort.Strings(pks)
+		slices.Sort(pks)
 		tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(tw, "  pk\tstate\topened\tfails\tprobe") //nolint:errcheck,gosec
 		for _, pk := range pks {

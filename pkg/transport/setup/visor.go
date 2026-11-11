@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	rpc "github.com/0magnet/gobrpc"
 
@@ -70,13 +71,7 @@ func (ts *TransportListener) Serve(ctx context.Context) {
 			break
 		}
 		remotePK := conn.RawRemoteAddr().PK
-		found := false
-		for _, trusted := range ts.tsNodes {
-			if trusted == remotePK {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(ts.tsNodes, remotePK)
 		if !found {
 			ts.log.WithField("remote_conn", remotePK).WithField("trusted", ts.tsNodes).Debug("Closing connection")
 			if err := conn.Close(); err != nil {

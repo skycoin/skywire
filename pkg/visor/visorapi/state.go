@@ -623,4 +623,8 @@ type DiagAutoconnect struct {
 	// SudphAllowed how many of them the site limit lets this visor dial.
 	SudphPeers   int `json:"sudph_peers"`
 	SudphAllowed int `json:"sudph_allowed"`
+	// DmsgServers is the dmsg servers the visor holds a session with, and
+	// DmsgServerTransports how many of them it also reaches over skynet.
+	DmsgServers          int `json:"dmsg_servers"`
+	DmsgServerTransports int `json:"dmsg_server_transports"`
 }

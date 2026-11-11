@@ -93,8 +93,8 @@ func skyDNSTunReady() bool {
 // privilege.
 func openSkyDNSTun() (TUNDevice, error) {
 	t, err := water.New(water.Config{
-		DeviceType:             water.TUN,
-		PlatformSpecificParams: water.PlatformSpecificParams{Name: SkyDNSTunName, Persist: true},
+		DeviceType: water.TUN,
+		Name:       SkyDNSTunName, Persist: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", SkyDNSTunName, err)

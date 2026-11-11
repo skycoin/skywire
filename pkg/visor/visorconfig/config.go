@@ -29,11 +29,13 @@ func MakeBaseConfig(common *Common, dmsgHTTP bool, services *Services, dmsgHTTPS
 		Carriers:             skyenv.DefaultDmsgCarriers,
 	}
 	hypervisorAutoconnect := skyenv.HypervisorAutoconnect
+	dmsgServerTransports := skyenv.DmsgServerTransports
 	conf.Transport = &Transport{
 		Discovery:             services.TransportDiscovery,
 		AddressResolver:       services.AddressResolver,
 		PublicAutoconnect:     skyenv.PublicAutoconnect,
 		HypervisorAutoconnect: &hypervisorAutoconnect,
+		DmsgServerTransports:  &dmsgServerTransports,
 		LogStore: &LogStore{
 			// The on-disk CSV log store was retired; "file" is now a no-op that
 			// only earns a deprecation warning at boot (init_transport.go). Default

@@ -40,6 +40,7 @@ func init() {
 		panic(err)
 	}
 	launcher.RegisterApp(skyenv.SkyDNSName, RunSkyDNS)
+	launcher.RegisterAppFlags(skyenv.SkyDNSName, RootCmd.Flags())
 }
 
 // RootCmd is the root command for skydns

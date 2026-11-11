@@ -38,10 +38,8 @@ func TestRelayGraph_OneQueryForConcurrentLookups(t *testing.T) {
 	c := &relayGraphCache{m: make(map[cipher.PubKey]*relayGraphEntry)}
 
 	var wg sync.WaitGroup
-	for i := 0; i < 12; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 12 {
+		wg.Go(func() {
 			peers, err := c.peers(context.Background(), dc, lpk, remote)
 			if err != nil {
 				t.Error(err)
@@ -50,7 +48,7 @@ func TestRelayGraph_OneQueryForConcurrentLookups(t *testing.T) {
 			if _, ok := peers[relay]; !ok || len(peers) != 1 {
 				t.Errorf("peers = %v, want only the stcpr relay", peers)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	if n := dc.calls.Load(); n != 1 {
@@ -71,7 +69,7 @@ func TestRelayGraph_FailureIsNotKept(t *testing.T) {
 	dc := &edgeCounter{err: errors.New("tpd down")}
 	c := &relayGraphCache{m: make(map[cipher.PubKey]*relayGraphEntry)}
 
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		if _, err := c.peers(context.Background(), dc, lpk, remote); err == nil {
 			t.Fatal("want the query's error")
 		}

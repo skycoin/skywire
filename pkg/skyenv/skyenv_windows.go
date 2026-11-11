@@ -1,5 +1,4 @@
 //go:build windows
-// +build windows
 
 // Package skyenv pkg/skyenv/skyenv_windows.go c0-com-env
 package skyenv
@@ -18,10 +17,8 @@ func PackageConfig() PkgConfig {
 	pkgConfig := PkgConfig{
 		LauncherBinPath: "C:/Program Files/Skywire",
 		LocalPath:       "C:/Program Files/Skywire/local",
-		Hypervisor: Hypervisor{
-			DbPath:     "C:/Program Files/Skywire/users.db",
-			EnableAuth: true,
-		},
+		DbPath:          "C:/Program Files/Skywire/users.db",
+		EnableAuth:      true,
 	}
 	return pkgConfig
 }

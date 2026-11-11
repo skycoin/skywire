@@ -7,8 +7,7 @@ import (
 	"errors"
 	"io"
 
-	"github.com/sirupsen/logrus"
-
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skydns"
 )
 
@@ -32,7 +31,7 @@ func (c *Client) startMeshGateway() (*meshClientGateway, error) {
 		Aliases:  c.cfg.MeshAliases,
 		Minter:   c.cfg.MeshTLSMinter,
 		MTU:      TUNMTU,
-		Log:      logrus.StandardLogger(),
+		Log:      logging.StandardLogger(),
 	})
 	if err != nil {
 		return nil, err

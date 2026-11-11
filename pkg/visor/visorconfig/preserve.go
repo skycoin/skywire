@@ -64,7 +64,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"reflect"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -83,7 +83,7 @@ var retiredKeys = map[string]struct{}{
 }
 
 var (
-	jsonUnmarshalerType = reflect.TypeOf((*json.Unmarshaler)(nil)).Elem()
+	jsonUnmarshalerType = reflect.TypeFor[json.Unmarshaler]()
 	textUnmarshalerType = reflect.TypeOf((*interface{ UnmarshalText([]byte) error })(nil)).Elem()
 )
 
@@ -298,7 +298,7 @@ func writeMergedObject(buf *bytes.Buffer, val json.RawMessage, res map[string]an
 			leftover = append(leftover, key)
 		}
 	}
-	sort.Strings(leftover)
+	slices.Sort(leftover)
 	for _, key := range leftover {
 		if !first {
 			buf.WriteByte(',')
@@ -366,8 +366,7 @@ func collectFields(t reflect.Type, out map[string]reflect.Type) {
 	if t.Kind() != reflect.Struct {
 		return
 	}
-	for i := 0; i < t.NumField(); i++ {
-		f := t.Field(i)
+	for f := range t.Fields() {
 		tag := f.Tag.Get("json")
 		if tag == "-" {
 			continue

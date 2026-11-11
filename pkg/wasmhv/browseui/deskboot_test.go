@@ -29,11 +29,11 @@ func TestDeskBootHasNoCodeBeforeItsHeader(t *testing.T) {
 	// The boot options exist only inside the function that receives them, so
 	// no code before its definition may touch them. Comments are allowed to
 	// mention the name; code is not.
-	def := strings.Index(src, "globalThis.skywireDeskBoot = function (opts)")
-	if def < 0 {
+	before, _, ok := strings.Cut(src, "globalThis.skywireDeskBoot = function (opts)")
+	if !ok {
 		t.Fatal("cannot locate the skywireDeskBoot definition")
 	}
-	for i, line := range strings.Split(src[:def], "\n") {
+	for i, line := range strings.Split(before, "\n") {
 		l := strings.TrimSpace(line)
 		if strings.HasPrefix(l, "//") {
 			continue

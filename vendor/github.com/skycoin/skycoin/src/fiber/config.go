@@ -6,6 +6,7 @@ package fiber
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/spf13/viper"
 
@@ -38,6 +39,17 @@ type NodeConfig struct {
 	// PQAddressForkSeq is the first block that may hold post-quantum (version 1)
 	// addresses and their spends. Zero means never.
 	PQAddressForkSeq uint64 `mapstructure:"pq_address_fork_seq"`
+	// BlockSigners are the signer public keys of a multi-signer chain. Empty keeps
+	// the single block publisher. See docs/multi-signer-fiber.md.
+	BlockSigners []string `mapstructure:"block_signers"`
+	// BlockSignerThreshold is k, the signatures that make a block final. Zero
+	// means floor(2N/3)+1. It must be more than 2N/3.
+	BlockSignerThreshold int `mapstructure:"block_signer_threshold"`
+	// MultiSignerForkSeq is the first block that needs k signatures
+	MultiSignerForkSeq uint64 `mapstructure:"multi_signer_fork_seq"`
+	// BlockRoundTimeout is how long signers wait for a proposal before the next
+	// proposer takes over. Zero means three block intervals.
+	BlockRoundTimeout time.Duration `mapstructure:"block_round_timeout"`
 	// GenesisTimestamp is the genesis block creation unix timestamp
 	GenesisTimestamp uint64 `mapstructure:"genesis_timestamp"`
 	// GenesisCoinVolume is the total number of coins in genesis block
@@ -90,8 +102,11 @@ type NodeConfig struct {
 	// PriceTickerSource is the price API source: "coinpaprika" or "coingecko"
 	PriceTickerSource string `mapstructure:"price_ticker_source"`
 
+	// CoinName is the coin name the API reports and the default data directory
+	// name. cmd/newcoin sets it; a fiber.toml can set it with coin_name.
+	CoinName string `mapstructure:"coin_name"`
+
 	// These fields are set by cmd/newcoin and are not configured in the fiber.toml file
-	CoinName string
 	// Ascii Font rendering of CoinName
 	// CoinAscii is the ASCII art representation of the coin
 	CoinAscii     string //nolint:revive

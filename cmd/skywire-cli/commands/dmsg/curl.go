@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/url"
@@ -14,7 +15,6 @@ import (
 	"time"
 
 	"github.com/0magnet/bottle/vnet"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
@@ -90,7 +90,7 @@ Example URLs:
 				// at debug level natively — when the request is
 				// proxied through the visor, we want the same
 				// experience by default.
-				if !cmd.Flags().Changed("verbose") && lvl >= logrus.DebugLevel {
+				if !cmd.Flags().Changed("verbose") && lvl >= logging.DebugLevel {
 					curlVerbose = true
 				}
 			}
@@ -478,7 +478,7 @@ func prepareOutputFile(path string, replace bool) (*os.File, error) {
 		}
 		return os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, 0644) //nolint:gosec
 	}
-	if os.IsNotExist(err) {
+	if errors.Is(err, fs.ErrNotExist) {
 		return os.Create(path) //nolint:gosec
 	}
 	return nil, err

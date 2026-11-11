@@ -9,8 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -244,7 +242,7 @@ const perAttemptTransportTimeout = 30 * time.Second
 const dialConcurrency = 8
 
 // tryEstablishTransport attempts to establish a transport of the specified type to the given public key, and return error.
-func (c *Connector) tryEstablishTransport(ctx context.Context, pk cipher.PubKey, netType tptypes.Type, logger *logrus.Entry) error {
+func (c *Connector) tryEstablishTransport(ctx context.Context, pk cipher.PubKey, netType tptypes.Type, logger *logging.Entry) error {
 	ctx, cancel := context.WithTimeout(ctx, perAttemptTransportTimeout)
 	defer cancel()
 

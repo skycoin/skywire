@@ -3,14 +3,16 @@
 package visor
 
 import (
+	"cmp"
 	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -238,6 +240,8 @@ func (v *Visor) Summary() (*visorapi.Summary, error) {
 		IsHypervisor:           v.IsHypervisorEnabled(),
 		Load:                   collectLoadStats(),
 	}
+	conn := v.Connectivity()
+	summary.Connectivity = &conn
 	if v.conf.Hypervisor != nil {
 		summary.HypervisorAddr = v.conf.Hypervisor.HTTPAddr
 	}
@@ -512,27 +516,47 @@ func (v *Visor) GoroutineDump() (string, error) {
 	}
 }
 
-// SetRewardAddress implements API. The durable store is <local_path>/reward.txt,
-// not skywire-config.json — the in-memory conf field below is never flushed, and
-// reward.txt sits outside the generated json, so the address survives both a
-// restart and a config regen. REWARDSKYADDR in skywire.conf sets it at gen time.
+// SetRewardAddress implements API. The address goes to <local_path>/reward.txt
+// and, when autoconfig manages the config, to REWARDSKYADDR in skywire.conf.
+// The regen on each restart or update takes it from there, and the config
+// value wins over reward.txt.
 func (v *Visor) SetRewardAddress(p string) (string, error) {
 	p, err := rewardconfig.ValidateRewardXpub(p)
 	if err != nil {
 		return "", err
 	}
-	// In-memory only, so the running visor reports the new address; not flushed.
-	v.conf.RewardAddress = p
-	// The durable write: reward.txt is what survey/reward reporting reads.
-	path := v.conf.LocalPath + "/" + skyenv.RewardFile
-	if err := os.WriteFile(path, []byte(p), 0600); err != nil {
-		return p, fmt.Errorf("failed to write config to file. err=%v", err)
+	if err := v.storeRewardAddress(p); err != nil {
+		return p, err
 	}
 	// Refresh the survey in the background. Setting the reward address must
 	// not block on survey generation — the address is already persisted above,
 	// and survey-gen depends on the address, not the other way around. Running
 	// it synchronously made SetRewardAddress hang whenever the survey's dmsg
 	// IP lookup couldn't complete (see GenerateSurvey's IP-lookup loop).
+	go GenerateSurvey(v, v.log, false)
+	return p, nil
+}
+
+// SetSingleRewardAddress implements API. It is SetRewardAddress with the
+// opt-in for a single address, which is refused if it has sent coins or if
+// the skycoin node cannot say whether it has.
+func (v *Visor) SetSingleRewardAddress(p string) (string, error) {
+	p, isXpub, err := rewardconfig.ValidateRewardSetting(p, true)
+	if err != nil {
+		return "", err
+	}
+	if !isXpub {
+		e, err := v.RewardAddressExposure(p)
+		if err != nil {
+			return "", fmt.Errorf("could not check whether %s has sent coins, so it was not set: %w", p, err)
+		}
+		if e.Spent {
+			return "", fmt.Errorf("%s: %w", p, rewardconfig.ErrAddressSpent)
+		}
+	}
+	if err := v.storeRewardAddress(p); err != nil {
+		return p, err
+	}
 	go GenerateSurvey(v, v.log, false)
 	return p, nil
 }
@@ -547,7 +571,7 @@ func (v *Visor) GetRewardAddress() (string, error) {
 	path := v.conf.LocalPath + "/" + skyenv.RewardFile
 	rConfig, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return "", nil
 		}
 		return "", fmt.Errorf("failed to read reward file: %v", err)
@@ -564,9 +588,22 @@ func (v *Visor) DeleteRewardAddress() error {
 		return fmt.Errorf("error deleting file. err=%v", err)
 	}
 	v.conf.RewardAddress = ""
+	v.mirrorChanges()
 	v.survey.mu.Lock()
 	v.survey.data = visorconfig.Survey{}
 	v.survey.mu.Unlock()
+	return nil
+}
+
+// storeRewardAddress sets the address in memory, writes reward.txt and saves
+// it to skywire.conf so the next autoconfig keeps it.
+func (v *Visor) storeRewardAddress(p string) error {
+	v.conf.RewardAddress = p
+	path := v.conf.LocalPath + "/" + skyenv.RewardFile
+	if err := os.WriteFile(path, []byte(p), 0600); err != nil {
+		return fmt.Errorf("failed to write config to file. err=%v", err)
+	}
+	v.mirrorChanges()
 	return nil
 }
 
@@ -645,6 +682,8 @@ func (v *Visor) connectedHypervisorPKs() []cipher.PubKey {
 		out = append(out, pk)
 	}
 	v.initLock.RUnlock()
-	sort.Slice(out, func(i, j int) bool { return out[i].String() < out[j].String() })
+	slices.SortFunc(out, func(a, b cipher.PubKey) int {
+		return cmp.Compare(a.String(), b.String())
+	})
 	return out
 }

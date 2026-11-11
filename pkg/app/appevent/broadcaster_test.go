@@ -76,7 +76,7 @@ func TestBroadcaster_Broadcast(t *testing.T) {
 		// Arrange: events to broadcast and results slice.
 		events := makeEvents(nEvents)
 		results := make([][]*Event, nClients)
-		for i := 0; i < nClients; i++ {
+		for i := range nClients {
 			bc.AddClient(makeMockClient(map[string]bool{TCPDial: true, TCPClose: true}, &results[i]))
 		}
 

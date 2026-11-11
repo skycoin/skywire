@@ -1,5 +1,4 @@
 //go:build !no_ci
-// +build !no_ci
 
 package integration_test
 
@@ -78,7 +77,7 @@ func TestRestart(t *testing.T) {
 		var err error
 		var lastError string
 
-		for attempt := 0; attempt < 2; attempt++ {
+		for attempt := range 2 {
 			res, err = env.SendSkyMessage(sender, receiver, t.Name())
 
 			// If HTTP request itself failed (e.g., connection timeout), retry

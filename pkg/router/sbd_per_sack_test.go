@@ -109,7 +109,7 @@ func TestSBDSampleIntervalRateLimitsFolds(t *testing.T) {
 	require.Equal(t, sbdSampleIntervalDefault, SBDSampleInterval(), "default must be the compiled-in constant")
 
 	id := mts[0].Entry.ID
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		rg.mux.recordAckDelayTp(id, 40*time.Millisecond)
 	}
 	rg.legLivenessMu.Lock()
@@ -176,7 +176,7 @@ func TestLegLatencyByTpUsesEndToEnd(t *testing.T) {
 	mts[1].SetLatency(20)
 	rg.mux.setLegE2ERTT(mts[1].Entry.ID, 410)
 
-	got := rg.mux.legLatencyByTp(mts)
+	got := rg.mux.legLatencyByTp(tpLegs(mts))
 	require.InDelta(t, 20, got[mts[0].Entry.ID], 0.001, "a leg with no pong sample keeps its first-hop RTT")
 	require.InDelta(t, 410, got[mts[1].Entry.ID], 0.001, "a slow-routed leg is judged on its whole route")
 }
