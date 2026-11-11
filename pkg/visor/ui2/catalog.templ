@@ -1,0 +1,110 @@
+package ui2
+
+import "github.com/skycoin/skywire/pkg/visor/visorapi"
+
+// CatalogPage is the apps tab's catalog view: every app the visor can run,
+// with its configured instances.
+templ CatalogPage(c AppCatalog) {
+	@VisorLayout(c.PK, "apps") {
+		<div class="head">
+			<h1>{ T(ctx, "apps.tabs.catalog") }</h1>
+			<span class="spacer"></span>
+			<a class="btn sm" href={ templ.URL(VisorURL(c.PK, "apps")) }><span class="mi">apps</span>{ T(ctx, "apps.apps-list.title") }</a>
+		</div>
+		<div id="app-panel"></div>
+		@CatalogBody(c)
+	}
+}
+
+// CatalogBody is the grouped catalog. It polls itself like the app list.
+templ CatalogBody(c AppCatalog) {
+	<div id="catalog" hx-get={ c.url("/body") } hx-trigger="every 10s [document.visibilityState === 'visible']" hx-swap="outerHTML">
+		@ErrorBox(c.Err)
+		if len(c.Groups) == 0 && c.Err == "" {
+			<p class="dim">{ T(ctx, "apps.catalog.loading") }</p>
+		}
+		for _, g := range c.Groups {
+			<h2>{ T(ctx, "apps.catalog.kinds."+g.Kind) } <span class="small dim">{ itoa(len(g.Entries)) }</span></h2>
+			<div class="cat-grid">
+				for _, e := range g.Entries {
+					<div class="card sub cat-card" data-app={ e.Name }>
+						<div class="head">
+							<strong>{ e.Name }</strong>
+							<span class="spacer"></span>
+							<span class="badge">{ T(ctx, "apps.catalog.kind."+g.Kind) }</span>
+						</div>
+						if e.Description != "" {
+							<p class="small dim">{ e.Description }</p>
+						}
+						if len(e.Instances) == 0 {
+							<div class="bar">
+								<span class="small dim">{ T(ctx, "apps.catalog.not-added") }</span>
+								<span class="spacer"></span>
+								<button class="btn sm" type="button" hx-post={ c.url("/add") } hx-vals={ addVals(e.Name, e.Name) } hx-target="#catalog" hx-swap="outerHTML"><span class="mi">add</span>{ T(ctx, "apps.catalog.add") }</button>
+							</div>
+						}
+						for _, i := range e.Instances {
+							@catalogInstance(c, i)
+						}
+						if e.MultiInstance && len(e.Instances) > 0 {
+							<button class="btn sm" type="button" hx-post={ c.url("/add") } hx-vals={ addVals(e.Name, NextInstanceName(e)) } hx-prompt={ T(ctx, "apps.catalog.name-prompt") } hx-target="#catalog" hx-swap="outerHTML"><span class="mi">add</span>{ T(ctx, "apps.catalog.add-another") }</button>
+						}
+					</div>
+				}
+			</div>
+		}
+	</div>
+}
+
+templ catalogInstance(c AppCatalog, i visorapi.CatalogInstance) {
+	{{ x := App{Name: i.Name, Status: instanceStatus(i.Status), Detail: i.DetailedStatus, AutoStart: i.AutoStart} }}
+	<div class="cat-inst" data-instance={ i.Name }>
+		<div class="bar">
+			<strong class="small">{ i.Name }</strong>
+			if x.Status == 2 {
+				<span class="mi error" title={ x.Detail }>warning</span>
+				<span class="small error">{ T(ctx, "apps.catalog.failed") }</span>
+			} else {
+				@appState(x)
+			}
+		</div>
+		<div class="small dim">
+			if i.Port != 0 {
+				{ T(ctx, "apps.catalog.port") } { itoa(int(i.Port)) } ·
+			}
+			{ T(ctx, "apps.catalog.autostart") }:
+			if i.AutoStart {
+				{ T(ctx, "apps.catalog.on") }
+			} else {
+				{ T(ctx, "apps.catalog.off") }
+			}
+		</div>
+		if x.Detail != "" && x.Status != 1 {
+			<div class="small dim">{ x.Detail }</div>
+		}
+		<div class="actions">
+			if x.Running() {
+				<button class="icon-btn" type="button" hx-put={ VisorURL(c.PK, "apps") + "/" + i.Name + "/state" } hx-vals='{"run":"","view":"catalog"}' hx-confirm={ T(ctx, "apps.stop-confirmation") } hx-target="#catalog" hx-swap="outerHTML" title={ T(ctx, "apps.stop-app") } aria-label={ T(ctx, "apps.stop-app") }><span class="mi">stop</span></button>
+			} else {
+				<button class="icon-btn" type="button" hx-put={ VisorURL(c.PK, "apps") + "/" + i.Name + "/state" } hx-vals='{"run":"1","view":"catalog"}' hx-target="#catalog" hx-swap="outerHTML" title={ T(ctx, "apps.start-app") } aria-label={ T(ctx, "apps.start-app") }><span class="mi">play_arrow</span></button>
+			}
+			<button class="icon-btn" type="button" hx-put={ VisorURL(c.PK, "apps") + "/" + i.Name + "/autostart" } hx-vals={ catalogAutostartVals(!i.AutoStart) } hx-confirm={ autostartConfirm(ctx, i.AutoStart) } hx-target="#catalog" hx-swap="outerHTML" title={ autostartTitle(ctx, i.AutoStart) } aria-label={ autostartTitle(ctx, i.AutoStart) }>
+				<span class={ "mi", templ.KV("ok", i.AutoStart), templ.KV("dim", !i.AutoStart) }>power_settings_new</span>
+			</button>
+			<button class="icon-btn" type="button" hx-get={ VisorURL(c.PK, "apps") + "/" + i.Name + "/logs" } hx-target="#app-panel" hx-swap="innerHTML" title={ T(ctx, "apps.view-logs") } aria-label={ T(ctx, "apps.view-logs") }><span class="mi">list</span></button>
+			<button class="icon-btn" type="button" hx-get={ VisorURL(c.PK, "apps") + "/" + i.Name + "/settings" } hx-target="#app-panel" hx-swap="innerHTML" title={ T(ctx, "apps.settings") } aria-label={ T(ctx, "apps.settings") }><span class="mi">settings</span></button>
+		</div>
+	</div>
+}
+
+func addVals(binary, name string) string {
+	return jsonVals(map[string]string{"binary": binary, "name": name})
+}
+
+func catalogAutostartVals(on bool) string {
+	v := ""
+	if on {
+		v = "1"
+	}
+	return jsonVals(map[string]string{"autostart": v, "view": "catalog"})
+}

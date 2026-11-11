@@ -237,3 +237,11 @@ func TestUI2Islands(t *testing.T) {
 		require.NotContains(t, body, `href="tp-viz/"`, "no visualizer without tp-viz")
 	}
 }
+
+func TestUI2CatalogPage(t *testing.T) {
+	srv, _, pk := newUI2Server(t, true)
+	code, body := ui2Do(t, ui2Req(t, http.MethodGet, srv.URL+"/ui2/visors/"+pk.Hex()+"/apps/catalog", "", ""))
+	require.Equal(t, http.StatusOK, code, body)
+	require.Contains(t, body, `id="catalog"`)
+	require.Contains(t, body, `hx-get="ui2/visors/`+pk.Hex()+`/apps/catalog/body"`)
+}
