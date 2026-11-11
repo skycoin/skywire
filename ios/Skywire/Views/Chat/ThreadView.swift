@@ -294,7 +294,7 @@ struct ThreadView: View {
             .background(Color.skyContainer)
         }
         if let group, !group.postable {
-            Text(verbatim: group.cannotPostReason.isEmpty ? L10n.text("chat_cannot_post") : group.cannotPostReason)
+            Text(verbatim: ChatText.cannotPost(group))
                 .skyText(.bodyMedium)
                 .foregroundStyle(Color.skyOnSurfaceVariant)
                 .frame(maxWidth: .infinity, alignment: .leading)

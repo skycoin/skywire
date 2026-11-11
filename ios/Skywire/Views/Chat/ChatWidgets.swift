@@ -181,6 +181,18 @@ enum ChatText {
         return String(format: "%d:%02d", s / 60, s % 60)
     }
 
+    /// Why a group refuses this phone's posts, in the app's language (pkg/skychat/group PostBlock*).
+    static func cannotPost(_ g: GroupInfo) -> String {
+        switch g.cannotPostCode {
+        case "banned": L10n.text("chat_cannot_post_banned")
+        case "removed": L10n.text("chat_cannot_post_removed")
+        case "muted": L10n.text("chat_cannot_post_muted")
+        case "channel": L10n.text("chat_cannot_post_channel")
+        case "read_only": L10n.text("chat_cannot_post_read_only")
+        default: g.cannotPostReason.isEmpty ? L10n.text("chat_cannot_post") : g.cannotPostReason
+        }
+    }
+
     /// `role · N members · kind · state`, the line under a group's name (index.html _groupSubtitle).
     static func groupSubtitle(_ g: GroupInfo) -> String {
         var parts: [String] = []
@@ -206,6 +218,8 @@ enum ChatText {
             parts.append(L10n.text("chat_state_declined"))
         } else if g.status == "banned" {
             parts.append(L10n.text("chat_state_banned"))
+        } else if g.status == "removed" {
+            parts.append(L10n.text("chat_state_removed"))
         } else if g.readOnly {
             parts.append(L10n.text("chat_state_read_only"))
         } else if g.canPost == false {

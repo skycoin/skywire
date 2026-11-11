@@ -156,6 +156,8 @@ public struct GroupInfo: Sendable, Equatable, Identifiable {
     public var readOnly = false
     public var canPost: Bool?
     public var cannotPostReason = ""
+    /// The reason as a stable code (banned, removed, muted, channel, read_only), for showing it translated.
+    public var cannotPostCode = ""
     public var pendingJoins = 0
     public var avatar = ""
     public var listed = false
@@ -189,6 +191,7 @@ public struct GroupInfo: Sendable, Equatable, Identifiable {
         readOnly = f.bool("read_only")
         canPost = f.optionalBool("can_post")
         cannotPostReason = f.string("cannot_post_reason")
+        cannotPostCode = f.string("cannot_post_code")
         pendingJoins = f.int("pending_joins")
         avatar = f.string("avatar")
         listed = f.bool("listed")
