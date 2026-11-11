@@ -19,12 +19,12 @@ func TestLegPayloadAttribution(t *testing.T) {
 	p := func(n int) []byte { b := make([]byte, n); return b }
 
 	// Unique seqs arrive spread across legs 0,1,2.
-	m.deliverData(0, 0, p(100)) // leg 0
-	m.deliverData(1, 1, p(100)) // leg 1
-	m.deliverData(2, 2, p(100)) // leg 2
-	m.deliverData(1, 3, p(100)) // leg 1 again
+	m.deliverData(m.legAt(0), 0, p(100)) // leg 0
+	m.deliverData(m.legAt(1), 1, p(100)) // leg 1
+	m.deliverData(m.legAt(2), 2, p(100)) // leg 2
+	m.deliverData(m.legAt(1), 3, p(100)) // leg 1 again
 	// Retransmit of seq 1 arrives on leg 2 — already seen, must NOT be credited.
-	m.deliverData(2, 1, p(100))
+	m.deliverData(m.legAt(2), 1, p(100))
 
 	stats := m.snapshotLegs()
 	got := map[int]uint64{}
@@ -51,19 +51,39 @@ func TestLegPayloadAttribution(t *testing.T) {
 	}
 }
 
-// TestLegPayloadNegativeLegSkips confirms a negative leg index skips attribution
-// (the callers/tests that have no leg context), without affecting delivery.
+// TestLegPayloadNegativeLegSkips confirms a nil leg skips attribution (the
+// callers/tests that have no leg context), without affecting delivery.
 func TestLegPayloadNegativeLegSkips(t *testing.T) {
 	log := logging.NewMasterLogger().PackageLogger("legpayload-test")
 	m := newRouteMux(log, true)
 	m.growLegs(2)
 
-	if d, _ := m.deliverData(-1, 0, []byte("hello")); len(d) != 1 || string(d[0]) != "hello" {
-		t.Fatalf("delivery broke with leg=-1: %v", d)
+	if d, _ := m.deliverData(m.legAt(-1), 0, []byte("hello")); len(d) != 1 || string(d[0]) != "hello" {
+		t.Fatalf("delivery broke with no leg: %v", d)
 	}
 	for _, s := range m.snapshotLegs() {
 		if s.PayloadBytes != 0 {
-			t.Fatalf("leg %d credited %d despite leg=-1", s.Index, s.PayloadBytes)
+			t.Fatalf("leg %d credited %d despite no leg", s.Index, s.PayloadBytes)
 		}
+	}
+}
+
+// TestPayloadFollowsLegAcrossSwap checks a frame's payload is credited to the
+// leg it arrived on when the legs are reordered before it is delivered.
+func TestPayloadFollowsLegAcrossSwap(t *testing.T) {
+	m := newRouteMux(logging.NewMasterLogger().PackageLogger("legpayload-test"), true)
+	m.growLegs(3)
+
+	arrival := m.legAt(2)
+	m.swapLegs(0, 2)
+	m.deliverData(arrival, 0, []byte("hello"))
+	m.deliverData(arrival, 0, []byte("hello"))
+
+	snap := m.snapshotLegs()
+	if snap[0].PayloadBytes != 5 || snap[0].DupBytes != 5 {
+		t.Fatalf("arrival leg, now leg 0: payload %d dup %d, want 5 and 5", snap[0].PayloadBytes, snap[0].DupBytes)
+	}
+	if snap[2].PayloadBytes != 0 || snap[2].DupBytes != 0 {
+		t.Fatalf("leg 2 credited payload %d dup %d for a frame it did not carry", snap[2].PayloadBytes, snap[2].DupBytes)
 	}
 }

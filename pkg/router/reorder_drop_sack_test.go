@@ -26,17 +26,17 @@ func TestReorderDropIsNotSACKed(t *testing.T) {
 
 	// seq 0 in order, then a gap at seq 1 with seq 2 and 3 buffered behind it —
 	// the buffer is now at its cap.
-	if delivered, _ := m.deliverData(0, 0, p(0)); len(delivered) != 1 {
+	if delivered, _ := m.deliverData(m.legAt(0), 0, p(0)); len(delivered) != 1 {
 		t.Fatalf("seq 0: delivered %d, want 1", len(delivered))
 	}
-	m.deliverData(0, 2, p(2))
-	m.deliverData(0, 3, p(3))
+	m.deliverData(m.legAt(0), 2, p(2))
+	m.deliverData(m.legAt(0), 3, p(3))
 	if got := m.reorderPending(); got != 2 {
 		t.Fatalf("pending = %d, want 2 (buffer at cap)", got)
 	}
 
 	// seq 4 arrives with the buffer full: it is DROPPED.
-	delivered, gap := m.deliverData(0, 4, p(4))
+	delivered, gap := m.deliverData(m.legAt(0), 4, p(4))
 	if len(delivered) != 0 {
 		t.Fatalf("seq 4: delivered %d, want 0 (frontier still gapped at seq 1)", len(delivered))
 	}

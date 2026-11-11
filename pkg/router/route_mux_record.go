@@ -5,39 +5,60 @@ import (
 	"time"
 )
 
-// recordSent atomically increments the sent-bytes/packets counters
-// for leg idx. Bounds-checked; out-of-range indices are silently
-// dropped (defensive: a leg can be removed between selectTransport
-// and the actual write returning).
-func (m *routeMux) recordSent(idx int, n uint64) {
-	if idx < 0 {
+// The record methods credit the leg a packet rode. They take the leg's record,
+// not its index, because the caller runs after rg.mu is released and an index
+// may by then name another leg. All are lock-free and a nil leg is a no-op.
+
+// recordSent credits the leg with one sent packet of n bytes. The bytes also
+// charge the probe budget of a leg ruled probe-only.
+func (l *muxLeg) recordSent(n uint64) {
+	if l == nil {
 		return
 	}
-	m.legMu.RLock()
-	if idx < len(m.legs) {
-		m.legs[idx].sentBytes.Add(n)
-		m.legs[idx].sentPackets.Add(1)
-		// The probe budget is charged from what actually went on the wire, so a
-		// leg ruled probe-only carries one probe per window however large the
-		// frames are (the gate's own charge would have to guess the size).
-		m.legs[idx].probeWinBytes.Add(n)
-	}
-	m.legMu.RUnlock()
+	l.sentBytes.Add(n)
+	l.sentPackets.Add(1)
+	l.probeWinBytes.Add(n)
 }
 
-// recordRecv atomically increments the recv-bytes/packets counters
-// for leg idx. Same bounds-check semantics as recordSent.
-func (m *routeMux) recordRecv(idx int, n uint64) {
-	if idx < 0 {
+// recordRecv credits the leg with one received packet of n bytes.
+func (l *muxLeg) recordRecv(n uint64) {
+	if l == nil {
 		return
 	}
-	m.legMu.RLock()
-	if idx < len(m.legs) {
-		m.legs[idx].recvBytes.Add(n)
-		m.legs[idx].recvPackets.Add(1)
-		m.legs[idx].lastRecvNano.Store(time.Now().UnixNano())
+	l.recvBytes.Add(n)
+	l.recvPackets.Add(1)
+	l.lastRecvNano.Store(time.Now().UnixNano())
+}
+
+// recordPayload credits the leg with n bytes of unique payload, a sequence's
+// first arrival.
+func (l *muxLeg) recordPayload(n uint64) {
+	if l != nil {
+		l.payloadBytes.Add(n)
 	}
-	m.legMu.RUnlock()
+}
+
+// recordDup credits the leg with n bytes of duplicate data, a sequence already
+// delivered or buffered when it arrived on this leg.
+func (l *muxLeg) recordDup(n uint64) {
+	if l != nil {
+		l.dupBytes.Add(n)
+	}
+}
+
+// recordRepair credits the leg with n bytes of FEC repair frames.
+func (l *muxLeg) recordRepair(n uint64) {
+	if l != nil {
+		l.repairBytes.Add(n)
+	}
+}
+
+// recordRetransmit counts one retransmit carried by the leg. Its bytes are
+// counted by recordSent.
+func (l *muxLeg) recordRetransmit() {
+	if l != nil {
+		l.retransmits.Add(1)
+	}
 }
 
 // sackLeg picks the leg a receiver-side SACK rides. The primary (0), as it
@@ -69,65 +90,6 @@ func (m *routeMux) sackLeg(silence time.Duration, now int64) int {
 		}
 	}
 	return best
-}
-
-// recordPayload atomically credits leg idx with n bytes of UNIQUE in-order
-// payload (a seq's first arrival). Same bounds-check semantics as recordRecv.
-func (m *routeMux) recordPayload(idx int, n uint64) {
-	if idx < 0 {
-		return
-	}
-	m.legMu.RLock()
-	if idx < len(m.legs) {
-		m.legs[idx].payloadBytes.Add(n)
-	}
-	m.legMu.RUnlock()
-}
-
-// recordDup atomically credits leg idx with n bytes of DUPLICATE data (a seq
-// that had already been delivered or buffered when it arrived on this leg).
-// Splitting dupBytes out of recvBytes is what attributes a "standby leg with
-// traffic" honestly: the peer's spurious retransmits ride the fastest leg
-// (resendSeqs → selectFastestTransport), which is typically the parked direct
-// leg, and without this counter that flow is indistinguishable from striped
-// payload. Same bounds-check semantics as recordRecv.
-func (m *routeMux) recordDup(idx int, n uint64) {
-	if idx < 0 {
-		return
-	}
-	m.legMu.RLock()
-	if idx < len(m.legs) {
-		m.legs[idx].dupBytes.Add(n)
-	}
-	m.legMu.RUnlock()
-}
-
-// recordRepair atomically credits leg idx with n bytes of FEC repair frames.
-// Repairs are overhead by design (they buy gap-fill latency); counting them
-// per leg separates that deliberate cost from spurious-retransmit waste.
-func (m *routeMux) recordRepair(idx int, n uint64) {
-	if idx < 0 {
-		return
-	}
-	m.legMu.RLock()
-	if idx < len(m.legs) {
-		m.legs[idx].repairBytes.Add(n)
-	}
-	m.legMu.RUnlock()
-}
-
-// recordRetransmit atomically increments the retransmit counter for leg
-// idx (the leg that carried a SACK retransmit). The retransmitted bytes
-// are still recorded via recordSent; this is the separate loss signal.
-func (m *routeMux) recordRetransmit(idx int) {
-	if idx < 0 {
-		return
-	}
-	m.legMu.RLock()
-	if idx < len(m.legs) {
-		m.legs[idx].retransmits.Add(1)
-	}
-	m.legMu.RUnlock()
 }
 
 // retransmitsAt returns leg idx's cumulative retransmit count (0 if out of

@@ -182,12 +182,11 @@ func (rg *RouteGroup) resendSeqs(seqs []uint32) error {
 		if err := rg.writePacket(context.Background(), tp, retxPacket, rule.KeyRouteID()); err != nil {
 			rg.mux.retxSendErrors.Add(1)
 			rg.logger.WithError(err).Warnf("failed to retransmit seq %d", seq)
-		} else if leg >= 0 {
-			// Count retransmits against the leg that carried them
-			// (which may differ from the original send leg — the
-			// retx selector picks fresh, mirroring the data path).
-			rg.mux.recordSent(leg, uint64(retxPacket.Size()))
-			rg.mux.recordRetransmit(leg) // separate loss signal for leg health
+		} else {
+			// Count the retransmit against the leg that carried it, which may
+			// not be the leg the sequence first went out on.
+			leg.recordSent(uint64(retxPacket.Size()))
+			leg.recordRetransmit() // separate loss signal for leg health
 			// Re-tag the sequence's last-send transport so a later demote
 			// flush attributes it to where it now rides, not where it started.
 			if tp != nil {

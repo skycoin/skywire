@@ -83,12 +83,9 @@ func (m *routeMux) wrapPayload(routeID routing.RouteID, data []byte, tpID uuid.U
 // and returns any payloads that are now deliverable in order.
 // Also tracks the sequence for SACK generation.
 //
-// leg is the arrival leg index (the transport this frame came in on). A seq seen
-// here for the FIRST time credits that leg's payloadBytes with the frame's app
-// payload — so per-leg payloadBytes attributes the transfer's unique payload to
-// the legs that actually carried it, retransmits/duplicates excluded. Pass a
-// negative leg to skip attribution (callers/tests without a leg context).
-func (m *routeMux) deliverData(leg int, seq uint32, data []byte) (delivered [][]byte, gapDetected bool) {
+// leg is the record of the leg the frame arrived on, nil to skip attribution. A
+// seq seen for the first time credits its payload, and a repeat its duplicate.
+func (m *routeMux) deliverData(leg *muxLeg, seq uint32, data []byte) (delivered [][]byte, gapDetected bool) {
 	// FEC: record the on-wire (pre-open) payload so a sibling in this block can be
 	// reconstructed if it is late/lost on a slow leg. Inert unless CapFEC
 	// negotiated. Must run BEFORE open — reconstruction reproduces the on-wire
@@ -122,7 +119,7 @@ func (m *routeMux) deliverData(leg int, seq uint32, data []byte) (delivered [][]
 	// size. Already-delivered is seq < reorderBuf.NextSeq (no seq-0 ambiguity);
 	// already-buffered-out-of-order is the received set. Checked BEFORE
 	// RecordReceived/Insert record this seq.
-	if leg >= 0 {
+	if leg != nil {
 		isNew := true
 		if m.reorderBuf != nil && seq < m.reorderBuf.NextSeq() {
 			isNew = false // already delivered
@@ -130,9 +127,9 @@ func (m *routeMux) deliverData(leg int, seq uint32, data []byte) (delivered [][]
 			isNew = false // already buffered out of order
 		}
 		if isNew {
-			m.recordPayload(leg, uint64(len(data)))
+			leg.recordPayload(uint64(len(data)))
 		} else {
-			m.recordDup(leg, uint64(len(data)))
+			leg.recordDup(uint64(len(data)))
 		}
 	}
 

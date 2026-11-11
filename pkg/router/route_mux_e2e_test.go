@@ -43,7 +43,7 @@ func TestMux_InOrderDelivery(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		delivered, _ := recv.deliverData(-1, seq, payload)
+		delivered, _ := recv.deliverData(nil, seq, payload)
 		collect(&got, delivered)
 	}
 	if len(got) != 200 {
@@ -86,12 +86,12 @@ func TestMux_InterleavedLegs(t *testing.T) {
 	ei, oi := 0, 0
 	for ei < len(evens) || oi < len(odds) {
 		for b := 0; b < 4 && ei < len(evens); b++ {
-			d, _ := recv.deliverData(-1, evens[ei].seq, evens[ei].data)
+			d, _ := recv.deliverData(nil, evens[ei].seq, evens[ei].data)
 			collect(&got, d)
 			ei++
 		}
 		for b := 0; b < 4 && oi < len(odds); b++ {
-			d, _ := recv.deliverData(-1, odds[oi].seq, odds[oi].data)
+			d, _ := recv.deliverData(nil, odds[oi].seq, odds[oi].data)
 			collect(&got, d)
 			oi++
 		}
@@ -136,7 +136,7 @@ func TestMux_RecoversLostPacketViaRetx(t *testing.T) {
 		if p.seq == lost {
 			continue // simulate loss
 		}
-		d, _ := recv.deliverData(-1, p.seq, p.data)
+		d, _ := recv.deliverData(nil, p.seq, p.data)
 		collect(&got, d)
 	}
 	// At this point only seqs 0..4 are deliverable; 6..19 are buffered behind
@@ -152,7 +152,7 @@ func TestMux_RecoversLostPacketViaRetx(t *testing.T) {
 		t.Fatalf("retx buffer dropped lost seq %d — sender cannot recover it", lost)
 	}
 	// Retransmit it.
-	d, _ := recv.deliverData(-1, lost, retx)
+	d, _ := recv.deliverData(nil, lost, retx)
 	collect(&got, d)
 
 	if len(got) != 20 {

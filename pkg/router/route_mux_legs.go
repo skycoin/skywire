@@ -34,12 +34,13 @@ func (m *routeMux) legAt(idx int) *muxLeg {
 	if idx < 0 {
 		return nil
 	}
+	var l *muxLeg
 	m.legMu.RLock()
-	defer m.legMu.RUnlock()
-	if idx >= len(m.legs) {
-		return nil
+	if idx < len(m.legs) {
+		l = m.legs[idx]
 	}
-	return m.legs[idx]
+	m.legMu.RUnlock()
+	return l
 }
 
 // SetStandbyNewLegs controls whether newly-grown aux legs enter warm standby on

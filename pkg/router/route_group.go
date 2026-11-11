@@ -960,7 +960,9 @@ func (rg *RouteGroup) readData(data []byte, ok bool, p []byte) (int, error) {
 	return ioutil.BufRead(&rg.readBuf, data, p)
 }
 
-func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule routing.Rule, leg int) (int, error) {
+// write sends data on tp. leg is the mux record of the leg tp belongs to, taken
+// under rg.mu with the pick, and nil when the group has no mux.
+func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule routing.Rule, leg *muxLeg) (int, error) {
 	var packet routing.Packet
 	var seq uint32
 	var err error
@@ -1003,14 +1005,9 @@ func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule ro
 
 	rg.lastSent.Store(time.Now().UnixNano())
 
-	// Per-mux-leg sent counter. The aggregate networkStats is
-	// already updated inside writePacket (and gates on packet
-	// type); this records the same packet against the specific
-	// leg that carried it so 'proxy mux-info' can show
-	// where bandwidth is going across the mux'd routes.
-	if rg.mux != nil && leg >= 0 {
-		rg.mux.recordSent(leg, uint64(packet.Size()))
-	}
+	// Credit the leg that carried the packet. writePacket has already updated
+	// the group's aggregate networkStats.
+	leg.recordSent(uint64(packet.Size()))
 
 	// FEC: if wrapPayload just completed a block, schedule its repair frames
 	// on the fastest live leg (off the data path). Inert unless CapFEC negotiated.
@@ -1090,7 +1087,8 @@ func (rg *RouteGroup) resendOnAnotherLeg(failed *transport.ManagedTransport, seq
 		rg.mu.Unlock()
 		return false
 	}
-	tp, rule, leg, err := rg.mux.selectRetxTransport(rg.legs, failed.Entry.ID)
+	tp, rule, idx, err := rg.mux.selectRetxTransport(rg.legs, failed.Entry.ID)
+	leg := rg.mux.legAt(idx)
 	rg.mu.Unlock()
 	if err != nil || tp == nil || tp == failed {
 		return false
@@ -1104,10 +1102,8 @@ func (rg *RouteGroup) resendOnAnotherLeg(failed *transport.ManagedTransport, seq
 	}
 	rg.mux.retxSetTp(seq, tp.Entry.ID)
 	rg.lastSent.Store(time.Now().UnixNano())
-	if leg >= 0 {
-		rg.mux.recordSent(leg, uint64(packet.Size()))
-		rg.mux.recordRetransmit(leg)
-	}
+	leg.recordSent(uint64(packet.Size()))
+	leg.recordRetransmit()
 	rg.logger.WithField("failed_tp", failed.Entry.ID).WithField("tp", tp.Entry.ID).
 		Debugf("Leg write failed; sent seq %d on another leg", seq)
 	return true

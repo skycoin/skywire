@@ -12,6 +12,14 @@ func (m *routeMux) growLegs(n int) {
 	m.syncLegs(make([]uuid.UUID, n))
 }
 
+// The index forms below credit the leg now at idx, for tests that hold no lock
+// and change no legs. Production code credits a record taken under rg.mu.
+
+func (m *routeMux) recordSent(idx int, n uint64)    { m.legAt(idx).recordSent(n) }
+func (m *routeMux) recordRecv(idx int, n uint64)    { m.legAt(idx).recordRecv(n) }
+func (m *routeMux) recordPayload(idx int, n uint64) { m.legAt(idx).recordPayload(n) }
+func (m *routeMux) recordRetransmit(idx int)        { m.legAt(idx).recordRetransmit() }
+
 // legFlags returns each leg's ready and standby flag, in leg order.
 func (m *routeMux) legFlags() (ready, standby []bool) {
 	m.legMu.RLock()

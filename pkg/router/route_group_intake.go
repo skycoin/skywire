@@ -405,19 +405,17 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) (err error) {
 
 	rg.networkStats.AddBandwidthReceived(uint64(packet.Size()))
 
-	// Per-mux-leg recv counter. We resolve the leg from the
-	// packet's route ID (which matches one of the consume rule key route IDs,
-	// each leg has its own consume rule). The lookup is O(legs)
-	// but legs is small (typically 1-16) and this only runs for
-	// data packets after we've already paid for noise decryption.
-	arrivalLeg := -1
+	// Resolve the arrival leg from the consume rule the packet came in on, and
+	// keep its record: the index is stale once rg.mu is released.
+	var arrivalLeg *muxLeg
 	if rg.mux != nil {
 		rg.mu.Lock()
-		arrivalLeg = rg.legByConsumeRuleLocked(packet.RouteID())
-		rg.mux.recordRecv(arrivalLeg, uint64(packet.Size()))
+		idx := rg.legByConsumeRuleLocked(packet.RouteID())
+		arrivalLeg = rg.mux.legAt(idx)
+		arrivalLeg.recordRecv(uint64(packet.Size()))
 		// Inbound traffic on a leg proves the peer registered its rule
 		// for this leg, so it is now safe to send on it.
-		rg.mux.markLegReady(arrivalLeg)
+		rg.mux.markLegReady(idx)
 		rg.mu.Unlock()
 	}
 
@@ -532,9 +530,9 @@ func (rg *RouteGroup) handleRepairPacket(packet routing.Packet) error {
 	// invisible in the per-leg telemetry, so a leg carrying repair overhead was
 	// indistinguishable from an idle one.
 	rg.mu.Lock()
-	leg := rg.legByConsumeRuleLocked(packet.RouteID())
-	rg.mux.recordRecv(leg, uint64(packet.Size()))
-	rg.mux.recordRepair(leg, uint64(packet.Size()))
+	leg := rg.mux.legAt(rg.legByConsumeRuleLocked(packet.RouteID()))
+	leg.recordRecv(uint64(packet.Size()))
+	leg.recordRepair(uint64(packet.Size()))
 	rg.mu.Unlock()
 	delivered := rg.mux.fecOnRecvRepair(packet.RepairBlockID(), packet.RepairIndex(), packet.RepairSymLen(), packet.RepairSymbol())
 	for _, d := range delivered {
