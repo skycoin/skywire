@@ -189,13 +189,17 @@ fun ThreadScreen(vm: ChatViewModel, key: String, onBack: () -> Unit) {
     LaunchedEffect(atBottom) { repo.setAtBottom(key, atBottom) }
 
     // New messages follow the reader down only while they are at the bottom (or it is their own).
+    // Read during composition, before the insert is laid out: the list keeps its
+    // anchor item, so afterwards the old newest row sits at index 1.
     var lastNewest by remember { mutableStateOf(messages.lastOrNull()?.key) }
-    LaunchedEffect(messages.lastOrNull()?.key) {
+    val newestKey = messages.lastOrNull()?.key
+    val wasAtBottom = remember(newestKey) { atBottom }
+    LaunchedEffect(newestKey) {
         val newest = messages.lastOrNull() ?: return@LaunchedEffect
         if (newest.key != lastNewest) {
             lastNewest = newest.key
-            if (atBottom || newest.mine) listState.animateScrollToItem(0)
-            if (atBottom) repo.markRead(key)
+            if (wasAtBottom || newest.mine) listState.animateScrollToItem(0)
+            if (wasAtBottom) repo.markRead(key)
         }
     }
 
