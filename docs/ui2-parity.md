@@ -38,7 +38,7 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 | `/settings/labels` | label list, edit, delete | yes | on `ui2/settings` |
 | `/app/:name/:key` | full page app host | no | |
 | `/vpn/...` | VPN client UI | no | |
-| `/wallet` | wallet | no | the wallet tab links to the Angular one |
+| `/wallet` | wallet | yes | the wallet tab frames skycoin-web's own ui2 at `wallet/ui2/` |
 | | language list en, es, de, pt, zh | yes | |
 
 ## Visor tabs
@@ -72,7 +72,7 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 | vpn | VPN client | no | |
 | resources | host stats and resource monitor | partial | host, process and runtime figures, no history charts |
 | terminal | dmsgpty terminal | yes | embeds the hypervisor pty page |
-| wallet | wallet | partial | links to the Angular wallet and embeds its node config page |
+| wallet | wallet | yes | frames skycoin-web's ui2 when the app runs, else says how to start it |
 | logs | runtime logs with filter and search | yes | |
 | settings | skyenv editor | yes | |
 | | offline alerts (SMTP and push) | no | |
