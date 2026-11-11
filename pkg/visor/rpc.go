@@ -189,7 +189,7 @@ func (r *RPC) ApproveHypervisor(sel *string, out *cipher.PubKey) (err error) {
 
 // NewPairCode mints a one-time pairing code.
 func (r *RPC) NewPairCode(ttl *time.Duration, out *visorapi.PairCode) (err error) {
-	defer rpcutil.LogCall(r.log, "NewPairCode", ttl)(out, &err)
+	defer rpcutil.LogCall(r.log, "NewPairCode", ttl)(nil, &err) // the code is a secret
 	*out, err = r.visor.NewPairCode(*ttl)
 	return err
 }

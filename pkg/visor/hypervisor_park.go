@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -125,8 +126,17 @@ func (v *Visor) takeHypervisorParked(m dmsgasync.Message) error {
 // the hypervisor's RPC connection would.
 func (v *Visor) serveParkedCall(hv cipher.PubKey, frame []byte) (string, error) {
 	var req gobimpl.Request
-	if err := gob.NewDecoder(bytes.NewReader(frame)).Decode(&req); err != nil {
+	fdec := gob.NewDecoder(bytes.NewReader(frame))
+	if err := fdec.Decode(&req); err != nil {
 		return "", err
+	}
+	// A frame is one request and its argument. Anything after them would be
+	// served without the allow list check.
+	if err := fdec.DecodeValue(reflect.Value{}); err != nil {
+		return req.ServiceMethod, err
+	}
+	if err := fdec.DecodeValue(reflect.Value{}); !errors.Is(err, io.EOF) {
+		return req.ServiceMethod, errors.New("more than one call in a frame")
 	}
 	method := strings.TrimPrefix(req.ServiceMethod, visorapi.RPCPrefix+".")
 	if !hvParkAllows(method) || req.ServiceMethod != visorapi.RPCPrefix+"."+method {

@@ -2,7 +2,9 @@
 package visor
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/0magnet/gobrpc/gobimpl"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -122,4 +125,29 @@ func TestHypervisorParkedWaitsForStartup(t *testing.T) {
 	require.False(t, v.waitStarted(10*time.Millisecond))
 	close(v.startupComplete)
 	require.True(t, v.waitStarted(time.Millisecond))
+}
+
+// A frame carrying a second call after an allowed one is refused whole, so the
+// second call cannot ride past the allow list.
+func TestParkedFrameHoldsOneCall(t *testing.T) {
+	env := dmsgtest.NewEnv(t, 10*time.Second)
+	require.NoError(t, env.Startup(0, 1, 2, &dmsg.Config{MinSessions: 1}))
+	t.Cleanup(env.Shutdown)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	cs := env.AllClients()
+	hvC, mvC := cs[0], cs[1]
+	off := false
+	mv := asyncVisor(t, ctx, mvC, &visorconfig.DmsgAsyncConfig{Inbox: visorconfig.DmsgAsyncInboxConfig{Publish: &off}}, hvC.LocalPK())
+
+	var frame bytes.Buffer
+	enc := gob.NewEncoder(&frame)
+	for seq, public := range []bool{true, true} {
+		require.NoError(t, enc.Encode(gobimpl.Request{ServiceMethod: visorapi.RPCPrefix + ".SetIsPublic", Seq: uint64(seq + 1)})) //nolint:gosec
+		require.NoError(t, enc.Encode(public))
+	}
+
+	_, err := mv.serveParkedCall(hvC.LocalPK(), frame.Bytes())
+	require.Error(t, err)
+	require.False(t, mv.conf.IsPublic, "no call in a refused frame may apply")
 }
