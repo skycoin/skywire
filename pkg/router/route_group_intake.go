@@ -142,7 +142,7 @@ func (rg *RouteGroup) handlePacketNow(packet routing.Packet) error {
 		// A handshake on an aux leg proves the peer registered that leg's
 		// rule, so it is safe to start sending on it. The primary leg's
 		// handshake (which creates the mux below) needs no marking — leg 0
-		// is ready from growLegs. This matters most for download-heavy
+		// is ready from the start. This matters most for download-heavy
 		// flows: the bulk-sending side would otherwise never receive data
 		// on its aux legs and so never learn it may spread onto them.
 		if rg.mux != nil {
@@ -199,16 +199,16 @@ func (rg *RouteGroup) handlePacketNow(packet routing.Packet) error {
 				rg.mux.onLegDelaySample = rg.foldLegDelaySample
 				// If a promoting rotation engine was already wired (SetRotation
 				// before the handshake), route new aux legs through warm standby
-				// on add. Set BEFORE growLegs so it governs any aux legs already
+				// on add. Set BEFORE syncLegs so it governs any aux legs already
 				// present in legs; the primary (index 0) is always active.
 				if rg.standbyNewLegs {
 					rg.mux.SetStandbyNewLegs(true)
 				}
-				// rg.legs already has the primary transport at this
-				// point; size the leg counters to match. Subsequent
-				// AppendRoute calls (mux 2/N+) extend the slice via
-				// appendRules.
-				rg.mux.growLegs(len(rg.legs))
+				// rg.legs already has the primary leg, and may have aux legs. Later
+				// appends add their own record.
+				rg.mu.Lock()
+				rg.syncMuxLegsLocked()
+				rg.mu.Unlock()
 				rg.logger.Debug("Route multiplexing enabled (both peers support CapMux)")
 				if sack {
 					rg.logger.Debug("SACK retransmission enabled (both peers support CapSACK)")
@@ -405,19 +405,17 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) (err error) {
 
 	rg.networkStats.AddBandwidthReceived(uint64(packet.Size()))
 
-	// Per-mux-leg recv counter. We resolve the leg from the
-	// packet's route ID (which matches one of the consume rule key route IDs,
-	// each leg has its own consume rule). The lookup is O(legs)
-	// but legs is small (typically 1-16) and this only runs for
-	// data packets after we've already paid for noise decryption.
-	arrivalLeg := -1
+	// Resolve the arrival leg from the consume rule the packet came in on, and
+	// keep its record: the index is stale once rg.mu is released.
+	var arrivalLeg *muxLeg
 	if rg.mux != nil {
 		rg.mu.Lock()
-		arrivalLeg = rg.legByConsumeRuleLocked(packet.RouteID())
-		rg.mux.recordRecv(arrivalLeg, uint64(packet.Size()))
+		idx := rg.legByConsumeRuleLocked(packet.RouteID())
+		arrivalLeg = rg.mux.legAt(idx)
+		arrivalLeg.recordRecv(uint64(packet.Size()))
 		// Inbound traffic on a leg proves the peer registered its rule
 		// for this leg, so it is now safe to send on it.
-		rg.mux.markLegReady(arrivalLeg)
+		rg.mux.markLegReady(idx)
 		rg.mu.Unlock()
 	}
 
@@ -532,9 +530,9 @@ func (rg *RouteGroup) handleRepairPacket(packet routing.Packet) error {
 	// invisible in the per-leg telemetry, so a leg carrying repair overhead was
 	// indistinguishable from an idle one.
 	rg.mu.Lock()
-	leg := rg.legByConsumeRuleLocked(packet.RouteID())
-	rg.mux.recordRecv(leg, uint64(packet.Size()))
-	rg.mux.recordRepair(leg, uint64(packet.Size()))
+	leg := rg.mux.legAt(rg.legByConsumeRuleLocked(packet.RouteID()))
+	leg.recordRecv(uint64(packet.Size()))
+	leg.recordRepair(uint64(packet.Size()))
 	rg.mu.Unlock()
 	delivered := rg.mux.fecOnRecvRepair(packet.RepairBlockID(), packet.RepairIndex(), packet.RepairSymLen(), packet.RepairSymbol())
 	for _, d := range delivered {

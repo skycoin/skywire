@@ -547,26 +547,35 @@ func (rg *RouteGroup) applyDistribution(cfg DistributionConfig) {
 // (size-threshold, sticky:5tuple, latency-adaptive,
 // dscp-priority); other modes ignore it.
 //
-// Returns the leg index (position in rg.legs) so the caller can record
-// per-leg byte counts after a successful write; -1 for the
-// single-transport / legacy path.
+// Returns the picked leg's mux record, nil without a mux, so the caller can
+// credit the leg after the write even if its index has changed by then.
 // NOTE: not thread-safe, caller must hold rg.mu.
-func (rg *RouteGroup) nextTransport(payload []byte) (*transport.ManagedTransport, routing.Rule, int, error) {
+func (rg *RouteGroup) nextTransport(payload []byte) (*transport.ManagedTransport, routing.Rule, *muxLeg, error) {
 	if len(rg.legs) == 0 {
-		return nil, nil, -1, ErrNoTransports
+		return nil, nil, nil, ErrNoTransports
 	}
 	if rg.legs[0].fwd == nil {
-		return nil, nil, -1, ErrNoRules
+		return nil, nil, nil, ErrNoRules
 	}
 
 	if rg.mux != nil && len(rg.legs) > 1 {
-		return rg.mux.selectTransport(rg.legs, payload)
+		tp, rule, idx, err := rg.mux.selectTransport(rg.legs, payload)
+		return tp, rule, rg.mux.legAt(idx), err
 	}
 
 	if rg.legs[0].tp == nil {
-		return nil, nil, -1, ErrBadTransport
+		return nil, nil, nil, ErrBadTransport
 	}
-	return rg.legs[0].tp, rg.legs[0].fwd, 0, nil
+	return rg.legs[0].tp, rg.legs[0].fwd, rg.muxLegLocked(0), nil
+}
+
+// muxLegLocked returns the mux record of leg idx, nil without a mux or a
+// record. Caller holds rg.mu, which is what ties idx to the leg.
+func (rg *RouteGroup) muxLegLocked(idx int) *muxLeg {
+	if rg.mux == nil {
+		return nil
+	}
+	return rg.mux.legAt(idx)
 }
 
 // nextFastestTransport is nextTransport's retransmit-path variant: it routes to
@@ -580,44 +589,46 @@ func (rg *RouteGroup) nextTransport(payload []byte) (*transport.ManagedTransport
 // peer's no-skip frontier is waiting on behind a different leg's queue, and it
 // is why rows that looked confined on the data path still showed a fifth of
 // their bytes on the wrong leg.
-func (rg *RouteGroup) nextFastestTransport() (*transport.ManagedTransport, routing.Rule, int, error) {
+func (rg *RouteGroup) nextFastestTransport() (*transport.ManagedTransport, routing.Rule, *muxLeg, error) {
 	if len(rg.legs) == 0 {
-		return nil, nil, -1, ErrNoTransports
+		return nil, nil, nil, ErrNoTransports
 	}
 	if rg.legs[0].fwd == nil {
-		return nil, nil, -1, ErrNoRules
+		return nil, nil, nil, ErrNoRules
 	}
 	if rg.mux != nil && len(rg.legs) > 1 {
 		if directional, wantDirect, dstPK, srcPK := rg.mux.dirConfig(); directional && rg.mux.forwardSender() {
 			if tp, rule, idx, ok := rg.mux.selectConfinedForward(rg.legs, wantDirect, dstPK, srcPK); ok {
-				return tp, rule, idx, nil
+				return tp, rule, rg.mux.legAt(idx), nil
 			}
 		}
-		return rg.mux.selectFastestTransport(rg.legs)
+		tp, rule, idx, err := rg.mux.selectFastestTransport(rg.legs)
+		return tp, rule, rg.mux.legAt(idx), err
 	}
 	if rg.legs[0].tp == nil {
-		return nil, nil, -1, ErrBadTransport
+		return nil, nil, nil, ErrBadTransport
 	}
-	return rg.legs[0].tp, rg.legs[0].fwd, 0, nil
+	return rg.legs[0].tp, rg.legs[0].fwd, rg.muxLegLocked(0), nil
 }
 
 // nextRetxTransport is nextFastestTransport for the RETRANSMIT path: the same
 // pick, minus the leg the sequence was last sent on. Caller holds rg.mu.
-func (rg *RouteGroup) nextRetxTransport(avoid uuid.UUID) (*transport.ManagedTransport, routing.Rule, int, error) {
+func (rg *RouteGroup) nextRetxTransport(avoid uuid.UUID) (*transport.ManagedTransport, routing.Rule, *muxLeg, error) {
 	if avoid == uuid.Nil || rg.mux == nil || len(rg.legs) < 2 {
 		return rg.nextFastestTransport()
 	}
 	if rg.legs[0].fwd == nil {
-		return nil, nil, -1, ErrNoRules
+		return nil, nil, nil, ErrNoRules
 	}
 	// Directional confinement pins the forward direction to one leg by design;
 	// a retransmit must not break out of it.
 	if directional, wantDirect, dstPK, srcPK := rg.mux.dirConfig(); directional && rg.mux.forwardSender() {
 		if tp, rule, idx, ok := rg.mux.selectConfinedForward(rg.legs, wantDirect, dstPK, srcPK); ok {
-			return tp, rule, idx, nil
+			return tp, rule, rg.mux.legAt(idx), nil
 		}
 	}
-	return rg.mux.selectRetxTransport(rg.legs, avoid)
+	tp, rule, idx, err := rg.mux.selectRetxTransport(rg.legs, avoid)
+	return tp, rule, rg.mux.legAt(idx), err
 }
 
 // dropLegs removes the legs on the given transports from this group and fires
@@ -1005,10 +1016,8 @@ func (rg *RouteGroup) reelectPrimary(id uuid.UUID) {
 	rg.mux.swapLegs(0, newIdx)
 	// forwardHops records the PRIMARY leg's path (used for self-heal shared-hop
 	// exclusion and mux info); re-point it at the new primary's stored hops.
-	if rg.legs[0].tp != nil {
-		if hops, okHops := rg.legForwardHops[rg.legs[0].tp.Entry.ID]; okHops {
-			rg.forwardHops = hops
-		}
+	if hops := rg.legs[0].hops; len(hops) > 0 {
+		rg.forwardHops = hops
 	}
 	rg.logger.Infof("latency-band: re-elected leg %d into the primary slot (old primary was an out-of-band outlier)", newIdx)
 	rg.noteLegEvent(MuxEventPrimaryRehome,
@@ -1584,8 +1593,7 @@ func (rg *RouteGroup) removeLegsByID(deadIDs []uuid.UUID, reason, hookEvent stri
 			if tp != nil {
 				rg.logger.Infof("pruning leg %v: %s", tp.Entry.ID, reason)
 			}
-			rg.noteLegEvent(MuxEventLegRemoved, reason, MuxByAdaptive, i, remaining-1, tp,
-				rg.legHopsLocked(tpEntryID(tp)))
+			rg.noteLegEvent(MuxEventLegRemoved, reason, MuxByAdaptive, i, remaining-1, tp, lg.hops)
 			if i == 0 {
 				rg.noteMuxEvent(MuxEvent{Event: MuxEventPrimaryRehome, By: MuxByAdaptive, LegIndex: 0,
 					Legs: remaining - 1, Reason: "primary leg failed " + reason})
@@ -1705,8 +1713,7 @@ func (rg *RouteGroup) pruneDeadTransports() []int {
 			} else {
 				rg.logger.Infof("Pruning dead mux transport %v", tp.Entry.ID)
 			}
-			rg.noteLegEvent(MuxEventLegRemoved, reason, MuxByLocal, i, len(rg.legs)-len(droppedIdx)-1, tp,
-				rg.legHopsLocked(tpEntryID(tp)))
+			rg.noteLegEvent(MuxEventLegRemoved, reason, MuxByLocal, i, len(rg.legs)-len(droppedIdx)-1, tp, lg.hops)
 			if i == 0 {
 				rg.noteMuxEvent(MuxEvent{Event: MuxEventPrimaryRehome, By: MuxByLocal, LegIndex: 0,
 					Legs: len(rg.legs) - len(droppedIdx) - 1, Reason: "primary leg's " + reason})
@@ -1776,7 +1783,7 @@ func (rg *RouteGroup) pruneLegByConsumeRule(routeID routing.RouteID) bool {
 	rg.legs = append(rg.legs[:idx], rg.legs[idx+1:]...)
 	rg.forgetPeerPark(tpEntryID(retiredTp))
 	rg.noteLegEvent(MuxEventLegRemoved, "peer retired the leg (close: leg-retired)", MuxByRemote,
-		idx, len(rg.legs), retiredTp, rg.legHopsLocked(tpEntryID(retiredTp)))
+		idx, len(rg.legs), retiredTp, lg.hops)
 	if idx == 0 {
 		rg.noteMuxEvent(MuxEvent{Event: MuxEventPrimaryRehome, By: MuxByRemote, LegIndex: 0, Legs: len(rg.legs),
 			Reason: "peer retired the primary leg"})

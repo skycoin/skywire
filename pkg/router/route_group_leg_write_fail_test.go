@@ -23,7 +23,7 @@ func TestRouteGroupWriteSurvivesALegFailingUnderIt(t *testing.T) {
 	rg.mu.Lock()
 	tp, rule := rg.legs[0].tp, rg.legs[0].fwd
 	rg.mu.Unlock()
-	n, err := rg.write([]byte("payload"), tp, rule, 0)
+	n, err := rg.write([]byte("payload"), tp, rule, rg.mux.legAt(0))
 	require.NoError(t, err)
 	require.Equal(t, len("payload"), n)
 	require.Equal(t, []uint32{0}, conns[1].dataSeqs(), "the frame must go out on the surviving leg")
@@ -48,7 +48,7 @@ func TestRouteGroupWriteFailsWhenNoOtherLegIsUp(t *testing.T) {
 	rg.mu.Lock()
 	tp, rule := rg.legs[0].tp, rg.legs[0].fwd
 	rg.mu.Unlock()
-	_, err := rg.write([]byte("payload"), tp, rule, 0)
+	_, err := rg.write([]byte("payload"), tp, rule, rg.mux.legAt(0))
 	require.Error(t, err)
 }
 
@@ -70,7 +70,7 @@ func TestRouteGroupWriteSurvivesALegPrunedBeforeItsWriteFails(t *testing.T) {
 	rg.legs = rg.legs[1:]
 	rg.mu.Unlock()
 
-	n, err := rg.write([]byte("payload"), tp, rule, 0)
+	n, err := rg.write([]byte("payload"), tp, rule, rg.mux.legAt(0))
 	require.NoError(t, err)
 	require.Equal(t, len("payload"), n)
 	require.Equal(t, []uint32{0}, conns[1].dataSeqs(), "the frame must go out on the remaining leg")

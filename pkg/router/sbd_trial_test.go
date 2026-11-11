@@ -380,10 +380,7 @@ func TestSBDRulingWithDemoteOffTouchesNoWeights(t *testing.T) {
 	sbdTick(rg, ids, 25_000_000, 21_500_000)
 	require.Equal(t, 1, countEvents(rg, MuxEventSBDRuling), "precondition: the detector did rule")
 
-	rg.mux.legMu.Lock()
-	nGroups := len(rg.mux.legGroups)
-	rg.mux.legMu.Unlock()
-	require.Zero(t, nGroups, "no grouping may reach the mux while demotion is off")
+	require.Empty(t, rg.mux.legGroupIDs(), "no grouping may reach the mux while demotion is off")
 
 	w := sbdLegWeights(rg, mts)
 	require.Len(t, w, 2)
@@ -425,10 +422,7 @@ func TestSBDNoRulingOrGroupingBelowTheEvidenceFloor(t *testing.T) {
 	sbdTick(rg, ids, 30, 0)
 
 	require.Zero(t, countEvents(rg, MuxEventSBDRuling), "an idle tick is not evidence of a shared queue")
-	rg.mux.legMu.Lock()
-	nGroups := len(rg.mux.legGroups)
-	rg.mux.legMu.Unlock()
-	require.Zero(t, nGroups, "and no grouping is computed from it")
+	require.Empty(t, rg.mux.legGroupIDs(), "and no grouping is computed from it")
 
 	w := sbdLegWeights(rg, mts)
 	require.InDelta(t, 1000, w[0], 1e-9)

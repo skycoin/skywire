@@ -87,16 +87,16 @@ func TestMuxGapAge(t *testing.T) {
 	require.Zero(t, m.gapAge(), "fresh mux has no gap")
 
 	// seq 0 is expected next; delivering seq 2 opens a frontier gap at seq 0.
-	delivered, gap := m.deliverData(-1, 2, []byte("c"))
+	delivered, gap := m.deliverData(nil, 2, []byte("c"))
 	require.Empty(t, delivered, "out-of-order packet is held, not delivered")
 	require.True(t, gap, "SACK tracker reports the gap")
 	require.Positive(t, m.reorderPending(), "the out-of-order packet is buffered, so a gap is open")
 	require.GreaterOrEqual(t, m.gapAge(), time.Duration(0), "an open gap has a measurable, non-negative age")
 
 	// Fill the gap: seq 0 then seq 1 drains 0,1,2 in order and closes the gap.
-	d0, _ := m.deliverData(-1, 0, []byte("a"))
+	d0, _ := m.deliverData(nil, 0, []byte("a"))
 	require.Equal(t, [][]byte{[]byte("a")}, d0)
-	d1, _ := m.deliverData(-1, 1, []byte("b"))
+	d1, _ := m.deliverData(nil, 1, []byte("b"))
 	require.Equal(t, [][]byte{[]byte("b"), []byte("c")}, d1)
 	require.Zero(t, m.reorderPending(), "nothing is buffered once contiguous again")
 	require.Zero(t, m.gapAge(), "gap closed once contiguous again")
@@ -146,8 +146,8 @@ func TestMuxSACKPathEnabled(t *testing.T) {
 	require.Nil(t, m.getRetxPayload(99), "unknown seq has no stored payload")
 
 	// The receiver has seen seq 0 and 1: generate a SACK and feed it back.
-	m.deliverData(-1, 0, []byte("hello"))
-	m.deliverData(-1, 1, []byte("world"))
+	m.deliverData(nil, 0, []byte("hello"))
+	m.deliverData(nil, 1, []byte("world"))
 	lastContig, words := m.generateSACK()
 	require.EqualValues(t, 1, lastContig)
 

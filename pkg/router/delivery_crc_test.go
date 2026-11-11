@@ -17,7 +17,7 @@ func TestDeliveryCRCDropsCorruptedFrame(t *testing.T) {
 	m.groupPort = 4242
 
 	// A correctly stamped frame is delivered with its trailer stripped.
-	delivered, _ := m.deliverData(-1, 0, stampDeliveryCRC(0, []byte("hello")))
+	delivered, _ := m.deliverData(nil, 0, stampDeliveryCRC(0, []byte("hello")))
 	require.Equal(t, [][]byte{[]byte("hello")}, delivered)
 
 	before := MuxCountersSnapshot().DeliveryCRCFailures
@@ -27,12 +27,12 @@ func TestDeliveryCRCDropsCorruptedFrame(t *testing.T) {
 	// runs earlier, on the wire bytes) cannot see.
 	bad := stampDeliveryCRC(1, []byte("world"))
 	bad[0] ^= 0xff
-	delivered, _ = m.deliverData(-1, 1, bad)
+	delivered, _ = m.deliverData(nil, 1, bad)
 	require.Empty(t, delivered, "a CRC mismatch must not be delivered to the app")
 	require.Equal(t, before+1, MuxCountersSnapshot().DeliveryCRCFailures)
 
 	// The group is not wedged: the next frame still delivers.
-	delivered, _ = m.deliverData(-1, 2, stampDeliveryCRC(2, []byte("again")))
+	delivered, _ = m.deliverData(nil, 2, stampDeliveryCRC(2, []byte("again")))
 	require.Equal(t, [][]byte{[]byte("again")}, delivered)
 }
 
