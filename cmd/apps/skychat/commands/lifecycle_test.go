@@ -556,6 +556,8 @@ func (p *pollAPI) PairPoll(time.Time) ([]visorapi.PairMessage, error) {
 // message is ever filtered out (the pre-filter behavior).
 func (p *pollAPI) PairList() ([]visorapi.PairInfo, error) { return nil, nil }
 
+func (p *pollAPI) GroupList() ([]visorapi.GroupInfo, error) { return nil, nil }
+
 func (p *pollAPI) GroupPoll(time.Time) ([]visorapi.GroupMessage, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

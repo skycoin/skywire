@@ -169,7 +169,6 @@ func startGroupPoller(parent context.Context) {
 		pendingSeen := map[string]int{}
 		// groupSeen is each group as the last scan saw it, for scanGroupChanges.
 		groupSeen := map[string]visorapi.GroupInfo{}
-		var sinceJoinScan int
 		ticker := time.NewTicker(pairPollInterval)
 		defer ticker.Stop()
 		for {
@@ -178,14 +177,9 @@ func startGroupPoller(parent context.Context) {
 				return
 			case <-ticker.C:
 			}
-			// The approval queue changes on human timescales, so scan it
-			// far less often than messages. GroupList is a store walk on
-			// the visor side; running it at message cadence would be
-			// pure overhead for a signal that can afford to be seconds late.
-			if sinceJoinScan++; sinceJoinScan >= joinScanEveryNPolls {
-				sinceJoinScan = 0
-				scanGroups(pendingSeen, groupSeen)
-			}
+			// Role, roster and rule changes reach the UI from this scan, so it runs
+			// every tick. GroupList is a cheap store read on the visor side.
+			scanGroups(pendingSeen, groupSeen)
 			var msgs []visorapi.GroupMessage
 			err := pairRPCCall("GroupPoll", func(c visorapi.API) error {
 				out, e := c.GroupPoll(since)
@@ -283,12 +277,6 @@ func isGroupMetaInputError(err error) bool {
 	}
 	return false
 }
-
-// joinScanEveryNPolls is how many message-poll ticks pass between
-// approval-queue scans. At the default pair-poll cadence this lands
-// around a few seconds, which is far below the latency a human
-// approving a request would notice.
-const joinScanEveryNPolls = 10
 
 // scanGroups lists the groups once for scanPendingJoins and scanGroupChanges.
 func scanGroups(pending map[string]int, seen map[string]visorapi.GroupInfo) {
