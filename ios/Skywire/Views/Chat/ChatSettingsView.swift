@@ -63,7 +63,7 @@ struct ChatSettingsView: View {
     @ViewBuilder private var notifications: some View {
         section(L10n.text("chat_notifications"))
         if let allowed {
-            Text(allowed ? L10n.key("chat_notif_allowed") : L10n.key("chat_notif_not_allowed")).skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
+            Text(allowed ? L10n.key("chat_notif_allowed_ios") : L10n.key("chat_notif_not_allowed_ios")).skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
             if !allowed {
                 Button {
                     if let url = URL(string: UIApplication.openNotificationSettingsURLString) { UIApplication.shared.open(url) }

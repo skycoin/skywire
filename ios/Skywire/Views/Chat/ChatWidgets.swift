@@ -330,15 +330,18 @@ struct ChatSwitchRow: View {
     let onChange: (Bool) -> Void
 
     var body: some View {
-        Toggle(isOn: Binding(get: { checked }, set: { onChange($0) })) {
+        // .skySwitch draws only the switch, so the title is laid out beside it.
+        HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: title).skyText(.bodyLarge).foregroundStyle(Color.skyOnSurface)
                 if let sub {
                     Text(verbatim: sub).skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Toggle(isOn: Binding(get: { checked }, set: { onChange($0) })) { Text(verbatim: title) }
+                .toggleStyle(.skySwitch)
         }
-        .toggleStyle(.skySwitch)
         .disabled(!enabled)
         .padding(.vertical, 6)
     }

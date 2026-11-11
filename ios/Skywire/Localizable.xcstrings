@@ -10760,31 +10760,31 @@
         }
       }
     },
-    "chat_notif_allowed" : {
+    "chat_notif_allowed_ios" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Android shows SkyChat notifications."
+            "value" : "iOS shows SkyChat notifications."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Android muestra las notificaciones de SkyChat."
+            "value" : "iOS muestra las notificaciones de SkyChat."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Android affiche les notifications de SkyChat."
+            "value" : "iOS affiche les notifications de SkyChat."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Android 会显示 SkyChat 通知。"
+            "value" : "iOS 会显示 SkyChat 通知。"
           }
         }
       }
@@ -10876,31 +10876,31 @@
         }
       }
     },
-    "chat_notif_not_allowed" : {
+    "chat_notif_not_allowed_ios" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Android is not allowed to show notifications from this app yet."
+            "value" : "iOS is not allowed to show notifications from this app yet."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Android aún no tiene permiso para mostrar notificaciones de esta app."
+            "value" : "iOS aún no tiene permiso para mostrar notificaciones de esta app."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Android n’est pas encore autorisé à afficher les notifications de cette app."
+            "value" : "iOS n’est pas encore autorisé à afficher les notifications de cette app."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "尚未允许 Android 显示此应用的通知。"
+            "value" : "尚未允许 iOS 显示此应用的通知。"
           }
         }
       }

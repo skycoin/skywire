@@ -186,6 +186,18 @@
       "zh-Hans": "把节点的通讯录复制到手机“通讯录”App 的 Skywire 分组中，并让副本与节点通讯录保持一致。任何有权读取通讯录的应用都能读到这些名称和密钥。默认关闭。",
       "es": "Copia la libreta de contactos del nodo en la app Contactos del teléfono, en un grupo Skywire, y mantiene la copia igual que la libreta. Cualquier app con permiso para leer tus contactos podrá leer estos nombres y claves. Desactivado por defecto.",
       "fr": "Copie le carnet de contacts du visor dans l’app Contacts du téléphone, dans un groupe Skywire, et garde la copie identique au carnet. Toute app autorisée à lire vos contacts pourra alors lire ces noms et ces clés. Désactivé par défaut."
+    },
+    "chat_notif_allowed_ios": {
+      "en": "iOS shows SkyChat notifications.",
+      "zh-Hans": "iOS 会显示 SkyChat 通知。",
+      "es": "iOS muestra las notificaciones de SkyChat.",
+      "fr": "iOS affiche les notifications de SkyChat."
+    },
+    "chat_notif_not_allowed_ios": {
+      "en": "iOS is not allowed to show notifications from this app yet.",
+      "zh-Hans": "尚未允许 iOS 显示此应用的通知。",
+      "es": "iOS aún no tiene permiso para mostrar notificaciones de esta app.",
+      "fr": "iOS n’est pas encore autorisé à afficher les notifications de cette app."
     }
   },
   "InfoPlist": {
