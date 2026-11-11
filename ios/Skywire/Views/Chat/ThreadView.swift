@@ -301,6 +301,18 @@ struct ThreadView: View {
                 .padding(16)
                 .background(Color.skyContainer)
         } else {
+            // Admins can post, but see the rule everyone else is held to.
+            if let group, group.isChannel || group.readOnly {
+                Text(verbatim: group.isChannel ? L10n.text("chat_cannot_post_channel") : L10n.text("chat_cannot_post_read_only"))
+                    .skyText(.bodySmall)
+                    .foregroundStyle(Color.skyOnSurfaceVariant)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 6)
+                    .background(Color.skyContainer)
+                    .accessibilityIdentifier("thread-post-rule")
+            }
             Composer(key: key)
         }
     }
