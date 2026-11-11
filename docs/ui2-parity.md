@@ -56,7 +56,7 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 | transports | list, search, add, delete, delete all | yes | |
 | | autoconnect, public, persistent | yes | |
 | | transport label, details dialog, sorting | no | |
-| bandwidth | per transport snapshot and daily history | no | |
+| bandwidth | per transport snapshot and daily history | yes | paged 50 to a page with search; daily history loads when a row opens |
 | uptime | uptime bars and service uptimes | yes | |
 | apps | list, start, stop, autostart, settings, logs, help | yes | |
 | | app catalog, add app, add another instance | yes | `apps/catalog` |
