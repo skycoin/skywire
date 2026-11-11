@@ -26,6 +26,7 @@ import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.DeepLinks
 import com.skycoin.skywire.core.MailContact
 import com.skycoin.skywire.core.MailContacts
+import com.skycoin.skywire.core.NotificationBridge
 import com.skycoin.skywire.core.PhoneContacts
 import com.skycoin.skywire.core.SkymailAddress
 import com.skycoin.skywire.core.SkywirePaths
@@ -154,6 +155,10 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { api.mailList(folder) }
             .onSuccess { list ->
                 mutable.update { if (folder == MailFolder.SENT) it.copy(sent = list) else it.copy(inbox = list) }
+                if (folder != MailFolder.SENT) {
+                    val read = list.filter { it.seen }.mapTo(HashSet()) { it.id }
+                    NotificationBridge.clearMail(getApplication<Application>()) { it in read }
+                }
             }
             .onFailure { e -> mutable.update { it.copy(error = e.message) } }
     }
@@ -165,6 +170,7 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             runCatching { api.mailRead(folder, summary.id) }
                 .onSuccess { m ->
+                    NotificationBridge.clearMail(getApplication<Application>()) { it == summary.id }
                     mutable.update { s ->
                         s.copy(
                             open = s.open?.takeIf { it.summary.id == summary.id }?.copy(message = m),
@@ -189,6 +195,7 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             runCatching { api.mailDelete(open.folder, open.summary.id) }
                 .onSuccess {
+                    NotificationBridge.clearMail(getApplication<Application>()) { it == open.summary.id }
                     mutable.update { s ->
                         s.copy(
                             busy = false,

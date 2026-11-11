@@ -240,6 +240,15 @@ internal class NotificationBridge(context: Context) {
             for (t in setOf(thread, thread.lowercase())) notifications.cancel("$SKYCHAT:$t", TAGGED_ID)
         }
 
+        /** Takes down the new-mail notifications for the message ids [gone] says are read or deleted. */
+        fun clearMail(context: Context, gone: (String) -> Boolean) {
+            val manager = context.getSystemService(NotificationManager::class.java) ?: return
+            runCatching { manager.activeNotifications }.getOrNull()?.forEach { n ->
+                val id = n.tag?.removePrefix("$SKYMAIL:")?.takeIf { it != n.tag } ?: return@forEach
+                if (gone(id)) manager.cancel(n.tag, n.id)
+            }
+        }
+
         private const val TAG = "SkywireNotify"
         private const val SKYCHAT = "skychat"
         private const val SKYMAIL = "skymail"
