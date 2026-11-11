@@ -24,6 +24,7 @@ struct MessageRow: View {
     let group: Bool
     let highlighted: Bool
     let onTap: () -> Void
+    var onLongPress: (() -> Void)?
     @EnvironmentObject private var repo: ChatRepository
 
     var body: some View {
@@ -47,7 +48,8 @@ struct MessageRow: View {
                         FileContent(key: key, m: m, f: f, colors: colors)
                         UploadProgress(msgKey: m.key, colors: colors)
                     } else {
-                        Text(verbatim: ChatText.shown(m.text)).skyText(.bodyLarge).foregroundStyle(colors.fg).textSelection(.enabled)
+                        // Not selectable: a long press picks the message, and its sheet has Copy.
+                        Text(verbatim: ChatText.shown(m.text)).skyText(.bodyLarge).foregroundStyle(colors.fg)
                     }
                     if !media { MetaLine(key: key, m: m, group: group, colors: colors) }
                 }
@@ -64,7 +66,7 @@ struct MessageRow: View {
         .animation(.easeInOut(duration: 0.3), value: highlighted)
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
-        .onLongPressGesture(perform: onTap)
+        .onLongPressGesture(perform: onLongPress ?? onTap)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("msg-\(m.key)")
     }

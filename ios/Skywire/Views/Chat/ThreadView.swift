@@ -30,6 +30,8 @@ struct ThreadView: View {
     @ObservedObject private var store = ChatRepository.shared.store
     @ObservedObject private var thread: ChatRepository.Thread
     @State private var highlight: String?
+    /// Message keys picked by a long press; while any are, a tap picks too.
+    @State private var selected: Set<String> = []
     @State private var atBottom = true
     @State private var lastNewest: String?
 
@@ -55,7 +57,11 @@ struct ThreadView: View {
         let messages = thread.messages
         let rows = Self.rows(messages)
         VStack(spacing: 0) {
-            header
+            if selected.isEmpty {
+                header
+            } else {
+                selectionBar(messages)
+            }
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 2) {
@@ -174,12 +180,48 @@ struct ThreadView: View {
                 .padding(.vertical, 4)
                 .accessibilityIdentifier("thread-notice")
         case let .message(m):
-            MessageRow(key: key, m: m, group: isGroup, highlighted: highlight == m.key) {
+            MessageRow(key: key, m: m, group: isGroup, highlighted: highlight == m.key || selected.contains(m.key), onTap: {
+                if !selected.isEmpty {
+                    toggle(m)
+                    return
+                }
                 // The keyboard would cover the sheet's lower actions.
                 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                 dialogs.presentSheet { MessageSheet(key: key, m: m, group: isGroup).environmentObject(repo).environmentObject(nav) }
-            }
+            }, onLongPress: { toggle(m) })
         }
+    }
+
+    private func toggle(_ m: ChatMessage) {
+        if selected.remove(m.key) == nil { selected.insert(m.key) }
+    }
+
+    /// The header while messages are picked: how many, and delete them for me.
+    private func selectionBar(_ messages: [ChatMessage]) -> some View {
+        HStack(spacing: 4) {
+            SquareBarButton(icon: MI.roundedClose) { selected = [] }
+                .accessibilityLabel(Text("chat_clear_selection"))
+                .accessibilityIdentifier("thread-clear-selection")
+            Text(verbatim: L10n.format("chat_selected_count", selected.count))
+                .skyText(.titleMedium)
+                .foregroundStyle(Color.skyOnSurface)
+                .padding(.leading, 8)
+                .accessibilityIdentifier("thread-selected-count")
+            Spacer(minLength: 0)
+            Button {
+                dialogs.confirm(L10n.text("chat_confirm_delete_selected"), confirm: L10n.text("chat_ok")) {
+                    for m in messages where selected.contains(m.key) { repo.deleteForMe(key, m) }
+                    selected = []
+                }
+            } label: {
+                MaterialIcon(MI.roundedDelete).foregroundStyle(Color.skyError).frame(width: 44, height: 44)
+            }
+            .accessibilityLabel(Text("chat_delete_selected"))
+            .accessibilityIdentifier("thread-delete-selected")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color.skyBackground)
     }
 
     private static func dayText(_ day: Date) -> String {
