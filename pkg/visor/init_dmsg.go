@@ -328,7 +328,7 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	//     2–3 minutes before shutdown.
 	const dmsgInitTimeout = 30 * time.Second
 	switch {
-	case selfOnly:
+	case selfOnly || ownFileServerOnly(&dmsgConf):
 		// The only server is this visor's own, which starts after this stage.
 		log.Info("DMSG: this visor's own dmsg server is its only one; not waiting for the client")
 	case v.opts.DmsgServer != "":
@@ -1675,4 +1675,14 @@ func dmsgQUICAdvertisedAddr(publicAddr string, udpAddr net.Addr) string {
 		return ""
 	}
 	return net.JoinHostPort(host, strconv.Itoa(ua.Port))
+}
+
+// ownFileServerOnly reports whether the only dmsg server conf lists is the one
+// this visor runs from a config file, under that file's key.
+func ownFileServerOnly(conf *dmsgc.DmsgConfig) bool {
+	if conf.Server == nil || !conf.Server.Enabled || conf.Server.ConfigPath == "" {
+		return false
+	}
+	cfg, err := dmsgsrv.LoadFile(conf.Server.ConfigPath)
+	return err == nil && conf.OnlySelfServer(cfg.PubKey)
 }
