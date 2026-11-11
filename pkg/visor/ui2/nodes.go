@@ -26,6 +26,7 @@ type Node struct {
 	Location    string
 	Transports  int
 	Apps        int
+	AppNames    []string
 	AppsRunning int
 	Routes      int
 	DmsgServer  string
@@ -64,6 +65,9 @@ func NodeOf(s visorapi.Summary) Node {
 		n.Transports = len(o.Transports)
 		n.Apps = len(o.Apps)
 		for _, a := range o.Apps {
+			if a != nil {
+				n.AppNames = append(n.AppNames, a.Name)
+			}
 			if a != nil && a.Status == appserver.AppStatusRunning {
 				n.AppsRunning++
 			}

@@ -54,6 +54,7 @@ func (hv *Hypervisor) ui2Routes(r *httputil.Router) {
 		})
 		r.Get("/ui2/visors/{pk}/{tab}", hv.ui2NotPorted())
 		hv.ui2NodesRoutes(r)
+		hv.ui2BulkRoutes(r)
 		hv.ui2ContactsRoutes(r)
 		hv.ui2AppsRoutes(r)
 		hv.ui2TransportsRoutes(r)

@@ -1,0 +1,107 @@
+package ui2
+
+// BulkBar is the selection bar of the visor list. ui2.js shows it while
+// visors are ticked and keeps one hidden pk input per ticked visor in it.
+templ BulkBar() {
+	<form id="bulk" class="bar bulk" hidden data-bulk>
+		<span class="small" data-bulk-count data-fmt={ T(ctx, "nodes.bulk.selected") }></span>
+		<span data-bulk-pks></span>
+		@bulkBtn(BulkRestart, "nodes.bulk.restart")
+		@bulkBtn(BulkReward, "nodes.bulk.reward")
+		@bulkBtn(BulkAdd, "nodes.bulk.add-app")
+		@bulkBtn(BulkStart, "nodes.bulk.start-app")
+		@bulkBtn(BulkStop, "nodes.bulk.stop-app")
+		<button class="btn sm" type="button" data-bulk-clear>{ T(ctx, "nodes.bulk.clear") }</button>
+	</form>
+	<div id="bulk-panel"></div>
+}
+
+templ bulkBtn(action, label string) {
+	<button class="btn sm" type="button" hx-get={ "ui2/nodes/bulk?action=" + action } hx-include="#bulk" hx-target="#bulk-panel">{ T(ctx, label) }</button>
+}
+
+// BulkPanel is the form of a bulk action, or its result once it ran.
+templ BulkPanel(b Bulk) {
+	<form
+		class="card sub bulk-panel"
+		hx-post="ui2/nodes/bulk"
+		hx-target="#bulk-panel"
+		if b.Action == BulkRestart && !b.Ran {
+			hx-confirm={ T(ctx, "nodes.bulk.restart-confirmation", "n", itoa(b.Todo())) }
+		}
+	>
+		<div class="head">
+			<h2>{ T(ctx, BulkTitle(b.Action)) }</h2>
+			<span class="spacer"></span>
+			<button class="icon-btn sm" type="button" data-clear="#bulk-panel" aria-label={ T(ctx, "common.close") }><span class="mi">close</span></button>
+		</div>
+		<input type="hidden" name="action" value={ b.Action }/>
+		for _, r := range b.Rows {
+			<input type="hidden" name="pk" value={ r.PK }/>
+		}
+		@ErrorBox(b.Err)
+		if !b.Ran {
+			@bulkFields(b)
+		} else {
+			{{ ok, failed, skipped := b.Counts() }}
+			<p>{ T(ctx, "nodes.bulk-apps.summary", "ok", itoa(ok), "failed", itoa(failed), "skipped", itoa(skipped)) }</p>
+		}
+		<div class="table-wrap">
+			<table class="list">
+				<tbody>
+					for _, r := range b.Rows {
+						<tr>
+							<td data-label={ T(ctx, "nodes.label") }><span data-label-for={ r.PK }>{ r.Name }</span></td>
+							<td class="mono small pk-text" title={ r.PK }>{ r.PK }</td>
+							<td class="small">
+								switch  {
+									case r.Skip != "":
+										<span class="dim">{ T(ctx, r.Skip) }</span>
+									case r.Err != "":
+										<span class="error">{ r.Err }</span>
+									case r.Done:
+										<span class="ok">{ T(ctx, "nodes.bulk-apps.ok") }</span>
+									default:
+										<span class="dim">{ T(ctx, "nodes.bulk-apps.waiting") }</span>
+								}
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	</form>
+}
+
+templ bulkFields(b Bulk) {
+	<div class="form">
+		switch b.Action {
+			case BulkReward:
+				<label>
+					{ T(ctx, "rewards-address-config.address") }
+					<input class="filter" name="address" value={ b.Address } autocomplete="off" required/>
+				</label>
+				<label class="check small"><input type="checkbox" name="accept_risk" checked?={ b.AcceptRisk }/> { T(ctx, "rewards-address-config.accept-risk") }</label>
+			case BulkAdd, BulkStart, BulkStop:
+				<label>
+					{ T(ctx, "nodes.bulk-apps.app") }
+					<select name="app" hx-get="ui2/nodes/bulk" hx-include="closest form" hx-target="#bulk-panel" hx-trigger="change">
+						<option value=""></option>
+						for _, a := range b.Apps {
+							<option value={ a } selected?={ a == b.App }>{ a }</option>
+						}
+					</select>
+				</label>
+				if b.Action == BulkAdd {
+					<label class="check small"><input type="checkbox" name="start_after" checked?={ b.StartAfter } hx-get="ui2/nodes/bulk" hx-include="closest form" hx-target="#bulk-panel" hx-trigger="change"/> { T(ctx, "nodes.bulk-apps.start-after-add") }</label>
+				}
+		}
+		<p>
+			<button
+				class="btn primary"
+				type="submit"
+				disabled?={ b.Todo() == 0 || (b.Action != BulkRestart && b.Action != BulkReward && b.App == "") }
+			>{ T(ctx, "nodes.bulk-apps.run", "n", itoa(b.Todo())) }</button>
+		</p>
+	</div>
+}
