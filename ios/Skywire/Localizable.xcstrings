@@ -1190,6 +1190,35 @@
         }
       }
     },
+    "chat_add_by_address_sub" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Public key, skychat:// link, invite or QR"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clave pública, enlace skychat://, invitación o QR"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clé publique, lien skychat://, invitation ou QR"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "公钥、skychat:// 链接、邀请或二维码"
+          }
+        }
+      }
+    },
     "chat_add_contact" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7628,6 +7657,35 @@
         }
       }
     },
+    "chat_new_channel_sub" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open to join, only admins post"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abierto a unirse, solo los administradores escriben"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouvert à tous, seuls les administrateurs publient"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开放加入，仅管理员发言"
+          }
+        }
+      }
+    },
     "chat_new_channel_title" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7769,6 +7827,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "新群组"
+          }
+        }
+      }
+    },
+    "chat_new_group_sub" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Everyone in it can post"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todos los miembros pueden escribir"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tout le monde peut y publier"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所有成员均可发言"
           }
         }
       }
@@ -11481,6 +11568,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "从通讯录选择"
+          }
+        }
+      }
+    },
+    "chat_pick_contact_sub" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Someone you already saved"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alguien que ya guardaste"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quelqu’un que vous avez déjà enregistré"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你已保存的人"
           }
         }
       }

@@ -173,17 +173,17 @@ private struct StartMenu: View {
 
     var body: some View {
         Menu {
-            Button { nav.push(.addAddress("", fromLink: false)) } label: {
-                Label(L10n.text("chat_add_by_address"), image: MI.roundedPersonAdd)
+            startItem(L10n.text("chat_add_by_address"), L10n.text("chat_add_by_address_sub"), MI.roundedPersonAdd) {
+                nav.push(.addAddress("", fromLink: false))
             }
-            Button { nav.push(.contacts(pick: true)) } label: {
-                Label(L10n.text("chat_pick_contact"), image: MI.roundedContacts)
+            startItem(L10n.text("chat_pick_contact"), L10n.text("chat_pick_contact_sub"), MI.roundedContacts) {
+                nav.push(.contacts(pick: true))
             }
-            Button { nav.push(.newGroup(channel: false)) } label: {
-                Label(L10n.text("chat_new_group"), image: MI.roundedGroupAdd)
+            startItem(L10n.text("chat_new_group"), L10n.text("chat_new_group_sub"), MI.roundedGroupAdd) {
+                nav.push(.newGroup(channel: false))
             }
-            Button { nav.push(.newGroup(channel: true)) } label: {
-                Label(L10n.text("chat_new_channel"), image: MI.roundedCampaign)
+            startItem(L10n.text("chat_new_channel"), L10n.text("chat_new_channel_sub"), MI.roundedCampaign) {
+                nav.push(.newGroup(channel: true))
             }
         } label: {
             MaterialIcon(MI.roundedAdd)
@@ -194,6 +194,14 @@ private struct StartMenu: View {
         }
         .accessibilityLabel(Text("chat_start_menu"))
         .accessibilityIdentifier("chat-start")
+    }
+
+    /// A row with Android's line under its title (StartItem).
+    private func startItem(_ title: String, _ sub: String, _ icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, image: icon)
+            Text(verbatim: sub)
+        }
     }
 }
 
