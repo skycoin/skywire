@@ -1,0 +1,21 @@
+# xcodebuild -scheme Skywire test, iPhone 18 Pro (iOS 27.0), 2026-09-30T00:21Z, Xcode 27.0
+  SkywireTests.CoreBridgeTests testStartFailureCarriesTheReason passed (0.015 seconds).
+  SkywireTests.CoreBridgeTests testStartPingStopThreeCycles passed (62.264 seconds).
+  SkywireTests.CoreBridgeTests testStopDuringStart passed (14.328 seconds).
+	 Executed 3 tests, with 0 failures (0 unexpected) in 76.607 (76.610) seconds
+  SkywireTests.StringCatalogTests testEveryKeyHasTheThreeLanguages passed (0.016 seconds).
+  SkywireTests.StringCatalogTests testPlaceholdersMatchInEveryLanguage passed (0.011 seconds).
+  SkywireTests.StringCatalogTests testTheCatalogueHasExactlyTheKeysTheSourcesUse passed (0.025 seconds).
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.052 (0.055) seconds
+	 Executed 6 tests, with 0 failures (0 unexpected) in 76.659 (76.666) seconds
+	 Executed 6 tests, with 0 failures (0 unexpected) in 76.659 (76.668) seconds
+  SkywireAppTests.SecretStoreTests testAGroupTheAppIsNotEntitledToIsRefused passed (0.029 seconds).
+  SkywireAppTests.SecretStoreTests testAPasswordIsGeneratedOnceAndKept passed (0.006 seconds).
+  SkywireAppTests.SecretStoreTests testConcurrentFirstCallsAgree passed (0.012 seconds).
+  SkywireAppTests.SecretStoreTests testDeleteRotates passed (0.006 seconds).
+  SkywireAppTests.SecretStoreTests testEachSecretIsItsOwn passed (0.006 seconds).
+  SkywireAppTests.SecretStoreTests testTheAppHasItsKeychainGroup passed (0.002 seconds).
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.060 (0.064) seconds
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.060 (0.064) seconds
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.060 (0.065) seconds
+** TEST SUCCEEDED **

@@ -1,4 +1,4 @@
-//go:build tinygo && darwin
+//go:build tinygo && darwin && !mobile
 
 package rpcgrpc
 

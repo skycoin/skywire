@@ -1,0 +1,9 @@
+{
+  "body": "{\"error\":\"skymail: no deliverable recipients\",\"message_id\":\"\",\"recipients\":[{\"rcpt\":\"bob@example.com\",\"error\":\"not a skywire address (want user@<pk>.skynet)\"}]}\n",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "method": "POST",
+  "path": "/api/visors/02bdad9b58ec30b90eb27e65530bf1159b8019c1fe70f5e0da24e51718c4c53f2f/mail/send",
+  "status": 502
+}

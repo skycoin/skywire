@@ -1,4 +1,4 @@
-//go:build darwin
+//go:build darwin && !ios
 
 // Package vpn pkg/vpn/os_server_darwin.go c4-app-vpn
 package vpn

@@ -1,3 +1,5 @@
+//go:build !mobile
+
 // Package visor pkg/visor/status_board.go c3-vis-core
 package visor
 

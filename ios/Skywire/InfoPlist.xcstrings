@@ -1,0 +1,151 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "NSCameraUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire uses the camera to record video messages and scan QR codes in SkyChat and the wallet."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire usa la cámara para grabar mensajes de vídeo y escanear códigos QR en SkyChat y en la billetera."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire utilise l’appareil photo pour enregistrer des messages vidéo et scanner des codes QR dans SkyChat et le portefeuille."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire 使用相机录制视频消息，并在 SkyChat 和钱包中扫描二维码。"
+          }
+        }
+      }
+    },
+    "NSContactsUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire copies the visor’s contact book into Contacts, in a Skywire group, when you turn that on in Settings."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire copia la libreta de contactos del nodo en Contactos, en un grupo Skywire, cuando lo activas en Ajustes."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire copie le carnet de contacts du visor dans Contacts, dans un groupe Skywire, quand vous l’activez dans Réglages."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在设置中开启后，Skywire 会把节点的通讯录复制到“通讯录”的 Skywire 分组中。"
+          }
+        }
+      }
+    },
+    "NSFaceIDUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire uses Face ID to unlock the app when the app lock is on, and to confirm wallet sends and the showing of a recovery phrase."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire usa Face ID para desbloquear la app cuando el bloqueo de la app está activado, y para confirmar los envíos de la billetera y antes de mostrar una frase de recuperación."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire utilise Face ID pour déverrouiller l’app quand le verrouillage est activé, et pour confirmer les envois du portefeuille et l’affichage d’une phrase de récupération."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开启应用锁后，Skywire 会使用面容 ID 解锁应用；钱包发送转账和显示助记词之前，也会用它确认身份。"
+          }
+        }
+      }
+    },
+    "NSMicrophoneUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyChat uses the microphone for calls and to record voice and video messages."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyChat usa el micrófono para las llamadas y para grabar mensajes de voz y de vídeo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyChat utilise le micro pour les appels et pour enregistrer des messages vocaux et vidéo."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyChat 使用麦克风进行通话，以及录制语音和视频消息。"
+          }
+        }
+      }
+    },
+    "NSPhotoLibraryAddUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire saves the pictures and videos you choose to your photo library."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire guarda en tu fototeca las imágenes y los vídeos que elijas."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire enregistre dans votre photothèque les images et les vidéos que vous choisissez."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire 会把你选择的图片和视频保存到照片图库。"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

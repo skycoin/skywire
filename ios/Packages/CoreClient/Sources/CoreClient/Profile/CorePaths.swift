@@ -1,0 +1,58 @@
+import Foundation
+
+/// Every file the core reads or writes, under one directory. The app (and,
+/// later, the packet-tunnel extension) passes `dataDir` to the core as its
+/// working directory, so a relative path in the config would resolve here
+/// too; the profile makes every path absolute anyway.
+public struct CorePaths: Sendable, Equatable {
+    public let dataDir: URL
+
+    public init(dataDir: URL) {
+        self.dataDir = dataDir
+    }
+
+    public var configFile: URL { dataDir.appendingPathComponent("skywire-config.json") }
+    /// The app build the config was last generated for (Android's name for the same file).
+    public var configStampFile: URL { dataDir.appendingPathComponent("skywire-config.installed-at") }
+    /// The config as it was before an update regenerated it, until that finishes.
+    public var configBackupFile: URL { dataDir.appendingPathComponent("skywire-config.json.pre-update") }
+    /// The config's `local_path`: app work dirs, log stores, the uptime DB.
+    public var localDir: URL { dataDir.appendingPathComponent("local", isDirectory: true) }
+    /// The visor's contact book, beside `local_path` (pkg/visor/contacts.go).
+    public var contactsDir: URL { dataDir.appendingPathComponent("contacts", isDirectory: true) }
+    /// The Skymail mailbox, beside `local_path` too (skymailDir in pkg/visor/skymail.go).
+    public var mailDir: URL { dataDir.appendingPathComponent("mail", isDirectory: true) }
+    /// The launcher's `bin_path`. The apps run in-process, so nothing is ever
+    /// executed from it; the launcher only creates it at startup, which is why
+    /// it has to be inside the container.
+    public var binDir: URL { dataDir.appendingPathComponent("bin", isDirectory: true) }
+    /// The local API's account store (`hypervisor.db_path`).
+    public var usersDB: URL { dataDir.appendingPathComponent("users.db") }
+    public var transportLogs: URL { localDir.appendingPathComponent("transport_logs") }
+    public var skychatPasswordFile: URL { localDir.appendingPathComponent(SkychatProfile.passwordFileName) }
+    public var skychatHistoryFile: URL { localDir.appendingPathComponent(SkychatProfile.historyFileName) }
+    public var skydexPasswordFile: URL { localDir.appendingPathComponent(SkydexProfile.passwordFileName) }
+
+    /// `Library/Application Support/skywire/` in this process's container.
+    public static func appSupport() -> CorePaths {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return CorePaths(dataDir: base.appendingPathComponent("skywire", isDirectory: true))
+    }
+
+    /// `skywire/` in the App Group container the app and the packet-tunnel
+    /// extension share, where the core runs on a device; nil when this process
+    /// has no such group (the entitlement is missing).
+    public static func appGroup(_ identifier: String) -> CorePaths? {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: identifier)
+            .map { CorePaths(dataDir: $0.appendingPathComponent("skywire", isDirectory: true)) }
+    }
+
+    /// Creates the directories the core expects to find. `local/` has to
+    /// exist before the visor starts: its uptime recorder opens a database in
+    /// it at startup and gives up (a warning, and no uptime) if it cannot.
+    public func createDirectories() throws {
+        for directory in [dataDir, localDir, binDir] {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
+    }
+}

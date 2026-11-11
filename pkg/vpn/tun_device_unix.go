@@ -1,4 +1,4 @@
-//go:build !windows && !android && !js
+//go:build !windows && !android && !js && !ios
 
 // Package vpn pkg/vpn/tun_device_unix.go c4-app-vpn
 package vpn

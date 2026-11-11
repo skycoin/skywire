@@ -377,7 +377,9 @@ func (c *quicClient) listen() (net.Listener, error) {
 }
 
 func (c *quicClient) bindAndReRegister(port string) {
-	bind := func() error { return c.ar.BindQUIC(context.Background(), port) }
+	ctx, cancel := c.closeContext()
+	defer cancel()
+	bind := func() error { return c.ar.BindQUIC(ctx, port) }
 	if c.bindUntilBound("QUIC", bind) {
 		c.reRegister("QUIC", bind, nil)
 	}

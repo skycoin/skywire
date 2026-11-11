@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The app's privacy manifest (playbook item 2.9). No tracking and no data
+  collected for the developer: everything the app keeps stays on the device.
+
+  The required-reason APIs are the ones the binary imports, read from the Go
+  core's c-archive (`nm -u`) and the Swift sources:
+   - UserDefaults (AppSettings): the app's own preferences. CA92.1.
+   - File timestamps: the Go runtime's stat, fstat, fstatat and lstat, on the
+     core's files inside the app container. C617.1.
+   - System boot time: mach_absolute_time, the Go runtime's monotonic clock,
+     used to measure time between events inside the app. 35F9.1.
+  Not declared: statfs (disk space). Only pkg/sftp's statvfs handler imports
+  it, reached through dmsgscp and pkg/pty, both inactive on the phone; they
+  are to be cut from the mobile graph before the first upload (playbook M2 as
+  built), not declared with a reason that is not true.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>35F9.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

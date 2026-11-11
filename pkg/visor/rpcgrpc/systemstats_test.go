@@ -1,4 +1,4 @@
-//go:build !(tinygo && darwin)
+//go:build !mobile && !(tinygo && darwin)
 
 // Package rpcgrpc — pkg/visor/rpcgrpc/systemstats_test.go: exercises the
 // gopsutil-backed SystemStatsCollector against the real host. These are

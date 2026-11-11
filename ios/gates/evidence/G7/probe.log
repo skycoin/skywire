@@ -1,0 +1,6 @@
+Test Case '-[SkywireAppTests.TunnelProbeTests testTheTunnelStarts]' started.
+TUNNEL PROBE: provider com.skycoin.skywire.tunnel; app group group.com.skycoin.skywire
+TUNNEL PROBE: App Group container: <simulator>/data/Containers/Shared/AppGroup/3A63E41C-DBF2-422B-A622-64010EF2AC36/skywire
+TUNNEL PROBE: loadAllFromPreferences threw: NEVPNErrorDomain 5: IPC failed
+TUNNEL PROBE: saveToPreferences threw: NEVPNErrorDomain 5: IPC failed
+Test Case '-[SkywireAppTests.TunnelProbeTests testTheTunnelStarts]' passed (0.025 seconds).

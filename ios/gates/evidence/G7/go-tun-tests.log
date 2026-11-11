@@ -1,0 +1,14 @@
+=== RUN   TestTunSettingsTrackUpAndDown
+--- PASS: TestTunSettingsTrackUpAndDown (0.00s)
+=== RUN   TestIOSTunDevice
+=== RUN   TestIOSTunDevice/ipv4
+=== RUN   TestIOSTunDevice/ipv6
+--- PASS: TestIOSTunDevice (0.00s)
+    --- PASS: TestIOSTunDevice/ipv4 (0.00s)
+    --- PASS: TestIOSTunDevice/ipv6 (0.00s)
+=== RUN   TestIOSTunDeviceRefusesWhatIsNotIP
+--- PASS: TestIOSTunDeviceRefusesWhatIsNotIP (0.00s)
+=== RUN   TestIOSTunDeviceCloseUnblocksRead
+--- PASS: TestIOSTunDeviceCloseUnblocksRead (0.05s)
+PASS
+ok  	github.com/skycoin/skywire/pkg/vpn	1.027s

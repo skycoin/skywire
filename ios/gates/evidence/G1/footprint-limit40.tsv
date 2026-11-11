@@ -1,0 +1,22 @@
+pid=91316 t0=2026-09-29T12:31:43Z args=
+0	1604 KB	peak 1748 KB	ping 
+31	43 MB	peak 44 MB	ping 
+61	48 MB	peak 50 MB	ping "PONG!"
+91	49 MB	peak 51 MB	ping "PONG!"
+121	59 MB	peak 59 MB	ping "PONG!"
+152	59 MB	peak 59 MB	ping "PONG!"
+182	60 MB	peak 60 MB	ping "PONG!"
+212	60 MB	peak 60 MB	ping "PONG!"
+242	60 MB	peak 60 MB	ping "PONG!"
+272	61 MB	peak 61 MB	ping "PONG!"
+303	60 MB	peak 61 MB	ping "PONG!"
+333	61 MB	peak 61 MB	ping "PONG!"
+363	63 MB	peak 64 MB	ping "PONG!"
+393	65 MB	peak 66 MB	ping "PONG!"
+423	65 MB	peak 66 MB	ping "PONG!"
+453	64 MB	peak 66 MB	ping "PONG!"
+483	63 MB	peak 66 MB	ping "PONG!"
+514	62 MB	peak 66 MB	ping "PONG!"
+544	62 MB	peak 66 MB	ping "PONG!"
+574	62 MB	peak 66 MB	ping "PONG!"
+done

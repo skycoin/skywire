@@ -1,3 +1,5 @@
+//go:build !mobile
+
 // Package visor pkg/visor/init_embedded_services.go c3-vis-core
 //
 // Deployment services running inside the visor. Each block in

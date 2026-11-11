@@ -1,0 +1,9 @@
+{
+  "body": "{\"public_key\":\"02bdad9b58ec30b90eb27e65530bf1159b8019c1fe70f5e0da24e51718c4c53f2f\",\"build\":{\"go\":\"go1.27.1\",\"version\":\"v1.3.100-169-g23ec5807a-23ec5807a25e\",\"commit\":\"23ec5807a25ebc366e3a6f77a08044ff41e41bfa\",\"date\":\"2026-10-12T03:04:28Z\",\"os\":\"darwin\",\"arch\":\"arm64\",\"build_tags\":\"mobile,withoutsystray\"},\"dmsg_connected\":false,\"dmsg_sessions\":0}\n",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "method": "GET",
+  "path": "/api/about",
+  "status": 200
+}

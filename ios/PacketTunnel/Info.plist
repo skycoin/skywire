@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Merged with the keys Xcode generates. NSExtension makes this the app's
+  packet-tunnel provider. SkywireAppGroup: the container the app prepares the
+  core's config in, from the xcconfig's SKYWIRE_APP_GROUP.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.networkextension.packet-tunnel</string>
+		<key>NSExtensionPrincipalClass</key>
+		<string>$(PRODUCT_MODULE_NAME).PacketTunnelProvider</string>
+	</dict>
+	<key>SkywireAppGroup</key>
+	<string>$(SKYWIRE_APP_GROUP)</string>
+	<key>SkywireKeychainGroup</key>
+	<string>$(AppIdentifierPrefix)$(SKYWIRE_KEYCHAIN_GROUP)</string>
+</dict>
+</plist>

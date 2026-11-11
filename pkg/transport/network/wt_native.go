@@ -233,9 +233,11 @@ func (c *wtClient) advertise(addr net.Addr, cert *skyquic.RotatingWebTransportCe
 // with backoff, then re-registers periodically to keep the entry alive, and
 // whenever the certificate rotates.
 func (c *wtClient) registerWT(ar addrresolver.APIClient, port string, cert *skyquic.RotatingWebTransportCert, rotated <-chan struct{}) {
+	ctx, cancel := c.closeContext()
+	defer cancel()
 	bind := func() error {
 		h, next := cert.Hash(), cert.NextHash()
-		return ar.BindWT(context.Background(), port, hex.EncodeToString(h[:]), hex.EncodeToString(next[:]))
+		return ar.BindWT(ctx, port, hex.EncodeToString(h[:]), hex.EncodeToString(next[:]))
 	}
 	if c.bindUntilBound("WT", bind) {
 		c.reRegister("WT", bind, rotated)
