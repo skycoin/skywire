@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/fs"
 	"log"
 	"mime"
 	"net/http"
@@ -20,7 +19,7 @@ import (
 
 	"github.com/skycoin/skycoin/src/util/calvin"
 
-	"github.com/skycoin/skycoin/explorer"
+	"github.com/skycoin/skycoin/src/explorerui"
 	"github.com/skycoin/skycoin/src/fiber"
 )
 
@@ -160,43 +159,36 @@ var RootCmd = &cobra.Command{
 				log.Fatalln("Unable to register js mime type.")
 			}
 
-			var fileServer http.Handler
 			if uiFilesFolder != "" {
-				// External GUI directory
-				log.Printf("Serving GUI from local folder: %s", uiFilesFolder)
-				fileServer = http.FileServer(http.Dir(uiFilesFolder))
-			} else {
-				// Embedded GUI
-				log.Println("Serving embedded GUI")
-				sub, err := fs.Sub(explorer.EmbeddedFiles, "dist")
-				if err == nil {
-					fileServer = http.FileServer(http.FS(sub))
-				} else {
-					// fallback if dist/ not present in FS
-					fileServer = http.FileServer(http.FS(explorer.EmbeddedFiles))
-				}
+				log.Printf("Serving the Angular explorer from local folder: %s", uiFilesFolder)
 			}
+			classic := classicHandler()
+			ui := explorerui.Handler(explorerui.NewClient(skycoinAddr.String()), explorerui.Options{Classic: "classic/"})
 
-			// Serve static files
-			gzipHandle("/", fileServer)
-
-			// Angular SPA fallback (/app/* → index.html)
-			mux.Handle("/app/", gzhttp.GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if uiFilesFolder != "" {
-					http.ServeFile(w, r, filepath.Join(uiFilesFolder, "index.html"))
+			// The server rendered explorer has / and the Angular paths. Other
+			// paths are Angular files, kept where its absolute links expect them.
+			gzipHandle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/" {
+					ui.ServeHTTP(w, r)
 					return
 				}
-				f, err := explorer.EmbeddedFiles.Open("dist/index.html")
-				if err != nil {
-					http.Error(w, "index.html not found", http.StatusInternalServerError)
-					return
+				classic.files.ServeHTTP(w, r)
+			}))
+			gzipHandle("/app/", ui)
+			gzipHandle("/static/", ui)
+
+			// The Angular explorer stays reachable at /classic/ for one release.
+			gzipHandle("/classic/", classic)
+
+			// /ui2/ held the server rendered explorer while it sat beside the
+			// Angular one.
+			gzipHandle("/ui2/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				to := strings.TrimPrefix(r.URL.Path, "/ui2")
+				if r.URL.RawQuery != "" {
+					to += "?" + r.URL.RawQuery
 				}
-				defer f.Close() //nolint:errcheck
-				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				if _, err := io.Copy(w, f); err != nil {
-					log.Printf("Error serving index.html: %v", err)
-				}
-			})))
+				http.Redirect(w, r, to, http.StatusMovedPermanently)
+			}))
 
 			// Backwards compatibility redirects
 			gzipHandle("/blocks", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
