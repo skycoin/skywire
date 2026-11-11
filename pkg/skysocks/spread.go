@@ -103,8 +103,10 @@ func (p spreadPolicy) capped() bool { return p.maxShare > 0 && p.maxShare < 1 }
 //     had never carried a byte be handed the fattest share of an object.
 //  2. A tunnel whose share of the bytes so far is at or above max_share is
 //     SKIPPED, but only while another tunnel is under its cap: a cap must
-//     never be a reason to stall an object. Neither may the probe bound: with
-//     nothing else eligible, every tunnel is. The share is of every byte the
+//     never be a reason to stall an object. Neither may the probe bound, and
+//     it is the one waived first: with nothing else eligible a spent probe
+//     under its cap takes the chunk before any capped tunnel does, so the cap
+//     gives way only when every tunnel is at it. The share is of every byte the
 //     object has placed, elsewhere included, so a route that left the
 //     candidates does not make the ones still offered all look capped.
 //  3. Among what is left, the tunnel furthest BELOW its weight — smallest
@@ -130,7 +132,8 @@ func spreadChoose(capsBps, priorBps []float64, carried []int64, elsewhere int64,
 		measured float64
 		carried  int64
 		probe    bool
-		eligible bool
+		spent    bool // a probe that has had its one chunk
+		capped   bool // at or over max_share of the bytes placed
 	}
 	lanes := make([]lane, len(capsBps))
 	// 1. weights. The smallest positive weight is what a probe lane borrows:
@@ -142,7 +145,7 @@ func spreadChoose(capsBps, priorBps []float64, carried []int64, elsewhere int64,
 		if w <= 0 && i < len(priorBps) {
 			w = priorBps[i]
 		}
-		lanes[i] = lane{weight: w, measured: c, carried: carried[i], probe: w <= 0, eligible: true}
+		lanes[i] = lane{weight: w, measured: c, carried: carried[i], probe: w <= 0}
 		if p.even && w > 0 {
 			lanes[i].weight = 1
 		}
@@ -158,30 +161,32 @@ func spreadChoose(capsBps, priorBps []float64, carried []int64, elsewhere int64,
 	for _, l := range lanes {
 		total += l.carried
 	}
-	eligible := 0
+	eligible, underCap := 0, 0
 	for i := range lanes {
+		if p.capped() && total > 0 && float64(lanes[i].carried) >= p.maxShare*float64(total) {
+			lanes[i].capped = true
+		} else {
+			underCap++
+		}
 		if lanes[i].probe {
 			lanes[i].weight = least
 			// The one probe chunk: once it has carried anything for this
 			// object it sits out until a measurement gives it a real weight.
-			if lanes[i].carried > 0 {
-				lanes[i].eligible = false
-				continue
-			}
+			lanes[i].spent = lanes[i].carried > 0
 		}
-		if p.capped() && total > 0 && float64(lanes[i].carried) >= p.maxShare*float64(total) {
-			lanes[i].eligible = false
-			continue
+		if !lanes[i].capped && !lanes[i].spent {
+			eligible++
 		}
-		eligible++
 	}
-	// 3. the deepest deficit wins. With nothing eligible — every tunnel at its
-	// cap, or every tunnel a spent probe — the bounds are ignored: neither may
-	// ever be a reason to stall an object.
+	// 3. the deepest deficit wins. With nothing eligible the probe bound is
+	// waived first, and the cap only when every tunnel is at or over it.
 	idx := -1
 	bestScore, bestCap := 0.0, 0.0
 	for i, l := range lanes {
-		if !l.eligible && eligible > 0 {
+		if l.capped && underCap > 0 {
+			continue
+		}
+		if l.spent && eligible > 0 {
 			continue
 		}
 		score := float64(l.carried) / l.weight
