@@ -1004,19 +1004,66 @@ func (c *Client) openChunkStreamFor(p chunkPlacement, size int64, kind pickKind)
 		p.pl.uncharge(sess, size)
 		return nil, nil, fmt.Errorf("%w: closed between the pick and the open", errSessionClosed)
 	}
-	st, err := sess.Open()
+	st, err := sess.OpenStream()
 	if err != nil {
 		// Nothing went out: the reservation must not steer the rest of the
 		// object away from a tunnel that carried no bytes for it.
 		p.pl.uncharge(sess, size)
-		if sess.IsClosed() {
+		if sess.IsClosed() || tunnelConnErr(err) {
 			return nil, nil, fmt.Errorf("%w: %v", errSessionClosed, err)
 		}
 
 		return nil, nil, err
 	}
 
-	return sess, st, nil
+	return sess, tunnelStream{st}, nil
+}
+
+// yamuxVerdicts are the errors yamux itself returns from OpenStream and from a
+// stream's Read and Write. None of them says the tunnel conn failed.
+var yamuxVerdicts = []error{
+	io.EOF,
+	yamux.ErrSessionShutdown,
+	yamux.ErrRemoteGoAway,
+	yamux.ErrStreamsExhausted,
+	yamux.ErrStreamClosed,
+	yamux.ErrConnectionReset,
+	yamux.ErrConnectionWriteTimeout,
+	yamux.ErrTimeout,
+}
+
+// tunnelConnErr reports whether err, from OpenStream or a stream's Read or
+// Write, is the tunnel conn's own write error. yamux closes the session on it.
+func tunnelConnErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	for _, v := range yamuxVerdicts {
+		if errors.Is(err, v) {
+			return false
+		}
+	}
+	return true
+}
+
+// tunnelStream labels the tunnel conn's write error errSessionClosed. yamux
+// hands that error to the caller before IsClosed reports the session closed.
+type tunnelStream struct{ *yamux.Stream }
+
+func (s tunnelStream) Read(p []byte) (int, error) {
+	n, err := s.Stream.Read(p)
+	if tunnelConnErr(err) {
+		err = fmt.Errorf("%w: %v", errSessionClosed, err)
+	}
+	return n, err
+}
+
+func (s tunnelStream) Write(p []byte) (int, error) {
+	n, err := s.Stream.Write(p)
+	if tunnelConnErr(err) {
+		err = fmt.Errorf("%w: %v", errSessionClosed, err)
+	}
+	return n, err
 }
 
 // lostWatcher closes an in-flight chunk stream the moment ANOTHER attempt wins
@@ -1233,7 +1280,9 @@ func (g *tunnelGuard) err(err error) error {
 	if g.snubbed.Load() || (g.m != nil && g.m.isSnubbed()) {
 		return fmt.Errorf("%w: %v", errTunnelSnubbed, err)
 	}
-	if !g.fired.Load() && !g.sess.IsClosed() {
+	// A tunnelStream may have seen the conn fail before the session says so.
+	connFailed := errors.Is(err, errSessionClosed)
+	if !g.fired.Load() && !g.sess.IsClosed() && !connFailed {
 		return err
 	}
 	// Retire here too, not only in the watcher: stop() and the close can race in
@@ -1242,6 +1291,9 @@ func (g *tunnelGuard) err(err error) error {
 	// once-only per tunnel, so the two callers cannot double-promote.
 	if g.c != nil {
 		g.c.retireTunnel(g.sess, "tunnel closed under a range fetch")
+	}
+	if connFailed {
+		return err
 	}
 
 	return fmt.Errorf("%w: %v", errSessionClosed, err)
