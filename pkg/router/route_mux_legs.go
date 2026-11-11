@@ -69,15 +69,17 @@ func (m *routeMux) groupOf(i int) int {
 // which can flip a live leg to not-ready (the mux>=2 hang — see the ready[]
 // note above) or mis-attribute bytes after an index is reused. The counterpart
 // to growLegs.
-func (m *routeMux) removeLegs(indices ...int) {
+func (m *routeMux) removeLegs(indices ...int) (promoted bool) {
 	if len(indices) == 0 {
-		return
+		return false
 	}
 	drop := make(map[int]bool, len(indices))
 	for _, i := range indices {
 		drop[i] = true
 	}
 	m.legMu.Lock()
+	// Group ids are leg indices, so a grouping does not survive a compaction.
+	m.legGroups = nil
 	if len(m.legs) > 0 {
 		kept := make([]*legCounters, 0, len(m.legs))
 		for i, c := range m.legs {
@@ -108,10 +110,12 @@ func (m *routeMux) removeLegs(indices ...int) {
 		}
 		m.standby = kept
 		if len(m.standby) > 0 {
+			promoted = m.standby[0]
 			m.standby[0] = false // the primary leg is never standby
 		}
 	}
 	m.legMu.Unlock()
+	return promoted
 }
 
 // markLegReady records that leg idx has carried inbound traffic, so it
@@ -216,6 +220,7 @@ func (m *routeMux) swapLegs(i, j int) {
 	}
 	m.legMu.Lock()
 	defer m.legMu.Unlock()
+	m.legGroups = nil // group ids are leg indices
 	if i < len(m.legs) && j < len(m.legs) {
 		m.legs[i], m.legs[j] = m.legs[j], m.legs[i]
 	}

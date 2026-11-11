@@ -455,7 +455,7 @@ func (rg *RouteGroup) detachLegForRehome(id uuid.UUID, reason string) (*rehomeLe
 	leg.hops = rg.legHopsLocked(tpEntryID(leg.tp))
 	rg.legs = append(rg.legs[:idx], rg.legs[idx+1:]...)
 	if rg.mux != nil {
-		rg.mux.removeLegs(idx)
+		rg.compactMuxLocked(idx)
 		rg.mux.rebuildWeights(rg.legs)
 	}
 	rg.forgetPeerPark(tpEntryID(leg.tp))

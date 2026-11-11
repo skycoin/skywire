@@ -690,7 +690,7 @@ func (r *router) RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uu
 	// Compact the per-leg counter/readiness arrays in lockstep with the
 	// legs compaction above, then rebuild the selector.
 	if rg.mux != nil {
-		rg.mux.removeLegs(idx)
+		rg.compactMuxLocked(idx)
 		rg.mux.rebuildWeights(rg.legs)
 	}
 

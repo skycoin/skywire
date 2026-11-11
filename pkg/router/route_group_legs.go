@@ -1606,7 +1606,7 @@ func (rg *RouteGroup) removeLegsByID(deadIDs []uuid.UUID, reason, hookEvent stri
 	}
 	rg.legs = alive
 	if rg.mux != nil {
-		rg.mux.removeLegs(droppedIdx...)
+		rg.compactMuxLocked(droppedIdx...)
 	}
 	rg.mu.Unlock()
 
@@ -1731,7 +1731,7 @@ func (rg *RouteGroup) pruneDeadTransports() []int {
 	// aligned with the pruned legs. droppedIdx are the original
 	// pre-compaction indices.
 	if rg.mux != nil {
-		rg.mux.removeLegs(droppedIdx...)
+		rg.compactMuxLocked(droppedIdx...)
 	}
 
 	rg.logger.Infof("Pruned dead transports: %d alive, %d removed", len(alive), len(droppedIdx))
@@ -1784,7 +1784,7 @@ func (rg *RouteGroup) pruneLegByConsumeRule(routeID routing.RouteID) bool {
 
 	rg.rt.DelRules(deadRuleIDs)
 	if rg.mux != nil {
-		rg.mux.removeLegs(idx)
+		rg.compactMuxLocked(idx)
 		rg.mux.rebuildWeights(rg.legs)
 	}
 	rg.logger.Infof("Retired remote mux leg %d (consume rule %d); %d legs remain", idx, routeID, len(rg.legs))
