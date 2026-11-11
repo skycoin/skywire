@@ -41,9 +41,20 @@ func dayLabel(_ timestamp: Int64) -> String {
     return wallFormat("d MMMM", date)
 }
 
-/// The time of day as Android writes it: 24-hour `HH:mm`.
-func timeLabel(_ timestamp: Int64) -> String {
-    wallFormat("HH:mm", Date(timeIntervalSince1970: TimeInterval(timestamp)))
+/// Date and time in full, year and seconds included, in the app's language.
+func fullDateTime(_ timestamp: Int64) -> String {
+    let formatter = DateFormatter()
+    formatter.locale = L10n.locale
+    formatter.dateStyle = .medium
+    formatter.timeStyle = .medium
+    return formatter.string(from: Date(timeIntervalSince1970: TimeInterval(timestamp)))
+}
+
+/// The first of the wallet's own addresses a transaction used, and how many more.
+func ownAddressLabel(_ tx: CachedTx) -> String? {
+    guard let first = tx.own.first else { return nil }
+    let more = tx.own.count - 1
+    return shortAddress(first, head: 6, tail: 4) + (more > 0 ? " +\(more)" : "")
 }
 
 /// A date in a fixed Android pattern, with the phone's language for the month names.
@@ -167,13 +178,15 @@ struct TxRow: View {
                         }
                     }
                     Text(verbatim: partyLine).skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).lineLimit(1)
+                    if let own = ownAddressLabel(tx) {
+                        Text(verbatim: L10n.format(tx.incoming ? "wallet_own_received_line" : "wallet_own_sent_line", own))
+                            .skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).lineLimit(1)
+                    }
+                    Text(verbatim: fullDateTime(tx.timestamp)).skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                VStack(alignment: .trailing, spacing: 0) {
-                    Text(verbatim: (tx.incoming ? "+" : "\u{2212}") + coin.amountText(tx.amount))
-                        .skyText(.bodyLarge, bold: true).foregroundStyle(txColor(tx))
-                    Text(verbatim: timeLabel(tx.timestamp)).skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
-                }
+                Text(verbatim: (tx.incoming ? "+" : "\u{2212}") + coin.amountText(tx.amount))
+                    .skyText(.bodyLarge, bold: true).foregroundStyle(txColor(tx))
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 13)

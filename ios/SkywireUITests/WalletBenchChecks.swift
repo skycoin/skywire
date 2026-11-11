@@ -34,7 +34,7 @@ final class WalletBenchChecks: XCTestCase {
     func testAddressBalancesOutputsAndHistory() throws {
         let app = try benchWallet()
         app.buttons["wallet-receive"].tap()
-        app.buttons["wallet-other-addresses"].tap()
+        tapWhenUp("wallet-other-addresses", in: app)
         let first = app.buttons["wallet-address-1"], second = app.buttons["wallet-address-2"]
         XCTAssertTrue(first.waitForExistence(timeout: 10))
         XCTAssertTrue(first.label.contains("13.500"), "address 1 reads \(first.label)")
@@ -66,12 +66,18 @@ final class WalletBenchChecks: XCTestCase {
         XCTAssertEqual(chip.label, "\(addresses[1].prefix(8))…\(addresses[1].suffix(6))")
         let rows = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "4.000"))
         XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 5), "the second address's receipt is not listed")
+        let arrived = "received at \(addresses[1].prefix(6))…\(addresses[1].suffix(4))"
+        XCTAssertTrue(rows.firstMatch.label.contains(arrived), "the row does not say where it arrived: \(rows.firstMatch.label)")
         XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "10.000")).firstMatch.exists,
                        "the history shows another address's transaction")
         attachScreenshot(app, "bench-history-of-address")
         chip.tap()
         tapWhenUp("All addresses", in: app)
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "10.000")).firstMatch.waitForExistence(timeout: 5))
+        rows.firstMatch.tap()
+        XCTAssertTrue(app.staticTexts[addresses[1]].waitForExistence(timeout: 5), "the detail does not name the receiving address in full")
+        XCTAssertTrue(app.staticTexts["Received at"].exists)
+        attachScreenshot(app, "bench-tx-own-address")
     }
 
     /// A send spends from one chosen address, or from outputs picked by hand with the hours set
@@ -648,7 +654,7 @@ final class WalletBenchChecks: XCTestCase {
         // The restore scanned the shipped node, which knows none of the phrase's addresses: the
         // bench's three are derived by hand, the same chain either way.
         app.buttons["wallet-receive"].tap()
-        app.buttons["wallet-other-addresses"].tap()
+        tapWhenUp("wallet-other-addresses", in: app)
         for index in 2...3 where !app.buttons["wallet-address-\(index)"].waitForExistence(timeout: 2) {
             app.buttons["wallet-address-new"].tap()
             XCTAssertTrue(app.buttons["wallet-address-\(index)"].waitForExistence(timeout: 10))

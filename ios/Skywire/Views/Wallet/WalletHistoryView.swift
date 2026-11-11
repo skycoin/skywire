@@ -230,7 +230,10 @@ struct WalletTxView: View {
         VStack(spacing: 0) {
             detail(tx.incoming ? L10n.key("wallet_tx_from") : L10n.key("wallet_tx_to"), tx.party.map { shortAddress($0) } ?? "—", first: true)
             detail(L10n.key("wallet_tx_wallet"), model.active?.name ?? "—")
-            detail(L10n.key("wallet_tx_date"), wallFormat("d MMMM, HH:mm", Date(timeIntervalSince1970: TimeInterval(tx.timestamp))))
+            if !tx.own.isEmpty {
+                detail(tx.incoming ? L10n.key("wallet_tx_received_at") : L10n.key("wallet_tx_sent_from"), tx.own.joined(separator: "\n"))
+            }
+            detail(L10n.key("wallet_tx_date"), fullDateTime(tx.timestamp))
             if let price = model.usdPrice {
                 // Today's price, not the price on the day: skycoin-web says the same.
                 detail(L10n.key("wallet_tx_usd_now"), L10n.format("wallet_usd_value", model.coin.usdText(tx.amount, price: price)))
@@ -263,10 +266,12 @@ struct WalletTxView: View {
     private func detail(_ label: LocalizedStringKey, _ value: String, first: Bool = false) -> some View {
         VStack(spacing: 0) {
             if !first { SkyDivider(color: .skyContainerHighest) }
-            HStack {
-                Text(label).skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant)
-                Spacer()
+            // A long value (a full address) wraps in its own column, clear of the label.
+            HStack(alignment: .firstTextBaseline, spacing: 16) {
+                Text(label).skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant).fixedSize()
                 Text(verbatim: value).skyText(.bodyMedium, bold: true)
+                    .multilineTextAlignment(.trailing)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
             .padding(.vertical, 14)
         }
