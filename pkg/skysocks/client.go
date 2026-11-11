@@ -192,6 +192,9 @@ type Client struct {
 	rsSplits atomic.Uint64
 	rsChunks atomic.Uint64
 	rsBytes  atomic.Uint64
+	// rsBackoffs counts the retry backoffs range chunks slept. A free retry
+	// (freeRetry) never adds to it.
+	rsBackoffs atomic.Uint64
 
 	// spreadLast holds the *spreadPlanner of the most recently COMPLETED split
 	// download or striped upload — the per-tunnel byte ledger behind the
