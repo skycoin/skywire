@@ -102,14 +102,14 @@ The dmsghttp-config is the default — and currently the only supported — viso
 skywire cli config gen -b --bestproto
 ```
 
-In order to bootstrap the visor's connection to the dmsg network (via TCP connection to an individual dmsg server), the [dmsghttp-config.json](/dmsghttp-config.json) is provided with the skywire binary release. All production deployment services are then reached by the visor over the dmsg network.
+In order to bootstrap the visor's connection to the dmsg network (via TCP connection to an individual dmsg server), the dmsghttp-config.json is provided with the skywire binary release. All production deployment services are then reached by the visor over the dmsg network.
 
 In the instance that the skywire production deployment changes — specifically the dmsg servers:
 * it will be necessary to update to the next version or package release which ships an updated dmsghttp-config.json,
 
   OR
 
-* it will be necessary to manually update the [dmsghttp-config.json](/dmsghttp-config.json) provided by your skywire installation.
+* it will be necessary to manually update the dmsghttp-config.json provided by your skywire installation.
 
 Currently, **there is no mechanism for updating the dmsghttp-config.json which does not require an http request** — a request which may be blocked depending on region.
 
@@ -277,7 +277,7 @@ All computer hardware and architectures are eligible for both reward pools.
 
 ### Deployment
 
-The deployment your visor is running on can be verified by comparing the services configured in the visor's .json config against [conf.skywire.skycoin.com](https://conf.skywire.skycoin.com)
+The deployment your visor is running on can be verified by comparing the services configured in the visor's .json config against [deployment/services-config.json](https://github.com/skycoin/skywire/blob/develop/deployment/services-config.json) in the skywire repository
 
 ```
 cat /opt/skywire/skywire.json
@@ -287,7 +287,7 @@ The service configuration will be automatically updated any time a config is gen
 
 Compare the dmsghttp-config of your current installation with the dmsghttp-config on the develop branch of [github.com/skycoin/skywire](https://github.com/skycoin/skywire) — the dmsghttp-config is the default config and is used by every visor on the production deployment.
 
-The same data in a different format should be displayed in the [dmsg-discovery all_servers](https://dmsgd.skywire.skycoin.com/dmsg-discovery/all_servers) page. Ensure that the dmsghttp-config.json in your installation has the same ip addresses and ports for the dmsg server keys.
+The same data in a different format is listed by `skywire cli svc dmsgd all-servers`, which queries the dmsg discovery over dmsg. Ensure that the dmsghttp-config.json in your installation has the same ip addresses and ports for the dmsg server keys.
 
 The data from the dmsg discovery should be considered authoritative or current.
 
