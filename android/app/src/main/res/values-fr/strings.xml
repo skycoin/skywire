@@ -167,6 +167,12 @@
     <string name="call_unmute">Réactiver</string>
     <string name="call_speaker">Haut-parleur</string>
     <string name="call_missed_title">Appel manqué</string>
+    <string name="chat_notif_join_request">Demande pour rejoindre le groupe</string>
+    <string name="chat_notif_message_request">Demande de message</string>
+    <plurals name="chat_notif_join_waiting">
+        <item quantity="one">%1$d personne attend de rejoindre %2$s</item>
+        <item quantity="other">%1$d personnes attendent de rejoindre %2$s</item>
+    </plurals>
 
     <!-- Home / Connect -->
     <string name="state_disconnected">Déconnecté</string>
@@ -1410,6 +1416,7 @@
     <string name="chat_call">Appeler</string>
     <string name="chat_call_incoming">Appel entrant</string>
     <string name="chat_call_outgoing">Appel sortant</string>
+    <string name="chat_call_unanswered">Appel sans réponse</string>
     <string name="chat_call_name">Appeler %1$s</string>
     <string name="chat_calls_failed">Impossible de charger le journal d’appels.</string>
     <string name="chat_cancel">Annuler</string>

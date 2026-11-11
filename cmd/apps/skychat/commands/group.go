@@ -441,6 +441,7 @@ func scanPendingJoins(groups []visorapi.GroupInfo, seen map[string]int) {
 			// to hear about a join request — the queue lives behind a dialog,
 			// not in the message stream. The tag folds repeats for one group
 			// into a single notification on sinks that coalesce.
+			// The Android app matches this English title and body to translate them.
 			notifyOSInboundThread("", "join:"+g.ID, "Group join request",
 				strconv.Itoa(g.PendingJoins)+" waiting to join "+g.Name)
 		}

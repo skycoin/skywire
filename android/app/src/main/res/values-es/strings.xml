@@ -169,6 +169,12 @@
     <string name="call_unmute">Activar</string>
     <string name="call_speaker">Altavoz</string>
     <string name="call_missed_title">Llamada perdida</string>
+    <string name="chat_notif_join_request">Solicitud para unirse al grupo</string>
+    <string name="chat_notif_message_request">Solicitud de mensaje</string>
+    <plurals name="chat_notif_join_waiting">
+        <item quantity="one">%1$d persona espera unirse a %2$s</item>
+        <item quantity="other">%1$d personas esperan unirse a %2$s</item>
+    </plurals>
 
     <!-- Home / Connect -->
     <string name="state_disconnected">Desconectado</string>
@@ -1412,6 +1418,7 @@
     <string name="chat_call">Llamar</string>
     <string name="chat_call_incoming">Llamada entrante</string>
     <string name="chat_call_outgoing">Llamada saliente</string>
+    <string name="chat_call_unanswered">Llamada sin respuesta</string>
     <string name="chat_call_name">Llamar a %1$s</string>
     <string name="chat_calls_failed">No se pudo cargar el registro de llamadas.</string>
     <string name="chat_cancel">Cancelar</string>

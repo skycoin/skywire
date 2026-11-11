@@ -124,6 +124,12 @@
     <string name="call_unmute">Unmute</string>
     <string name="call_speaker">Speaker</string>
     <string name="call_missed_title">Missed call</string>
+    <string name="chat_notif_join_request">Group join request</string>
+    <string name="chat_notif_message_request">Message request</string>
+    <plurals name="chat_notif_join_waiting">
+        <item quantity="one">%1$d waiting to join %2$s</item>
+        <item quantity="other">%1$d waiting to join %2$s</item>
+    </plurals>
 
     <!-- Home / Connect -->
     <string name="state_disconnected">Disconnected</string>
@@ -1370,6 +1376,7 @@
     <string name="chat_call">Call</string>
     <string name="chat_call_incoming">Incoming call</string>
     <string name="chat_call_outgoing">Outgoing call</string>
+    <string name="chat_call_unanswered">Unanswered call</string>
     <string name="chat_call_name">Call %1$s</string>
     <string name="chat_calls_failed">Could not load the call log.</string>
     <string name="chat_cancel">Cancel</string>
