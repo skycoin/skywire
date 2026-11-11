@@ -87,6 +87,11 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	m.pairingMod = maker("pairing", initPairing, &m.dmsgC)
 	m.groupingMod = maker("grouping", initGrouping, &m.dmsgC)
 	m.voiceMod = maker("voice", initVoice, &m.dmsgC)
+	// The phone's inbox, hosted by a granted hypervisor: skychat's 1:1 messages
+	// and the hypervisor's changes wait there while the phone is offline.
+	m.dmsgAsyncMod = maker("dmsg_async", initDmsgAsync, &m.dmsgC)
+	// Mails when a watched visor goes offline. Idle until one is set up.
+	m.alertsMod = maker("alerts", initAlerts, &m.dmsgC)
 
 	// Dropped. Remote shell and file copy (the phone profile removes pty);
 	// the dmsghttp log server and system survey; host telemetry (stats), the
@@ -125,14 +130,10 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	m.sdRegCXOMod = dropped("sd_reg_cxo")
 	m.embeddedServices = dropped("embedded_services")
 	m.ownKeyServices = dropped("own_key_services")
-	// Offline delivery and offline alerts are desktop features (see skymail's
-	// offline_mobile.go). Parking a send on a peer's inbox needs only dmsg.
-	m.dmsgAsyncMod = dropped("dmsg_async")
-	m.alertsMod = dropped("alerts")
 
 	m.vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &m.ebc, &m.ar, &m.disc,
 		&m.tr, &m.rt, &m.launch, &m.cli, &m.hvs, &m.pv, &m.trs, &m.stcpC, &m.stcprC, &m.quicC, &m.wsC, &m.wtC,
-		&m.skyFwd, &m.pi, &m.dmsgPi, &m.tpdco, &m.cxoUserFeedsMod, &m.pairingMod, &m.groupingMod, &m.voiceMod, &m.netWatch)
+		&m.skyFwd, &m.pi, &m.dmsgPi, &m.tpdco, &m.cxoUserFeedsMod, &m.pairingMod, &m.groupingMod, &m.dmsgAsyncMod, &m.voiceMod, &m.netWatch, &m.alertsMod)
 	// Hypervisor: the local API the app talks to (plus Fleet, opt-in).
 	m.hv = maker("hypervisor", initHypervisor, &m.vis)
 	return m
