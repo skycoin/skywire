@@ -204,20 +204,75 @@ document.addEventListener('DOMContentLoaded', function () {
 
 // The visor list: the labels set in the Angular UI (kept in this origin's
 // localStorage under <hypervisor key>labelsData, storage.service.ts), the
-// search box, the online and offline filters and the nested rows of a
+// search box, the quick filters, the column sort and the nested rows of a
 // sub-hypervisor. Applied again after every poll.
 (function () {
 	'use strict';
 	var expanded = {};
+	var sortKey = '', sortDesc = false;
+	try { var s0 = JSON.parse(localStorage.getItem('ui2-node-sort') || 'null'); if (s0) { sortKey = s0.k || ''; sortDesc = !!s0.d; } } catch (_) { /* none */ }
+	function hvKey(k) { return (document.body.getAttribute('data-hvpk') || '') + k; }
+	function readJSON(k) {
+		try { return JSON.parse(localStorage.getItem(hvKey(k)) || '[]') || []; } catch (_) { return []; }
+	}
+	function writeJSON(k, v) {
+		try { localStorage.setItem(hvKey(k), JSON.stringify(v)); } catch (_) { /* no storage */ }
+	}
 	function labels() {
-		var hv = document.body.getAttribute('data-hvpk'), m = {};
-		if (!hv) return m;
-		try {
-			(JSON.parse(localStorage.getItem(hv + 'labelsData') || '[]') || []).forEach(function (l) {
-				if (l && l.id && l.label) m[l.id] = l.label;
-			});
-		} catch (_) { /* no storage or bad data */ }
+		var m = {};
+		if (!document.body.getAttribute('data-hvpk')) return m;
+		readJSON('labelsData').forEach(function (l) { if (l && l.id && l.label) m[l.id] = l.label; });
 		return m;
+	}
+	// saveLabel follows storage.service.ts saveLabel: an empty label removes it.
+	function saveLabel(pk, label) {
+		var ls = readJSON('labelsData').filter(function (l) { return l && l.id !== pk; });
+		if (label) ls.push({ id: pk, label: label, identifiedElementType: 'nd' });
+		writeJSON('labelsData', ls);
+	}
+	// hide marks forgotten visors hidden for the Angular list too
+	// (storage.service.ts setLocalNodesAsHidden).
+	function hide(pks) {
+		var ns = readJSON('localNodesData'), seen = {};
+		ns.forEach(function (n) { if (pks.indexOf(n.publicKey) >= 0) { n.hidden = true; seen[n.publicKey] = 1; } });
+		pks.forEach(function (pk) { if (!seen[pk]) ns.push({ publicKey: pk, hidden: true, ip: null }); });
+		writeJSON('localNodesData', ns);
+	}
+	function sortVal(tr, k) {
+		if (k === 'label') { var a = tr.querySelector('[data-label-for]'); return a ? a.textContent.toLowerCase() : ''; }
+		if (k === 'pk') return tr.getAttribute('data-pk') || '';
+		if (k === 'reward') return tr.getAttribute('data-reward') || '';
+		var v = tr.getAttribute('data-sk-' + k) || '';
+		return (k === 'tps' || k === 'apps' || k === 'ping') ? Number(v) || 0 : v.toLowerCase();
+	}
+	function sortRows(card) {
+		card.querySelectorAll('[data-node-sort]').forEach(function (b) {
+			var on = b.getAttribute('data-node-sort') === sortKey;
+			b.parentNode.setAttribute('aria-sort', on ? (sortDesc ? 'descending' : 'ascending') : 'none');
+			b.querySelector('.mi').textContent = on ? (sortDesc ? 'arrow_downward' : 'arrow_upward') : '';
+		});
+		var tb = card.querySelector('#nodes tbody');
+		if (!tb || !sortKey) return;
+		var groups = [], cur = null;
+		Array.prototype.forEach.call(tb.children, function (tr) {
+			if (!tr.getAttribute('data-parent') || !cur) { cur = { head: tr, rows: [] }; groups.push(cur); }
+			cur.rows.push(tr);
+		});
+		groups.sort(function (x, y) {
+			var a = sortVal(x.head, sortKey), b = sortVal(y.head, sortKey);
+			var c = a < b ? -1 : a > b ? 1 : 0;
+			return sortDesc ? -c : c;
+		});
+		groups.forEach(function (g) { g.rows.forEach(function (tr) { tb.appendChild(tr); }); });
+	}
+	function matches(tr, st) {
+		switch (st) {
+		case 'on': return tr.getAttribute('data-online') === '1';
+		case 'off': return tr.getAttribute('data-online') !== '1';
+		case 'outdated': return tr.getAttribute('data-outdated') === '1';
+		case 'noreward': return tr.getAttribute('data-reward') !== '1';
+		}
+		return true;
 	}
 	function apply() {
 		var card = document.querySelector('[data-nodes]');
@@ -232,10 +287,10 @@ document.addEventListener('DOMContentLoaded', function () {
 			var pk = tr.getAttribute('data-pk'), parent = tr.getAttribute('data-parent'), ok = true;
 			if (pk) {
 				var lab = m[pk], a = tr.querySelector('[data-label-for]'), h = tr.querySelector('[data-host-for]');
-				if (lab && a && a.textContent !== lab) a.textContent = lab;
+				if (a) a.textContent = lab || (h ? h.textContent : a.textContent);
 				if (h) h.hidden = !lab || h.textContent === lab;
 				var text = (tr.getAttribute('data-text') || '') + ' ' + (lab || '').toLowerCase();
-				ok = (!q || text.indexOf(q) >= 0) && (!st || (st === 'on') === (tr.getAttribute('data-online') === '1'));
+				ok = (!q || text.indexOf(q) >= 0) && matches(tr, st);
 			}
 			if (!parent) { total++; if (ok) shown++; }
 			tr.classList.toggle('open', !parent || !!expanded[parent] || (!!q && ok));
@@ -244,6 +299,7 @@ document.addEventListener('DOMContentLoaded', function () {
 		card.querySelectorAll('[data-node-toggle]').forEach(function (b) {
 			b.setAttribute('aria-expanded', expanded[b.getAttribute('data-node-toggle')] ? 'true' : 'false');
 		});
+		sortRows(card);
 		var c = card.querySelector('[data-node-shown]');
 		if (c) c.textContent = (q || st) ? c.getAttribute('data-fmt').replace('{{ n }}', shown).replace('{{ total }}', total) : '';
 	}
@@ -258,8 +314,37 @@ document.addEventListener('DOMContentLoaded', function () {
 			apply();
 			return;
 		}
+		var so = e.target.closest('[data-node-sort]');
+		if (so) {
+			var k = so.getAttribute('data-node-sort');
+			if (k !== sortKey) { sortKey = k; sortDesc = false; } else if (!sortDesc) { sortDesc = true; } else { sortKey = ''; sortDesc = false; }
+			try { localStorage.setItem('ui2-node-sort', JSON.stringify({ k: sortKey, d: sortDesc })); } catch (_) { /* no storage */ }
+			apply();
+			return;
+		}
+		var el = e.target.closest('[data-edit-label]');
+		if (el) {
+			var pk = el.getAttribute('data-edit-label');
+			var l = window.prompt(el.getAttribute('data-prompt'), labels()[pk] || '');
+			if (l !== null) { saveLabel(pk, l.trim()); apply(); }
+			return;
+		}
 		var t = e.target.closest('[data-node-toggle]');
-		if (t) { var pk = t.getAttribute('data-node-toggle'); expanded[pk] = !expanded[pk]; apply(); }
+		if (t) { var tp = t.getAttribute('data-node-toggle'); expanded[tp] = !expanded[tp]; apply(); }
+	});
+	document.addEventListener('htmx:beforeRequest', function (e) {
+		var el = e.detail.elt;
+		if (!el || !el.hasAttribute || !el.hasAttribute('data-hide-offline')) return;
+		var pks = [];
+		document.querySelectorAll('#nodes tbody tr[data-online="0"] [data-hide-pk]').forEach(function (b) { pks.push(b.getAttribute('data-hide-pk')); });
+		el.setAttribute('data-hide-list', pks.join(','));
+	});
+	document.addEventListener('htmx:afterRequest', function (e) {
+		var el = e.detail.elt;
+		if (!e.detail.successful || !el || !el.getAttribute) return;
+		var one = el.getAttribute('data-hide-pk'), list = el.getAttribute('data-hide-list');
+		if (one) hide([one]);
+		else if (list) hide(list.split(','));
 	});
 	document.addEventListener('htmx:afterSettle', apply);
 	document.addEventListener('DOMContentLoaded', apply);
