@@ -254,6 +254,7 @@ func TestRangeSplitChunkFailoverOnTunnelLoss(t *testing.T) {
 	t.Logf("cut at %d/%d bytes, tunnel B accepted %d stream(s), %d still open", before, blobSize, acceptedAtCut, bSess.NumStreams())
 
 	// Kill tunnel B — the live equivalent of its last transport being removed.
+	backoffsAtCut := client.rsBackoffs.Load()
 	cut := time.Now()
 	_ = bSess.Close() //nolint:errcheck
 
@@ -307,10 +308,10 @@ func TestRangeSplitChunkFailoverOnTunnelLoss(t *testing.T) {
 	if next > time.Second {
 		t.Fatalf("first byte after the tunnel died took %v, want < 1s", next)
 	}
-	// And it must not have SLEPT: a chunk whose tunnel died is refetched at once,
-	// so the gap stays well inside one retry backoff rather than a multiple of it.
-	if next >= rsChunkRetryBackoff {
-		t.Fatalf("first byte after the tunnel died took %v — the refetch backed off (>= %v)", next, rsChunkRetryBackoff)
+	// And it must not have SLEPT: a chunk whose tunnel died is refetched at once.
+	// The backoffs are counted, since the gap also measures how busy the CPU is.
+	if slept := client.rsBackoffs.Load() - backoffsAtCut; slept != 0 {
+		t.Fatalf("%d chunk retry backoff(s) of %v slept after the tunnel died, want 0 (first byte took %v)", slept, rsChunkRetryBackoff, next)
 	}
 }
 
