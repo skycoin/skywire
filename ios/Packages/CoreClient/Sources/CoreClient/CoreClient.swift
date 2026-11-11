@@ -211,6 +211,15 @@ public actor CoreClient {
         return try Self.decode(DmsgReconnectResult.self, response, path).sessionsClosed
     }
 
+    /// Tells the core the network moved under it or its metered flag changed. The core
+    /// re-dials dmsg after a move and runs lean while metered.
+    public func networkEvent(_ event: NetworkEvent) async throws -> NetworkReply {
+        let path = "/api/network"
+        let response = try await authed(.post, path, body: try JSONEncoder().encode(event))
+        try Self.check(response, "POST", path)
+        return try Self.decode(NetworkReply.self, response, path)
+    }
+
     // MARK: Notifications
 
     static let notificationsPath = "/api/notifications/stream"

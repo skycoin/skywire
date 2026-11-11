@@ -1,0 +1,9 @@
+{
+  "body": "{\"public_ip\": \"203.0.113.10\", \"public_ip_source\": \"dmsg\", \"public_ip_at\": \"2026-11-11T12:39:32.464548+08:00\", \"nat\": \"Symmetric NAT\", \"nat_at\": \"2026-11-11T12:39:29.902438+08:00\", \"local_addresses\": [\"100.64.0.10\", \"2001:db8::10\"], \"metered\": true, \"metered_source\": \"ios\", \"mode\": \"lean\", \"mode_since\": \"2026-11-11T12:39:59.760927+08:00\", \"metered_mode\": \"lean\", \"moves\": 0, \"pending\": true, \"watch_interval\": \"12s\", \"public_ip_check_interval\": \"12m0s\", \"connectivity\": {\"state\": \"dmsg-only\", \"online\": false, \"since\": \"2026-11-11T12:39:31.365105+08:00\", \"reason\": \"no transports, 2 dmsg sessions\", \"changes\": 1, \"transports\": 0, \"dmsg_sessions\": 2}}\n",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "method": "POST",
+  "path": "/api/network",
+  "status": 200
+}

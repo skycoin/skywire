@@ -34,6 +34,7 @@ final class AppModel: ObservableObject {
     let paths: CorePaths
     let vault: ConfigVault
     private let host: any CoreHost
+    private let network: NetworkWatcher
     private let footprintLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "skywire", category: "footprint")
     private let lifecycleLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "skywire", category: "lifecycle")
     /// The background grace in progress, if any (see `enteredBackground`).
@@ -50,6 +51,7 @@ final class AppModel: ObservableObject {
         self.log = log
         self.paths = paths
         self.vault = vault
+        network = NetworkWatcher(client: client)
     }
 
     /// The app's model, with the core where `CoreHostChoice` says: in the
@@ -254,6 +256,7 @@ final class AppModel: ObservableObject {
         coreState = state
         if state != .running {
             apiUp = false
+            network.stop()
         } else if !wasRunning {
             publicKey = readPublicKey()
             Task { await waitForAPI() }
@@ -279,6 +282,7 @@ final class AppModel: ObservableObject {
                 lastError = error.localizedDescription
             }
         }
+        if coreState == .running { network.start() }
     }
 
     /// The Keychain's password no longer opens users.db (the Keychain lost

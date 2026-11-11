@@ -223,6 +223,16 @@ final class CoreClientTests: XCTestCase {
         XCTAssertEqual(closed, 2)
     }
 
+    func testNetworkEventReportsAMoveOntoMobileData() async throws {
+        let reply = try await client.networkEvent(NetworkEvent(event: "moved", metered: true, ifname: "pdp_ip0"))
+        let sent = try XCTUnwrap(server.requests.last { $0.path == "/api/network" }?.jsonObject)
+        XCTAssertEqual(sent as NSDictionary, ["event": "moved", "metered": true, "ifname": "pdp_ip0", "source": "ios"] as NSDictionary)
+        // The recorded core took the report as the phone's and went lean.
+        XCTAssertEqual(reply.mode, "lean")
+        XCTAssertTrue(reply.metered)
+        XCTAssertEqual(reply.moves, 0, "the refresh the move queued had not run when the core answered")
+    }
+
     // MARK: Apps
 
     func testApp() async throws {
@@ -399,6 +409,7 @@ final class CoreClientTests: XCTestCase {
         try await client.deleteRewardAddress()
         visor.serveVariant("reward-none")
         _ = try await client.rewardAddress()
+        _ = try await client.networkEvent(NetworkEvent(event: "moved", metered: true, ifname: "pdp_ip0"))
         try await client.restartVisor(pk: pk)
 
         // The recordings only the rules produce: a second login on a live

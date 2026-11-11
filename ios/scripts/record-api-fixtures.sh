@@ -168,6 +168,9 @@ rec reward-put PUT "/api/visors/$PK/reward" "{\"reward_address\":\"$XPUB\"}" csr
 rec reward GET "/api/visors/$PK/reward"
 rec reward-delete DELETE "/api/visors/$PK/reward" "" csrf
 rec reward-none GET "/api/visors/$PK/reward"
+# The network watcher's report of a move onto mobile data. Last before the
+# restart, as it re-dials dmsg and runs the core lean.
+rec network-moved POST /api/network '{"event":"moved","metered":true,"ifname":"pdp_ip0","source":"ios"}' csrf
 rec restart POST "/api/visors/$PK/restart" '{}' csrf
 rm -f "$RAW/.h" "$RAW/.b"
 
@@ -188,6 +191,10 @@ for path in glob.glob(os.path.join(raw, "*.json")):
         body = body.replace(old, new)
     if os.path.basename(path) == "svc-fetch-proxy.json":
         body = json.dumps(json.loads(body)[:5]) + "\n"
+    if os.path.basename(path) == "network-moved.json":
+        state = json.loads(body)
+        state["local_addresses"] = ["100.64.0.10", "2001:db8::10"]
+        body = json.dumps(state) + "\n"
     fixture["body"] = body
     with open(path, "w") as f:
         json.dump(fixture, f, indent=2, sort_keys=True)
