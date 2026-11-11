@@ -1448,9 +1448,9 @@ func connectToTpDisc(ctx context.Context, v *Visor, log *logging.Logger) (transp
 		return tpdclient.NewHTTP(tpdURL, v.conf.PK, v.conf.SK, httpC, pIP, v.MasterLogger())
 	}
 
-	// A TPD this visor hosts under its own key mounts after the transport
-	// module, so waiting for it here only delays the boot.
-	if cmdutil.PKFromDmsgURL(tpdURL) == v.conf.PK {
+	// A TPD this visor hosts is reachable only after the transport module, so
+	// waiting for it here only delays the boot.
+	if tpdPK := cmdutil.PKFromDmsgURL(tpdURL); tpdPK == v.conf.PK || v.hostsOwnKeyService(tpdPK) {
 		return transport.NewDeferredDiscoveryClient(v.ctx, log, tpdDeferredRetry, connect), nil
 	}
 

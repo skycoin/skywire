@@ -137,6 +137,20 @@ func (es *embeddedService) setStandalone(pk cipher.PubKey, raw json.RawMessage, 
 	es.wake = make(chan struct{}, 1)
 }
 
+// hostsOwnKeyService reports whether pk is the key of a service this visor
+// runs in its process under that key.
+func (v *Visor) hostsOwnKeyService(pk cipher.PubKey) bool {
+	if pk.Null() {
+		return false
+	}
+	for _, es := range v.embeddedServices() {
+		if es.standalone && es.ownPK == pk {
+			return true
+		}
+	}
+	return false
+}
+
 // hostCXOPubStorage is cxoPubStorage for a publisher on port: in memory
 // when an embedded service aggregates on that port. The service's
 // aggregator then shares the publisher's node, and holds every visor's feed
