@@ -29,10 +29,12 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 | `/nodes/resources` | CPU, memory, disk and traffic of every visor | no | |
 | `/nodes/uptime` | uptime of every visor, version history | no | |
 | `/nodes/transports` | transports across the fleet | no | |
-| `/settings` | change password | no | |
-| | refresh rate, theme, language | partial | theme and language in the top bar, list polls every 10 s |
-| | updater config, auto update, reload worker, visor switcher | no | |
-| `/settings/labels` | label list | no | |
+| `/settings` | change password | yes | `ui2/settings` |
+| | refresh rate, theme, language | yes | the refresh rate sets the visor list poll |
+| | updater config | n/a | only feeds the update action, which has no backend |
+| | auto update, reload worker | n/a | the Angular in-browser visor's service worker |
+| | visor switcher row | n/a | an Angular navigation option |
+| `/settings/labels` | label list, edit, delete | yes | on `ui2/settings` |
 | `/app/:name/:key` | full page app host | no | |
 | `/vpn/...` | VPN client UI | no | |
 | `/wallet` | wallet | no | the wallet tab links to the Angular one |

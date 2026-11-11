@@ -395,3 +395,114 @@ document.addEventListener('DOMContentLoaded', function () {
 	document.addEventListener('htmx:afterSettle', apply);
 	document.addEventListener('DOMContentLoaded', apply);
 })();
+
+// The hypervisor settings page: theme, refresh rate and the label list, all
+// kept in this browser under the Angular UI's keys (storage.service.ts).
+(function () {
+	'use strict';
+	function hvKey(k) { return (document.body.getAttribute('data-hvpk') || '') + k; }
+	function readLabels() {
+		try { return JSON.parse(localStorage.getItem(hvKey('labelsData')) || '[]') || []; } catch (_) { return []; }
+	}
+	function writeLabels(ls) {
+		try { localStorage.setItem(hvKey('labelsData'), JSON.stringify(ls)); } catch (_) { /* no storage */ }
+	}
+	function cell(tr, text, cls) {
+		var td = document.createElement('td');
+		if (cls) td.className = cls;
+		td.textContent = text;
+		tr.appendChild(td);
+		return td;
+	}
+	function iconBtn(icon, label, attr, id) {
+		var b = document.createElement('button');
+		b.type = 'button';
+		b.className = 'icon-btn sm';
+		b.title = label;
+		b.setAttribute('aria-label', label);
+		b.setAttribute(attr, id);
+		var s = document.createElement('span');
+		s.className = 'mi';
+		s.textContent = icon;
+		b.appendChild(s);
+		return b;
+	}
+	function renderLabels() {
+		var box = document.querySelector('[data-labels-list]');
+		if (!box) return;
+		var d = box.dataset, ls = readLabels();
+		box.textContent = '';
+		if (ls.length === 0) {
+			var p = document.createElement('p');
+			p.className = 'dim';
+			p.textContent = d.empty;
+			box.appendChild(p);
+			return;
+		}
+		var wrap = document.createElement('div'), t = document.createElement('table'), hr = document.createElement('tr');
+		wrap.className = 'table-wrap';
+		t.className = 'list';
+		[d.colLabel, d.colId, d.colType, ''].forEach(function (h) { var th = document.createElement('th'); th.textContent = h; hr.appendChild(th); });
+		var th = document.createElement('thead'), tb = document.createElement('tbody');
+		th.appendChild(hr);
+		ls.forEach(function (l) {
+			if (!l || !l.id) return;
+			var tr = document.createElement('tr');
+			cell(tr, l.label).setAttribute('data-label', d.colLabel);
+			cell(tr, l.id, 'mono small pk-text').setAttribute('data-label', d.colId);
+			cell(tr, d['type' + (l.identifiedElementType || '').charAt(0).toUpperCase() + (l.identifiedElementType || '').slice(1)] || l.identifiedElementType || '').setAttribute('data-label', d.colType);
+			var a = cell(tr, '', 'actions');
+			a.appendChild(iconBtn('edit', d.edit, 'data-label-edit', l.id));
+			a.appendChild(iconBtn('delete', d['delete'], 'data-label-del', l.id));
+			tb.appendChild(tr);
+		});
+		t.appendChild(th);
+		t.appendChild(tb);
+		wrap.appendChild(t);
+		box.appendChild(wrap);
+	}
+	document.addEventListener('click', function (e) {
+		if (!e.target.closest) return;
+		var box = document.querySelector('[data-labels-list]');
+		var ed = e.target.closest('[data-label-edit]'), del = e.target.closest('[data-label-del]');
+		if (!box || (!ed && !del)) return;
+		var id = (ed || del).getAttribute(ed ? 'data-label-edit' : 'data-label-del'), ls = readLabels();
+		if (del) {
+			if (!window.confirm(box.dataset.confirm)) return;
+			writeLabels(ls.filter(function (l) { return l && l.id !== id; }));
+		} else {
+			var cur = ls.filter(function (l) { return l && l.id === id; })[0];
+			var v = window.prompt(box.dataset.prompt, cur ? cur.label : '');
+			if (v === null) return;
+			v = v.trim();
+			writeLabels(v ? ls.map(function (l) { if (l && l.id === id) l.label = v; return l; }) : ls.filter(function (l) { return l && l.id !== id; }));
+		}
+		renderLabels();
+	});
+	document.addEventListener('change', function (e) {
+		var t = e.target;
+		if (!t.matches) return;
+		if (t.matches('[data-theme-choice] input')) {
+			if (t.value === 'system') document.documentElement.removeAttribute('data-theme');
+			else document.documentElement.setAttribute('data-theme', t.value);
+			try { if (t.value === 'system') localStorage.removeItem('hvui-theme'); else localStorage.setItem('hvui-theme', t.value); } catch (_) { /* no storage */ }
+		} else if (t.matches('[data-refresh]')) {
+			document.cookie = 'ui2-refresh=' + t.value + ';path=/;max-age=31536000;samesite=lax';
+			try { localStorage.setItem(hvKey('refreshSeconds'), t.value); } catch (_) { /* no storage */ }
+			var toast = document.getElementById('toast');
+			if (toast) { toast.textContent = t.getAttribute('data-done'); toast.className = 'show'; setTimeout(function () { toast.className = ''; }, 3000); }
+		}
+	});
+	document.addEventListener('DOMContentLoaded', function () {
+		var th = document.documentElement.getAttribute('data-theme') || 'system';
+		document.querySelectorAll('[data-theme-choice] input').forEach(function (i) { i.checked = i.value === th; });
+		renderLabels();
+	});
+	// First visit after choosing a refresh rate in the Angular UI.
+	if (document.cookie.indexOf('ui2-refresh=') < 0) {
+		try {
+			var r = localStorage.getItem(hvKey('refreshSeconds'));
+			if (r) document.cookie = 'ui2-refresh=' + r + ';path=/;max-age=31536000;samesite=lax';
+		} catch (_) { /* no storage */ }
+	}
+})();

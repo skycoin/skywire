@@ -1984,6 +1984,8 @@
       "remove-all-confirm": "Remove every transport of this visor? Persistent ones may be created again shortly."
     },
     "route-viz": "Route visualizer",
+    "refresh-rate": "Refresh rate",
+    "refresh-help": "How often the visor list updates.",
     "wallet": {
       "node": "Coin node"
     },
