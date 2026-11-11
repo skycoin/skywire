@@ -252,7 +252,7 @@ struct AddressBlock: View {
                 .buttonStyle(.outlined)
                 .accessibilityIdentifier("dex-copy-address")
                 Button {
-                    dialogs.showCustom { PaymentQr(model: model, address: address, amount: amount, coin: coin, title: qrTitle, hint: qrHint) }
+                    dialogs.showCustom { PaymentQr(address: address, amount: amount, coin: coin, title: qrTitle, hint: qrHint) }
                 } label: { MaterialIcon(MI.roundedQrCode2, size: 18) }
                 .buttonStyle(.outlined)
                 .accessibilityLabel(Text("dex_show_qr"))
@@ -266,7 +266,6 @@ struct AddressBlock: View {
 /// carries the amount too; the switch falls back to a bare address for wallets
 /// that do not understand the link. Dark on white in both themes.
 private struct PaymentQr: View {
-    @ObservedObject var model: DexModel
     let address: String
     let amount: Double
     let coin: String
@@ -274,6 +273,8 @@ private struct PaymentQr: View {
     let hint: String?
     @EnvironmentObject private var dialogs: SkyDialogs
     @State private var withAmount = true
+    /// Said in the dialog, not in a snackbar, which the dialog's scrim would cover.
+    @State private var copied = false
 
     var body: some View {
         let uri = DexFormat.paymentURI(address: address, amount: amount, coin: coin)
@@ -298,12 +299,16 @@ private struct PaymentQr: View {
                         .toggleStyle(.skySwitch)
                     }
                     Text(verbatim: address).skyText(.bodySmall, mono: true).foregroundStyle(Color.skyOnSurface)
+                    if copied {
+                        Text("copied_to_clipboard").skyText(.bodySmall).foregroundStyle(Color.skyPrimary)
+                            .accessibilityIdentifier("dex-qr-copied")
+                    }
                     let base = uri != nil && withAmount ? L10n.format("dex_qr_hint_link", coin) : L10n.text("dex_qr_hint_plain")
                     Text(verbatim: hint.map { base + " " + $0 } ?? base).skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
                     if let uri, withAmount {
                         Button {
                             UIPasteboard.general.string = uri
-                            model.notice = L10n.text("copied_to_clipboard")
+                            copied = true
                         } label: { Text("dex_copy_link") }
                         .buttonStyle(.skyText)
                     }
@@ -314,7 +319,7 @@ private struct PaymentQr: View {
                 Spacer()
                 Button {
                     UIPasteboard.general.string = address
-                    model.notice = L10n.text("copied_to_clipboard")
+                    copied = true
                 } label: { Text("dex_copy_address") }
                 .buttonStyle(.skyText)
                 Button { dialogs.dismiss() } label: { Text("dex_close") }

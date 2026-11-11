@@ -428,6 +428,8 @@ struct ChatQrDialog: View {
     let spec: ChatQrSpec
     @ObservedObject var repo: ChatRepository
     @EnvironmentObject private var dialogs: SkyDialogs
+    /// Said here, not in a snackbar, which the dialog's scrim would cover.
+    @State private var copied: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -446,11 +448,15 @@ struct ChatQrDialog: View {
                 Spacer(minLength: 0)
                 Button {
                     UIPasteboard.general.string = spec.address
-                    repo.note(L10n.text("chat_address_copied"))
+                    copied = L10n.text("chat_address_copied")
                 } label: {
                     MaterialIcon(MI.roundedContentCopy).foregroundStyle(Color.skyOnSurfaceVariant).frame(width: 44, height: 44)
                 }
                 .accessibilityLabel(Text("chat_copy_address"))
+            }
+            if let copied {
+                Text(verbatim: copied).skyText(.bodySmall).foregroundStyle(Color.skyPrimary)
+                    .accessibilityIdentifier("qr-copied")
             }
             Text(verbatim: spec.help).skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
             HStack {
@@ -460,7 +466,7 @@ struct ChatQrDialog: View {
                         Task {
                             if let link = await repo.inviteLink(gid) {
                                 UIPasteboard.general.string = link
-                                repo.note(L10n.text("chat_invite_copied"))
+                                copied = L10n.text("chat_invite_copied")
                             }
                         }
                     } label: { Text("chat_copy_invite_instead") }
