@@ -844,3 +844,19 @@ func TestSpreadChooseCountsBytesOnRoutesThatLeft(t *testing.T) {
 	require.Equal(t, 0, spreadChoose(caps, []float64{0, 0}, []int64{7 * mb, 6 * mb}, 0, spreadPolicy{maxShare: 0.4}),
 		"without the 3 MB elsewhere both look capped and the faster one is chosen")
 }
+
+// A spent probe under its cap outranks a capped tunnel. The numbers are a
+// failing spread-cut run: tun2's four chunks are re-placed after its snub.
+func TestSpreadChooseWaivesTheProbeBoundBeforeTheCap(t *testing.T) {
+	const mb = 1 << 20
+	caps := []float64{5225832, 1386862, 0} // direct, t1, the promoted standby
+	carried := []int64{6 * mb, 6 * mb, 0}
+	pol := spreadPolicy{maxShare: 0.4, minRoutes: 3}
+	for left := int64(3); left >= 0; left-- {
+		// left is what the snubbed route still holds of its reservation.
+		idx := spreadChoose(caps, make([]float64, 3), carried, left*mb, pol)
+		require.Equalf(t, 2, idx, "carried %v with %d MB elsewhere", carried, left)
+		carried[idx] += mb
+	}
+	require.Equal(t, []int64{6 * mb, 6 * mb, 4 * mb}, carried)
+}
