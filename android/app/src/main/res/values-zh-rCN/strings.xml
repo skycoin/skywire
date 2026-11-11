@@ -133,6 +133,11 @@
     <string name="call_unmute">取消静音</string>
     <string name="call_speaker">免提</string>
     <string name="call_missed_title">未接来电</string>
+    <string name="chat_notif_join_request">入群申请</string>
+    <string name="chat_notif_message_request">消息请求</string>
+    <plurals name="chat_notif_join_waiting">
+        <item quantity="other">%1$d 人等待加入 %2$s</item>
+    </plurals>
 
     <!-- Home / Connect -->
     <string name="state_disconnected">未连接</string>
@@ -1317,6 +1322,7 @@
     <string name="chat_call">呼叫</string>
     <string name="chat_call_incoming">来电</string>
     <string name="chat_call_outgoing">去电</string>
+    <string name="chat_call_unanswered">未接通</string>
     <string name="chat_call_name">呼叫 %1$s</string>
     <string name="chat_calls_failed">无法加载通话记录。</string>
     <string name="chat_cancel">取消</string>
