@@ -1,0 +1,69 @@
+package ui2
+
+import "context"
+
+// AppFlagsForm edits an app's flags one by one instead of as a raw args
+// line. Saving rewrites the launcher args.
+templ AppFlagsForm(v AppFlagsView) {
+	<section class="card sub">
+		<div class="head">
+			<h2>{ T(ctx, "app-settings.show-flags-form") }: { v.App }</h2>
+			<span class="spacer"></span>
+			<button class="icon-btn" type="button" data-clear="#app-panel" aria-label={ T(ctx, "common.close") }><span class="mi">close</span></button>
+		</div>
+		@ErrorBox(v.Err)
+		if len(v.Flags) == 0 && v.Err == "" {
+			<p class="dim">{ T(ctx, "app-flags.none") }</p>
+		} else if len(v.Flags) > 0 {
+			<form class="form flags" hx-put={ VisorURL(v.PK, "apps") + "/" + v.App + "/flags" } hx-target="#app-panel" hx-swap="innerHTML">
+				for _, f := range v.Flags {
+					<div class={ "flag-row", templ.KV("flag-set", f.Set) } data-flag={ f.Name }>
+						<div class="bar">
+							<label class="mono" for={ "flag-" + f.Name }>
+								if f.Shorthand != "" {
+									-{ f.Shorthand },
+								}
+								--{ f.Name }
+							</label>
+							<span class="badge">{ T(ctx, "app-flags.type-"+f.Type) }</span>
+						</div>
+						switch f.Type {
+							case "bool":
+								<label class="check"><input id={ "flag-" + f.Name } type="checkbox" name={ "v:" + f.Name } value="true" checked?={ f.Value == "true" }/> { T(ctx, "app-flags.on") }</label>
+								<input type="hidden" name={ "b:" + f.Name } value="1"/>
+							case "int":
+								<input id={ "flag-" + f.Name } type="number" step="1" name={ "v:" + f.Name } value={ f.Value } placeholder={ f.Default }/>
+							default:
+								<input id={ "flag-" + f.Name } class="mono" type="text" name={ "v:" + f.Name } value={ f.Value } placeholder={ flagPlaceholder(ctx, f) }/>
+						}
+						if f.Err != "" {
+							<p class="error small">{ f.Err }</p>
+						}
+						<p class="small dim">
+							{ f.Usage }
+							<span>{ T(ctx, "app-flags.default") }: <span class="mono">{ flagDefault(ctx, f) }</span></span>
+						</p>
+					</div>
+				}
+				<div class="bar">
+					<button class="btn primary" type="submit">{ T(ctx, "common.save") }</button>
+					<button class="btn" type="button" hx-get={ VisorURL(v.PK, "apps") + "/" + v.App + "/settings" } hx-target="#app-panel" hx-swap="innerHTML">{ T(ctx, "common.cancel") }</button>
+				</div>
+			</form>
+		}
+	</section>
+}
+
+func flagPlaceholder(ctx context.Context, f FlagRow) string {
+	if f.Type == "stringList" {
+		return T(ctx, "app-flags.list-placeholder")
+	}
+	return f.Default
+}
+
+func flagDefault(ctx context.Context, f FlagRow) string {
+	if f.Default == "" {
+		return T(ctx, "app-flags.empty")
+	}
+	return f.Default
+}

@@ -58,8 +58,9 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 | bandwidth | per transport snapshot and daily history | no | |
 | uptime | uptime bars and service uptimes | yes | |
 | apps | list, start, stop, autostart, settings, logs, help | yes | |
-| | app catalog and add app | no | |
-| | flags form, remove app, filter dialog | no | |
+| | app catalog, add app, add another instance | yes | `apps/catalog` |
+| | flags form | yes | "Edit flags" in an app's settings |
+| | filter dialog, multi select actions | no | |
 | chat | skychat | partial | iframes the Angular chat tab, so it still needs Angular |
 | mail | mailbox, compose, settings | yes | |
 | contacts | list, add, edit, delete, import | yes | |

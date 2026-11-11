@@ -9,7 +9,7 @@ templ AppsPage(a Apps) {
 		<div class="head">
 			<h1>{ T(ctx, "apps.apps-list.title") }</h1>
 			<span class="spacer"></span>
-			<a class="btn sm" href={ templ.URL(ClassicURL(a.PK, "apps/catalog")) }><span class="mi">view_module</span>{ T(ctx, "apps.tabs.catalog") }</a>
+			<a class="btn sm" href={ templ.URL(VisorURL(a.PK, "apps/catalog")) }><span class="mi">view_module</span>{ T(ctx, "apps.tabs.catalog") }</a>
 		</div>
 		<div id="app-panel"></div>
 		@AppsRows(a)
@@ -154,6 +154,7 @@ templ AppSettings(pk string, x App, errMsg string) {
 				<button class="btn primary" type="submit">{ T(ctx, "common.save") }</button>
 				<button class="btn" type="button" data-clear="#app-panel">{ T(ctx, "common.cancel") }</button>
 				<span class="spacer"></span>
+				<button class="btn" type="button" hx-get={ VisorURL(pk, "apps") + "/" + x.Name + "/flags" } hx-target="#app-panel" hx-swap="innerHTML">{ T(ctx, "app-settings.show-flags-form") }</button>
 				<button class="btn" type="button" hx-get={ VisorURL(pk, "apps") + "/" + x.Name + "/help" } hx-target="#app-help">{ T(ctx, "app-settings.show-help") }</button>
 			</div>
 		</form>

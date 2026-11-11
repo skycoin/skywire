@@ -426,3 +426,10 @@ input.invalid { border-color: rgb(var(--rose)); }
 .narrow-form { max-width: 420px; }
 fieldset.choice { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 4px 16px; }
 fieldset.choice legend { padding: 0; margin-bottom: 4px; }
+
+/* app catalog */
+.cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.cat-grid .cat-card { margin: 0; }
+.cat-inst { border-top: 1px solid rgba(var(--fg), 0.12); padding-top: 8px; margin-top: 8px; }
+.cat-inst .bar { margin: 0 0 4px; }
+.cat-inst .actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }

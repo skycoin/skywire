@@ -3,13 +3,17 @@ package visor
 
 import (
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/a-h/templ"
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/skywireconfig/autoconfigcmd"
 	"github.com/skycoin/skywire/pkg/visor/ui2"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // The apps tab of the server rendered UI. Writes go through the JSON putApp
@@ -18,10 +22,15 @@ import (
 func (hv *Hypervisor) ui2AppsRoutes(r *httputil.Router) {
 	r.Get("/ui2/visors/{pk}/apps", hv.ui2Apps(false))
 	r.Get("/ui2/visors/{pk}/apps/rows", hv.ui2Apps(true))
+	r.Get("/ui2/visors/{pk}/apps/catalog", hv.ui2Catalog(false))
+	r.Get("/ui2/visors/{pk}/apps/catalog/body", hv.ui2Catalog(true))
+	r.Post("/ui2/visors/{pk}/apps/catalog/add", hv.ui2CatalogAdd())
 	r.Get("/ui2/visors/{pk}/apps/{app}/settings", hv.ui2AppSettings())
 	r.Put("/ui2/visors/{pk}/apps/{app}/settings", hv.ui2AppSettingsSave())
 	r.Get("/ui2/visors/{pk}/apps/{app}/logs", hv.ui2AppLogs())
 	r.Get("/ui2/visors/{pk}/apps/{app}/help", hv.ui2AppHelp())
+	r.Get("/ui2/visors/{pk}/apps/{app}/flags", hv.ui2AppFlags())
+	r.Put("/ui2/visors/{pk}/apps/{app}/flags", hv.ui2AppFlagsSave())
 	r.Put("/ui2/visors/{pk}/apps/{app}/state", hv.ui2AppPut("run", "status"))
 	r.Put("/ui2/visors/{pk}/apps/{app}/autostart", hv.ui2AppPut("autostart", "autostart"))
 }
@@ -73,6 +82,10 @@ func (hv *Hypervisor) ui2AppPut(form, field string) http.HandlerFunc {
 			}
 		}
 		if !ui2CallAPI(w, r, hv.putApp(), map[string]any{field: v}) {
+			return
+		}
+		if r.FormValue("view") == "catalog" {
+			hv.render(w, r, ui2.CatalogBody(ui2LoadCatalog(ctx, r.PathValue("pk"))), ui2.Toast(hv.ui2T(r, "apps.operation-completed"), false))
 			return
 		}
 		a := ui2LoadApps(ctx, r.PathValue("pk"))
@@ -149,4 +162,129 @@ func (hv *Hypervisor) ui2AppHelp() http.HandlerFunc {
 		}
 		hv.render(w, r, ui2.AppHelp(text, msg))
 	})
+}
+
+func ui2LoadCatalog(ctx *httpCtx, pk string) ui2.AppCatalog {
+	entries, err := ctx.API.AppCatalog()
+	c := ui2.CatalogOf(pk, entries)
+	if err != nil {
+		c.Err = err.Error()
+	}
+	return c
+}
+
+// ui2Catalog serves the catalog view, or with body set only the polled part.
+func (hv *Hypervisor) ui2Catalog(body bool) http.HandlerFunc {
+	return hv.withCtx(hv.ui2VisorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		c := ui2LoadCatalog(ctx, r.PathValue("pk"))
+		if body {
+			hv.render(w, r, ui2.CatalogBody(c))
+			return
+		}
+		hv.render(w, r, ui2.CatalogPage(c))
+	})
+}
+
+// ui2CatalogAdd adds an instance of a catalog app, named by the prompt's
+// answer when another instance was asked for.
+func (hv *Hypervisor) ui2CatalogAdd() http.HandlerFunc {
+	return hv.withCtx(hv.ui2VisorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		name := strings.TrimSpace(r.FormValue("name"))
+		if p := strings.TrimSpace(r.Header.Get("HX-Prompt")); p != "" {
+			name = p
+		}
+		body := map[string]string{"name": name, "binary": r.FormValue("binary")}
+		if !ui2CallAPI(w, r, hv.postApp(), body) {
+			return
+		}
+		c := ui2LoadCatalog(ctx, r.PathValue("pk"))
+		hv.render(w, r, ui2.CatalogBody(c), ui2.Toast(hv.ui2T(r, "apps.operation-completed"), false))
+	})
+}
+
+func (hv *Hypervisor) ui2AppFlags() http.HandlerFunc {
+	return hv.withCtx(hv.ui2VisorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		f, err := ctx.API.AppFlags(r.PathValue("app"))
+		v := ui2.FlagsViewOf(r.PathValue("pk"), f)
+		v.App = r.PathValue("app")
+		if err != nil {
+			v.Err = err.Error()
+		}
+		hv.render(w, r, ui2.AppFlagsForm(v))
+	})
+}
+
+// ui2AppFlagsSave checks each changed flag as the Angular flags form does
+// and writes the rebuilt args through the JSON app handler. A flag counts
+// as set when its value differs from the default.
+func (hv *Hypervisor) ui2AppFlagsSave() http.HandlerFunc {
+	return hv.withCtx(hv.ui2VisorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		if err := r.ParseForm(); err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+			return
+		}
+		name, pk := r.PathValue("app"), r.PathValue("pk")
+		schema, err := ctx.API.AppFlags(name)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		st, err := ctx.API.App(name)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		values, set := map[string]string{}, map[string]bool{}
+		v := ui2.AppFlagsView{PK: pk, App: name}
+		bad := false
+		for _, f := range schema.Flags {
+			val := strings.TrimSpace(r.PostForm.Get("v:" + f.Name))
+			if f.Type == visorapi.FlagTypeBool {
+				val = strconv.FormatBool(val == "true")
+			}
+			row := ui2.FlagRow{AppFlag: f}
+			row.Value = val
+			values[f.Name], set[f.Name] = val, val != ui2.FlagDefault(f)
+			row.Set = set[f.Name]
+			if set[f.Name] {
+				row.Err = ui2FlagErr(f, val)
+				bad = bad || row.Err != ""
+			}
+			v.Flags = append(v.Flags, row)
+		}
+		if bad {
+			v.Err = hv.ui2T(r, "app-settings.flags-invalid")
+			hv.render(w, r, ui2.AppFlagsForm(v))
+			return
+		}
+		args := ui2.BuildFlagArgs(st.Args, schema.Flags, values, set)
+		if cw := callJSON(w, r, hv.putApp(), map[string]any{"args": ui2.ArgsString(args)}); cw.code != http.StatusOK {
+			v.Err = cw.errText()
+			hv.render(w, r, ui2.AppFlagsForm(v))
+			return
+		}
+		if f, err := ctx.API.AppFlags(name); err == nil {
+			v = ui2.FlagsViewOf(pk, f)
+			v.App = name
+		}
+		hv.render(w, r, ui2.AppFlagsForm(v), ui2.Toast(hv.ui2T(r, "app-settings.saved"), false))
+	})
+}
+
+// ui2FlagErr is why val does not fit flag f, or "".
+func ui2FlagErr(f visorapi.AppFlag, val string) string {
+	if val == "" {
+		return ""
+	}
+	if f.Type == visorapi.FlagTypeInt {
+		if _, err := strconv.ParseInt(val, 10, 64); err != nil {
+			return err.Error()
+		}
+	}
+	if f.Check != "" {
+		if err := autoconfigcmd.CheckValue(f.Check, val); err != nil {
+			return err.Error()
+		}
+	}
+	return ""
 }
