@@ -375,12 +375,23 @@ final class MailModel: ObservableObject {
         changeContacts(done: L10n.text("mail_contact_saved")) { client in
             guard let contact = MailContacts.saved(try await client.contacts(), name: name, address: clean, uid: uid, replacing: replacing) else { return }
             _ = try await client.contactPut(contact)
+            // SkyChat lists the person too, under the same name.
+            if let pk = SkymailAddress.pk(ofAddress: clean)?.lowercased() {
+                let chat = ChatRepository.shared
+                chat.setName(pk, name, share: false)
+                chat.addContact(pk, share: false)
+            }
         }
     }
 
-    /// Removes the whole contact from the book, not only its mail addresses.
+    /// Removes the whole contact from the book, not only its mail addresses, and from SkyChat.
     func deleteContact(_ uid: String) {
-        changeContacts(done: nil) { try await $0.contactDelete(uid) }
+        let keys = contacts.first { $0.uid == uid }?.addresses.compactMap { SkymailAddress.pk(ofAddress: $0)?.lowercased() } ?? []
+        changeContacts(done: nil) { client in
+            try await client.contactDelete(uid)
+            let chat = ChatRepository.shared
+            for pk in keys { chat.removeContact(pk, share: false) }
+        }
     }
 
     private func loadContacts() async {

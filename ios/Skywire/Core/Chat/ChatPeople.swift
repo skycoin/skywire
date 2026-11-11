@@ -208,11 +208,47 @@ extension ChatRepository {
 
     // MARK: Contacts
 
-    func removeContact(_ pk: String) {
+    /// `share` false is SkyMail removing it from the visor's book, which is done already.
+    func removeContact(_ pk: String, share: Bool = true) {
         store.update { $0.contacts.removeAll { $0 == pk } }
-        setName(pk, "")
+        setName(pk, "", share: false)
         Task { _ = try? await api.accept(pk: pk, accepted: false) }
+        guard share else { return }
+        unshareContact(pk)
         note(L10n.text("chat_note_contact_removed"))
+    }
+
+    /// Puts a named SkyChat contact in the visor's book, so SkyMail and the dashboard list it too.
+    func shareContact(_ pk: String) {
+        guard let name = names[pk], !name.isEmpty, let address = SkymailAddress.of(pk), let client = visorClient else { return }
+        Task {
+            guard let book = try? await client.contacts() else { return }
+            if book.contains(where: { c in c.name == name && c.keys.contains { $0.lowercased() == pk } }) { return }
+            guard let contact = MailContacts.saved(book, name: name, address: address) else { return }
+            _ = try? await client.contactPut(contact)
+            await PhoneContacts.sync(client)
+        }
+    }
+
+    /// Takes `pk` off the visor's book, and a contact it leaves with no key or mailbox.
+    private func unshareContact(_ pk: String) {
+        guard let client = visorClient else { return }
+        let mine: @Sendable (String) -> Bool = { $0.lowercased() == pk }
+        let mineMail: @Sendable (String) -> Bool = { SkymailAddress.pk(ofAddress: $0).map(mine) ?? false }
+        Task {
+            guard let book = try? await client.contacts() else { return }
+            for c in book where c.keys.contains(where: mine) || c.mail.contains(where: mineMail) {
+                var rest = c
+                rest.keys.removeAll(where: mine)
+                rest.mail.removeAll(where: mineMail)
+                if rest.keys.isEmpty && rest.mail.isEmpty {
+                    try? await client.contactDelete(c.uid)
+                } else {
+                    _ = try? await client.contactPut(rest)
+                }
+            }
+            await PhoneContacts.sync(client)
+        }
     }
 
     func lookupPeer(_ pk: String) async -> PeerLookup? {

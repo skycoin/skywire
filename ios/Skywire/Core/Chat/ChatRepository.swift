@@ -750,22 +750,28 @@ final class ChatRepository: ObservableObject {
 
     func isContact(_ pk: String) -> Bool { store.state.contacts.contains(pk.lowercased()) }
 
+    /// `share` false is SkyMail adding from the visor's book, which already holds the contact.
     @discardableResult
-    func addContact(_ pk: String, name: String? = nil, avatar: Data? = nil) -> Bool {
+    func addContact(_ pk: String, name: String? = nil, avatar: Data? = nil, share: Bool = true) -> Bool {
         let p = pk.lowercased()
         guard Skychat.isPk(p) else { return false }
-        if let name, !name.trimmingCharacters(in: .whitespaces).isEmpty, (names[p] ?? "").isEmpty { setName(p, name) }
+        if let name, !name.trimmingCharacters(in: .whitespaces).isEmpty, (names[p] ?? "").isEmpty { setName(p, name, share: false) }
         if let avatar, !store.hasAvatar(p) { store.setAvatar(p, avatar) }
         if !store.state.contacts.contains(p) { store.update { $0.contacts.append(p) } }
+        if share { shareContact(p) }
         return true
     }
 
-    func setName(_ pk: String, _ name: String) {
+    func setName(_ pk: String, _ name: String, share: Bool = true) {
         let p = pk.lowercased()
         let clean = String(name.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ").prefix(Skychat.nameMax))
         if clean.isEmpty { names[p] = nil } else { names[p] = clean }
         Task { try? await api.setContactName(pk: p, name: clean) }
+        if share && store.state.contacts.contains(p) { shareContact(p) }
     }
+
+    /// The visor's API, for its contact book, which SkyMail and the dashboard share.
+    var visorClient: CoreClient? { app?.client }
 
     static let readyAttempts = 30
     static let readyInterval: Duration = .milliseconds(500)
