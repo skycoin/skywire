@@ -21,7 +21,6 @@ import (
 	"io"
 	"io/fs"
 	"math"
-	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -31,8 +30,10 @@ import (
 	"github.com/bitfield/script"
 	"github.com/oschwald/geoip2-golang/v2"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	clilog "github.com/skycoin/skywire/cmd/skywire-cli/commands/log"
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	deprewards "github.com/skycoin/skywire/pkg/deployment/rewards"
 	"github.com/skycoin/skywire/pkg/geoip"
@@ -60,6 +61,8 @@ func init() {
 	runCmd.Flags().StringVar(&runMinVersion, "minv", "", "minimum skywire version to fetch from / keep surveys for")
 	runCmd.Flags().BoolVar(&runSkipCollect, "skip-collect", false, "skip survey/tp/bw collection (use existing data on disk)")
 	runCmd.Flags().StringVar(&runProxy, "proxy", "", "collect surveys via a dmsgweb SOCKS5 resolving proxy (host:port, e.g. 127.0.0.1:4443)\ninstead of an own dmsg client — reuses a running `skywire dmsg web`'s warm sessions")
+	runCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
+	clirpc.RegisterFetchFlags(runCmd)
 }
 
 var runCmd = &cobra.Command{
@@ -79,7 +82,7 @@ Designed to be invoked directly by systemd:
   ExecStart=/usr/bin/skywire cli rewards run
 
 Replaces the legacy 'script reward | bash' pipeline.`,
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		if log == nil {
 			log = logging.MustGetLogger("rewards")
 		}
@@ -108,7 +111,7 @@ Replaces the legacy 'script reward | bash' pipeline.`,
 		}
 
 		// Fetch & prune UT for this date.
-		if err := fetchAndSaveUT(date, runHistDir); err != nil {
+		if err := fetchAndSaveUT(cmd.Flags(), date, runHistDir); err != nil {
 			log.Fatal("UT fetch failed: ", err)
 		}
 
@@ -194,26 +197,15 @@ func runLogCollection(minVer, proxy string) error {
 // visors that hold >= 2 transports, so the formerly-separate
 // hist/{date}_transports.txt eligibility gate is now implicit in the UT
 // data itself — no manual transport-count tracking required.
-func fetchAndSaveUT(date, histDir string) error {
+func fetchAndSaveUT(flags *pflag.FlagSet, date, histDir string) error {
 	dep := getDeploymentForUT()
 	url := strings.TrimRight(dep.TransportDiscovery, "/") + "/uptimes?v=v2"
 
-	client := &http.Client{Timeout: 60 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, url, nil) //nolint:noctx
+	// The deployment services answer over dmsg only, so fetch the way the other
+	// collection steps do: CXO cache, then the visor's RPC, then a dmsg client.
+	body, err := clirpc.FetchServiceURL(flags, url)
 	if err != nil {
-		return err
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = resp.Body.Close() }() //nolint:errcheck
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("uptime tracker returned %d", resp.StatusCode)
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
+		return fmt.Errorf("fetch %s: %w", url, err)
 	}
 
 	type utEntry struct {
