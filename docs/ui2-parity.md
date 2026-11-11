@@ -26,7 +26,7 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 | `/nodes/services-health` | deployment service health, /health payload, RSN stats | yes | `ui2/services` |
 | `/nodes/network` | network view from the uptime tracker | no | |
 | `/nodes/visualizer` | network graph | partial | cosmos-go WebGL page, linked as tp-viz and route-viz, not reimplemented |
-| `/nodes/resources` | CPU, memory, disk and traffic of every visor | no | |
+| `/nodes/resources` | CPU, memory, disk and traffic of every visor | yes | `ui2/resources` |
 | `/nodes/uptime` | uptime of every visor, version history | no | |
 | `/nodes/transports` | transports across the fleet | no | |
 | `/settings` | change password | yes | `ui2/settings` |
@@ -69,7 +69,7 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 | skynet | forwarded ports and forwards | no | |
 | web-proxy | resolving proxy settings | no | |
 | vpn | VPN client | no | |
-| resources | host stats and resource monitor | no | |
+| resources | host stats and resource monitor | partial | host, process and runtime figures, no history charts |
 | terminal | dmsgpty terminal | yes | embeds the hypervisor pty page |
 | wallet | wallet | partial | links to the Angular wallet and embeds its node config page |
 | logs | runtime logs with filter and search | yes | |

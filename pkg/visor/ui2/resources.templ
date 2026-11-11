@@ -1,0 +1,144 @@
+package ui2
+
+import "github.com/skycoin/skywire/pkg/visor/visorapi"
+
+// ResourcesPage is the host resources of every visor this hypervisor
+// manages.
+templ ResourcesPage(rows []ResRow, sampled string) {
+	@Layout(T(ctx, "nodes.resources-title"), "#/nodes/resources") {
+		<section class="card" data-labels>
+			<div class="head"><h1>{ T(ctx, "nodes.resources-title") }</h1></div>
+			@ResourceRows(rows, sampled)
+		</section>
+	}
+}
+
+// ResourceRows polls itself every 5 seconds as the Angular page does.
+templ ResourceRows(rows []ResRow, sampled string) {
+	<div id="res-rows" hx-get="ui2/resources/rows" hx-trigger="every 5s [document.visibilityState === 'visible']" hx-swap="outerHTML">
+		<p class="small dim">{ T(ctx, "multi-resources.summary", "count", itoa(len(rows))) } · { T(ctx, "multi-resources.last-updated") }: { sampled }</p>
+		<div class="table-wrap">
+			<table class="list nodes">
+				<thead>
+					<tr>
+						<th class="state"><span class="sr">{ T(ctx, "nodes.state") }</span></th>
+						<th>{ T(ctx, "multi-resources.visor") }</th>
+						<th>{ T(ctx, "nodes.ip-location") }</th>
+						<th class="num">{ T(ctx, "multi-resources.cpu") }</th>
+						<th class="num">{ T(ctx, "multi-resources.mem") }</th>
+						<th class="num">{ T(ctx, "multi-resources.disk") }</th>
+						<th class="num">{ T(ctx, "multi-resources.tx") }</th>
+						<th class="num">{ T(ctx, "multi-resources.rx") }</th>
+						<th class="num">{ T(ctx, "multi-resources.proc-rss") }</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, r := range rows {
+						<tr
+							class={ "row", templ.KV("offline", !r.Online) }
+							if r.Online {
+								data-href={ VisorURL(r.PK, "resources") }
+								tabindex="0"
+							}
+							data-pk={ r.PK }
+						>
+							<td class="state"><span class={ "dot", templ.KV("on", r.Online), templ.KV("off", !r.Online) }></span></td>
+							<td class="name" data-label={ T(ctx, "multi-resources.visor") }>
+								<div class="lbl-line"><a href={ templ.URL(VisorURL(r.PK, "resources")) } data-label-for={ r.PK }>{ r.Name() }</a></div>
+								<div class="small dim" data-host-for={ r.PK } hidden>{ r.Name() }</div>
+								<div class="mono small dim pk-text" title={ r.PK }>{ r.PK }</div>
+								if r.Err != "" {
+									<div class="small error">{ r.Err }</div>
+								}
+							</td>
+							<td class="small" data-label={ T(ctx, "nodes.ip-location") }>
+								if r.PublicIP != "" {
+									<div>{ r.PublicIP }</div>
+								}
+								if r.Location != "" {
+									<div class="dim">{ r.Location }</div>
+								}
+							</td>
+							if s := r.Stats; s != nil {
+								<td class={ "num", pctTone(s.CPUPercent) } data-label={ T(ctx, "multi-resources.cpu") }>{ Pct(s.CPUPercent) }</td>
+								<td class={ "num", pctTone(s.MemPercent) } data-label={ T(ctx, "multi-resources.mem") }>
+									{ Pct(s.MemPercent) }
+									<div class="small dim">{ Bytes(s.MemUsed) } / { Bytes(s.MemTotal) }</div>
+								</td>
+								<td class={ "num", pctTone(s.DiskPercent) } data-label={ T(ctx, "multi-resources.disk") }>{ Pct(s.DiskPercent) }</td>
+								<td class="num" data-label={ T(ctx, "multi-resources.tx") }>{ Rate(r.TxRate) }</td>
+								<td class="num" data-label={ T(ctx, "multi-resources.rx") }>{ Rate(r.RxRate) }</td>
+								<td class="num" data-label={ T(ctx, "multi-resources.proc-rss") }>
+									if s.Process != nil {
+										{ Bytes(s.Process.MemRSS) }
+									} else {
+										-
+									}
+								</td>
+							} else {
+								<td class="num dim" colspan="6">-</td>
+							}
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	</div>
+}
+
+// VisorResourcesPage is one visor's resources tab.
+templ VisorResourcesPage(v VisorRes) {
+	@VisorLayout(v.PK, "resources") {
+		<div class="head"><h1>{ T(ctx, "node.resource-monitor.title") }</h1></div>
+		@VisorResLive(v)
+	}
+}
+
+// VisorResLive polls every 3 seconds.
+templ VisorResLive(v VisorRes) {
+	<div id="res-live" hx-get={ VisorURL(v.PK, "resources/live") } hx-trigger="every 3s [document.visibilityState === 'visible']" hx-swap="outerHTML">
+		<h2>{ T(ctx, "node.resource-monitor.tab-host") }</h2>
+		@ErrorBox(v.HostErr)
+		if h := v.Host; h != nil {
+			<div class="ov">
+				@resCard(T(ctx, "node.resource-monitor.cpu"), Pct(h.CPUPercent), pctTone(h.CPUPercent), itoa(h.CPUCount)+" / "+itoa(h.CPULogicalCount)+" cores")
+				@resCard(T(ctx, "node.resource-monitor.memory"), Pct(h.MemPercent), pctTone(h.MemPercent), Bytes(h.MemUsed)+" / "+Bytes(h.MemTotal))
+				if h.SwapTotal > 0 {
+					@resCard("Swap", Pct(h.SwapPercent), pctTone(h.SwapPercent), Bytes(h.SwapUsed)+" / "+Bytes(h.SwapTotal))
+				}
+				@resCard(T(ctx, "node.resource-monitor.disk"), Pct(h.DiskPercent), pctTone(h.DiskPercent), Bytes(h.DiskUsed)+" / "+Bytes(h.DiskTotal))
+				@resCard(T(ctx, "node.resource-monitor.net-tx"), Rate(v.TxRate), "", Bytes(h.NetBytesSent))
+				@resCard(T(ctx, "node.resource-monitor.net-rx"), Rate(v.RxRate), "", Bytes(h.NetBytesRecv))
+			</div>
+			<p class="small dim">{ h.Hostname } · { h.Platform } { h.OS }/{ h.Arch } · { HostUptime(h.UptimeSeconds) } · { v.Sampled }</p>
+		}
+		<h2>{ T(ctx, "node.resource-monitor.tab-process") }</h2>
+		@ErrorBox(v.RunErr)
+		<div class="ov">
+			if h := v.Host; h != nil && h.Process != nil {
+				@resCard(T(ctx, "node.resource-monitor.cpu"), Pct(h.Process.CPUPercent), "", "PID "+itoa(int(h.Process.PID)))
+				@resCard("RSS", Bytes(h.Process.MemRSS), "", "")
+				@resCard(T(ctx, "node.resource-monitor.threads"), itoa(int(h.Process.NumThreads)), "", "fds "+itoa(int(h.Process.NumFDs))+" · conns "+itoa(h.Process.OpenConns))
+			}
+			if rt := v.Runtime; rt != nil {
+				@runtimeCards(rt)
+			}
+		</div>
+	</div>
+}
+
+templ runtimeCards(rt *visorapi.RuntimeStatsInfo) {
+	@resCard(T(ctx, "node.resource-monitor.heap"), Bytes(rt.MemHeapAlloc), "", Bytes(rt.MemSys)+" sys")
+	@resCard(T(ctx, "node.resource-monitor.goroutines"), itoa(rt.NumGoroutine), "", rt.GoVersion)
+	@resCard("GC", itoa(int(rt.NumGC)), "", "GOMAXPROCS "+itoa(rt.GOMAXPROCS))
+}
+
+templ resCard(label, value, tone, sub string) {
+	<div class="ov-card">
+		<div class="small dim">{ label }</div>
+		<div class={ "ov-big", tone }>{ value }</div>
+		if sub != "" {
+			<div class="small dim">{ sub }</div>
+		}
+	</div>
+}
