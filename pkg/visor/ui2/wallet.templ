@@ -1,16 +1,31 @@
 package ui2
 
-// WalletPage opens the dashboard's wallet and hosts its node settings page,
-// as the Angular wallet tab does.
-templ WalletPage(pk string) {
+// The states of the hypervisor's skycoin-web app for the wallet tab.
+const (
+	WalletRunning = "running"
+	WalletStopped = "stopped"
+	WalletMissing = "missing"
+)
+
+// WalletPage hosts skycoin-web's server rendered wallet, forwarded by the
+// hypervisor at wallet/ui2/, and the coin node settings page.
+templ WalletPage(pk, state string) {
 	@VisorLayout(pk, "wallet") {
-		<div class="head">
-			<h1>{ T(ctx, "wallet.title") }</h1>
-			<span class="spacer"></span>
-			<a class="btn primary" href="#/wallet"><span class="mi">account_balance_wallet</span>{ T(ctx, "wallet.open") }</a>
-			<a class="btn sm" href="#/wallet" target="_blank" rel="noreferrer"><span class="mi">open_in_new</span>{ T(ctx, "wallet.open-fullscreen") }</a>
-		</div>
-		<p class="small dim">{ T(ctx, "wallet.help") }</p>
+		switch state {
+			case WalletRunning:
+				@islandHead(T(ctx, "wallet.title"), T(ctx, "wallet.help"), "wallet/ui2/", T(ctx, "wallet.open-fullscreen"))
+				<iframe class="island wallet" src="wallet/ui2/" title={ T(ctx, "wallet.title") }></iframe>
+			case WalletStopped:
+				<h1>{ T(ctx, "wallet.title") }</h1>
+				<p><strong>{ T(ctx, "wallet.not-running") }</strong></p>
+				<p class="small dim">{ T(ctx, "wallet.not-running-help") }</p>
+				<p><a class="btn primary" href={ templ.URL(VisorURL(From(ctx).HVPK, "apps/catalog")) }><span class="mi">apps</span>{ T(ctx, "apps.tabs.catalog") }</a></p>
+			default:
+				<h1>{ T(ctx, "wallet.title") }</h1>
+				<p><strong>{ T(ctx, "wallet.not-configured") }</strong></p>
+				<p class="small dim">{ T(ctx, "wallet.not-configured-help") }</p>
+				<p><a class="btn primary" href={ templ.URL(VisorURL(From(ctx).HVPK, "apps/catalog")) }><span class="mi">apps</span>{ T(ctx, "apps.tabs.catalog") }</a></p>
+		}
 		<h2>{ T(ctx, "ui2.wallet.node") }</h2>
 		<iframe class="island wallet-config" src="wallet/config" title={ T(ctx, "ui2.wallet.node") }></iframe>
 	}
