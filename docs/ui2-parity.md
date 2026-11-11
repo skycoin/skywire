@@ -27,7 +27,8 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 | `/nodes/network` | network view from the uptime tracker | no | |
 | `/nodes/visualizer` | network graph | partial | cosmos-go WebGL page, linked as tp-viz and route-viz, not reimplemented |
 | `/nodes/resources` | CPU, memory, disk and traffic of every visor | yes | `ui2/resources` |
-| `/nodes/uptime` | uptime of every visor, version history | no | |
+| `/nodes/uptime` | uptime of every visor | yes | `ui2/uptime` |
+| | version history chart | no | |
 | `/nodes/transports` | transports across the fleet | no | |
 | `/settings` | change password | yes | `ui2/settings` |
 | | refresh rate, theme, language | yes | the refresh rate sets the visor list poll |
