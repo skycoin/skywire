@@ -155,6 +155,9 @@ func servedPair(t *testing.T) (dialer, dst *Client, ses ClientSession) {
 		return c
 	}
 	dialer, dst = connect(), connect()
+	// A client has its session before the server lists it, and a dial to a
+	// session the server does not list yet is refused.
+	require.Eventually(t, func() bool { return srv.SessionCount() == 2 }, 5*time.Second, time.Millisecond)
 	ses, ok := dialer.clientSession(dialer.porter, srvPK)
 	require.True(t, ok)
 	return dialer, dst, ses
