@@ -525,3 +525,48 @@ document.addEventListener('DOMContentLoaded', function () {
 	document.addEventListener('htmx:afterSettle', apply);
 	document.addEventListener('DOMContentLoaded', apply);
 })();
+
+// Chat: reply to a message, Ctrl+Enter sends, and a sent form is cleared.
+(function () {
+	'use strict';
+	document.addEventListener('click', function (e) {
+		if (!e.target.closest) return;
+		var f = document.getElementById('chat-form');
+		var r = e.target.closest('[data-reply]');
+		if (r && f) {
+			f.querySelector('[data-reply-input]').value = r.getAttribute('data-reply');
+			f.querySelector('[data-reply-text]').textContent = '↩ ' + (r.getAttribute('data-reply-quote') || '').slice(0, 80);
+			f.querySelector('[data-reply-show]').hidden = false;
+			var ta = f.querySelector('textarea');
+			if (ta) ta.focus();
+			return;
+		}
+		if (e.target.closest('[data-reply-cancel]') && f) {
+			f.querySelector('[data-reply-input]').value = '';
+			f.querySelector('[data-reply-show]').hidden = true;
+		}
+	});
+	// The log stays at its newest message across polls unless the reader scrolled up.
+	var atEnd = true;
+	function toEnd() { var l = document.getElementById('chat-log'); if (l && atEnd) l.scrollTop = l.scrollHeight; }
+	document.addEventListener('htmx:beforeSwap', function (e) {
+		var l = document.getElementById('chat-log');
+		if (l && e.detail.target === l) atEnd = l.scrollHeight - l.scrollTop - l.clientHeight < 40;
+	});
+	document.addEventListener('htmx:afterSettle', toEnd);
+	document.addEventListener('DOMContentLoaded', toEnd);
+	window.addEventListener('load', toEnd);
+	document.addEventListener('keydown', function (e) {
+		if (e.key !== 'Enter' || !(e.ctrlKey || e.metaKey) || !e.target.matches || !e.target.matches('[data-ctrl-enter]')) return;
+		e.preventDefault();
+		if (e.target.form) e.target.form.requestSubmit();
+	});
+	document.addEventListener('htmx:afterRequest', function (e) {
+		var el = e.detail.elt;
+		if (!e.detail.successful || !el || !el.matches || !el.matches('form[data-reset-on-ok]')) return;
+		var ta = el.querySelector('textarea');
+		if (ta) ta.value = '';
+		var ri = el.querySelector('[data-reply-input]');
+		if (ri) { ri.value = ''; el.querySelector('[data-reply-show]').hidden = true; }
+	});
+})();

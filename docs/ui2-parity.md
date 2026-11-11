@@ -62,7 +62,9 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 | | app catalog, add app, add another instance | yes | `apps/catalog` |
 | | flags form | yes | "Edit flags" in an app's settings |
 | | filter dialog, multi select actions | no | |
-| chat | skychat | partial | iframes the Angular chat tab, so it still needs Angular |
+| chat | direct messages: peers, history, send, reply, delete | yes | polls every 3 s instead of SSE; read receipts not shown |
+| | rooms: list, messages, send, create, join, invite, add member | yes | moderation (ban, mute, approve) not ported |
+| | voice calls, skychat password | no | |
 | mail | mailbox, compose, settings | yes | |
 | contacts | list, add, edit, delete, import | yes | |
 | rewards | address, history, rules | yes | |

@@ -1,24 +1,182 @@
 package ui2
 
-// ChatPage hosts the Angular UI's chat tab in its chrome-less embed mode, as
-// the wasm desktop's chat window does. Chat and voice are not reimplemented.
-// The skychat page behind the proxy cannot be hosted: it asks for /sse at the
-// root.
-templ ChatPage(pk string) {
-	@VisorLayout(pk, "chat") {
-		@islandHead(T(ctx, "skychat.title"), "", ClassicURL(pk, "chat"), T(ctx, "ui2.open-full-page"))
-		<iframe class="island chat" src={ ClassicURL(pk, "chat") + "?embed=1" } title={ T(ctx, "skychat.title") } allow="microphone; autoplay; clipboard-write"></iframe>
+import "github.com/skycoin/skywire/pkg/visor/visorapi"
+
+// ChatPage is the chat tab: direct messages or the group rooms.
+templ ChatPage(c Chat) {
+	@VisorLayout(c.PK, "chat") {
+		<div class="head">
+			<h1>{ T(ctx, "skychat.title") }</h1>
+			<span class="spacer"></span>
+			if !c.Remote {
+				<a class={ "btn sm", templ.KV("primary", c.Mode != "groups") } href={ templ.URL(c.url("?mode=dm")) }>{ T(ctx, "skychat.mode-direct") }</a>
+				<a class={ "btn sm", templ.KV("primary", c.Mode == "groups") } href={ templ.URL(c.url("?mode=groups")) }>{ T(ctx, "skychat.mode-groups") }</a>
+			}
+		</div>
+		if c.Remote {
+			<p class="dim">{ T(ctx, "skychat.remote-unavailable") }</p>
+		} else if c.Mode == "groups" {
+			<div class="chat" data-labels>
+				@ChatRooms(c, false)
+				<section class="chat-main">
+					@ChatRoomLog(c)
+					if c.Group != nil {
+						<form id="chat-form" class="chat-compose" hx-post={ c.url("/groups/send") } hx-target="#chat-log" hx-swap="outerHTML" data-reset-on-ok>
+							<input type="hidden" name="group" value={ c.Group.ID }/>
+							<textarea name="text" rows="2" required placeholder={ T(ctx, "skychat.group-placeholder") } aria-label={ T(ctx, "skychat.message") } data-ctrl-enter></textarea>
+							<button class="btn primary" type="submit">{ T(ctx, "skychat.send") }</button>
+						</form>
+						@chatRoomTools(c)
+					}
+				</section>
+			</div>
+		} else {
+			<div class="chat" data-labels>
+				@ChatPeers(c, false)
+				<section class="chat-main">
+					@ChatLog(c)
+					<form id="chat-form" class="chat-compose" hx-post={ c.url("/send") } hx-target="#chat-log" hx-swap="outerHTML" data-reset-on-ok>
+						if c.Peer != "" {
+							<input type="hidden" name="to" value={ c.Peer }/>
+						} else {
+							<input class="mono" name="to" required placeholder={ T(ctx, "skychat.to") } aria-label={ T(ctx, "skychat.to") } autocomplete="off"/>
+						}
+						<input type="hidden" name="reply_to" value="" data-reply-input/>
+						<div class="small dim chat-quote" data-reply-show hidden>
+							<span data-reply-text></span>
+							<button class="icon-btn sm" type="button" data-reply-cancel aria-label={ T(ctx, "common.cancel") }><span class="mi">close</span></button>
+						</div>
+						<textarea name="message" rows="2" required placeholder={ T(ctx, "skychat.placeholder") } aria-label={ T(ctx, "skychat.message") } data-ctrl-enter></textarea>
+						<button class="btn primary" type="submit">{ T(ctx, "skychat.send") }</button>
+					</form>
+				</section>
+			</div>
+		}
 	}
 }
 
-// islandHead is the title row of a tab that hosts a page of its own.
-templ islandHead(title, help, href, open string) {
-	<div class="head">
-		<h1>{ title }</h1>
-		<span class="spacer"></span>
-		<a class="btn sm" href={ templ.URL(href) } target="_blank" rel="noreferrer"><span class="mi">open_in_new</span>{ open }</a>
+// ChatPeers is the conversation list.
+templ ChatPeers(c Chat, oob bool) {
+	<aside id="chat-peers" class="chat-side" { oobAttrs(oob)... }>
+		<h2 class="small">{ T(ctx, "skychat.peers") }</h2>
+		<a class={ "chat-peer", templ.KV("active", c.Peer == "") } href={ templ.URL(c.url("?mode=dm")) }><span class="mi">edit</span> { T(ctx, "skychat.to") }</a>
+		if len(c.Peers) == 0 {
+			<p class="small dim">{ T(ctx, "skychat.peers-empty") }</p>
+		}
+		for _, p := range c.Peers {
+			<a class={ "chat-peer mono small", templ.KV("active", p == c.Peer) } href={ templ.URL(c.url("?mode=dm&peer=" + p)) } title={ p } data-label-for={ p }>{ p }</a>
+		}
+	</aside>
+}
+
+// ChatLog is the conversation with c.Peer. It polls itself and the peer list.
+templ ChatLog(c Chat) {
+	<div id="chat-log" class="chat-log" hx-get={ c.url("/log?peer=" + c.Peer) } hx-trigger="every 3s [document.visibilityState === 'visible']" hx-swap="outerHTML" data-follow>
+		@ErrorBox(c.Err)
+		if !c.History && c.Err == "" {
+			<p class="small dim">{ T(ctx, "skychat.no-history") }</p>
+		}
+		if c.Peer != "" && len(c.Msgs) == 0 {
+			<p class="dim">{ T(ctx, "skychat.empty") }</p>
+		}
+		for _, m := range c.Msgs {
+			<div class={ "chat-msg", templ.KV("out", m.Outgoing) } data-msg={ m.ID }>
+				if m.ReplyTo != "" {
+					<div class="small dim chat-quote">↩ { c.QuoteOf(m.ReplyTo) }</div>
+				}
+				if m.Deleted {
+					<div class="dim small">—</div>
+				} else {
+					<div class="chat-text">{ m.Body() }</div>
+				}
+				<div class="small dim chat-meta">
+					{ chatTime(m.TS) }
+					if m.ID != "" && !m.Deleted {
+						<button class="icon-btn sm" type="button" data-reply={ m.ID } data-reply-quote={ m.Body() } title="↩" aria-label="↩"><span class="mi">reply</span></button>
+						if m.Outgoing {
+							<button class="icon-btn sm" type="button" hx-post={ c.url("/delete") } hx-vals={ jsonVals(map[string]string{"peer": m.Peer, "id": m.ID}) } hx-target="#chat-log" hx-swap="outerHTML" hx-confirm="?" aria-label="delete"><span class="mi">delete</span></button>
+						}
+					}
+				</div>
+			</div>
+		}
 	</div>
-	if help != "" {
-		<p class="small dim">{ help }</p>
+}
+
+// ChatRooms is the room list with the create and join forms.
+templ ChatRooms(c Chat, oob bool) {
+	<aside id="chat-rooms" class="chat-side" { oobAttrs(oob)... }>
+		<h2 class="small">{ T(ctx, "skychat.rooms") }</h2>
+		if len(c.Groups) == 0 {
+			<p class="small dim">{ T(ctx, "skychat.rooms-empty") }</p>
+		}
+		for _, g := range c.Groups {
+			<a class={ "chat-peer", templ.KV("active", c.Group != nil && c.Group.ID == g.ID) } href={ templ.URL(c.url("?mode=groups&group=" + g.ID)) }>
+				{ g.Name }
+				<span class="small dim">{ string(g.Mode) } · { itoa(len(g.Members)) } { T(ctx, "skychat.members") }</span>
+			</a>
+		}
+		<details class="add">
+			<summary class="btn sm"><span class="mi">add</span>{ T(ctx, "skychat.create-room") }</summary>
+			<form class="form" hx-post={ c.url("/groups/create") } hx-target="#chat-rooms" hx-swap="outerHTML">
+				<input name="name" required placeholder={ T(ctx, "skychat.room-name") } aria-label={ T(ctx, "skychat.room-name") }/>
+				<select name="mode" aria-label={ T(ctx, "skychat.mode-groups") }>
+					<option value="public">public</option>
+					<option value="private">private</option>
+				</select>
+				<button class="btn primary" type="submit">{ T(ctx, "skychat.create") }</button>
+			</form>
+		</details>
+		<details class="add">
+			<summary class="btn sm"><span class="mi">login</span>{ T(ctx, "skychat.join-room") }</summary>
+			<form class="form" hx-post={ c.url("/groups/join") } hx-target="#chat-rooms" hx-swap="outerHTML">
+				<input class="mono" name="invite" required placeholder={ T(ctx, "skychat.invite-link") } aria-label={ T(ctx, "skychat.invite-link") }/>
+				<button class="btn primary" type="submit">{ T(ctx, "skychat.join") }</button>
+			</form>
+		</details>
+		if c.Invite != "" {
+			<p class="small"><span class="dim">{ T(ctx, "skychat.invite-link") }:</span> <span class="mono key" data-copy={ c.Invite }>{ c.Invite }</span></p>
+		}
+		@ErrorBox(c.Err)
+	</aside>
+}
+
+// ChatRoomLog is a room's messages. It polls itself.
+templ ChatRoomLog(c Chat) {
+	if c.Group == nil {
+		<div id="chat-log" class="chat-log"><p class="dim">{ T(ctx, "skychat.rooms-pick") }</p></div>
+	} else {
+		<div id="chat-log" class="chat-log" hx-get={ c.url("/groups/log?group=" + c.Group.ID) } hx-trigger="every 3s [document.visibilityState === 'visible']" hx-swap="outerHTML" data-follow>
+			if len(c.GMsgs) == 0 {
+				<p class="dim">{ T(ctx, "skychat.empty") }</p>
+			}
+			for _, m := range c.GMsgs {
+				@roomMsg(c, m)
+			}
+		</div>
 	}
+}
+
+templ roomMsg(c Chat, m visorapi.GroupMessage) {
+	<div class={ "chat-msg", templ.KV("out", m.SenderPK.Hex() == c.PK) }>
+		if m.SenderPK.Hex() != c.PK {
+			<div class="small mono dim" data-label-for={ m.SenderPK.Hex() }>{ m.SenderPK.Hex() }</div>
+		}
+		<div class="chat-text">{ m.Text }</div>
+		<div class="small dim chat-meta">{ chatTime(m.TS) }</div>
+	</div>
+}
+
+// chatRoomTools are the invite and add member controls of a room.
+templ chatRoomTools(c Chat) {
+	<div class="bar">
+		<button class="btn sm" type="button" hx-get={ c.url("/groups/invite?group=" + c.Group.ID) } hx-target="#chat-rooms" hx-swap="outerHTML"><span class="mi">link</span>{ T(ctx, "skychat.invite") }</button>
+		if c.Group.Role == "owner" || c.Group.Role == "admin" {
+			<form class="bar" hx-post={ c.url("/groups/add-member") } hx-target="#chat-rooms" hx-swap="outerHTML">
+				<input type="hidden" name="group" value={ c.Group.ID }/>
+				<input class="mono filter" name="pk" required placeholder={ T(ctx, "skychat.add-member-pk") } aria-label={ T(ctx, "skychat.add-member-pk") }/>
+				<button class="btn sm" type="submit">{ T(ctx, "skychat.add") }</button>
+			</form>
+		}
+	</div>
 }
