@@ -120,3 +120,17 @@ func (rg *RouteGroup) setLegGroupsFor(shown []uuid.UUID, groups []int) {
 	}
 	rg.mux.SetLegGroups(groups)
 }
+
+// compactMuxLocked drops indices from the mux after rg.legs lost the same legs.
+// A parked leg left in the primary slot goes active, so the peer is told.
+func (rg *RouteGroup) compactMuxLocked(indices ...int) {
+	if rg.mux == nil || !rg.mux.removeLegs(indices...) || len(rg.legs) == 0 {
+		return
+	}
+	tp := rg.legs[0].tp
+	id := tpEntryID(tp)
+	rg.forgetPeerPark(id)
+	rg.noteLegEvent(MuxEventLegPromoted, "parked leg took the primary slot", MuxByAdaptive,
+		0, len(rg.legs), tp, nil)
+	go rg.sendLegStateByID(id, false)
+}
