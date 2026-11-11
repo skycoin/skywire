@@ -35,6 +35,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -573,13 +574,26 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
 
     // --- backup ---
 
-    /** Write the config and the group state to [uri], with the core stopped while it copies. */
-    fun backup(uri: Uri) = identityAction(R.string.settings_backup_done) {
+    /**
+     * Write the config and the group state to [uri]. The zip is built and
+     * checked in the cache with the core stopped, and only a whole one is
+     * copied out, after the core is back, so [uri] never holds a partial one.
+     */
+    fun backup(uri: Uri) = action {
         val app = getApplication<Application>()
-        withContext(Dispatchers.IO) { app.contentResolver.openOutputStream(uri, "wt") }
-            ?.use { config.writeBackup(it) }
-            ?: error(app.getString(R.string.settings_export_unwritable))
-        ""
+        mutable.update { it.copy(busy = true) }
+        val staged = withContext(Dispatchers.IO) { File.createTempFile("backup", ".zip", app.cacheDir) }
+        try {
+            withCoreStopped { config.writeBackup(staged) }
+            withContext(Dispatchers.IO) {
+                app.contentResolver.openOutputStream(uri, "wt")?.use { out -> staged.inputStream().use { it.copyTo(out) } }
+                    ?: error(app.getString(R.string.settings_export_unwritable))
+            }
+            mutable.update { it.copy(message = app.getString(R.string.settings_backup_done)) }
+        } finally {
+            withContext(NonCancellable + Dispatchers.IO) { staged.delete() }
+            mutable.update { it.copy(busy = false) }
+        }
     }
 
     /** The public key the backup at [uri] restores, for the confirmation, or null when it is none. */
@@ -781,19 +795,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     private fun identityAction(successMessage: Int, block: suspend () -> String) = action {
         mutable.update { it.copy(busy = true) }
         try {
-            val outcome = CompletableDeferred<Result<String>>()
-            val running = mutable.value.coreState !is CoreState.Stopped &&
-                mutable.value.coreState !is CoreState.Failed
-            if (running) {
-                SkywireCoreService.restart(getApplication()) {
-                    outcome.complete(runCatching { block() })
-                }
-            } else {
-                // Nothing to restart. The next Connect picks the new identity
-                // up through the ordinary first-run path.
-                outcome.complete(runCatching { withContext(Dispatchers.IO) { block() } })
-            }
-            outcome.await().getOrThrow()
+            withCoreStopped(block)
             // The API client caches this visor's key for the life of the
             // process, and it is now the key of a visor that no longer exists.
             api.forgetIdentity()
@@ -804,6 +806,23 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         } finally {
             mutable.update { it.copy(busy = false) }
         }
+    }
+
+    /** Run [block] with the core stopped, restarting it after if it was running. */
+    private suspend fun <T> withCoreStopped(block: suspend () -> T): T {
+        val outcome = CompletableDeferred<Result<T>>()
+        val running = mutable.value.coreState !is CoreState.Stopped &&
+            mutable.value.coreState !is CoreState.Failed
+        if (running) {
+            SkywireCoreService.restart(getApplication()) {
+                outcome.complete(runCatching { block() })
+            }
+        } else {
+            // Nothing to restart. The next Connect picks the new identity
+            // up through the ordinary first-run path.
+            outcome.complete(runCatching { withContext(Dispatchers.IO) { block() } })
+        }
+        return outcome.await().getOrThrow()
     }
 
     private suspend fun loadRewardAddress() {
