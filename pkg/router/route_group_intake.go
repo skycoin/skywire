@@ -142,7 +142,7 @@ func (rg *RouteGroup) handlePacketNow(packet routing.Packet) error {
 		// A handshake on an aux leg proves the peer registered that leg's
 		// rule, so it is safe to start sending on it. The primary leg's
 		// handshake (which creates the mux below) needs no marking — leg 0
-		// is ready from growLegs. This matters most for download-heavy
+		// is ready from the start. This matters most for download-heavy
 		// flows: the bulk-sending side would otherwise never receive data
 		// on its aux legs and so never learn it may spread onto them.
 		if rg.mux != nil {
@@ -199,16 +199,16 @@ func (rg *RouteGroup) handlePacketNow(packet routing.Packet) error {
 				rg.mux.onLegDelaySample = rg.foldLegDelaySample
 				// If a promoting rotation engine was already wired (SetRotation
 				// before the handshake), route new aux legs through warm standby
-				// on add. Set BEFORE growLegs so it governs any aux legs already
+				// on add. Set BEFORE syncLegs so it governs any aux legs already
 				// present in legs; the primary (index 0) is always active.
 				if rg.standbyNewLegs {
 					rg.mux.SetStandbyNewLegs(true)
 				}
-				// rg.legs already has the primary transport at this
-				// point; size the leg counters to match. Subsequent
-				// AppendRoute calls (mux 2/N+) extend the slice via
-				// appendRules.
-				rg.mux.growLegs(len(rg.legs))
+				// rg.legs already has the primary leg, and may have aux legs. Later
+				// appends add their own record.
+				rg.mu.Lock()
+				rg.syncMuxLegsLocked()
+				rg.mu.Unlock()
 				rg.logger.Debug("Route multiplexing enabled (both peers support CapMux)")
 				if sack {
 					rg.logger.Debug("SACK retransmission enabled (both peers support CapSACK)")

@@ -42,7 +42,7 @@ func (m *routeMux) rebuildWeights(legs []groupLeg) {
 			// receiver isn't expecting on that route and would stall the reorder
 			// frontier on). Its byte counter was still sampled above so a later
 			// promotion starts from a fresh delta, not a stale backlog.
-			active[i] = !(i < len(m.standby) && m.standby[i])
+			active[i] = !lc.standby
 		}
 		// SHARED-BOTTLENECK COLLAPSE (RFC 8382): legs that funnel through the same
 		// physical pipe (groupOf()) must be counted as ONE unit of capacity, not N
@@ -321,13 +321,7 @@ func (m *routeMux) refreshLegWindows(legs []groupLeg) {
 			if hi := float64(EcfMaxWindowBytes()); cwnd > hi {
 				cwnd = hi
 			}
-			ready := true
-			if i < len(m.standby) && m.standby[i] {
-				ready = false
-			}
-			if i < len(m.ready) && !m.ready[i] {
-				ready = false
-			}
+			ready := lc.ready && !lc.standby
 			states[i] = ecfLegState{
 				rttMs:      lc.ecfRttMs,
 				rttMinMs:   lc.ecfRttMinMs,

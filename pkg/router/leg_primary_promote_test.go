@@ -58,11 +58,7 @@ func TestActivePrimarySuccessorSendsNoLegState(t *testing.T) {
 // leg indices, does not outlive a removal or a primary swap.
 func TestLegRemovalDropsStaleGrouping(t *testing.T) {
 	rg, mts, _ := createMuxRouteGroup(t, 3)
-	groups := func() []int {
-		rg.mux.legMu.RLock()
-		defer rg.mux.legMu.RUnlock()
-		return rg.mux.legGroups
-	}
+	groups := rg.mux.legGroupIDs
 
 	rg.mux.SetLegGroups([]int{0, 1, 1})
 	rg.reelectPrimary(mts[2].Entry.ID)

@@ -13,8 +13,10 @@ func TestFECStripeCap(t *testing.T) {
 	m := &routeMux{
 		fecEnabled: true,
 		fecStriper: newFECStriper(fecDefaultKDefault, fecDefaultRDefault),
-		legs:       make([]*legCounters, 4),
-		ready:      []bool{true, true, true, true},
+	}
+	m.growLegs(4)
+	for i := range 4 {
+		m.markLegReady(i)
 	}
 	tps := []*transport.ManagedTransport{{}, {}, {}, {}} // zero-value: IsClosed()==false
 
@@ -66,9 +68,8 @@ func TestFECStripeCapInertSingleLeg(t *testing.T) {
 	m := &routeMux{
 		fecEnabled: true,
 		fecStriper: newFECStriper(fecDefaultKDefault, fecDefaultRDefault),
-		legs:       make([]*legCounters, 1),
-		ready:      []bool{true},
 	}
+	m.growLegs(1)
 	if m.fecStripeActive() {
 		t.Fatal("cap must be inactive with a single active leg")
 	}

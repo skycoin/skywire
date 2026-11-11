@@ -181,10 +181,7 @@ func (rg *RouteGroup) appendRules(forward, reverse routing.Rule, tp *transport.M
 	if rg.mux != nil && len(rg.legs) > 1 {
 		rg.mux.rebuildWeights(rg.legs)
 	}
-	// Keep per-leg counters parallel to legs.
-	if rg.mux != nil {
-		rg.mux.growLegs(len(rg.legs))
-	}
+	rg.syncMuxLegsLocked()
 	rg.noteLegEvent(MuxEventLegAdded, reason, MuxByLocal, newIdx, legs, tp, rg.legHopsLocked(tpEntryID(tp)))
 	// Initial single-leg rg's get their first leg via appendRules
 	// too, but the policy doesn't need on_leg_change to fire for
@@ -222,9 +219,7 @@ func (rg *RouteGroup) appendForwardLeg(forward routing.Rule, tp *transport.Manag
 	if rg.mux != nil && len(rg.legs) > 1 {
 		rg.mux.rebuildWeights(rg.legs)
 	}
-	if rg.mux != nil {
-		rg.mux.growLegs(len(rg.legs))
-	}
+	rg.syncMuxLegsLocked()
 	rg.noteLegEvent(MuxEventLegAdded, reason, MuxByLocal, newIdx, legs, tp, rg.legHopsLocked(tpEntryID(tp)))
 	// As in appendRules, a group's first leg is not a leg change.
 	hookSet := rg.legChangeHook != nil && newIdx > 0
@@ -246,10 +241,8 @@ func (rg *RouteGroup) appendForwardLeg(forward routing.Rule, tp *transport.Manag
 //
 // The rule is kept in rvsOnly, apart from the legs, so it shifts no leg; the read
 // path is by route-id lookup (not slice-indexed) so this works without further
-// data-plane changes. Per-leg counter slots (mux.legs) are NOT
-// extended here — they are parallel to legs and the reverse-only
-// leg doesn't add a forward transport. Per-direction recv-byte
-// attribution for reverse-only legs is a separate refinement.
+// data-plane changes. The mux gets no record for it, since its records
+// are one per leg.
 func (rg *RouteGroup) appendReverseLeg(reverse routing.Rule) {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()

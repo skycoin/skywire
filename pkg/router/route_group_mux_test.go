@@ -199,7 +199,7 @@ func TestMuxSelectTransportSkipsNotReadyLeg(t *testing.T) {
 
 	// Reset readiness: primary ready, aux (leg 1) not ready.
 	rg.mux.legMu.Lock()
-	rg.mux.ready = []bool{true, false}
+	rg.mux.legs[0].ready, rg.mux.legs[1].ready = true, false
 	rg.mux.legMu.Unlock()
 
 	// Every selection must return the primary while leg 1 is not ready.
@@ -296,9 +296,9 @@ func TestRouteMuxRemoveLegs(t *testing.T) {
 	m.removeLegs(1, 3) // drop middle legs (ascending, as pruneDeadTransports passes)
 
 	require.Len(t, m.legs, 3, "legs not compacted")
-	require.Len(t, m.ready, 3, "ready not compacted")
 	// Survivors are original legs 0,2,4 in order.
-	require.Equal(t, []bool{true, true, true}, m.ready, "ready bits must follow the surviving legs")
+	ready, _ := m.legFlags()
+	require.Equal(t, []bool{true, true, true}, ready, "ready bits must follow the surviving legs")
 	require.Equal(t, uint64(0), m.legs[0].sentBytes.Load())
 	require.Equal(t, uint64(20), m.legs[1].sentBytes.Load(), "former leg 2's counters must move to index 1")
 	require.Equal(t, uint64(40), m.legs[2].sentBytes.Load(), "former leg 4's counters must move to index 2")
@@ -313,9 +313,10 @@ func TestRouteMuxRemoveLegsPromotesPrimary(t *testing.T) {
 	m.growLegs(3)     // ready = [T,F,F]
 	m.markLegReady(2) // ready = [T,F,T]
 	m.removeLegs(0)   // drop the primary; former leg 1 becomes the new leg 0
-	require.Len(t, m.ready, 2)
-	require.True(t, m.ready[0], "promoted primary must be marked ready")
-	require.True(t, m.ready[1], "former leg 2 keeps its ready bit")
+	ready, _ := m.legFlags()
+	require.Len(t, ready, 2)
+	require.True(t, ready[0], "promoted primary must be marked ready")
+	require.True(t, ready[1], "former leg 2 keeps its ready bit")
 }
 
 // TestRemoveMuxRouteByTransportRemovesPrimary proves the router-level guard
@@ -369,7 +370,6 @@ func TestRouteMuxRemoveLegsEmpty(t *testing.T) {
 	m.growLegs(2)
 	m.removeLegs() // no indices → no change
 	require.Len(t, m.legs, 2)
-	require.Len(t, m.ready, 2)
 }
 
 // TestPruneLivenessDeadLegs verifies a leg flagged black-holing (by transport

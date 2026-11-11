@@ -197,7 +197,7 @@ func (m *routeMux) unidirFlipTick() (flipped, changed bool) {
 	var up, down float64      // ABSOLUTE upload / download bytes/sec
 	m.legMu.RLock()
 	for i, s := range stats {
-		if i < len(m.standby) && m.standby[i] {
+		if i < len(m.legs) && m.legs[i].standby {
 			continue // active legs only
 		}
 		if initiator {

@@ -121,6 +121,14 @@ func (rg *RouteGroup) setLegGroupsFor(shown []uuid.UUID, groups []int) {
 	rg.mux.SetLegGroups(groups)
 }
 
+// syncMuxLegsLocked gives the mux a record for every leg, named by its
+// transport ID. Call it after every append to rg.legs. Caller holds rg.mu.
+func (rg *RouteGroup) syncMuxLegsLocked() {
+	if rg.mux != nil {
+		rg.mux.syncLegs(rg.legIDsLocked())
+	}
+}
+
 // compactMuxLocked drops indices from the mux after rg.legs lost the same legs.
 // A parked leg left in the primary slot goes active, so the peer is told.
 func (rg *RouteGroup) compactMuxLocked(indices ...int) {

@@ -181,7 +181,7 @@ func TestMux_SendDrivingWithUnreadyAuxLeg(t *testing.T) {
 
 	// Live scenario: aux leg (index 1) not yet proven-ready by inbound traffic.
 	rg.mu.Lock()
-	rg.mux.ready[1] = false
+	rg.mux.legs[1].ready = false
 	rg.mu.Unlock()
 
 	_ = rg.SetWriteDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck

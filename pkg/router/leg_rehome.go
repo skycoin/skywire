@@ -492,7 +492,7 @@ func (rg *RouteGroup) adoptRehomedLeg(leg *rehomeLeg, reason string, standby boo
 	idx := rg.appendLegLocked(fwd, rvs, leg.tp)
 	rg.resetLegLiveness(tpEntryID(leg.tp))
 	if rg.mux != nil {
-		rg.mux.growLegs(len(rg.legs))
+		rg.syncMuxLegsLocked()
 		rg.mux.rebuildWeights(rg.legs)
 		// The chain is already established, so it needs no aux-leg handshake to
 		// become selectable. Set under rg.mu, while idx still names this leg.
