@@ -138,12 +138,16 @@ struct ThreadView: View {
         let calendar = Calendar.current
         var out: [ThreadRow] = []
         out.reserveCapacity(messages.count + 8)
+        // ForEach needs each id once, and a message can arrive twice: by a
+        // replayed feed, or by history and the live stream racing.
+        var placed = Set<String>()
         for i in messages.indices.reversed() {
             let m = messages[i]
+            guard placed.insert(m.key).inserted else { continue }
             out.append(.message(m))
             let day = calendar.startOfDay(for: Date(timeIntervalSince1970: Double(m.ts) / 1000))
             let previous = i > 0 ? calendar.startOfDay(for: Date(timeIntervalSince1970: Double(messages[i - 1].ts) / 1000)) : nil
-            if previous != day { out.append(.day(day)) }
+            if previous != day, placed.insert(ThreadRow.day(day).id).inserted { out.append(.day(day)) }
         }
         return out
     }
