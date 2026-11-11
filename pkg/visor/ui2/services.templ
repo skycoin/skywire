@@ -1,0 +1,163 @@
+package ui2
+
+import "github.com/skycoin/skywire/pkg/visor/visorapi"
+
+// ServicesPage is the deployment services health page.
+templ ServicesPage(s Services) {
+	@Layout(T(ctx, "nodes.services-health-title"), "#/nodes/services-health") {
+		<section class="card">
+			<div class="head"><h1>{ T(ctx, "nodes.services-health-title") }</h1></div>
+			@ServicesBody(s)
+			<div id="svc-drill"></div>
+		</section>
+		<section class="card">
+			<div class="head"><h2>{ T(ctx, "services-health.rsn-section") }</h2></div>
+			<div id="rsn" hx-get="ui2/services/rsn" hx-trigger="load, every 30s [document.visibilityState === 'visible']" hx-swap="innerHTML">
+				<p class="dim">{ T(ctx, "services-health.loading") }</p>
+			</div>
+		</section>
+	}
+}
+
+// ServicesBody is the summary and the table, polled every 15 seconds as
+// the Angular page does.
+templ ServicesBody(s Services) {
+	<div id="services" hx-get="ui2/services/body" hx-trigger="every 15s [document.visibilityState === 'visible']" hx-swap="outerHTML">
+		@ErrorBox(s.Err)
+		if len(s.Entries) > 0 {
+			<p>
+				if s.AnyDown() {
+					<span class="mi warn-text">warning</span> { T(ctx, "services-health.degraded") }
+				} else {
+					<span class="mi ok">check_circle</span> { T(ctx, "services-health.all-ok") }
+				}
+				<span class="small dim">· { T(ctx, "services-health.last-updated") }: { s.Checked }</span>
+			</p>
+			<div class="table-wrap">
+				<table class="list">
+					<thead>
+						<tr>
+							<th class="state"><span class="sr">{ T(ctx, "services-health.status") }</span></th>
+							<th>{ T(ctx, "services-health.service") }</th>
+							<th>{ T(ctx, "services-health.status") }</th>
+							<th class="num">{ T(ctx, "services-health.latency") }</th>
+							<th>{ T(ctx, "services-health.version") }</th>
+							<th>{ T(ctx, "services-health.ip") }</th>
+							<th>{ T(ctx, "services-health.endpoint") }</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, e := range s.Entries {
+							@serviceRow(e)
+						}
+					</tbody>
+				</table>
+			</div>
+		} else if s.Err == "" {
+			<p class="dim">{ T(ctx, "services-health.loading") }</p>
+		}
+	</div>
+}
+
+templ serviceRow(e visorapi.ServiceHealthEntry) {
+	<tr>
+		<td class="state"><span class={ "dot", statusDot(e.Status) }></span></td>
+		<td data-label={ T(ctx, "services-health.service") }>
+			<strong>{ e.Name }</strong>
+			if k := SvcKey(e.Name); k != "" {
+				<button class="icon-btn sm" type="button" hx-get={ "ui2/services/drill?service=" + k } hx-target="#svc-drill" hx-swap="innerHTML" title={ T(ctx, "services-health.drill") } aria-label={ T(ctx, "services-health.drill") }><span class="mi">unfold_more</span></button>
+			}
+			if e.Error != "" {
+				<div class="small error">{ e.Error }</div>
+			}
+		</td>
+		<td data-label={ T(ctx, "services-health.status") }>{ e.Status }</td>
+		<td class={ "num", latencyTone(e.LatencyMs) } data-label={ T(ctx, "services-health.latency") }>{ i64(e.LatencyMs) } ms</td>
+		<td class="small mono" data-label={ T(ctx, "services-health.version") }>
+			if e.Version != "" {
+				{ e.Version }
+			} else {
+				<span class="dim">—</span>
+			}
+		</td>
+		<td class="small mono" data-label={ T(ctx, "services-health.ip") }>
+			if e.IP != "" {
+				{ e.IP }
+			} else {
+				<span class="dim">—</span>
+			}
+		</td>
+		<td class="small mono pk-text" data-label={ T(ctx, "services-health.endpoint") } title={ EndpointURL(e.URL) }>{ EndpointURL(e.URL) }</td>
+	</tr>
+}
+
+// ServiceDrill is a service's /health payload.
+templ ServiceDrill(service, body, errMsg string) {
+	<section class="card sub">
+		<div class="head">
+			<h2 class="mono">{ service } /health</h2>
+			<span class="spacer"></span>
+			<button class="icon-btn" type="button" data-clear="#svc-drill" aria-label={ T(ctx, "services-health.collapse") }><span class="mi">close</span></button>
+		</div>
+		@ErrorBox(errMsg)
+		if body != "" {
+			<pre class="mono small logbox">{ body }</pre>
+		}
+	</section>
+}
+
+// RSNStats is the route setup nodes' stats.
+templ RSNStats(rows []RSNRow) {
+	if len(rows) == 0 {
+		<p class="dim">{ T(ctx, "services-health.rsn-empty") }</p>
+	}
+	<div class="cat-grid">
+		for _, r := range rows {
+			<div class="card sub">
+				<div class="bar">
+					<span class={ "dot", templ.KV("on", r.HasStats), templ.KV("off", !r.HasStats) }></span>
+					<span class="mono small pk-text" title={ r.PK }>{ r.PK }</span>
+					if r.HasStats {
+						<span class="spacer"></span>
+						<strong class={ rateTone(r.Rate) }>{ pct(r.Rate) }</strong>
+					}
+				</div>
+				if r.Err != "" {
+					<p class="small error">{ T(ctx, "services-health.rsn-error") }: { r.Err }</p>
+				}
+				if r.HasStats {
+					<dl class="kv small">
+						<dt>{ T(ctx, "services-health.rsn-success") }</dt>
+						<dd>{ u64(r.Successful) }</dd>
+						<dt>{ T(ctx, "services-health.rsn-failed") }</dt>
+						<dd>{ u64(r.Failed) }</dd>
+						<dt>{ T(ctx, "services-health.rsn-active") }</dt>
+						<dd>{ itoa(r.Active) }</dd>
+						<dt>{ T(ctx, "services-health.rsn-latency-p50") }</dt>
+						<dd>{ i64(r.P50) } ms</dd>
+						<dt>{ T(ctx, "services-health.rsn-latency-p95") }</dt>
+						<dd>{ i64(r.P95) } ms</dd>
+						<dt>{ T(ctx, "services-health.rsn-latency-p99") }</dt>
+						<dd>{ i64(r.P99) } ms</dd>
+						if r.LastSuccess != "" {
+							<dt>{ T(ctx, "services-health.rsn-last-success") }</dt>
+							<dd>{ r.LastSuccess }</dd>
+						}
+						if r.LastFailure != "" {
+							<dt>{ T(ctx, "services-health.rsn-last-failure") }</dt>
+							<dd>{ r.LastFailure }</dd>
+						}
+					</dl>
+					if len(r.Failures) > 0 {
+						<p class="small">
+							<span class="dim">{ T(ctx, "services-health.rsn-failure-reasons") }:</span>
+							for _, f := range r.Failures {
+								<span class="badge">{ f.Reason } ({ u64(f.Count) })</span>
+							}
+						</p>
+					}
+				}
+			</div>
+		}
+	</div>
+}
