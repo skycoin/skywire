@@ -144,6 +144,13 @@ final class NotificationBridge: NSObject, ObservableObject {
         center.setBadgeCount(count ?? 0, withCompletionHandler: nil)
     }
 
+    /// Takes down a conversation's notification once it is open in the app,
+    /// so it does not wait for a tap to say what was already read.
+    static func clearChat(_ thread: String) {
+        let ids = Set([thread, thread.lowercased()]).map { "\(SkychatProfile.app):\($0)" }
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ids)
+    }
+
     private func post(_ event: NotifyEvent) {
         if event.app == SkychatProfile.app && !Self.chatAllows(event, ChatRepository.shared.store.notif) { return }
         let style = Self.presentation(of: event.app)

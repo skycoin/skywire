@@ -425,6 +425,7 @@ final class ChatRepository: ObservableObject {
         watchLink(key.flatMap { Skychat.isPk($0) ? $0 : nil })
         guard let key else { return }
         markRead(key)
+        NotificationBridge.clearChat(key)
         if key == Skychat.savedKey { return }
         Task {
             if Skychat.isPk(key) {
