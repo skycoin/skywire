@@ -208,6 +208,7 @@ struct Composer: View {
 
     private func start(asVideo: Bool) {
         Task {
+            let asking = Self.undecided(.audio) || (asVideo && Self.undecided(.video))
             guard await Self.permit(.audio) else {
                 repo.note(L10n.text("chat_rec_mic_denied"), error: true)
                 return
@@ -217,6 +218,11 @@ struct Composer: View {
                     repo.note(L10n.text("chat_rec_camera_denied"), error: true)
                     return
                 }
+            }
+            // The press that brought up the system's question records nothing, as on Android.
+            if asking {
+                repo.note(asVideo ? L10n.text("chat_rec_camera_ready") : L10n.text("chat_rec_mic_ready"))
+                return
             }
             ChatAudioPlayer.shared.stop()
             recVideo = asVideo
@@ -255,6 +261,10 @@ struct Composer: View {
                 }
             }
         }
+    }
+
+    private static func undecided(_ media: AVMediaType) -> Bool {
+        AVCaptureDevice.authorizationStatus(for: media) == .notDetermined
     }
 
     /// Asks for the microphone or camera the first time; true when allowed.

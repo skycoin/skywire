@@ -12587,6 +12587,35 @@
         }
       }
     },
+    "chat_rec_mic_ready" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Microphone ready — hold 🎤 to record."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Micrófono listo: mantén pulsado 🎤 para grabar."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Micro prêt — maintenez 🎤 pour enregistrer."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "麦克风已就绪——按住 🎤 录音。"
+          }
+        }
+      }
+    },
     "chat_rec_mode_video" : {
       "extractionState" : "manual",
       "localizations" : {
