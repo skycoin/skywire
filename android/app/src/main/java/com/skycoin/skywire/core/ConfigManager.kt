@@ -18,9 +18,9 @@ import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
-import java.io.OutputStream
 import java.util.concurrent.TimeUnit
 import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
@@ -629,15 +629,16 @@ class ConfigManager(
     // --- backup ---
 
     /**
-     * The config and this visor's group state as one zip. The state is
-     * `local/skychat`: the group store with its sealed keys, the feeds and
-     * their history, which a key alone cannot bring back. **Call with the
-     * core stopped**, because those are open databases while it runs.
+     * The config and this visor's group state as one zip in [target]. The
+     * state is `local/skychat`: the group store with its sealed keys, the
+     * feeds and their history, which a key alone cannot bring back. **Call
+     * with the core stopped**, because those are open databases while it runs.
+     * The zip is read back before this returns, so a bad one fails here.
      */
-    suspend fun writeBackup(out: OutputStream) {
+    suspend fun writeBackup(target: File) {
         val config = configJson()
         withContext(Dispatchers.IO) {
-            ZipOutputStream(out).use { zip ->
+            ZipOutputStream(target.outputStream()).use { zip ->
                 zip.putNextEntry(ZipEntry(BACKUP_CONFIG))
                 zip.write(config.toByteArray(Charsets.UTF_8))
                 zip.closeEntry()
@@ -648,6 +649,12 @@ class ConfigManager(
                     zip.closeEntry()
                 }
             }
+            // Reading every entry to its end checks each CRC.
+            val buf = ByteArray(BUFFER)
+            ZipFile(target).use { zip ->
+                zip.entries().asSequence().forEach { e -> zip.getInputStream(e).use { while (it.read(buf) >= 0) {} } }
+            }
+            checkNotNull(target.inputStream().use(::backupSecretKey)) { context.getString(R.string.settings_backup_unreadable) }
         }
     }
 
@@ -766,6 +773,7 @@ class ConfigManager(
         const val TAG = "SkywireConfig"
         const val BACKUP_CONFIG = "skywire-config.json"
         const val BACKUP_GROUPS = "skychat"
+        private const val BUFFER = 64 * 1024
         val MAILBOX_CHOICES = setOf("settings.json", "whitelist")
         const val MAX_CAPTURE = 256 * 1024
         const val SOCKS_APP = "skysocks-client"
