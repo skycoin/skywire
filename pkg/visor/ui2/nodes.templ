@@ -28,7 +28,7 @@ templ NodesPage(ns []Node, errMsg string) {
 // list does by default. ui2.js applies the Angular UI's labels and the
 // filter after every swap.
 templ NodeRows(ns []Node, errMsg string, oob bool) {
-	<div id="nodes" hx-get="ui2/nodes" hx-trigger="every 10s [document.visibilityState === 'visible']" hx-swap="outerHTML">
+	<div id="nodes" hx-get="ui2/nodes" hx-trigger={ pollEvery(From(ctx).Refresh) } hx-swap="outerHTML">
 		@ErrorBox(errMsg)
 		if len(ns) == 0 {
 			<p class="dim">{ T(ctx, "nodes.empty") }</p>

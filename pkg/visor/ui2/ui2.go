@@ -84,7 +84,9 @@ type Page struct {
 	HVPK   string
 	Remote bool
 	TPViz  bool
-	cat    *Catalog
+	// Refresh is how often, in seconds, the visor list polls.
+	Refresh int
+	cat     *Catalog
 }
 
 type pageKey struct{}

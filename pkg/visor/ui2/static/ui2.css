@@ -421,3 +421,8 @@ input.invalid { border-color: rgb(var(--rose)); }
   .list.nodes td.sel { float: right; padding: 6px 8px 0 0; }
   .list td.sel input { width: 24px; height: 24px; }
 }
+
+/* hypervisor settings */
+.narrow-form { max-width: 420px; }
+fieldset.choice { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+fieldset.choice legend { padding: 0; margin-bottom: 4px; }

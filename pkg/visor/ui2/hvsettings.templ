@@ -1,0 +1,73 @@
+package ui2
+
+// HVSettingsPage is the hypervisor's own settings, the Angular /settings
+// page: theme, refresh rate, password and the saved labels.
+templ HVSettingsPage(canChangePassword bool) {
+	@Layout(T(ctx, "settings.title"), "#/settings") {
+		<section class="card">
+			<div class="head"><h1>{ T(ctx, "settings.title") }</h1></div>
+			<div class="form narrow-form">
+				<fieldset class="choice" data-theme-choice>
+					<legend>{ T(ctx, "settings.theme.label") }</legend>
+					for _, c := range []string{"system", "light", "dark"} {
+						<label class="check"><input type="radio" name="theme" value={ c }/> { T(ctx, "settings.theme."+c) }</label>
+					}
+				</fieldset>
+				<label>
+					{ T(ctx, "ui2.refresh-rate") }
+					<select data-refresh data-done={ T(ctx, "settings.refresh-rate-confirmation") }>
+						for _, s := range RefreshChoices {
+							<option value={ itoa(s) } selected?={ s == From(ctx).Refresh }>{ itoa(s) } { T(ctx, "settings.seconds") }</option>
+						}
+					</select>
+					<span class="small dim">{ T(ctx, "ui2.refresh-help") }</span>
+				</label>
+			</div>
+		</section>
+		if canChangePassword {
+			<section class="card">
+				<div class="head"><h2>{ T(ctx, "settings.change-password") }</h2></div>
+				@PasswordForm("")
+			</section>
+		}
+		<section class="card">
+			<div class="head"><h2>{ T(ctx, "labels.list-title") }</h2></div>
+			<p class="small dim">{ T(ctx, "labels.info") }</p>
+			<div
+				data-labels-list
+				data-empty={ T(ctx, "labels.empty") }
+				data-col-label={ T(ctx, "labels.label") }
+				data-col-id={ T(ctx, "labels.id") }
+				data-col-type={ T(ctx, "labels.type") }
+				data-type-nd={ T(ctx, "labels.filter-dialog.type-options.visor") }
+				data-type-tp={ T(ctx, "labels.filter-dialog.type-options.transport") }
+				data-type-ds={ T(ctx, "labels.filter-dialog.type-options.dmsg-server") }
+				data-edit={ T(ctx, "labeled-element.edit-label") }
+				data-delete={ T(ctx, "labels.delete") }
+				data-confirm={ T(ctx, "labels.delete-confirmation") }
+				data-prompt={ T(ctx, "edit-label.label") }
+			></div>
+		</section>
+	}
+}
+
+// PasswordForm changes the admin password through /api/change-password.
+templ PasswordForm(errMsg string) {
+	<form id="pw-form" class="form narrow-form" hx-post="ui2/settings/password" hx-swap="outerHTML">
+		<p class="small dim">{ T(ctx, "settings.password.help") }</p>
+		@ErrorBox(errMsg)
+		<label>
+			{ T(ctx, "settings.password.old-password") }
+			<input type="password" name="old" autocomplete="current-password" required/>
+		</label>
+		<label>
+			{ T(ctx, "settings.password.new-password") }
+			<input type="password" name="new" autocomplete="new-password" minlength="6" maxlength="64" required/>
+		</label>
+		<label>
+			{ T(ctx, "settings.password.repeat-password") }
+			<input type="password" name="repeat" autocomplete="new-password" minlength="6" maxlength="64" required/>
+		</label>
+		<p><button class="btn primary" type="submit">{ T(ctx, "settings.change-password") }</button></p>
+	</form>
+}

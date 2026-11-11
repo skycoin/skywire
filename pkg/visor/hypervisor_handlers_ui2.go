@@ -55,6 +55,7 @@ func (hv *Hypervisor) ui2Routes(r *httputil.Router) {
 		r.Get("/ui2/visors/{pk}/{tab}", hv.ui2NotPorted())
 		hv.ui2NodesRoutes(r)
 		hv.ui2BulkRoutes(r)
+		hv.ui2HVSettingsRoutes(r)
 		hv.ui2ContactsRoutes(r)
 		hv.ui2AppsRoutes(r)
 		hv.ui2TransportsRoutes(r)
@@ -129,6 +130,11 @@ func (hv *Hypervisor) ui2Ctx(r *http.Request) context.Context {
 		lang = c.Value
 	}
 	p.Lang = ui2.PickLang(lang, r.Header.Get("Accept-Language"))
+	var refresh string
+	if c, err := r.Cookie(ui2.RefreshCookie); err == nil {
+		refresh = c.Value
+	}
+	p.Refresh = ui2.PickRefresh(refresh)
 	return ui2.With(r.Context(), p, ui2Catalog())
 }
 
