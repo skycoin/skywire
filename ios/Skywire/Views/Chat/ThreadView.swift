@@ -116,6 +116,8 @@ struct ThreadView: View {
         }
         .background(Color.skyBackground)
         .onAppear { lastNewest = messages.last?.key }
+        // Fresh roles and rules on open, for the header and the message box.
+        .task(id: key) { if isGroup { await repo.syncGroups() } }
     }
 
     private struct ScrollKey: Equatable {
@@ -157,6 +159,16 @@ struct ThreadView: View {
                 .background(Color.skyContainerHigh, in: .sky(SkyRadius.small))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
+        case let .message(m) where !m.notice.isEmpty:
+            let name = m.from == repo.myPk ? L10n.text("chat_you") : repo.displayName(m.from)
+            Text(verbatim: ChatText.notice(m.notice, name: name))
+                .skyText(.labelMedium)
+                .foregroundStyle(Color.skyOnSurfaceVariant)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 4)
+                .accessibilityIdentifier("thread-notice")
         case let .message(m):
             MessageRow(key: key, m: m, group: isGroup, highlighted: highlight == m.key) {
                 // The keyboard would cover the sheet's lower actions.

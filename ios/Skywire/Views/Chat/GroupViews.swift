@@ -107,6 +107,9 @@ struct GroupSettingsView: View {
         .background(Color.skyBackground)
         .onAppear { name = g?.name ?? "" }
         .onChange(of: g?.name ?? "") { name = $0 }
+        // The roster and roles as the visor has them now: a change may have
+        // come while the app was not listening.
+        .task(id: gid) { await repo.syncGroups() }
         .task(id: RequestsKey(admin: g.map(repo.isAdmin) ?? false, tick: repo.groupChanged.gid == gid ? repo.groupChanged.tick : 0)) {
             guard let g, repo.isAdmin(g) else { return }
             requests = try? await repo.api.groupRequests(gid: gid)

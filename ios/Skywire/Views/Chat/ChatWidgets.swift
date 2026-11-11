@@ -141,6 +141,7 @@ enum ChatText {
 
     /// `↑ `/`↓ ` and the shown text, the way list rows preview (index.html updatePreview).
     static func preview(_ m: ChatMessage, own: Bool, group: Bool = false, sender: String = "") -> String {
+        if !m.notice.isEmpty { return notice(m.notice, name: sender) }
         let text: String
         if let f = m.file {
             if f.isVoiceMessage {
@@ -158,6 +159,23 @@ enum ChatText {
         if !own { return text }
         if m.mine { return "↑ " + text }
         return group ? "\(sender): \(text)" : "↓ " + text
+    }
+
+    /// What a group notice says, about the member named `name` where it is about one.
+    static func notice(_ kind: String, name: String) -> String {
+        switch kind {
+        case "joined": L10n.format("chat_notice_joined", name)
+        case "left": L10n.format("chat_notice_left", name)
+        case "admin_added": L10n.format("chat_notice_admin_added", name)
+        case "admin_removed": L10n.format("chat_notice_admin_removed", name)
+        case "muted": L10n.format("chat_notice_muted", name)
+        case "unmuted": L10n.format("chat_notice_unmuted", name)
+        case "banned": L10n.format("chat_notice_banned", name)
+        case "unbanned": L10n.format("chat_notice_unbanned", name)
+        case "read_only_on": L10n.text("chat_notice_read_only_on")
+        case "read_only_off": L10n.text("chat_notice_read_only_off")
+        default: ""
+        }
     }
 
     /// The clock today, the weekday this week, the date before.

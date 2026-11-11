@@ -15,6 +15,8 @@ extension ChatRepository {
         case "group": group(m)
         case "group-delete": groupDelete(m)
         case "group-join-request": joinRequest(m)
+        case "group-update": groupUpdate(m)
+        case "group-notice": groupNotice(m)
         case "file-ready": fileReady(m)
         case "dm-status": dmStatus(m)
         case "pair": dm(m, viaPair: true)
@@ -165,6 +167,30 @@ extension ChatRepository {
         let by = m.deletedBy.lowercased()
         let me = myPk
         mutate(gid) { Skychat.withoutDeleted($0, nano: nano, by: by, me: me) }
+    }
+
+    /// Someone joined, left, was promoted or removed: skychat saw the group's info change.
+    private func groupUpdate(_ m: SseMessage) {
+        Task {
+            await syncGroups()
+            signalGroupChanged(m.groupId)
+        }
+    }
+
+    /// A change to a group's roster, roles or rules, as a gray line in its thread. Mutes
+    /// and bans are for admins and the member concerned, comings and goings in a channel for admins.
+    private func groupNotice(_ m: SseMessage) {
+        guard let g = groupInfo(m.groupId) else { return }
+        let me = myPk
+        let pk = m.peer.lowercased()
+        let admin = g.admins.contains { $0.lowercased() == me }
+        let shown = switch m.event {
+        case "joined", "left": !g.isChannel || admin
+        case "muted", "unmuted", "banned", "unbanned": admin || pk == me
+        case "admin_added", "admin_removed", "read_only_on", "read_only_off": true
+        default: false
+        }
+        if shown { appendMessage(m.groupId, ChatMessage(from: pk, notice: m.event)) }
     }
 
     private func joinRequest(_ m: SseMessage) {

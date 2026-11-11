@@ -286,6 +286,8 @@ public struct ChatMessage: Codable, Equatable, Identifiable, Sendable {
     public var tsNano: String
     public var readSent: Bool
     public var request: Bool
+    /// A group notice instead of a message: what changed, about the member in `from`.
+    public var notice: String
 
     public var id: String { key }
 
@@ -293,7 +295,7 @@ public struct ChatMessage: Codable, Equatable, Identifiable, Sendable {
         key: String = UUID().uuidString, ts: Int64 = Skychat.nowMs(), from: String = Skychat.me, text: String = "",
         viaPair: Bool = false, file: ChatFile? = nil, reply: ReplyRef? = nil, forwarded: Bool = false,
         forwardFrom: String = "", wireId: String = "", status: String = "", tsNano: String = "",
-        readSent: Bool = false, request: Bool = false
+        readSent: Bool = false, request: Bool = false, notice: String = ""
     ) {
         self.key = key
         self.ts = ts
@@ -309,6 +311,7 @@ public struct ChatMessage: Codable, Equatable, Identifiable, Sendable {
         self.tsNano = tsNano
         self.readSent = readSent
         self.request = request
+        self.notice = notice
     }
 
     public init(from decoder: any Decoder) throws {
@@ -327,6 +330,7 @@ public struct ChatMessage: Codable, Equatable, Identifiable, Sendable {
         tsNano = try c.decodeIfPresent(String.self, forKey: .tsNano) ?? ""
         readSent = try c.decodeIfPresent(Bool.self, forKey: .readSent) ?? false
         request = try c.decodeIfPresent(Bool.self, forKey: .request) ?? false
+        notice = try c.decodeIfPresent(String.self, forKey: .notice) ?? ""
     }
 
     public var mine: Bool { from == Skychat.me }
