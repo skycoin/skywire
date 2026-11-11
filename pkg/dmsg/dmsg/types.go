@@ -348,6 +348,15 @@ func (resp StreamResponse) Verify(req StreamRequest) error {
 
 // verify checks the StreamResponse, and its signature when sig is set.
 func (resp StreamResponse) verify(req StreamRequest, sig bool) error {
+	if err := resp.verifyOrigin(req, sig); err != nil {
+		return err
+	}
+	return resp.refusal()
+}
+
+// verifyOrigin checks that the response answers req, and its signature when
+// sig is set.
+func (resp StreamResponse) verifyOrigin(req StreamRequest, sig bool) error {
 	if resp.ReqHash != req.raw.Hash() {
 		return ErrDialRespInvalidHash
 	}
@@ -356,17 +365,19 @@ func (resp StreamResponse) verify(req StreamRequest, sig bool) error {
 			return ErrDialRespInvalidSig.Wrap(err)
 		}
 	}
-
-	// Check whether response states that the request is accepted.
-	if !resp.Accepted {
-		ok, err := ErrorFromCode(resp.ErrCode)
-		if !ok {
-			err = ErrDialRespNotAccepted
-		}
-		return err
-	}
-
 	return nil
+}
+
+// refusal returns the error an unaccepted response carries, nil if accepted.
+func (resp StreamResponse) refusal() error {
+	if resp.Accepted {
+		return nil
+	}
+	ok, err := ErrorFromCode(resp.ErrCode)
+	if !ok {
+		err = ErrDialRespNotAccepted
+	}
+	return err
 }
 
 // SignBytes signs the provided bytes with the given secret key.

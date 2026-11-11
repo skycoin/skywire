@@ -304,8 +304,14 @@ func (ss *ServerSession) serveStream(log logging.FieldLogger, yStr io.ReadWriteC
 	relayed := req.SrcAddr.PK != ss.rPK
 	// Only the session's own dialer can check a refusal signed by this entity,
 	// and only if it asked. Anyone else reads EOF, as a relaying peer must.
+	// A stream the destination answered gets nothing more from this entity.
+	var answered bool
 	if !relayed && req.AcceptsServerRefusal {
-		defer func() { ss.writeRefusal(yStr, req.raw.Hash(), err) }()
+		defer func() {
+			if !answered {
+				ss.writeRefusal(yStr, req.raw.Hash(), err)
+			}
+		}()
 	}
 	// A request from this session's own key needs no signature check here: the
 	// session handshake authenticated it, and the destination checks it again.
@@ -406,24 +412,21 @@ func (ss *ServerSession) serveStream(log logging.FieldLogger, yStr io.ReadWriteC
 			ss.m.RecordStream(metrics.DeltaFailed)
 			return ErrReqNoNextSession
 		}
-		return ss.forwardViaPeer(log, yStr, req)
+		answered, err = ss.forwardViaPeer(log, yStr, req)
+		return err
 	}
 	if logging.TraceEnabled() {
 		logging.Trace(log, "Obtained next session.")
 	}
 
-	return ss.bridgeStream(log, yStr, ss2, req)
-}
-
-// bridgeStream forwards a request to a destination session and bridges the two streams.
-func (ss *ServerSession) bridgeStream(log logging.FieldLogger, yStr io.ReadWriteCloser, dst ServerSession, req StreamRequest) error {
-	_, err := ss.bridge(log, yStr, dst, req)
+	answered, err = ss.bridge(log, yStr, ss2, req)
 	return err
 }
 
-// bridge is bridgeStream that also reports whether dst accepted the request.
-// Before acceptance yStr is untouched and the caller may try another session;
-// after it, yStr belongs to the bridge.
+// bridge forwards a request to a destination session and bridges the two
+// streams. It reports whether the destination answered, by accepting or with a
+// signed refusal. Until then yStr is untouched and the caller may try another
+// session. After it, yStr carries that answer and is spent.
 func (ss *ServerSession) bridge(log logging.FieldLogger, yStr io.ReadWriteCloser, dst ServerSession, req StreamRequest) (forwarded bool, err error) {
 	// A bridge where either side is a peer session, or whose request arrived
 	// over a client session on another key's behalf, is a *relayed* stream —
@@ -442,7 +445,13 @@ func (ss *ServerSession) bridge(log logging.FieldLogger, yStr io.ReadWriteCloser
 	yStr2, resp, err := dst.forwardRequest(req)
 	if err != nil {
 		ss.m.RecordStream(metrics.DeltaFailed)
-		return false, err
+		if resp == nil {
+			return false, err
+		}
+		// The destination refused. Its signed answer goes back unchanged, for
+		// the dialer and any relaying peer on the way to check.
+		_ = ss.writeObject(yStr, resp) //nolint:errcheck,gosec
+		return true, err
 	}
 	if logging.TraceEnabled() {
 		logging.Trace(log, "Forwarded stream request.")
@@ -546,19 +555,20 @@ func (c *idleTimeoutConn) SetWriteDeadline(t time.Time) error {
 
 // forwardViaPeer tries to forward a stream request through peer server sessions.
 // This is only called for client-originated requests (not peer-originated, enforcing 1-hop max).
-func (ss *ServerSession) forwardViaPeer(log logging.FieldLogger, yStr io.ReadWriteCloser, req StreamRequest) error {
+// Like bridge, it reports whether the destination answered yStr.
+func (ss *ServerSession) forwardViaPeer(log logging.FieldLogger, yStr io.ReadWriteCloser, req StreamRequest) (bool, error) {
 	dst := req.DstAddr.PK
 	// Every peer said "not here" moments ago: answer at once. An offline
 	// hypervisor or signaling peer is redialed by every visor that names it,
 	// and each such request otherwise costs one stream per peer.
 	if ss.entity.peerMissed(dst) {
 		ss.m.RecordStream(metrics.DeltaFailed)
-		return ErrReqNoNextSession
+		return false, ErrReqNoNextSession
 	}
 	peers := ss.entity.forwardSessions(dst)
 	if len(peers) == 0 {
 		ss.m.RecordStream(metrics.DeltaFailed)
-		return ErrReqNoNextSession
+		return false, ErrReqNoNextSession
 	}
 
 	tried, missed := 0, 0
@@ -575,10 +585,10 @@ func (ss *ServerSession) forwardViaPeer(log logging.FieldLogger, yStr io.ReadWri
 
 		forwarded, err := ss.bridge(log, yStr, peer, req)
 		if forwarded {
-			// The peer carried it. Whatever ended the bridge, yStr is spent,
-			// so there is no next peer to try.
+			// The peer reached the destination. Whatever ended the bridge, yStr
+			// is spent, so there is no next peer to try.
 			ss.entity.clearPeerMiss(dst)
-			return err
+			return true, err
 		}
 		tried++
 		if isPeerMiss(err) {
@@ -594,7 +604,7 @@ func (ss *ServerSession) forwardViaPeer(log logging.FieldLogger, yStr io.ReadWri
 	}
 
 	ss.m.RecordStream(metrics.DeltaFailed)
-	return ErrReqNoNextSession
+	return false, ErrReqNoNextSession
 }
 
 // isPeerMiss reports whether a peer's failure to forward means the
@@ -679,12 +689,16 @@ func (ss *ServerSession) forwardRequest(req StreamRequest) (mStr io.ReadWriteClo
 	}
 	var resp StreamResponse
 	if resp, err = respObj.ObtainStreamResponse(); err != nil {
-		return mStr, respObj, err
+		return mStr, nil, err
 	}
 	// The response comes over the destination's own session, which its handshake
 	// authenticated, so only a response relayed by a peer needs the signature
 	// check here. The initiator checks it again either way.
-	if err = resp.verify(req, ss.rPK != req.DstAddr.PK); err != nil {
+	if err = resp.verifyOrigin(req, ss.rPK != req.DstAddr.PK); err != nil {
+		return mStr, nil, err
+	}
+	// Only a refusal returns a response beside its error, for bridge to pass on.
+	if err = resp.refusal(); err != nil {
 		return mStr, respObj, err
 	}
 	return mStr, respObj, nil
