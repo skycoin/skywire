@@ -28,11 +28,27 @@ type Node interface {
 	NewSeed(entropy int) (string, error)
 	VerifySeed(seed string) (bool, error)
 	CreateWallet(api.CreateWalletOptions) (*api.WalletResponse, error)
+	CreateWalletTemp(api.CreateWalletOptions) (*api.WalletResponse, error)
+	RecoverWallet(api.WalletRecoverRequest) (*api.WalletResponse, error)
 	NewWalletAddress(id, password string, options ...wallet.Option) ([]string, error)
+	NewWalletAccount(id, password, name string) (*api.WalletResponse, error)
+	RemovePendingTransaction(txid string) error
+	ScanWalletAddresses(id string, n int, password string) ([]string, error)
+	UpdateWallet(id, label string) error
+	EncryptWallet(id, password string) (*api.WalletResponse, error)
+	DecryptWallet(id, password string) (*api.WalletResponse, error)
 	WalletCreateTransaction(api.WalletCreateTransactionRequest) (*api.CreateTransactionResponse, error)
 	InjectEncodedTransaction(rawtx string) (string, error)
+	WalletFolderName() (*api.WalletFolder, error)
+	WalletSeed(id, password string) (*api.WalletSeedResponse, error)
+	OutputsForAddresses(addrs []string) (*readable.UnspentOutputsSummary, error)
+	PendingTransactionsVerbose() ([]readable.UnconfirmedTransactionVerbose, error)
+	CoinSupply() (*api.CoinSupply, error)
 	Balance(addrs []string) (*api.BalanceResponse, error)
 	CreateTransaction(api.CreateTransactionRequest) (*api.CreateTransactionResponse, error)
+	VerifyTransaction(api.VerifyTransactionRequest) (*api.VerifyTransactionResponse, error)
+	WalletSignTransaction(api.WalletSignTransactionRequest) (*api.CreateTransactionResponse, error)
+	OutputsForHashes(hashes []string) (*readable.UnspentOutputsSummary, error)
 }
 
 // walletAPIDisabled reports whether err is the node refusing the WALLET API
@@ -85,6 +101,7 @@ type WalletRow struct {
 	Label     string
 	Type      string
 	Encrypted bool
+	Temp      bool
 	Addresses int
 	Balance   Amount
 	Err       string
@@ -113,6 +130,7 @@ func LoadWallets(n Node) Wallets {
 			Label:     w.Meta.Label,
 			Type:      w.Meta.Type,
 			Encrypted: w.Meta.Encrypted,
+			Temp:      w.Meta.Temp,
 			Addresses: len(w.Entries),
 			Href:      walletURL(w.Meta.Filename),
 		}
@@ -150,13 +168,21 @@ type AddressRow struct {
 
 // Wallet is the page of one wallet.
 type Wallet struct {
-	ID       string
-	Meta     readable.WalletMeta
-	Balance  Amount
-	Addrs    []AddressRow
-	Pager    Pager
-	Disabled bool
-	Err      string
+	ID      string
+	Meta    readable.WalletMeta
+	Balance Amount
+	Addrs   []AddressRow
+	Pager   Pager
+	// Exposed counts the addresses that hold coins and have spent.
+	Exposed int
+	Notice  Notice
+	// Accounts are a bip44 wallet's accounts after the first, which the
+	// address list does not show.
+	Accounts []AccountView
+	// AccountIDs are every account index, for the new address form.
+	AccountIDs []uint32
+	Disabled   bool
+	Err        string
 }
 
 // LoadWallet reads wallet id, its balance and the page of addresses q asks for.
@@ -174,17 +200,66 @@ func LoadWallet(n Node, id string, q ListQuery) Wallet {
 		b = &api.BalanceResponse{}
 	}
 	out.Balance = amountOf(b.BalancePair)
-	rows, err := addressRows(n, w.Entries, b, q, func(a string) string { return sendURL(id, a) })
+	rows, exposed, err := addressRows(n, w.Entries, b, q, func(a string) string { return sendURL(id, a) })
+	out.Exposed = exposed
 	if err != nil {
 		out.Err = err.Error()
 	}
 	out.Addrs, out.Pager = Paginate(rows, q, ListPageSize)
+	out.Accounts, out.AccountIDs = loadAccounts(n, w.Accounts)
 	return out
 }
 
+// AccountView is one bip44 account with its addresses and balance.
+type AccountView struct {
+	Index   uint32
+	Name    string
+	Balance Amount
+	Addrs   []AddressRow
+	Err     string
+}
+
+func loadAccounts(n Node, accts []readable.WalletAccount) ([]AccountView, []uint32) {
+	var out []AccountView
+	var ids []uint32
+	for _, a := range accts {
+		ids = append(ids, a.Index)
+		if a.Index == 0 {
+			continue
+		}
+		v := AccountView{Index: a.Index, Name: a.Name}
+		var addrs []string
+		for _, e := range append(append([]readable.WalletEntry{}, a.ExternalEntries...), a.ChangeEntries...) {
+			addrs = append(addrs, e.Address)
+		}
+		b := &api.BalanceResponse{}
+		if len(addrs) > 0 {
+			var err error
+			if b, err = n.Balance(addrs); err != nil {
+				v.Err, b = err.Error(), &api.BalanceResponse{}
+			}
+		}
+		v.Balance = amountOf(b.BalancePair)
+		for i, list := range [][]readable.WalletEntry{a.ExternalEntries, a.ChangeEntries} {
+			chain := "external"
+			if i == 1 {
+				chain = "change"
+			}
+			for j, e := range list {
+				ab := b.Addresses[e.Address]
+				v.Addrs = append(v.Addrs, AddressRow{Address: e.Address, Chain: chain, Index: strconv.Itoa(j), Coins: coins(ab.Confirmed.Coins), Hours: utoa(ab.Confirmed.Hours), Empty: ab.Confirmed.Coins == 0})
+			}
+		}
+		out = append(out, v)
+	}
+	return out, ids
+}
+
 // addressRows are the rows of entries that q keeps, with their balances in
-// b. move is the page that moves the coins off an exposed address.
-func addressRows(n Node, entries []readable.WalletEntry, b *api.BalanceResponse, q ListQuery, move func(string) string) ([]AddressRow, error) {
+// b, and how many of all entries are exposed. move is the page that moves
+// the coins off an exposed address.
+func addressRows(n Node, entries []readable.WalletEntry, b *api.BalanceResponse, q ListQuery, move func(string) string) ([]AddressRow, int, error) {
+	exposed := 0
 	all := make([]string, 0, len(entries))
 	for _, e := range entries {
 		all = append(all, e.Address)
@@ -209,129 +284,13 @@ func addressRows(n Node, entries []readable.WalletEntry, b *api.BalanceResponse,
 		r.Exposed = use[e.Address].Spent && !r.Empty
 		if r.Exposed {
 			r.MoveHref = move(e.Address)
+			exposed++
 		}
 		if q.Match(r.Address, r.Chain) && !(q.Hide && r.Empty) {
 			rows = append(rows, r)
 		}
 	}
-	return rows, err
-}
-
-// TxnRow is one transaction of a wallet, from the wallet's side.
-type TxnRow struct {
-	Txid      string
-	Time      string
-	Confirmed bool
-	Height    uint64
-	// Kind is "in", "out" or "self", a transfer between the wallet's own
-	// addresses.
-	Kind  string
-	Coins string
-	Hours string
-}
-
-// Txns is a page of a wallet's transaction history.
-type Txns struct {
-	ID    string
-	Rows  []TxnRow
-	Pager Pager
-	Err   string
-	// URL is where the pager asks for another page. Post sends the request
-	// as a POST carrying the browser wallet's addresses.
-	URL  string
-	Post bool
-}
-
-// LoadTxns reads the history of wallet id, newest first.
-func LoadTxns(n Node, id string, q ListQuery) Txns {
-	w, err := n.Wallet(id)
-	if err != nil {
-		return Txns{ID: id, Err: err.Error(), URL: walletPart("txns", id)}
-	}
-	addrs := make([]string, 0, len(w.Entries))
-	for _, e := range w.Entries {
-		addrs = append(addrs, e.Address)
-	}
-	out := historyOf(n, addrs, q)
-	out.ID, out.URL = id, walletPart("txns", id)
-	return out
-}
-
-// historyOf is a page of the history of the wallet that owns addrs.
-func historyOf(n Node, addrs []string, q ListQuery) Txns {
-	var out Txns
-	own := make(map[string]bool, len(addrs))
-	for _, a := range addrs {
-		own[a] = true
-	}
-	var txns []readable.TransactionWithStatusVerbose
-	if len(addrs) > 0 {
-		var err error
-		if txns, err = n.TransactionsVerbose(addrs); err != nil {
-			out.Err = err.Error()
-			return out
-		}
-	}
-	sort.SliceStable(txns, func(i, j int) bool {
-		a, b := txns[i], txns[j]
-		if a.Status.Confirmed != b.Status.Confirmed {
-			return !a.Status.Confirmed
-		}
-		return a.Time > b.Time
-	})
-	rows := make([]TxnRow, 0, len(txns))
-	for _, t := range txns {
-		r := txnRow(t, own)
-		if q.Match(r.Txid) {
-			rows = append(rows, r)
-		}
-	}
-	out.Rows, out.Pager = Paginate(rows, q, TxnPageSize)
-	return out
-}
-
-// TxnPageSize is how many transactions a history page shows.
-const TxnPageSize = 20
-
-func txnRow(t readable.TransactionWithStatusVerbose, own map[string]bool) TxnRow {
-	var in, out, inH, outH int64
-	foreign := false
-	for _, i := range t.Transaction.In {
-		if own[i.Address] {
-			c, _ := droplet.FromString(i.Coins) //nolint:errcheck
-			in += int64(c)                      //nolint:gosec
-			inH += int64(i.CalculatedHours)     //nolint:gosec
-		}
-	}
-	for _, o := range t.Transaction.Out {
-		if own[o.Address] {
-			c, _ := droplet.FromString(o.Coins) //nolint:errcheck
-			out += int64(c)                     //nolint:gosec
-			outH += int64(o.Hours)              //nolint:gosec
-		} else {
-			foreign = true
-		}
-	}
-	r := TxnRow{
-		Txid:      t.Transaction.Hash,
-		Time:      unixTime(t.Time),
-		Confirmed: t.Status.Confirmed,
-		Height:    t.Status.Height,
-	}
-	net, netH := out-in, outH-inH
-	switch {
-	case !foreign && in > 0:
-		r.Kind, net, netH = "self", out, outH
-	case net < 0:
-		r.Kind, net, netH = "out", -net, -netH
-	default:
-		r.Kind = "in"
-	}
-	if netH < 0 {
-		netH = 0
-	}
-	r.Coins, r.Hours = coins(uint64(net)), strconv.FormatInt(netH, 10) //nolint:gosec
-	return r
+	return rows, exposed, err
 }
 
 // Peer is one connection of the node.
@@ -341,6 +300,8 @@ type Peer struct {
 	Height   uint64
 	Agent    string
 	Trusted  bool
+	Sent     string
+	Received string
 }
 
 // Status is the node and blockchain status page.
@@ -360,6 +321,7 @@ type Status struct {
 	Outgoing    int
 	Uptime      string
 	WalletAPI   bool
+	Supply      Supply
 	Peers       []Peer
 	Err         string
 }
@@ -394,6 +356,11 @@ func LoadStatus(n Node) Status {
 		s.Percent = strconv.FormatFloat(pct, 'f', 1, 64)
 	}
 
+	if cs, err := n.CoinSupply(); err == nil {
+		s.Supply = Supply{Current: cs.CurrentSupply, Total: cs.TotalSupply}
+	}
+
+	now := time.Now()
 	if c, err := n.NetworkConnections(nil); err != nil {
 		s.Err = err.Error()
 	} else {
@@ -404,6 +371,8 @@ func LoadStatus(n Node) Status {
 				Height:   x.Height,
 				Agent:    agent(x.UserAgent.Coin, x.UserAgent.Version),
 				Trusted:  x.IsTrustedPeer,
+				Sent:     ago(now, x.LastSent),
+				Received: ago(now, x.LastReceived),
 			})
 		}
 		sort.Slice(s.Peers, func(i, j int) bool { return s.Peers[i].Addr < s.Peers[j].Addr })
