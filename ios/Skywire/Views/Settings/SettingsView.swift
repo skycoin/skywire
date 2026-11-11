@@ -99,6 +99,24 @@ struct ConfigFile: FileDocument {
     }
 }
 
+/// A written backup for the save panel, read from its temporary file.
+struct BackupFile: FileDocument {
+    static var readableContentTypes: [UTType] { [.zip] }
+    let url: URL
+
+    init(url: URL) {
+        self.url = url
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        throw CocoaError(.fileReadUnsupportedScheme)
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        try FileWrapper(url: url, options: .immediate)
+    }
+}
+
 /// A card's title and hint, Android's common pattern: titleMedium, 4 pt, bodySmall.
 private struct CardHeader: View {
     let title: LocalizedStringKey
@@ -231,9 +249,15 @@ private struct IdentityCard: View {
         }
     }
 
-    /// Android's DestructiveDialog: the body, an optional extra, the confirm in the error colour.
     private func destructive(title: Text, body: String, extra: String? = nil, confirm: LocalizedStringKey, action: @escaping () -> Void) {
-        dialogs.showCustom {
+        dialogs.destructive(title: title, body: body, extra: extra, confirm: confirm, action: action)
+    }
+}
+
+private extension SkyDialogs {
+    /// Android's DestructiveDialog: the body, an optional extra, the confirm in the error colour.
+    func destructive(title: Text, body: String, extra: String? = nil, confirm: LocalizedStringKey, action: @escaping () -> Void) {
+        showCustom {
             DialogFrame(title: title, confirm: confirm, destructive: true, onConfirm: action) {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(verbatim: body)
@@ -274,15 +298,29 @@ private struct ConfigCard: View {
     @ObservedObject var model: SettingsModel
     let export: () -> Void
     @EnvironmentObject private var app: AppModel
+    @EnvironmentObject private var dialogs: SkyDialogs
+    @State private var backupFile: BackupFile?
+    @State private var restoring = false
 
     var body: some View {
         SectionCard {
             CardHeader(title: L10n.key("settings_config"), hint: L10n.key("settings_config_hint"))
             Button(action: export) { Text("settings_export") }
                 .buttonStyle(.tonal)
-                .disabled(app.publicKey == nil || model.identityBusy)
+                .disabled(app.publicKey == nil || model.identityBusy || model.backupBusy)
                 .padding(.top, 12)
                 .accessibilityIdentifier("settings-export")
+            // The key alone brings back the identity, not the channels and groups it runs.
+            Button { askBackup() } label: { Text("settings_backup") }
+                .buttonStyle(.tonal)
+                .disabled(app.publicKey == nil || model.identityBusy || model.backupBusy)
+                .padding(.top, 8)
+                .accessibilityIdentifier("settings-backup")
+            Button { restoring = true } label: { Text("settings_restore") }
+                .buttonStyle(.tonal)
+                .disabled(model.identityBusy || model.backupBusy)
+                .padding(.top, 8)
+                .accessibilityIdentifier("settings-restore")
             SkyDivider().padding(.vertical, 16)
             SwitchRow(title: L10n.key("settings_encrypt"), hint: L10n.key("settings_encrypt_hint"), titleStyle: .titleSmall,
                       isOn: Binding(get: { settings.configEncrypted }, set: { setEncrypted($0) }),
@@ -292,6 +330,50 @@ private struct ConfigCard: View {
                 Note(text: L10n.key("settings_encrypt_warning_ios")).padding(.top, 10)
             }
         }
+        .fileExporter(isPresented: Binding(get: { backupFile != nil }, set: { if !$0 { discardBackup() } }),
+                      document: backupFile, contentType: .zip, defaultFilename: Backup.fileName) { result in
+            switch result {
+            case .success: model.notice = L10n.text("settings_backup_done")
+            case .failure(let error as CocoaError) where error.code == .userCancelled: break
+            case .failure(let error): model.notice = error.localizedDescription
+            }
+            discardBackup()
+        }
+        .fileImporter(isPresented: $restoring, allowedContentTypes: [.zip]) { result in
+            guard case let .success(url) = result, let pk = model.backupPublicKey(url) else { return }
+            askRestore(url, pk)
+        }
+    }
+
+    /// The warning, then the device-owner check; the zip is written with the core stopped, then saved.
+    private func askBackup() {
+        dialogs.showCustom {
+            DialogFrame(title: Text("settings_backup_title"), confirm: L10n.key("settings_continue"), onConfirm: {
+                Task {
+                    guard await WalletAuth.confirm(reason: L10n.text("settings_backup_prompt")) else { return }
+                    if let url = await model.backup(app) { backupFile = BackupFile(url: url) }
+                }
+            }) {
+                Text("settings_backup_warning").skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant)
+            }
+        }
+    }
+
+    /// The written zip holds the secret key in the clear: gone once the save panel is done with it.
+    private func discardBackup() {
+        if let url = backupFile?.url { try? FileManager.default.removeItem(at: url) }
+        backupFile = nil
+    }
+
+    /// Restoring ends the current identity, so with one it is asked twice, as Replace is.
+    private func askRestore(_ url: URL, _ pk: String) {
+        let final = {
+            dialogs.destructive(title: Text("settings_restore"), body: L10n.format("settings_restore_extra", Format.shortPK(pk)),
+                                confirm: L10n.key("settings_restore")) { model.restoreBackup(url, app) }
+        }
+        guard let current = app.publicKey else { return final() }
+        dialogs.destructive(title: Text("settings_restore"), body: L10n.format("settings_identity_loss", Format.shortPK(current)),
+                            extra: L10n.format("settings_restore_extra", Format.shortPK(pk)), confirm: L10n.key("settings_continue"), action: final)
     }
 
     /// On needs no ceremony. Off puts the key back on disk in the clear, so it is confirmed.

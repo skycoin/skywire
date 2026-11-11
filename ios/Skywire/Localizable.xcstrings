@@ -26785,6 +26785,180 @@
         }
       }
     },
+    "settings_backup" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back up with groups"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copia con grupos"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sauvegarder avec les groupes"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连同群组备份"
+          }
+        }
+      }
+    },
+    "settings_backup_done" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Backup saved."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copia guardada."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sauvegarde enregistrée."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "备份已保存。"
+          }
+        }
+      }
+    },
+    "settings_backup_prompt" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back up Skywire"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copia de seguridad de Skywire"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sauvegarder Skywire"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "备份 Skywire"
+          }
+        }
+      }
+    },
+    "settings_backup_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back up with groups?"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Hacer una copia con grupos?"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sauvegarder avec les groupes ?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连同群组一起备份？"
+          }
+        }
+      }
+    },
+    "settings_backup_unreadable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This file is not a Skywire backup."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este archivo no es una copia de Skywire."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce fichier n’est pas une sauvegarde Skywire."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此文件不是 Skywire 备份。"
+          }
+        }
+      }
+    },
+    "settings_backup_warning" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The backup holds this visor’s secret key in plain text, with the channels and groups it created or joined. Restoring it on a new phone brings them back. Anyone who reads it can run as this visor, so keep it where only you can reach it.\n\nSkywire disconnects while it copies, then reconnects."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La copia contiene la clave secreta de este visor en texto plano, junto con los canales y grupos que creó o a los que se unió. Al restaurarla en un teléfono nuevo vuelven con ella. Cualquiera que la lea puede funcionar como este visor, así que guárdala donde solo tú tengas acceso.\n\nSkywire se desconecta mientras copia y después vuelve a conectarse."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La sauvegarde contient la clé secrète de ce visor en clair, avec les chaînes et groupes qu’il a créés ou rejoints. La restaurer sur un nouveau téléphone les ramène. Toute personne qui la lit peut fonctionner comme ce visor, gardez-la donc là où vous seul y avez accès.\n\nSkywire se déconnecte pendant la copie, puis se reconnecte."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "备份以明文包含本节点的私钥，以及它创建或加入的频道和群组。在新手机上恢复后，它们会一起回来。任何人读到它，都能以本节点的身份运行，请存放在只有你能访问的地方。\n\n复制期间 Skywire 会断开连接，完成后重新连接。"
+          }
+        }
+      }
+    },
     "settings_config" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -28782,6 +28956,93 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "要更换本节点的身份吗？"
+          }
+        }
+      }
+    },
+    "settings_restore" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restore a backup"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restaurar una copia"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restaurer une sauvegarde"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "恢复备份"
+          }
+        }
+      }
+    },
+    "settings_restore_done" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Backup restored."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copia restaurada."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sauvegarde restaurée."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "备份已恢复。"
+          }
+        }
+      }
+    },
+    "settings_restore_extra" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The backup is for %1$@. Its channels and groups come back with it."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La copia es de %1$@. Sus canales y grupos vuelven con ella."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La sauvegarde est celle de %1$@. Ses chaînes et groupes reviennent avec elle."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此备份属于 %1$@。其频道和群组会一起恢复。"
           }
         }
       }

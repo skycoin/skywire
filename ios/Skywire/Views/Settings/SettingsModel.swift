@@ -14,6 +14,8 @@ final class SettingsModel: ObservableObject {
     @Published var notice: String?
     /// An identity change is running: the core restarts around it.
     @Published private(set) var identityBusy = false
+    /// A backup is being written: the core stops while it copies.
+    @Published private(set) var backupBusy = false
     /// The visor's reward address, as CoreClient.rewardAddress reads it; empty while the core is down.
     @Published private(set) var rewardAddress = ""
 
@@ -194,6 +196,42 @@ final class SettingsModel: ObservableObject {
             } catch {
                 notice = error.localizedDescription
             }
+        }
+    }
+
+    // MARK: Backup (Android: SettingsViewModel backup, backupPublicKey, restoreBackup)
+
+    /// The config and the group state as a zip for the save panel, the core stopped while it copies.
+    func backup(_ app: AppModel) async -> URL? {
+        let paths = app.paths, vault = app.vault
+        backupBusy = true
+        defer { backupBusy = false }
+        do {
+            return try await app.withCoreStopped { try Backup.write(config: try vault.readText(), paths: paths) }
+        } catch {
+            notice = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// The public key the backup at `url` restores, for the confirmation, or nil when it is none.
+    func backupPublicKey(_ url: URL) -> String? {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard let sk = Backup.secretKey(in: url), let pk = try? Identity.publicKey(of: sk) else {
+            notice = L10n.text("settings_backup_unreadable")
+            return nil
+        }
+        return pk
+    }
+
+    /// Installs the backup at `url`: its identity, then its channels and groups.
+    func restoreBackup(_ url: URL, _ app: AppModel) {
+        let paths = app.paths, vault = app.vault
+        changeIdentity(app, done: L10n.text("settings_restore_done")) {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            _ = try await Backup.restore(from: url, paths: paths, vault: vault)
         }
     }
 

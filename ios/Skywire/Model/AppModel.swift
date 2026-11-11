@@ -145,6 +145,23 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Runs `work` with the core stopped, as a backup needs, then starts it again if it ran.
+    func withCoreStopped<T: Sendable>(_ work: @escaping @Sendable () async throws -> T) async throws -> T {
+        let wasRunning = coreState != .stopped && coreState != .failed
+        busy = true
+        defer { busy = false }
+        if wasRunning { try await host.stop() }
+        let result: T
+        do {
+            result = try await work()
+        } catch {
+            if wasRunning { try? await host.start() }
+            throw error
+        }
+        if wasRunning { try await host.start() }
+        return result
+    }
+
     /// Seals the config when the user asked for it and the core is down.
     private func sealIfAsked(coreStopped: Bool = false) {
         guard settings.configEncrypted, coreStopped || coreState == .stopped || coreState == .failed else { return }
