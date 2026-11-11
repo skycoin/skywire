@@ -149,7 +149,7 @@ func buildRouter() http.Handler {
 			w.WriteHeader(http.StatusOK)
 			base := strings.TrimRight(canonicalDomain, "/")
 			if base == "" {
-				base = "https://reward.theskywirenetwork.net"
+				base = "https://haltingstate.net"
 			}
 			urls := []struct{ loc, priority string }{
 				{"/", "1.0"},
@@ -1000,7 +1000,7 @@ func buildRouter() http.Handler {
 			flush(w)
 		})
 
-		// dmsgpost dmsg://036a70e6956061778e1883e928c1236189db14dfd446df23d83e45c321b330c91f:80/reward -d $(skycoin-cli createRawTransaction /home/user/.skycoin/wallets/2023_06_29.wlt --csv <(curl --silent -L https://theskywirenetwork.net/skycoin-rewards/csv) -a 24MGsKPDo3EJX4uF1h4CHcgmNNHmtGaLR5f) -s <secret-key-of-reward-whitelisted-pk>
+		// dmsgpost dmsg://036a70e6956061778e1883e928c1236189db14dfd446df23d83e45c321b330c91f:80/reward -d $(skycoin-cli createRawTransaction /home/user/.skycoin/wallets/2023_06_29.wlt --csv <(curl --silent -L https://haltingstate.net/skycoin-rewards/csv) -a 24MGsKPDo3EJX4uF1h4CHcgmNNHmtGaLR5f) -s <secret-key-of-reward-whitelisted-pk>
 		handleAuth("POST /reward", func(w http.ResponseWriter, r *http.Request) {
 			//override the behavior of `public fallback` for this endpoint
 			if len(wlkeys) == 0 {
