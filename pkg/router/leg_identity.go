@@ -142,3 +142,15 @@ func (rg *RouteGroup) compactMuxLocked(indices ...int) {
 		0, len(rg.legs), tp, nil)
 	go rg.sendLegStateByID(id, false)
 }
+
+// forgetLeg drops what the group keeps by transport ID for a leg that has left
+// it, so a later leg on the same transport starts clean. Caller may hold rg.mu.
+func (rg *RouteGroup) forgetLeg(id uuid.UUID) {
+	rg.forgetPeerPark(id)
+	rg.adaptiveParkMu.Lock()
+	delete(rg.adaptiveParks, id)
+	rg.adaptiveParkMu.Unlock()
+	if rg.mux != nil {
+		rg.mux.forgetLeg(id)
+	}
+}

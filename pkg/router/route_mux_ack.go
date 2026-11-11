@@ -393,3 +393,15 @@ func (m *routeMux) retxSetTp(seq uint32, tpID uuid.UUID) {
 	}
 	m.retxBuf.SetTpID(seq, tpID)
 }
+
+// forgetLeg drops the per-transport delay and latency estimates of a leg that
+// has left the group.
+func (m *routeMux) forgetLeg(tpID uuid.UUID) {
+	m.ackDelayByTpMu.Lock()
+	delete(m.ackDelayByTp, tpID)
+	delete(m.sbdFoldNano, tpID)
+	m.ackDelayByTpMu.Unlock()
+	m.legE2EMu.Lock()
+	delete(m.legE2EByTp, tpID)
+	m.legE2EMu.Unlock()
+}
