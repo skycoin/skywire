@@ -33,21 +33,28 @@ private struct StatusLine: View {
     @EnvironmentObject private var app: AppModel
 
     var body: some View {
-        let (label, color): (LocalizedStringKey, Color) = switch app.coreState {
-        case .running where app.apiUp: (L10n.key("state_connected"), .skySuccess)
-        case .starting, .running: (L10n.key("state_starting"), .skyWarning)
-        case .stopping: (L10n.key("state_stopping"), .skyOnSurfaceVariant)
-        case .failed: (L10n.key("home_error_start"), .skyError)
-        case .stopped: (L10n.key("state_disconnected"), .skyOnSurfaceVariant)
-        }
+        let (label, color) = status
         HStack(spacing: 8) {
             StatusDot(color: color)
-            Text(label).skyText(.titleMedium).foregroundStyle(Color.skyOnBackground)
+            label.skyText(.titleMedium).foregroundStyle(Color.skyOnBackground)
         }
         .accessibilityElement(children: .combine)
         // For UI tests: the state in words no translation changes.
         .accessibilityIdentifier("core-state")
-        .accessibilityValue(Text(verbatim: app.connected ? "connected" : app.coreState.description))
+        .accessibilityValue(Text(verbatim: app.connected ? "connected" : app.restartAttempt != nil ? "restarting" : app.coreState.description))
+    }
+
+    private var status: (Text, Color) {
+        if let attempt = app.restartAttempt {
+            return (Text(verbatim: L10n.format("state_restarting", attempt)), .skyWarning)
+        }
+        return switch app.coreState {
+        case .running where app.apiUp: (Text(L10n.key("state_connected")), .skySuccess)
+        case .starting, .running: (Text(L10n.key("state_starting")), .skyWarning)
+        case .stopping: (Text(L10n.key("state_stopping")), .skyOnSurfaceVariant)
+        case .failed: (Text(L10n.key("home_error_start")), .skyError)
+        case .stopped: (Text(L10n.key("state_disconnected")), .skyOnSurfaceVariant)
+        }
     }
 }
 
@@ -58,8 +65,9 @@ private struct ConnectButton: View {
 
     var body: some View {
         let state = app.coreState
-        // A start can take a minute on a slow network: Disconnect aborts it (Android's Running-not-up).
-        let tonal = state == .starting || state == .running
+        // A start can take a minute on a slow network: Disconnect aborts it (Android's Running-not-up),
+        // and it stops a failed core that waits to start again.
+        let tonal = state == .starting || state == .running || app.restartAttempt != nil
         let busy = state == .stopping
         ZStack {
             if app.connecting {
@@ -111,7 +119,9 @@ private struct StatusCaption: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if let error = app.lastError ?? (app.coreState == .failed ? "" : nil) {
+            if app.restartAttempt != nil {
+                startingHint
+            } else if let error = app.lastError ?? (app.coreState == .failed ? "" : nil) {
                 if !error.isEmpty {
                     Text(verbatim: error).skyText(.bodySmall).foregroundStyle(Color.skyError)
                 }

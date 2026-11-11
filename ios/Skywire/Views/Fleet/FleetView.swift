@@ -39,7 +39,7 @@ struct FleetView: View {
                         }
                     } else if !app.connected {
                         SectionCard {
-                            Text(app.coreState == .stopped || app.coreState == .failed ? L10n.key("fleet_core_offline") : L10n.key("fleet_core_starting"))
+                            Text(app.coreState == .stopped || (app.coreState == .failed && app.restartAttempt == nil) ? L10n.key("fleet_core_offline") : L10n.key("fleet_core_starting"))
                                 .skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant)
                         }
                     } else {

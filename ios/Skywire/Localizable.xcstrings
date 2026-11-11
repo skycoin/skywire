@@ -30555,6 +30555,35 @@
         }
       }
     },
+    "state_restarting" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restarting (attempt %1$lld)…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reiniciando (intento %1$lld)…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Redémarrage (tentative %1$lld)…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在重启（第 %1$lld 次尝试）…"
+          }
+        }
+      }
+    },
     "state_starting" : {
       "extractionState" : "manual",
       "localizations" : {

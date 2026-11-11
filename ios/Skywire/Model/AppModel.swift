@@ -22,11 +22,14 @@ final class AppModel: ObservableObject {
     @Published private(set) var publicKey: String?
     /// The process's phys_footprint (Footprint), refreshed once a minute.
     @Published private(set) var footprint: UInt64?
+    /// The next start's number while a failed core waits to start again (Android: CoreState.Restarting).
+    @Published private(set) var restartAttempt: Int?
 
     /// The core runs and its API answers.
     var connected: Bool { coreState == .running && apiUp }
-    /// On the way up: the core is starting, or running with its API not yet answering.
-    var connecting: Bool { coreState == .starting || (coreState == .running && !apiUp) }
+    /// On the way up: the core is starting, running with its API not yet answering, or failed and
+    /// waiting to start again.
+    var connecting: Bool { coreState == .starting || (coreState == .running && !apiUp) || restartAttempt != nil }
 
     let settings: AppSettings
     let client: CoreClient
@@ -43,6 +46,8 @@ final class AppModel: ObservableObject {
     /// The account reset is tried once per process, as on Android: a second
     /// rejection means something else is wrong, and a loop would hide it.
     private var accountResetTried = false
+    private var restarts = CoreRestarts()
+    private var restartWait: Task<Void, Never>?
 
     init(host: any CoreHost, client: CoreClient, settings: AppSettings, log: CoreLog, paths: CorePaths, vault: ConfigVault) {
         self.host = host
@@ -115,11 +120,14 @@ final class AppModel: ObservableObject {
 
     func connect() {
         settings.wantsConnected = true
+        cancelRestart()
+        restarts.connected()
         perform { [host] in try await host.start() }
     }
 
     func disconnect() {
         settings.wantsConnected = false
+        cancelRestart()
         perform { [host] in try await host.stop() }
         sealAfterStop = true
     }
@@ -254,6 +262,7 @@ final class AppModel: ObservableObject {
     private func coreStateChanged(_ state: CoreState) {
         let wasRunning = coreState == .running
         coreState = state
+        if state == .failed { scheduleRestart() }
         if state != .running {
             apiUp = false
             network.stop()
@@ -261,6 +270,43 @@ final class AppModel: ObservableObject {
             publicKey = readPublicKey()
             Task { await waitForAPI() }
         }
+    }
+
+    /// A core that failed while the user wants it connected starts again after a wait, as
+    /// Android's service starts a visor that exited.
+    private func scheduleRestart() {
+        guard restartWait == nil, settings.wantsConnected else { return }
+        let wait = restarts.failed()
+        restartAttempt = restarts.next
+        lifecycleLog.notice("core failed; start \(self.restarts.next, privacy: .public) in \(String(describing: wait), privacy: .public)")
+        restartWait = Task { [weak self] in
+            try? await Task.sleep(for: wait)
+            guard !Task.isCancelled, let self else { return }
+            self.restartWait = nil
+            self.restartAttempt = nil
+            guard self.settings.wantsConnected, self.coreState == .failed else { return }
+            await self.restartFailedCore()
+        }
+    }
+
+    private func restartFailedCore() async {
+        restarts.starting()
+        busy = true
+        lastError = nil
+        defer { busy = false }
+        do {
+            try await host.start()
+        } catch {
+            lastError = error.localizedDescription
+            // A config that cannot be written is not tried again, as on Android: only the core's failure is.
+            if error is CoreError { scheduleRestart() }
+        }
+    }
+
+    private func cancelRestart() {
+        restartWait?.cancel()
+        restartWait = nil
+        restartAttempt = nil
     }
 
     /// Pings until the API answers (a start returns once it is up, but the

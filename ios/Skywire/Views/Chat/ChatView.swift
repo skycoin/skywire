@@ -159,12 +159,13 @@ private struct ChatStatus: View {
     let retry: () -> Void
 
     private var connecting: Bool {
-        conn.error == nil && (conn.starting || app.coreState == .starting || app.coreState == .running)
+        conn.error == nil && (conn.starting || app.coreState == .starting || app.coreState == .running || app.restartAttempt != nil)
     }
 
     private var message: String {
         if let error = conn.error { return error }
         switch app.coreState {
+        case .failed where app.restartAttempt != nil: return L10n.text("chat_core_starting")
         case .failed: return app.lastError ?? L10n.text("home_error_start")
         case .running where app.apiUp: return L10n.text("chat_starting")
         case .running, .starting: return L10n.text("chat_core_starting")
