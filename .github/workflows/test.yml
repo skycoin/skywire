@@ -132,8 +132,43 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: 'stable'
-          cache: true
-          cache-dependency-path: go.sum
+          cache: false
+
+      - name: Locate Go build cache
+        id: gocache
+        run: echo "dir=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Go build cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.gocache.outputs.dir }}
+          key: ${{ runner.os }}-e2e-gobuild-${{ hashFiles('**/go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-e2e-gobuild-${{ hashFiles('**/go.sum') }}-
+            ${{ runner.os }}-e2e-gobuild-
+
+      # Compiled here, where the build cache is, and not in the image build
+      # or the test container, which both start from nothing on every run.
+      - name: Build the visor and the test binary
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          mkdir -p _e2e
+          go build -mod=vendor -ldflags="-w -s" -o _e2e/skywire .
+          go test -mod=vendor -c -o _e2e/integration.test ./internal/integration
+          echo "E2E_PREBUILT=_e2e/skywire" >> "$GITHUB_ENV"
+          echo "E2E_TEST_BIN=_e2e/integration.test" >> "$GITHUB_ENV"
+
+      - name: Drop cache entries this run did not use
+        if: github.event_name == 'push'
+        run: find "$(go env GOCACHE)" -type f -mmin +120 -delete
+
+      - name: Save Go build cache
+        if: github.event_name == 'push'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.gocache.outputs.dir }}
+          key: ${{ runner.os }}-e2e-gobuild-${{ hashFiles('**/go.sum') }}-${{ github.sha }}
 
       - name: Setup SSH Key, Build and Run E2E
         shell: bash

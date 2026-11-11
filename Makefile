@@ -888,9 +888,11 @@ e2e-logs:
 	bash -c "docker compose logs --tail=all --follow"
 
 e2e-test:  ## E2E. Run e2e-tests suite in Docker. Prepare e2e environment with `make e2e-build && make e2e-run`
-	DOCKER_TAG=e2e docker compose -f ${COMPOSE_FILE} run --rm \
+	@# E2E_TEST_BIN names a compiled internal/integration test binary inside
+	@# the repository to run in place of compiling the suite in the container.
+	DOCKER_TAG=e2e docker compose -f ${COMPOSE_FILE} run --rm -e E2E_TEST_BIN \
 		e2e-test \
-		sh -c "go clean -testcache && go test -v -timeout=45m ./internal/integration"
+		sh -c 'if [ -n "$$E2E_TEST_BIN" ]; then cd internal/integration && "/workspace/$$E2E_TEST_BIN" -test.v -test.timeout=45m; else go clean -testcache && go test -v -timeout=45m ./internal/integration; fi'
 
 e2e-test-local:  ## E2E. Run e2e-tests suite in Docker. Prepare e2e environment with `make e2e-build && make e2e-run`
 	DOCKER_TAG=integration docker compose -f ${COMPOSE_FILE} run --rm \

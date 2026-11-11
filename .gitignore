@@ -189,3 +189,6 @@ docs/playground/wasm_exec.js
 /skywire.wasm.json
 /skywire
 /bin/
+
+# Binaries the e2e job compiles for its image and its test container
+/_e2e/
