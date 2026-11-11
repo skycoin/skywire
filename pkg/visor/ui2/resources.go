@@ -3,7 +3,6 @@ package ui2
 
 import (
 	"strconv"
-	"time"
 
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
@@ -55,12 +54,9 @@ func Rate(bps float64) string {
 
 // HostUptime prints seconds as days, hours and minutes.
 func HostUptime(s uint64) string {
-	d := time.Duration(s) * time.Second
-	days := int(d.Hours()) / 24
-	h := int(d.Hours()) % 24
-	m := int(d.Minutes()) % 60
+	days, h, m := s/86400, s/3600%24, s/60%60
 	if days > 0 {
-		return strconv.Itoa(days) + "d " + strconv.Itoa(h) + "h"
+		return strconv.FormatUint(days, 10) + "d " + strconv.FormatUint(h, 10) + "h"
 	}
-	return strconv.Itoa(h) + "h " + strconv.Itoa(m) + "m"
+	return strconv.FormatUint(h, 10) + "h " + strconv.FormatUint(m, 10) + "m"
 }
