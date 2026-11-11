@@ -93,3 +93,27 @@ func TestMuxNewLegDefaults(t *testing.T) {
 	m.syncLegs(ids)
 	require.Equal(t, ids, muxLegIDs(m))
 }
+
+// TestLegRouteDoesNotOutliveLeg checks a leg's recorded route and far-end
+// transport leave with the leg, so a later leg on the same transport starts clean.
+func TestLegRouteDoesNotOutliveLeg(t *testing.T) {
+	rg, mts, _ := createMuxRouteGroup(t, 2)
+	id := mts[1].Entry.ID
+	remote := uuid.New()
+	rg.mu.Lock()
+	fwd, rvs := rg.legs[1].fwd, rg.legs[1].rvs
+	rg.mu.Unlock()
+
+	rg.recordLegRoute([]routing.Hop{{TpID: id}}, []routing.Hop{{TpID: remote}})
+	require.Equal(t, []uuid.UUID{remote}, rg.remoteLegTransportIDs())
+	require.Len(t, rg.legHopsFor(id), 1)
+
+	require.Equal(t, 1, rg.removeLegsByID([]uuid.UUID{id}, "test", "removed"))
+	require.Empty(t, rg.remoteLegTransportIDs())
+	require.Empty(t, rg.legHopsFor(id))
+
+	rg.appendRules(fwd, rvs, mts[1], "test")
+	require.Empty(t, rg.remoteLegTransportIDs(), "a new leg must not inherit the old leg's far-end transport")
+	require.Empty(t, rg.legHopsFor(id), "a new leg must not inherit the old leg's route")
+	requireMuxInStep(t, rg)
+}

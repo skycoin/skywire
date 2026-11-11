@@ -679,7 +679,7 @@ func (r *router) RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uu
 	}
 
 	// Remove from slices
-	removedTp := rg.legs[idx].tp
+	removedTp, removedHops := rg.legs[idx].tp, rg.legs[idx].hops
 	rg.legs = append(rg.legs[:idx], rg.legs[idx+1:]...)
 
 	// Clean up rules
@@ -696,7 +696,7 @@ func (r *router) RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uu
 
 	rg.forgetPeerPark(tpID)
 	rg.noteLegEvent(MuxEventLegRemoved, "operator: mux remove", MuxByOperator, idx, len(rg.legs), removedTp,
-		rg.legHopsLocked(tpID))
+		removedHops)
 	if idx == 0 {
 		rg.noteMuxEvent(MuxEvent{Event: MuxEventPrimaryRehome, By: MuxByOperator, LegIndex: 0, Legs: len(rg.legs),
 			Reason: "operator removed the primary leg"})

@@ -34,28 +34,27 @@ func (rg *RouteGroup) SetForwardHops(hops []routing.Hop) {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
 	rg.forwardHops = hops
-	// Also record under the leg's first-hop transport ID so the per-leg mux
-	// view can show the primary leg's whole path (aux legs are recorded by
-	// AddMuxRouteByHops → recordLegHops).
+	// Also record them on the leg itself, for the per-leg mux view.
 	if len(hops) > 0 {
-		rg.legForwardHops[hops[0].TpID] = hops
+		if idx := rg.legIndexLocked(hops[0].TpID); idx >= 0 {
+			rg.legs[idx].hops = hops
+		}
 	}
 }
 
-// recordLegRoute stores a mux leg's full forward route keyed by its first-hop
-// transport ID, AND the far end's first-hop transport for that leg, taken from
-// the reverse path the leg was dialed with. Called by every aux-mux-leg commit path and by
-// the primary dial, so remoteLegTransportIDs mirrors the peer's live leg
-// transports. A nil/empty rev records the forward route only (best-effort: an
-// unrecorded leg simply contributes no exclusion).
+// recordLegRoute stores a leg's full forward route on the leg whose transport
+// is the route's first hop, and the far end's first-hop transport from rev.
+// An empty rev records the forward route only. A leg that is gone records nothing.
 func (rg *RouteGroup) recordLegRoute(fwd, rev []routing.Hop) {
 	if len(fwd) == 0 {
 		return
 	}
 	rg.mu.Lock()
-	rg.legForwardHops[fwd[0].TpID] = fwd
-	if len(rev) > 0 {
-		rg.legRemoteTp[fwd[0].TpID] = rev[0].TpID
+	if idx := rg.legIndexLocked(fwd[0].TpID); idx >= 0 {
+		rg.legs[idx].hops = fwd
+		if len(rev) > 0 {
+			rg.legs[idx].remoteTp = rev[0].TpID
+		}
 	}
 	rg.mu.Unlock()
 }
@@ -66,27 +65,19 @@ func (rg *RouteGroup) recordLegRoute(fwd, rev []routing.Hop) {
 // guaranteed to be refused by the peer's appendRouteToGroup/appendRouteAsymmetric
 // duplicate-transport guard, so the planners drop it BEFORE the setup-node dial.
 //
-// Derived from the live legs on every call (not from an accumulating set), so a
-// leg that has been pruned locally immediately stops excluding its remote
-// transport and a replacement leg over that same far-end link can be built
-// again. Callers must NOT hold rg.mu.
+// It is read off the live legs, so a pruned leg stops excluding its remote
+// transport at once, and a later leg on the same local transport does not
+// inherit it. Callers must NOT hold rg.mu.
 func (rg *RouteGroup) remoteLegTransportIDs() []uuid.UUID {
 	if rg == nil {
 		return nil
 	}
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	if len(rg.legRemoteTp) == 0 {
-		return nil
-	}
-	out := make([]uuid.UUID, 0, len(rg.legs))
+	var out []uuid.UUID
 	for _, lg := range rg.legs {
-		tp := lg.tp
-		if tp == nil {
-			continue
-		}
-		if remote, ok := rg.legRemoteTp[tp.Entry.ID]; ok {
-			out = append(out, remote)
+		if lg.tp != nil && lg.remoteTp != uuid.Nil {
+			out = append(out, lg.remoteTp)
 		}
 	}
 	return out
@@ -97,11 +88,7 @@ func (rg *RouteGroup) remoteLegTransportIDs() []uuid.UUID {
 func (rg *RouteGroup) legHopsFor(tpID uuid.UUID) []routing.Hop {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	h, ok := rg.legForwardHops[tpID]
-	if !ok {
-		return nil
-	}
-	return append([]routing.Hop(nil), h...)
+	return append([]routing.Hop(nil), rg.legHopsLocked(tpID)...)
 }
 
 // RouteHopDetails returns detailed information about each hop in the route,

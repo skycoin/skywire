@@ -7,9 +7,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// appendLegLocked adds the record of a new last leg. Leg 0 is ready and never
+// addLegLocked adds the record of a new last leg. Leg 0 is ready and never
 // standby. An aux leg starts not-ready, and standby when standbyNewLegs is set.
-func (m *routeMux) appendLegLocked(id uuid.UUID) {
+func (m *routeMux) addLegLocked(id uuid.UUID) {
 	aux := len(m.legs) > 0
 	m.legs = append(m.legs, &muxLeg{id: id, ready: !aux, standby: aux && m.standbyNewLegs, group: noLegGroup})
 }
@@ -20,7 +20,7 @@ func (m *routeMux) syncLegs(ids []uuid.UUID) {
 	m.legMu.Lock()
 	for i, id := range ids {
 		if i >= len(m.legs) {
-			m.appendLegLocked(id)
+			m.addLegLocked(id)
 		} else if m.legs[i].id == uuid.Nil {
 			m.legs[i].id = id
 		}
@@ -168,7 +168,7 @@ func (m *routeMux) setLegStandby(idx int, standby bool) {
 	}
 	m.legMu.Lock()
 	for len(m.legs) <= idx {
-		m.appendLegLocked(uuid.Nil)
+		m.addLegLocked(uuid.Nil)
 	}
 	m.legs[idx].standby = standby
 	m.legMu.Unlock()

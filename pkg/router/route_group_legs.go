@@ -1016,10 +1016,8 @@ func (rg *RouteGroup) reelectPrimary(id uuid.UUID) {
 	rg.mux.swapLegs(0, newIdx)
 	// forwardHops records the PRIMARY leg's path (used for self-heal shared-hop
 	// exclusion and mux info); re-point it at the new primary's stored hops.
-	if rg.legs[0].tp != nil {
-		if hops, okHops := rg.legForwardHops[rg.legs[0].tp.Entry.ID]; okHops {
-			rg.forwardHops = hops
-		}
+	if hops := rg.legs[0].hops; len(hops) > 0 {
+		rg.forwardHops = hops
 	}
 	rg.logger.Infof("latency-band: re-elected leg %d into the primary slot (old primary was an out-of-band outlier)", newIdx)
 	rg.noteLegEvent(MuxEventPrimaryRehome,
@@ -1595,8 +1593,7 @@ func (rg *RouteGroup) removeLegsByID(deadIDs []uuid.UUID, reason, hookEvent stri
 			if tp != nil {
 				rg.logger.Infof("pruning leg %v: %s", tp.Entry.ID, reason)
 			}
-			rg.noteLegEvent(MuxEventLegRemoved, reason, MuxByAdaptive, i, remaining-1, tp,
-				rg.legHopsLocked(tpEntryID(tp)))
+			rg.noteLegEvent(MuxEventLegRemoved, reason, MuxByAdaptive, i, remaining-1, tp, lg.hops)
 			if i == 0 {
 				rg.noteMuxEvent(MuxEvent{Event: MuxEventPrimaryRehome, By: MuxByAdaptive, LegIndex: 0,
 					Legs: remaining - 1, Reason: "primary leg failed " + reason})
@@ -1716,8 +1713,7 @@ func (rg *RouteGroup) pruneDeadTransports() []int {
 			} else {
 				rg.logger.Infof("Pruning dead mux transport %v", tp.Entry.ID)
 			}
-			rg.noteLegEvent(MuxEventLegRemoved, reason, MuxByLocal, i, len(rg.legs)-len(droppedIdx)-1, tp,
-				rg.legHopsLocked(tpEntryID(tp)))
+			rg.noteLegEvent(MuxEventLegRemoved, reason, MuxByLocal, i, len(rg.legs)-len(droppedIdx)-1, tp, lg.hops)
 			if i == 0 {
 				rg.noteMuxEvent(MuxEvent{Event: MuxEventPrimaryRehome, By: MuxByLocal, LegIndex: 0,
 					Legs: len(rg.legs) - len(droppedIdx) - 1, Reason: "primary leg's " + reason})
@@ -1787,7 +1783,7 @@ func (rg *RouteGroup) pruneLegByConsumeRule(routeID routing.RouteID) bool {
 	rg.legs = append(rg.legs[:idx], rg.legs[idx+1:]...)
 	rg.forgetPeerPark(tpEntryID(retiredTp))
 	rg.noteLegEvent(MuxEventLegRemoved, "peer retired the leg (close: leg-retired)", MuxByRemote,
-		idx, len(rg.legs), retiredTp, rg.legHopsLocked(tpEntryID(retiredTp)))
+		idx, len(rg.legs), retiredTp, lg.hops)
 	if idx == 0 {
 		rg.noteMuxEvent(MuxEvent{Event: MuxEventPrimaryRehome, By: MuxByRemote, LegIndex: 0, Legs: len(rg.legs),
 			Reason: "peer retired the primary leg"})

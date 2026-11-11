@@ -368,13 +368,13 @@ func (rg *RouteGroup) noteTunnelEvent(kind, reason string) {
 	rg.noteLegEvent(kind, reason, MuxByAdaptive, 0, legs, tp, hops)
 }
 
-// legHopsLocked returns the recorded forward path for tpID. Callers MUST hold
-// rg.mu (the unlocked counterpart is legHopsFor).
+// legHopsLocked returns the recorded forward path of the leg on tpID, nil when
+// the group has no such leg. Callers MUST hold rg.mu.
 func (rg *RouteGroup) legHopsLocked(tpID uuid.UUID) []routing.Hop {
-	if rg.legForwardHops == nil {
-		return nil
+	if idx := rg.legIndexLocked(tpID); idx >= 0 {
+		return rg.legs[idx].hops
 	}
-	return rg.legForwardHops[tpID]
+	return nil
 }
 
 // tpEntryID is tp.Entry.ID for a transport that may be nil.
