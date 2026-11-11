@@ -410,3 +410,14 @@ input.invalid { border-color: rgb(var(--rose)); }
   dl.kv.tp-info { grid-template-columns: max-content 1fr; gap: 6px 12px; align-items: center; }
   dl.kv.tp-info dd { margin: 0; }
 }
+
+/* visor list selection and bulk actions */
+.list th.sel, .list td.sel { width: 28px; padding-right: 0; }
+.list td.sel input, .list th.sel input { width: 18px; height: 18px; }
+.bar.bulk { padding: 8px; border-radius: 8px; background: var(--bar-bg); }
+.bar.bulk[hidden] { display: none; }
+.bulk-panel .form { max-width: 640px; }
+@media (max-width: 600px) {
+  .list.nodes td.sel { float: right; padding: 6px 8px 0 0; }
+  .list td.sel input { width: 24px; height: 24px; }
+}

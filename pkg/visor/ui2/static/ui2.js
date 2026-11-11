@@ -274,6 +274,27 @@ document.addEventListener('DOMContentLoaded', function () {
 		}
 		return true;
 	}
+	var sel = {};
+	// syncBulk keeps the ticked visors across polls and fills the bulk bar.
+	function syncBulk(card) {
+		var bar = document.querySelector('[data-bulk]');
+		if (!bar) return;
+		var present = {}, pks = [];
+		card.querySelectorAll('[data-bulk-sel]').forEach(function (cb) {
+			var pk = cb.getAttribute('data-bulk-sel');
+			present[pk] = 1;
+			cb.checked = !!sel[pk];
+		});
+		Object.keys(sel).forEach(function (pk) { if (present[pk]) pks.push(pk); else delete sel[pk]; });
+		bar.hidden = pks.length === 0;
+		var c = bar.querySelector('[data-bulk-count]');
+		if (c) c.textContent = c.getAttribute('data-fmt').replace('{{ n }}', pks.length);
+		var box = bar.querySelector('[data-bulk-pks]');
+		if (box) {
+			box.textContent = '';
+			pks.forEach(function (pk) { var i = document.createElement('input'); i.type = 'hidden'; i.name = 'pk'; i.value = pk; box.appendChild(i); });
+		}
+	}
 	function apply() {
 		var card = document.querySelector('[data-nodes]');
 		if (!card) return;
@@ -300,6 +321,8 @@ document.addEventListener('DOMContentLoaded', function () {
 			b.setAttribute('aria-expanded', expanded[b.getAttribute('data-node-toggle')] ? 'true' : 'false');
 		});
 		sortRows(card);
+		syncBulk(card);
+		document.querySelectorAll('#bulk-panel [data-label-for]').forEach(function (el) { var l = m[el.getAttribute('data-label-for')]; if (l) el.textContent = l; });
 		var c = card.querySelector('[data-node-shown]');
 		if (c) c.textContent = (q || st) ? c.getAttribute('data-fmt').replace('{{ n }}', shown).replace('{{ total }}', total) : '';
 	}
@@ -331,6 +354,29 @@ document.addEventListener('DOMContentLoaded', function () {
 		}
 		var t = e.target.closest('[data-node-toggle]');
 		if (t) { var tp = t.getAttribute('data-node-toggle'); expanded[tp] = !expanded[tp]; apply(); }
+	});
+	document.addEventListener('change', function (e) {
+		var t = e.target;
+		if (!t.matches) return;
+		if (t.matches('[data-bulk-sel]')) {
+			if (t.checked) sel[t.getAttribute('data-bulk-sel')] = 1; else delete sel[t.getAttribute('data-bulk-sel')];
+		} else if (t.matches('[data-bulk-all]')) {
+			document.querySelectorAll('#nodes tbody tr').forEach(function (tr) {
+				var cb = tr.querySelector('[data-bulk-sel]');
+				if (!cb || tr.style.display === 'none' || !tr.classList.contains('open')) return;
+				if (t.checked) sel[cb.getAttribute('data-bulk-sel')] = 1; else delete sel[cb.getAttribute('data-bulk-sel')];
+			});
+		} else return;
+		apply();
+	});
+	document.addEventListener('click', function (e) {
+		if (!e.target.closest || !e.target.closest('[data-bulk-clear]')) return;
+		sel = {};
+		var p = document.getElementById('bulk-panel');
+		if (p) p.textContent = '';
+		var a = document.querySelector('[data-bulk-all]');
+		if (a) a.checked = false;
+		apply();
 	});
 	document.addEventListener('htmx:beforeRequest', function (e) {
 		var el = e.detail.elt;

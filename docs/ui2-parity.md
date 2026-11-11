@@ -5,7 +5,8 @@ The server rendered UI at `/ui2/` (templ and htmx, `pkg/visor/ui2` and
 Angular UI in `static/skywire-manager-src`. Angular stays the default until
 this table has no gaps the owner cares about.
 
-Status is **yes** (present), **partial** (some of it) or **no** (missing).
+Status is **yes** (present), **partial** (some of it), **no** (missing) or
+**n/a** (the Angular feature has no backend to call).
 A missing visor tab renders a link to the same tab in the Angular UI.
 
 ## Home and fleet pages
@@ -19,8 +20,8 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 | | column sorting | yes | in the browser, since labels live there |
 | | drag to reorder | no | |
 | | edit label, remove visor, remove all offline | yes | labels in the same localStorage entry as Angular |
-| | bulk select: update, reward address, restart, add, start and stop app | no | |
-| | update one or all visors, set reward address on all | no | |
+| | bulk select: restart, reward address, add, start and stop app | yes | |
+| | update one or all visors | n/a | Angular calls visors/{pk}/update/..., which the hypervisor does not serve |
 | `/nodes/rewards` | list with reward columns | no | |
 | `/nodes/services-health` | deployment service health, RSN stats | no | |
 | `/nodes/network` | network view from the uptime tracker | no | |
@@ -44,7 +45,7 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 | info | overview, network, dmsg and hypervisor sections | yes | |
 | | config view and edit, restart, shut down | yes | |
 | | router settings (min hops, existing transports, local routes) | yes | |
-| | update visor | no | |
+| | update visor | n/a | no update route on the hypervisor |
 | | label | no | |
 | routing | rules list and delete, route groups, routing policies | yes | |
 | | route find and calc | yes | |

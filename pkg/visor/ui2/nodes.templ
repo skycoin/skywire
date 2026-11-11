@@ -18,6 +18,7 @@ templ NodesPage(ns []Node, errMsg string) {
 				<span class="spacer"></span>
 				<button class="btn sm" type="button" hx-delete="ui2/nodes" hx-target="#nodes" hx-swap="outerHTML" hx-confirm={ T(ctx, "nodes.delete-all-offline-confirmation") } data-hide-offline><span class="mi">delete_sweep</span>{ T(ctx, "nodes.delete-all-offline") }</button>
 			</div>
+			@BulkBar()
 			@NodeRows(ns, errMsg, false)
 		</section>
 	}
@@ -36,6 +37,7 @@ templ NodeRows(ns []Node, errMsg string, oob bool) {
 				<table class="list nodes">
 					<thead>
 						<tr>
+							<th class="sel"><input type="checkbox" data-bulk-all title={ T(ctx, "nodes.bulk.select-page") } aria-label={ T(ctx, "nodes.bulk.select-page") }/></th>
 							<th class="state"><span class="sr">{ T(ctx, "nodes.state") }</span></th>
 							@nodeSortTh(T(ctx, "nodes.label"), "label", false)
 							@nodeSortTh(T(ctx, "nodes.key"), "pk", false)
@@ -53,6 +55,7 @@ templ NodeRows(ns []Node, errMsg string, oob bool) {
 							@nodeRow(n, "")
 							if n.SubErr != "" {
 								<tr class="child" data-parent={ n.PK }>
+									<td></td>
 									<td></td>
 									<td colspan="9" class="error small">{ n.SubErr }</td>
 								</tr>
@@ -93,6 +96,11 @@ templ nodeRow(n Node, parent string) {
 		data-sk-apps={ itoa(n.AppsRunning) }
 		data-sk-ping={ itoa(n.PingMS) }
 	>
+		<td class="sel">
+			if !n.ViaSub {
+				<input type="checkbox" data-bulk-sel={ n.PK } aria-label={ n.Name() }/>
+			}
+		</td>
 		<td class="state" data-label={ T(ctx, "nodes.state") }>
 			if n.Online {
 				<span class="dot on" title={ T(ctx, "ui2.online") }></span>
