@@ -9,6 +9,7 @@ import (
 	markdown "github.com/MichaelMure/go-term-markdown"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/renderer/html"
 )
 
@@ -16,6 +17,7 @@ func rulesHTML(rules string) (string, error) {
 	var buf bytes.Buffer
 	md := goldmark.New(
 		goldmark.WithExtensions(extension.Strikethrough),
+		goldmark.WithParserOptions(parser.WithAutoHeadingID()),
 		goldmark.WithRendererOptions(html.WithXHTML()), // Optional: add XHTML compatibility
 	)
 	if err := md.Convert([]byte(rules), &buf); err != nil {

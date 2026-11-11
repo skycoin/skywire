@@ -864,7 +864,7 @@ func printWelcome(pubkey string, isHypervisor bool) {
 		msg2(fmt.Sprintf("reward metrics:\n%shttps://reward.theskywirenetwork.net%s", colorBlue, colorReset))
 		msg2(fmt.Sprintf("distribution notifications:\n%shttps://t.me/skywire_reward%s", colorBlue, colorReset))
 	} else {
-		msg2(fmt.Sprintf("reward eligibility rules:\n%shttps://github.com/skycoin/skywire/blob/develop/mainnet_rules.md%s", colorYellow, colorReset))
+		msg2(fmt.Sprintf("reward eligibility rules:\n%shttps://github.com/skycoin/skywire/blob/develop/rewards/mainnet_rules.md%s", colorYellow, colorReset))
 		msg2(fmt.Sprintf("set your skycoin reward address:\n%sskywire cli %sreward %s<skycoin-address>%s", colorCyan, colorYellow, colorGreen, colorReset))
 	}
 

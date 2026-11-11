@@ -170,26 +170,26 @@ func currentMinVersion() string {
 }
 
 // ineligibleReasonLink renders an ineligibility reason as a link
-// into the matching mainnet-rules anchor on the rewards index page,
+// into the matching mainnet-rules anchor on the front page,
 // so visitors can click through to the rule that classified them
 // out. Returns the bare reason unwrapped for entries we don't have
-// a mapping for. Anchor strings match the explicit (#…) links in
+// a mapping for. Anchors are the heading ids of
 // rewards/mainnet_rules.md.
 func ineligibleReasonLink(reason string) string {
 	r := strings.TrimSpace(reason)
 	anchor := ""
 	switch r {
 	case "No transports":
-		anchor = "Transports"
+		anchor = "transports"
 	case "kvm", "hyperv", "xenhvm", "vmware", "vbox":
-		anchor = "Per-Machine-Limit"
+		anchor = "per-machine-limit"
 	case "Invalid survey", "Survey not found":
-		anchor = "Survey"
+		anchor = "survey"
 	}
 	if anchor == "" {
 		return reason
 	}
-	return `<a href="/skycoin-rewards/#` + anchor + `">` + reason + `</a>`
+	return `<a href="/#` + anchor + `">` + reason + `</a>`
 }
 
 const htmlFrontPageTemplate = `
@@ -227,7 +227,7 @@ func mainPage(w http.ResponseWriter, r *http.Request) {
 	if v := currentMinVersion(); v != "" {
 		minVerBanner = `<div style='border:1px solid #2d4a6b;padding:6px 10px;margin:8px 0;background:#1a2536;border-radius:4px;font-size:11pt;'>` +
 			`<b>Currently enforced minimum skywire version: <span style='color:#3399FF;'>` + v + `</span></b> ` +
-			`<span style='color:#94a3b8;font-size:9pt;'>(auto-derived: each release becomes required 14 days after its tag date — see <a href='/skycoin-rewards/#Version'>Version</a> for full rule)</span>` +
+			`<span style='color:#94a3b8;font-size:9pt;'>(auto-derived: each release becomes required 14 days after its tag date — see <a href='/#1-version'>Version</a> for full rule)</span>` +
 			`</div>`
 	}
 	introHTML := minVerBanner +

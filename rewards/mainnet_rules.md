@@ -37,7 +37,7 @@ A total of up to ~1114.754  Skycoin __per pool__ are distributed daily in leap-y
 
 The presence pool reward for a day is evenly divided among all eligible visors on the basis of having met uptime and other requirements for the previous day, with IP and MAC address deduplication applied. All architectures are eligible for the presence pool.
 
-Regional saturation scaling is applied to the presence pool to promote geographic diversity. See [Regional Saturation Scaling](#Regional-Saturation-Scaling) for details.
+Regional saturation scaling is applied to the presence pool to promote geographic diversity. See [Regional Saturation Scaling](#regional-saturation-scaling) for details.
 
 ## Pool 2: Bandwidth
 
@@ -68,31 +68,31 @@ The bandwidth considered for this pool excludes same-LAN transports (where both 
 To receive Skycoin rewards for running skywire, the following requirements must be met:
 
 
-* [1)](#Version) **Minimum skywire [version](#Version)** — the newest release published at least two weeks ago, see the [Version](#Version) section
+* [1)](#1-version) **Minimum skywire [version](#1-version)** — the newest release published at least two weeks ago, see the [Version](#1-version) section
 
-* [2)](#Uptime) **75% [uptime](#Uptime) per day** minimum is required to be eligible to receive rewards
+* [2)](#uptime) **75% [uptime](#uptime) per day** minimum is required to be eligible to receive rewards
 
-* [3)](#Deployment) Visors must be running on **[the skywire production deployment](#Deployment)** with a config that is updated on every version. No default keys or addresses of this configuration may be removed - but you can add keys where applicable.
+* [3)](#deployment) Visors must be running on **[the skywire production deployment](#deployment)** with a config that is updated on every version. No default keys or addresses of this configuration may be removed - but you can add keys where applicable.
 
-* [4)](#Per-Machine-Limit) **Only 1 (one) visor per machine** - virtual machines are ineligible
+* [4)](#per-machine-limit) **Only 1 (one) visor per machine** - virtual machines are ineligible
 
-* [5)](#Per-IP-Limit) **Up to 8 (eight) visors may each receive 1 (one) reward share per location (ip address)** - with 8 shares divided between all visors at that ip address which achieved the minimum uptime.
+* [5)](#per-ip-limit) **Up to 8 (eight) visors may each receive 1 (one) reward share per location (ip address)** - with 8 shares divided between all visors at that ip address which achieved the minimum uptime.
 
-* [6)](#Skycoin-Address) **A valid [reward account xpub](#Skycoin-Address)** must be set for the visor. A single address is accepted only with an explicit opt-in, and from November 15, 2026 only while it has never sent coins
+* [6)](#skycoin-address) **A valid [reward account xpub](#skycoin-address)** must be set for the visor. A single address is accepted only with an explicit opt-in, and from November 15, 2026 only while it has never sent coins
 
-* [7)](#Connection-To-DMSG-Network) The visor must be **[connected to the DMSG network](#Connection-To-DMSG-Network)**
+* [7)](#connection-to-dmsg-network) The visor must be **[connected to the DMSG network](#connection-to-dmsg-network)**
 
-* [8)](#Transportable) **[Transports](#Transportable) can be established to the visor**
+* [8)](#transportable) **[Transports](#transportable) can be established to the visor**
 
-* [9)](#Transports) **The visor has at least 2 [Transports](#Transports)** observed at some point during the same period as uptime (checked hourly)
+* [9)](#transports) **The visor has at least 2 [Transports](#transports)** observed at some point during the same period as uptime (checked hourly)
 
-* [10)](#Transport-Setup-Node) **The visor responds to [Transport Setup-Node requests](#Transport-Setup-Node)**
+* [10)](#transport-setup-node) **The visor responds to [Transport Setup-Node requests](#transport-setup-node)**
 
-* [11)](#Routability-Ping-Latency-Metric) **The visor can have routes established to it & responds to [pings](#Ping-Latency-Metric) over routes**
+* [11)](#routability-and-ping-latency) **The visor can have routes established to it & responds to [pings](#routability-and-ping-latency) over routes**
 
-* [12)](#Transport-Bandwidth-and-Metrics) **The visor reports [transport bandwidth](#Transport-Bandwidth-and-Metrics) to the transport discovery** on transport re-registration - the basis for bandwidth-based rewards
+* [12)](#transport-bandwidth-and-metrics) **The visor reports [transport bandwidth](#transport-bandwidth-and-metrics) to the transport discovery** on transport re-registration - the basis for bandwidth-based rewards
 
-* [13)](#Survey) **The visor produces a [survey](#Survey)** when queried over dmsg by any keys in the survey_whitelist array by default
+* [13)](#survey) **The visor produces a [survey](#survey)** when queried over dmsg by any keys in the survey_whitelist array by default
 
 
 ### Deployment Changes and the dmsghttp-config
@@ -381,7 +381,7 @@ This can be verified by examining the visor's logging:
 [DMSGHTTP] 2024/10/09 - 22:31:46 | 200 |     193.325µs |                 | 03714c8bdaee0fb48f47babbc47c33e1880752b6620317c9d56b30f3b0ff58a9c3:51457 | GET      /node-info
 ```
 
-Bandwidth data is reported separately by each visor to the transport discovery on transport re-registration — it is no longer collected from the visor over dmsg as a per-day CSV. See [Transport Bandwidth and Metrics](#Transport-Bandwidth-and-Metrics).
+Bandwidth data is reported separately by each visor to the transport discovery on transport re-registration — it is no longer collected from the visor over dmsg as a per-day CSV. See [Transport Bandwidth and Metrics](#transport-bandwidth-and-metrics).
 
 The collected surveys should be visible in the survey index here:
 
