@@ -109,7 +109,7 @@ func (hv *Hypervisor) withCtx(vFunc valuesFunc, hFunc handlerFunc) http.HandlerF
 }
 
 func (hv *Hypervisor) visorCtx(w http.ResponseWriter, r *http.Request) (*httpCtx, bool) {
-	pk, err := pkFromParam(r, "pk")
+	pk, err := pkFromParam(r)
 	if err != nil {
 		httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 		return nil, false

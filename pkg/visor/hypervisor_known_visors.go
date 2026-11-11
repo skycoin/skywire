@@ -199,7 +199,7 @@ func (v *Visor) HVForgetVisor(pk cipher.PubKey) error {
 // deleteKnownVisor is DELETE /api/visors/{pk}/known: forget an offline visor.
 func (hv *Hypervisor) deleteKnownVisor() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		pk, err := pkFromParam(r, "pk")
+		pk, err := pkFromParam(r)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 			return
