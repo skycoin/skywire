@@ -227,7 +227,11 @@ private struct FileCard: View {
                 Text(verbatim: failed ? L10n.text("chat_transfer_failed_lower") : Skychat.humanSize(f.size))
                     .skyText(.labelSmall).foregroundStyle(colors.meta)
                 if f.url.isEmpty && !f.from.isEmpty && !f.id.isEmpty {
-                    Button { repo.requestFile(m) } label: { Text("chat_rerequest").skyText(.labelMedium).foregroundStyle(colors.accent) }
+                    // A held file was offered but never fetched: there is nothing to re-request yet.
+                    let held = f.status == "held"
+                    Button { repo.requestFile(m) } label: {
+                        Text(L10n.key(held ? "chat_get_file" : "chat_rerequest")).skyText(.labelMedium).foregroundStyle(colors.accent)
+                    }
                         .buttonStyle(.plain)
                 }
             }
