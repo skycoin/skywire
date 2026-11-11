@@ -506,3 +506,22 @@ document.addEventListener('DOMContentLoaded', function () {
 		} catch (_) { /* no storage */ }
 	}
 })();
+
+// A [data-labels] section outside the visor list shows the same labels.
+(function () {
+	'use strict';
+	function apply() {
+		var hv = document.body.getAttribute('data-hvpk'), m = {};
+		if (!hv) return;
+		try {
+			(JSON.parse(localStorage.getItem(hv + 'labelsData') || '[]') || []).forEach(function (l) { if (l && l.id && l.label) m[l.id] = l.label; });
+		} catch (_) { return; }
+		document.querySelectorAll('[data-labels] [data-label-for]').forEach(function (a) {
+			var pk = a.getAttribute('data-label-for'), lab = m[pk], h = a.closest('td, div').parentNode.querySelector('[data-host-for="' + pk + '"]');
+			if (lab) a.textContent = lab;
+			if (h) h.hidden = !lab || h.textContent === lab;
+		});
+	}
+	document.addEventListener('htmx:afterSettle', apply);
+	document.addEventListener('DOMContentLoaded', apply);
+})();
