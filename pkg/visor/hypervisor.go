@@ -1463,9 +1463,9 @@ func (tw *timeoutResponseWriter) copyTo(w http.ResponseWriter) {
 	w.WriteHeader(tw.statusCode)
 	w.Write(tw.body) //nolint:errcheck,gosec
 }
-func pkFromParam(r *http.Request, key string) (cipher.PubKey, error) {
+func pkFromParam(r *http.Request) (cipher.PubKey, error) {
 	pk := cipher.PubKey{}
-	err := pk.UnmarshalText([]byte(r.PathValue(key)))
+	err := pk.UnmarshalText([]byte(r.PathValue("pk")))
 
 	return pk, err
 }

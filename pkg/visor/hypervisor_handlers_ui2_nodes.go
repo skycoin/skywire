@@ -33,7 +33,7 @@ func (hv *Hypervisor) ui2ForgetNodes(all bool) http.HandlerFunc {
 		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(45 * time.Second)) //nolint:errcheck
 		var pks []cipher.PubKey
 		if !all {
-			pk, err := pkFromParam(r, "pk")
+			pk, err := pkFromParam(r)
 			if err != nil {
 				httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 				return

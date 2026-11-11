@@ -96,7 +96,7 @@ func (hv *Hypervisor) skychatProxyHandler() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusNotImplemented, errSkychatProxyNoLocal)
 			return
 		}
-		pk, err := pkFromParam(r, "pk")
+		pk, err := pkFromParam(r)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 			return
