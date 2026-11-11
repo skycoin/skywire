@@ -21,11 +21,15 @@ struct RootView: View {
     var body: some View {
         ZStack {
             ZStack(alignment: .bottom) {
-                ZStack {
-                    ForEach(AppTab.allCases, id: \.self) { tab in
-                        if navigator.visited.contains(tab) {
-                            let shown = navigator.tab == tab
-                            TabStack(tab: tab, navigator: navigator).stackLayer(shown: shown)
+                GeometryReader { geometry in
+                    ZStack {
+                        ForEach(AppTab.allCases, id: \.self) { tab in
+                            if navigator.visited.contains(tab) {
+                                let shown = navigator.tab == tab
+                                TabStack(tab: tab, navigator: navigator).stackLayer(shown: shown)
+                                    .offset(x: navigator.side(of: tab) * geometry.size.width)
+                                    .transition(.offset(x: navigator.step * geometry.size.width))
+                            }
                         }
                     }
                 }
@@ -136,6 +140,10 @@ final class Navigator: ObservableObject {
 
     /// NavHost's default: a 700 ms cross-fade, FastOutSlowIn.
     static let fade = Animation.timingCurve(0.4, 0, 0.2, 1, duration: 0.7)
+    /// Tab to tab: the new tab slides in from its side (Android TAB_SLIDE_MS).
+    static let slide = Animation.easeOut(duration: 0.25)
+    /// The side the last tab change came in from: 1 the right, -1 the left.
+    @Published private(set) var step: CGFloat = 1
 
     func stack(_ tab: AppTab) -> [Route] {
         stacks[tab] ?? []
@@ -187,11 +195,21 @@ final class Navigator: ObservableObject {
     }
 
     private func go(_ tab: AppTab) {
-        withAnimation(Self.fade) {
+        let from = Self.index(self.tab), to = Self.index(tab)
+        withAnimation(from == to ? Self.fade : Self.slide) {
+            if from != to { step = to > from ? 1 : -1 }
             visited.insert(tab)
             self.tab = tab
         }
     }
+
+    /// Where a tab's screens sit: on screen in front, else off to the side of the bar they are on.
+    func side(of tab: AppTab) -> CGFloat {
+        let at = Self.index(tab), front = Self.index(self.tab)
+        return at == front ? 0 : at > front ? 1 : -1
+    }
+
+    private static func index(_ tab: AppTab) -> Int { AppTab.allCases.firstIndex(of: tab) ?? 0 }
 }
 
 /// One tab: its root and the screens pushed over it, the top one shown.
