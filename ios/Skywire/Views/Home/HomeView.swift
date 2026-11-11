@@ -62,7 +62,7 @@ private struct ConnectButton: View {
         let tonal = state == .starting || state == .running
         let busy = state == .stopping
         ZStack {
-            if app.connected {
+            if app.connecting {
                 PulseRing(size: 180)
             }
             Button {

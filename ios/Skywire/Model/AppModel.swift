@@ -25,6 +25,8 @@ final class AppModel: ObservableObject {
 
     /// The core runs and its API answers.
     var connected: Bool { coreState == .running && apiUp }
+    /// On the way up: the core is starting, or running with its API not yet answering.
+    var connecting: Bool { coreState == .starting || (coreState == .running && !apiUp) }
 
     let settings: AppSettings
     let client: CoreClient

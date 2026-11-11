@@ -329,13 +329,17 @@ struct SkyBottomBar: View {
     }
 }
 
-/// The raised cloud: a 58 pt gradient disc in a 4 pt ring of the shell's colour.
+/// The raised cloud: a 58 pt gradient disc in a 4 pt ring of the shell's colour, with a
+/// pulse behind it only while connecting, since the pulse redraws the window every frame.
 private struct CloudButton: View {
     let action: () -> Void
+    @EnvironmentObject private var app: AppModel
 
     var body: some View {
         ZStack {
-            PulseRing(size: 66)
+            if app.connecting {
+                PulseRing(size: 66)
+            }
             Button(action: action) {
                 ZStack {
                     Circle().fill(Color.skyContainerLowest)

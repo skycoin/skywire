@@ -347,6 +347,7 @@ struct MaterialSpinner: View {
 }
 
 /// PulseRing (ui/components/Effects.kt): a filled circle that grows and fades, 2.6 s.
+/// Show it only while connecting: it redraws the whole window at the display's rate.
 struct PulseRing: View {
     let size: CGFloat
     var color: Color = .skyPrimary
