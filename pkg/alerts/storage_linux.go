@@ -5,6 +5,7 @@ package alerts
 import (
 	"errors"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -37,9 +38,12 @@ func CheckStorage() (readOnly bool, ioErrors int, last string) {
 	}
 	c.at = time.Now()
 	c.readOnly, c.n, c.last = false, 0, ""
-	if f, err := os.Open("/proc/mounts"); err == nil {
-		c.readOnly = RootReadOnly(f)
-		_ = f.Close() //nolint:errcheck
+	// Android always mounts the system image on / read-only.
+	if runtime.GOOS != "android" {
+		if f, err := os.Open("/proc/mounts"); err == nil {
+			c.readOnly = RootReadOnly(f)
+			_ = f.Close() //nolint:errcheck
+		}
 	}
 	if up := uptime(); up > 0 {
 		c.n, c.last = StorageErrors(readKmsg(), up-IOErrorWindow)
