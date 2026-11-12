@@ -313,3 +313,7 @@ fun mergeSnapshot(
     fetchedAtMs = nowMs,
     historyFetchedAtMs = if (history != null) nowMs else previous?.historyFetchedAtMs ?: 0,
 )
+
+/** Whether [address] has held coins or been in a transaction, as far as [snapshot] knows. */
+fun addressUsed(address: String, snapshot: WalletSnapshot): Boolean =
+    (snapshot.perAddress[address] ?: 0uL) > 0uL || snapshot.txs.any { address in it.own }

@@ -1,7 +1,10 @@
 package com.skycoin.skywire
 
+import com.skycoin.skywire.wallet.CachedTx
 import com.skycoin.skywire.wallet.WalletMeta
+import com.skycoin.skywire.wallet.WalletSnapshot
 import com.skycoin.skywire.wallet.addressScanPending
+import com.skycoin.skywire.wallet.addressUsed
 import com.skycoin.skywire.wallet.settledAddresses
 import com.skycoin.wallet.AddressBook
 import kotlinx.serialization.json.Json
@@ -89,5 +92,14 @@ class WalletAddressScanTest {
         val again = settledAddresses(settled, AddressBook(listOf("a", "b"), emptyList()), 20)
         assertEquals(20, again.addressScanAtMs)
         assertEquals(listOf("a", "b"), again.receiveAddresses)
+    }
+
+    @Test
+    fun anAddressIsUsedOnceItHeldCoinsOrWasInATransaction() {
+        val tx = CachedTx("t", incoming = true, amount = 1u, timestamp = 1, confirmed = true, confirmations = 1, own = listOf("b"))
+        val snapshot = WalletSnapshot(txs = listOf(tx), perAddress = mapOf("a" to 0uL, "c" to 5uL))
+        assertFalse(addressUsed("a", snapshot))
+        assertTrue(addressUsed("b", snapshot))
+        assertTrue(addressUsed("c", snapshot))
     }
 }
