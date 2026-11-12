@@ -19,6 +19,7 @@ templ ChatPage(c Chat) {
 			<div class="chat" data-labels>
 				@ChatRooms(c, false)
 				<section class="chat-main">
+					@ChatVoice(c.Voice)
 					@ChatRoomLog(c)
 					if c.Group != nil {
 						<form id="chat-form" class="chat-compose" hx-post={ c.url("/groups/send") } hx-target="#chat-log" hx-swap="outerHTML" data-reset-on-ok>
@@ -35,6 +36,7 @@ templ ChatPage(c Chat) {
 			<div class="chat" data-labels>
 				@ChatPeers(c, false)
 				<section class="chat-main">
+					@ChatVoice(c.Voice)
 					@ChatLog(c)
 					<form id="chat-form" class="chat-compose" hx-post={ c.url("/send") } hx-target="#chat-log" hx-swap="outerHTML" data-reset-on-ok>
 						if c.Peer != "" {
