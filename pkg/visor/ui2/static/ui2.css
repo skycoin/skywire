@@ -497,3 +497,10 @@ fieldset.choice legend { padding: 0; margin-bottom: 4px; }
 #nv-q input[name="country"] { flex: 0 0 6em; width: 6em; }
 #nv-q input[name="version"] { flex: 0 1 14em; width: 14em; }
 #nv-q input[name="min"] { flex: 0 0 7em; }
+
+/* The fleet pages lengthened the top bar: keep it on one line on laptop screens. */
+@media (min-width: 1001px) and (max-width: 1700px) {
+  .top nav.home { gap: 0; }
+  .top nav.home a { padding: 6px 6px; font-size: 0.88em; }
+  .top select.lang { max-width: 8.5em; }
+}
