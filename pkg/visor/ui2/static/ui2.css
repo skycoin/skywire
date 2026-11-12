@@ -1,9 +1,9 @@
 /* pkg/visor/ui2/static/ui2.css c3-vis-core
    Tokens follow static/skywire-manager-src/src/assets/scss/_tokens.scss. */
-@font-face { font-family: 'Skycoin'; font-weight: 300; font-display: swap; src: url('../../assets/fonts/skycoin/skycoin-light-webfont.woff2') format('woff2'); }
-@font-face { font-family: 'Skycoin'; font-weight: 400; font-display: swap; src: url('../../assets/fonts/skycoin/skycoin-regular-webfont.woff2') format('woff2'); }
-@font-face { font-family: 'Skycoin'; font-weight: 700; font-display: swap; src: url('../../assets/fonts/skycoin/skycoin-bold-webfont.woff2') format('woff2'); }
-@font-face { font-family: 'Material Icons'; font-style: normal; font-weight: 400; font-display: block; src: url('../../assets/fonts/material-icons/MaterialIcons-Regular.woff2') format('woff2'); }
+@font-face { font-family: 'Skycoin'; font-weight: 300; font-display: swap; src: url('../assets/fonts/skycoin/skycoin-light-webfont.woff2') format('woff2'); }
+@font-face { font-family: 'Skycoin'; font-weight: 400; font-display: swap; src: url('../assets/fonts/skycoin/skycoin-regular-webfont.woff2') format('woff2'); }
+@font-face { font-family: 'Skycoin'; font-weight: 700; font-display: swap; src: url('../assets/fonts/skycoin/skycoin-bold-webfont.woff2') format('woff2'); }
+@font-face { font-family: 'Material Icons'; font-style: normal; font-weight: 400; font-display: block; src: url('../assets/fonts/material-icons/MaterialIcons-Regular.woff2') format('woff2'); }
 
 :root {
   color-scheme: dark;
