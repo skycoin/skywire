@@ -495,9 +495,18 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
-      - uses: acifani/setup-tinygo@v3
-        with:
-          tinygo-version: '0.42.0'
+      # The same TinyGo as release-tinygo.yml, skycoin and skycoin.com.
+      - name: Install TinyGo
+        env:
+          TINYGO_RELEASE: v0.45.0-dev-skywire.2
+          TINYGO_SHA256: 28c5d87e92f00869b667827107faf1c0a96055d179839d1832d7ef14214b2dd6
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl -fsSL -o tinygo.tar.gz "https://github.com/0magnet/tinygo/releases/download/${TINYGO_RELEASE}/tinygo.linux-amd64.tar.gz"
+          echo "${TINYGO_SHA256}  tinygo.tar.gz" | sha256sum -c -
+          tar -xzf tinygo.tar.gz
+          echo "$RUNNER_TEMP/tinygo/bin" >> "$GITHUB_PATH"
 
       - name: Compile-check TinyGo wasm binaries
         run: make build-wasm-tinygo
