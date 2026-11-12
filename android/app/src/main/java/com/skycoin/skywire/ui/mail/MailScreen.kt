@@ -80,6 +80,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -102,8 +103,10 @@ import com.skycoin.skywire.ui.components.HelpTopic
 import com.skycoin.skywire.ui.components.SectionCard
 import com.skycoin.skywire.ui.components.SkyTopBar
 import java.time.OffsetDateTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import java.util.Locale
 
 /**
  * Skymail: the visor's own mailbox, e-mail between visors over Skywire. One
@@ -448,7 +451,7 @@ private fun MailRow(
         }
         Spacer(Modifier.width(8.dp))
         Text(
-            shortDate(m.date),
+            shortDate(m.date, LocalConfiguration.current.locales[0]),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -462,6 +465,7 @@ private fun MailRow(
 @Composable
 private fun MessageView(state: MailUiState, viewModel: MailViewModel) {
     val open = state.open ?: return
+    val locale = LocalConfiguration.current.locales[0]
     val m = open.message
     var confirmDelete by remember { mutableStateOf(false) }
     Column(
@@ -484,7 +488,7 @@ private fun MessageView(state: MailUiState, viewModel: MailViewModel) {
                 if (inbox) VerifiedLine(m.fromVerified, m.peerPk)
                 HeaderLine(R.string.mail_to, m.to)
                 if (m.cc.isNotEmpty()) HeaderLine(R.string.mail_cc, m.cc)
-                HeaderLine(R.string.mail_date, m.date)
+                HeaderLine(R.string.mail_date, localMailDate(m.date, ZoneId.systemDefault(), locale))
                 Spacer(Modifier.height(12.dp))
                 HorizontalDivider()
                 Spacer(Modifier.height(12.dp))
@@ -1137,10 +1141,11 @@ private fun displayAddress(raw: String, contacts: List<MailContact> = emptyList(
     return SkymailAddress.short(addr)
 }
 
-private fun shortDate(rfc3339: String): String = runCatching {
+private fun shortDate(rfc3339: String, locale: Locale): String = runCatching {
     val d = OffsetDateTime.parse(rfc3339)
     if (d.year < 1970) return "" // Go's zero time: no Date header
-    d.toLocalDate().format(DateTimeFormatter.ofLocalizedDate(FormatStyle.SHORT))
+    d.atZoneSameInstant(ZoneId.systemDefault()).toLocalDate()
+        .format(DateTimeFormatter.ofLocalizedDate(FormatStyle.SHORT).withLocale(locale))
 }.getOrDefault("")
 
 private fun copy(context: Context, text: String) {
