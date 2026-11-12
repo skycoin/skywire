@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
@@ -43,9 +45,11 @@ const (
 )
 
 // EnsureLocalTransport makes sure a transport other than dmsg reaches remote
-// when remote is on this visor's local network, which the address resolver
-// sees behind the same public IP. stcpr and squicr dial its LAN address first.
-// A peer elsewhere gets ErrNotLocal and nothing is created.
+// when remote is on this visor's local network: the address resolver sees it
+// behind the same public IP, or it advertises an address on one of our
+// subnets, which still holds when a VPN gives one side another public IP.
+// stcpr and squicr dial its LAN address first. A peer elsewhere gets
+// ErrNotLocal and nothing is created.
 func (tm *Manager) EnsureLocalTransport(ctx context.Context, remote cipher.PubKey) error {
 	if tm.hasDirectTransport(remote) {
 		return nil
@@ -75,7 +79,8 @@ func (tm *Manager) makeLocalTransport(ctx context.Context, remote cipher.PubKey)
 	if err != nil {
 		return notLocalBackoff, fmt.Errorf("%w: %w", ErrNotLocal, err)
 	}
-	if !data.IsLocal && !sameIP(data.RemoteAddr, ar.LocalPublicIP()) {
+	if !data.IsLocal && !sameIP(data.RemoteAddr, ar.LocalPublicIP()) &&
+		len(netutil.OnNetworks(data.Addresses, localNetworks())) == 0 {
 		return notLocalBackoff, ErrNotLocal
 	}
 	t := types.STCPR
@@ -86,13 +91,16 @@ func (tm *Manager) makeLocalTransport(ctx context.Context, remote cipher.PubKey)
 		return notLocalBackoff, ErrNotLocal
 	}
 	dctx, cancel := context.WithTimeout(ctx, localDialTimeout)
-	_, err = tm.SaveTransport(dctx, remote, t, LabelAutomatic)
+	_, err = tm.SaveTransport(network.WithSameLAN(dctx), remote, t, LabelAutomatic)
 	cancel()
 	if err != nil {
 		return unreachableBackoff, fmt.Errorf("%s: %w", t, err)
 	}
 	return 0, nil
 }
+
+// localNetworks is netutil.LocalNetworks, replaced in tests.
+var localNetworks = netutil.LocalNetworks
 
 // hasDirectTransport reports whether a live transport other than dmsg reaches
 // remote, which is what VStreamMux.Dial rides.

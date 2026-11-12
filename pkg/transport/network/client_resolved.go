@@ -16,6 +16,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
@@ -106,7 +107,13 @@ func (c *resolvedClient) dialVisor(ctx context.Context, rPK cipher.PubKey, dial 
 		}
 	}
 
-	if visorData.IsLocal || isSelfConnection || samePublicIP {
+	hosts := visorData.Addresses
+	lanFirst := visorData.IsLocal || isSelfConnection || samePublicIP
+	if !lanFirst && onSameLAN(ctx) {
+		hosts = netutil.OnNetworks(visorData.Addresses, localNetworks())
+		lanFirst = len(hosts) > 0
+	}
+	if lanFirst {
 		if isSelfConnection {
 			c.log.Debug("Detected self-connection, trying local addresses to avoid NAT issues")
 		}
@@ -115,7 +122,7 @@ func (c *resolvedClient) dialVisor(ctx context.Context, rPK cipher.PubKey, dial 
 		if host, _, err := net.SplitHostPort(remotePublicIP); err == nil {
 			remotePublicIP = host
 		}
-		for _, host := range visorData.Addresses {
+		for _, host := range hosts {
 			// Skip loopback addresses unless it's a self-connection
 			if !isSelfConnection && (host == "127.0.0.1" || host == "::1") {
 				continue
