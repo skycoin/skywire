@@ -78,6 +78,9 @@ templ vpnCard(pk, icon, key string, x *App) {
 				} else {
 					<button class="btn primary" type="button" hx-put={ VisorURL(pk, "apps") + "/" + x.Name + "/state" } hx-vals='{"run":"1","view":"vpn"}' hx-target="#vpn" hx-swap="outerHTML"><span class="mi">play_arrow</span>{ T(ctx, "vpn-tab.start") }</button>
 				}
+				if x.Name == "vpn-client" {
+					<button class="btn" type="button" hx-get={ VisorURL(pk, "vpn/servers?app="+x.Name) } hx-target="#app-panel" hx-swap="innerHTML"><span class="mi">dns</span>{ T(ctx, "skysocks-tab.select-server.button") }</button>
+				}
 				<button class="btn" type="button" hx-get={ VisorURL(pk, "apps") + "/" + x.Name + "/settings" } hx-target="#app-panel" hx-swap="innerHTML"><span class="mi">settings</span>{ T(ctx, "vpn-tab.settings") }</button>
 				<button class="btn" type="button" hx-get={ VisorURL(pk, "apps") + "/" + x.Name + "/flags" } hx-target="#app-panel" hx-swap="innerHTML"><span class="mi">tune</span>{ T(ctx, "app-settings.show-flags-form") }</button>
 			</div>
