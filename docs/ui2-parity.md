@@ -71,7 +71,7 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 | dmsg | sessions, clients, connect all, session count | yes | Angular folds it into info |
 | skynet | forwarded ports (add, toggles, whitelist, remove) and reverse proxies | yes | new ui2 keys are English only; the Angular tab has no translations to copy |
 | web-proxy | resolving proxy status, on/off, upstream | yes | |
-| vpn | VPN client | no | |
+| vpn | vpn-client and vpn-server: state, start, stop, settings, flags | partial | no public server list picker; the server key is set through Edit flags |
 | resources | host stats and resource monitor | partial | host, process and runtime figures, no history charts |
 | terminal | dmsgpty terminal | yes | embeds the hypervisor pty page |
 | wallet | wallet | yes | frames skycoin-web's ui2 when the app runs, else says how to start it |

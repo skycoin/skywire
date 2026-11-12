@@ -73,6 +73,7 @@ func (hv *Hypervisor) ui2Routes(r *httputil.Router) {
 		hv.ui2BandwidthRoutes(r)
 		hv.ui2WebProxyRoutes(r)
 		hv.ui2SkynetRoutes(r)
+		hv.ui2VPNRoutes(r)
 		hv.ui2RewardsRoutes(r)
 		hv.ui2DmsgRoutes(r)
 		hv.ui2SettingsRoutes(r)

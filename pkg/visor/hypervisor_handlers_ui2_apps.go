@@ -84,6 +84,10 @@ func (hv *Hypervisor) ui2AppPut(form, field string) http.HandlerFunc {
 		if !ui2CallAPI(w, r, hv.putApp(), map[string]any{field: v}) {
 			return
 		}
+		if r.FormValue("view") == "vpn" {
+			hv.render(w, r, ui2.VPNBody(ui2.VPNOf(ui2LoadApps(ctx, r.PathValue("pk")))), ui2.Toast(hv.ui2T(r, "apps.operation-completed"), false))
+			return
+		}
 		if r.FormValue("view") == "catalog" {
 			hv.render(w, r, ui2.CatalogBody(ui2LoadCatalog(ctx, r.PathValue("pk"))), ui2.Toast(hv.ui2T(r, "apps.operation-completed"), false))
 			return
