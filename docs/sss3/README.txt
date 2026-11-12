@@ -10,7 +10,7 @@ source:      derived from ../kcg-game-standards/ — ~120 plain-text C#/Unity
              antipattern-*, code-rules/*), the b0.standards corpus for the
              kcg-* repositories.
 extends:     sss-standards-golang.txt in this directory
-             sss-standards-golang.txt (the earlier, narrower SSS-only Go
+             (the earlier, narrower SSS-only Go
              adaptation). This adaptation is a SUPERSET: it covers the full
              game-standards corpus, not just the 16 SSS rules + 71 code-rules.
              The K1..K10 kernel there is carried forward and extended here as
