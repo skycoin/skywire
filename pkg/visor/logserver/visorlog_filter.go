@@ -54,8 +54,8 @@ func streamFilteredVisorLog(w http.ResponseWriter, req *http.Request, logFile st
 	}
 
 	minLevel := strings.ToUpper(strings.TrimSpace(getOne("min-level")))
-	minRank, hasMinLevel := levelOrder[minLevel]
-	if minLevel != "" && !hasMinLevel {
+	minRank, minLevelSet := levelOrder[minLevel]
+	if minLevel != "" && !minLevelSet {
 		writeString(w, http.StatusBadRequest,
 			"invalid min-level %q; expected one of trace, debug, info, warn, error, fatal, panic",
 			minLevel)
@@ -101,7 +101,7 @@ func streamFilteredVisorLog(w http.ResponseWriter, req *http.Request, logFile st
 	r := bufio.NewReaderSize(f, 64*1024)
 	ctx := req.Context()
 	var lineNum, written int
-	strictLevelMode := hasMinLevel // when set, lines that don't parse get dropped, not passed through
+	strictLevelMode := minLevelSet // when set, lines that don't parse get dropped, not passed through
 
 	for {
 		select {
@@ -112,7 +112,7 @@ func streamFilteredVisorLog(w http.ResponseWriter, req *http.Request, logFile st
 		line, err := r.ReadString('\n')
 		if len(line) > 0 {
 			lineNum++
-			if lineNum > sinceLine && passesFilters(line, minRank, hasMinLevel, modRE, grepRE, strictLevelMode) {
+			if lineNum > sinceLine && passesFilters(line, minRank, minLevelSet, modRE, grepRE, strictLevelMode) {
 				if _, werr := io.WriteString(w, line); werr != nil {
 					return
 				}
@@ -146,11 +146,11 @@ func streamFilteredVisorLog(w http.ResponseWriter, req *http.Request, logFile st
 // strictLevelMode drops lines that don't match the standard log shape
 // when a min-level filter is set (so a free-form library line can't
 // sneak past --min-level=error).
-func passesFilters(line string, minRank int, hasMinLevel bool, modRE, grepRE *regexp.Regexp, strictLevelMode bool) bool {
+func passesFilters(line string, minRank int, minLevelSet bool, modRE, grepRE *regexp.Regexp, strictLevelMode bool) bool {
 	if grepRE != nil && !grepRE.MatchString(line) {
 		return false
 	}
-	if !hasMinLevel && modRE == nil {
+	if !minLevelSet && modRE == nil {
 		return true
 	}
 	m := logLevelRE.FindStringSubmatch(line)
@@ -162,7 +162,7 @@ func passesFilters(line string, minRank int, hasMinLevel bool, modRE, grepRE *re
 		}
 		return true
 	}
-	if hasMinLevel {
+	if minLevelSet {
 		rank, ok := levelOrder[m[1]]
 		if !ok || rank < minRank {
 			return false

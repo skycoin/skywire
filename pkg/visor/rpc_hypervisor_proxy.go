@@ -152,16 +152,16 @@ func (v *Visor) HVListDirectVisors() ([]visorapi.HVVisorEntry, error) {
 	// Build the local entry first so we can use its PublicIP as the
 	// "LAN-adjacent" sort key for the remote entries.
 	var localEntry visorapi.HVVisorEntry
-	hasLocal := false
+	localFound := false
 	if hv.visor != nil {
 		localEntry = visorapi.HVVisorEntry{PK: v.conf.PK, Online: true, IsLocal: true}
 		if localSummary, err := v.Summary(); err == nil {
 			populateEntryFromSummary(&localEntry, localSummary)
 		}
-		hasLocal = true
+		localFound = true
 	}
 	sortHVVisorEntries(results, localEntry.PublicIP)
-	if hasLocal {
+	if localFound {
 		results = append([]visorapi.HVVisorEntry{localEntry}, results...)
 	}
 	return results, nil

@@ -93,8 +93,8 @@ func (v *Visor) initDmsgRelay(ctx context.Context, dmsgC *dmsg.Client) {
 					}
 					return
 				}
-				routePK, hasRoutePK := remotePK(conn.RemoteAddr())
-				if hasRoutePK && !v.relayPeerAllowed(routePK) {
+				routePK, pkKnown := remotePK(conn.RemoteAddr())
+				if pkKnown && !v.relayPeerAllowed(routePK) {
 					// Refuse before the handshake: the route already names the
 					// peer, so an unlisted one costs no crypto.
 					log.WithField("peer", routePK.String()).Debug("dmsg relay: peer not whitelisted")
@@ -103,7 +103,7 @@ func (v *Visor) initDmsgRelay(ctx context.Context, dmsgC *dmsg.Client) {
 				}
 				go func(conn net.Conn) {
 					allow := func(pk cipher.PubKey) bool {
-						if hasRoutePK && pk != routePK {
+						if pkKnown && pk != routePK {
 							return false
 						}
 						return v.relayPeerAllowed(pk)

@@ -162,7 +162,7 @@ func (hv *Hypervisor) getVoiceLevels() http.HandlerFunc {
 // Local visor only — see (*Visor).VoiceDialing.
 func (hv *Hypervisor) getVoiceDialing() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		if ctx.isRemote || hv.visor == nil {
+		if ctx.remote || hv.visor == nil {
 			httputil.WriteJSON(w, r, http.StatusOK, []visorapi.VoiceDialingInfo{})
 			return
 		}
@@ -186,7 +186,7 @@ func (hv *Hypervisor) getVoiceDialRingback() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "call required"})
 			return
 		}
-		if ctx.isRemote || hv.visor == nil {
+		if ctx.remote || hv.visor == nil {
 			httputil.WriteJSON(w, r, http.StatusNotFound, map[string]string{"error": ErrNoRingback.Error()})
 			return
 		}

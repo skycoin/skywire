@@ -55,8 +55,8 @@ func TestValidateRewardXpub(t *testing.T) {
 		t.Fatalf("bad xpub: %v", err)
 	}
 	// An address already set is still readable.
-	if _, isXpub, err := ValidateRewardAddress("2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6"); err != nil || isXpub {
-		t.Fatalf("existing address: %v %v", isXpub, err)
+	if _, xpub, err := ValidateRewardAddress("2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6"); err != nil || xpub {
+		t.Fatalf("existing address: %v %v", xpub, err)
 	}
 	if !strings.HasPrefix(account, "xpub") {
 		t.Fatalf("unexpected xpub form %q", account)
@@ -104,12 +104,12 @@ func TestValidateRewardSetting(t *testing.T) {
 	if _, _, err := ValidateRewardSetting(addr, false); !errors.Is(err, ErrSingleAddress) {
 		t.Fatalf("single address without opt-in: %v", err)
 	}
-	if got, isXpub, err := ValidateRewardSetting(" "+addr, true); err != nil || isXpub || got != addr {
-		t.Fatalf("single address with opt-in: %q %v %v", got, isXpub, err)
+	if got, xpub, err := ValidateRewardSetting(" "+addr, true); err != nil || xpub || got != addr {
+		t.Fatalf("single address with opt-in: %q %v %v", got, xpub, err)
 	}
 	for _, risk := range []bool{false, true} {
-		if got, isXpub, err := ValidateRewardSetting(account, risk); err != nil || !isXpub || got != account {
-			t.Fatalf("account xpub, opt-in %v: %q %v %v", risk, got, isXpub, err)
+		if got, xpub, err := ValidateRewardSetting(account, risk); err != nil || !xpub || got != account {
+			t.Fatalf("account xpub, opt-in %v: %q %v %v", risk, got, xpub, err)
 		}
 		if _, _, err := ValidateRewardSetting(chain, risk); !errors.Is(err, ErrNotAccountXpub) {
 			t.Fatalf("chain xpub, opt-in %v: %v", risk, err)

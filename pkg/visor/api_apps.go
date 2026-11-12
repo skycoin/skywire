@@ -810,17 +810,17 @@ func (v *Visor) SetAppKillswitch(appName string, killswitch bool) error {
 }
 
 // SetAppSecure implements API.
-func (v *Visor) SetAppSecure(appName string, isSecure bool) error {
+func (v *Visor) SetAppSecure(appName string, secure bool) error {
 	if appName != skyenv.VPNServerName {
 		return fmt.Errorf("app %s is not allowed to change 'secure' parameter", appName)
 	}
 
-	v.log.Infof("Setting %s secure to %v", appName, isSecure)
+	v.log.Infof("Setting %s secure to %v", appName, secure)
 
 	const (
 		secureArgName = "--secure"
 	)
-	if err := v.conf.UpdateAppArg(v.appL, appName, secureArgName, isSecure); err != nil {
+	if err := v.conf.UpdateAppArg(v.appL, appName, secureArgName, secure); err != nil {
 		return err
 	}
 	v.log.Infof("Updated %v secure state", appName)

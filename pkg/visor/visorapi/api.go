@@ -332,7 +332,7 @@ type Apps interface {
 	// for transitive pty + RPC trust).
 	AddPtyWhitelist(pks []cipher.PubKey) error
 	SetAppPK(appName string, pk cipher.PubKey) error
-	SetAppSecure(appName string, isSecure bool) error
+	SetAppSecure(appName string, secure bool) error
 	SetAppAddress(appName string, address string) error
 	SetAppKillswitch(appName string, killswitch bool) error
 	SetAppNetworkInterface(appName string, netifc string) error
@@ -535,7 +535,7 @@ type Transports interface {
 	RemoveTransport(tid uuid.UUID) error
 	RemoveAllTransports() error
 	SetPublicAutoconnect(pAc bool) error
-	SetIsPublic(isPublic bool) error
+	SetIsPublic(public bool) error
 	GetIsPublic() bool
 	LocalTransportStats() (*LocalTransportStatsResponse, error)
 	VisorCharts(args VisorChartsArgs) (*VisorCharts, error)

@@ -1418,8 +1418,8 @@ type httpCtx struct {
 	// Hypervisor
 	Conn
 
-	// isRemote is true when the request targets a remote visor (not the local hypervisor).
-	isRemote bool
+	// remote is true when the request targets a remote visor (not the local hypervisor).
+	remote bool
 
 	// App
 	App *appserver.AppState

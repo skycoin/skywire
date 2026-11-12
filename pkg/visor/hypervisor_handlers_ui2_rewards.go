@@ -93,7 +93,7 @@ func (hv *Hypervisor) ui2RewardSave() http.HandlerFunc {
 			hv.render(w, r, ui2.RewardAddress(hv.ui2RewardView(pk, "")), ui2.Toast(hv.ui2T(r, "rewards-address-config.done"), false))
 			return
 		}
-		canonical, isXpub, err := rewardconfig.ValidateRewardSetting(draft, acceptRisk)
+		canonical, xpub, err := rewardconfig.ValidateRewardSetting(draft, acceptRisk)
 		switch {
 		case errors.Is(err, rewardconfig.ErrSingleAddress):
 			fail(hv.ui2T(r, "rewards-address-config.single-needs-opt-in"))
@@ -103,7 +103,7 @@ func (hv *Hypervisor) ui2RewardSave() http.HandlerFunc {
 			return
 		}
 		setFn := ctx.API.SetRewardAddress
-		if !isXpub {
+		if !xpub {
 			setFn = ctx.API.SetSingleRewardAddress
 		}
 		set, err := setFn(canonical)

@@ -124,13 +124,13 @@ func (hv *Hypervisor) putRewardAddress() http.HandlerFunc {
 			return
 		}
 
-		canonical, isXpub, err := rewardconfig.ValidateRewardSetting(reqBody.RewardAddress, reqBody.AcceptRisk)
+		canonical, xpub, err := rewardconfig.ValidateRewardSetting(reqBody.RewardAddress, reqBody.AcceptRisk)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 			return
 		}
 		set := ctx.API.SetRewardAddress
-		if !isXpub {
+		if !xpub {
 			set = ctx.API.SetSingleRewardAddress
 		}
 		pConf, err := set(canonical)
@@ -362,8 +362,8 @@ func (hv *Hypervisor) getRewardAddressExposure() http.HandlerFunc {
 			}
 			addr = a
 		}
-		_, isXpub, err := rewardconfig.ValidateRewardAddress(addr)
-		if err == nil && isXpub {
+		_, xpub, err := rewardconfig.ValidateRewardAddress(addr)
+		if err == nil && xpub {
 			err = errors.New("an xpub has no single address to check")
 		}
 		if err != nil {
@@ -385,7 +385,7 @@ func (hv *Hypervisor) getRewardAddressExposure() http.HandlerFunc {
 func (hv *Hypervisor) getRewardXpubAddresses() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		xpub := strings.TrimSpace(r.URL.Query().Get("xpub"))
-		if _, isXpub, err := rewardconfig.ValidateRewardAddress(xpub); err != nil || !isXpub {
+		if _, xpubOK, err := rewardconfig.ValidateRewardAddress(xpub); err != nil || !xpubOK {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, errors.New("not an xpub"))
 			return
 		}

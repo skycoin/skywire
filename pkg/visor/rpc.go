@@ -71,13 +71,13 @@ func newRPCServerWith(v *Visor, remoteName string, link *hvLink) (*rpc.Server, e
 	return rpcS, nil
 }
 
-func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, includeLogs, isSetup bool) *visorapi.TransportSummary {
+func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, includeLogs, setup bool) *visorapi.TransportSummary {
 	summary := &visorapi.TransportSummary{
 		ID:            tp.Entry.ID,
 		Local:         tm.Local(),
 		Remote:        tp.Remote(),
 		Type:          tp.Type(),
-		IsSetup:       isSetup,
+		IsSetup:       setup,
 		Label:         tp.Entry.Label,
 		LatencyMS:     tp.GetLatency(),
 		ThroughputBps: tp.GetThroughputBps(),

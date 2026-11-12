@@ -403,11 +403,11 @@ func toDashboardWallet(w http.ResponseWriter) {
 
 // RewardAddressExposure implements API. It asks the default skycoin node whether addr has ever spent.
 func (v *Visor) RewardAddressExposure(addr string) (rewardconfig.AddressExposure, error) {
-	canonical, isXpub, err := rewardconfig.ValidateRewardAddress(strings.TrimSpace(addr))
+	canonical, xpub, err := rewardconfig.ValidateRewardAddress(strings.TrimSpace(addr))
 	if err != nil {
 		return rewardconfig.AddressExposure{}, err
 	}
-	if isXpub {
+	if xpub {
 		return rewardconfig.AddressExposure{}, errors.New("an xpub has no single address to check")
 	}
 	resp, err := v.coinNodeFetch(walletNodeDefault(), http.MethodGet, rewardconfig.AddressUxoutsPath(canonical), nil, nil)

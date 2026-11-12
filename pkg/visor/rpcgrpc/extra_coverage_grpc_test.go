@@ -150,7 +150,7 @@ func TestStreamPingTreeDmsgOnly(t *testing.T) {
 		if err != nil {
 			t.Fatalf("recv: %v", err)
 		}
-		if pr, isPR := ev.Payload.(*PingTreeEvent_PingResult); isPR && !pr.PingResult.Failed {
+		if pr, matched := ev.Payload.(*PingTreeEvent_PingResult); matched && !pr.PingResult.Failed {
 			ok = true
 		}
 	}
