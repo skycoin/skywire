@@ -101,6 +101,9 @@ data class MailUiState(
 
     /** The address to hand out: dmsg needs no route, which a phone rarely has. */
     val myAddress: String? get() = status?.addressDmsg?.takeIf { it.isNotEmpty() } ?: status?.address
+
+    /** The largest message the mailbox takes, as sent. */
+    val messageLimit: Long get() = status?.limits?.maxMessageSize?.takeIf { it > 0 } ?: DEFAULT_MAX_MESSAGE
 }
 
 /**
@@ -278,13 +281,11 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
         if (uris.isEmpty()) return
         viewModelScope.launch {
             val picked = withContext(Dispatchers.IO) { uris.mapNotNull(::readAttachment) }
-            val limit = mutable.value.status?.limits?.maxMessageSize?.takeIf { it > 0 } ?: DEFAULT_MAX_MESSAGE
+            val limit = mutable.value.messageLimit
             mutable.update { s ->
                 val draft = s.draft ?: return@update s
                 val all = draft.attachments + picked
-                // The wire size is what the receiver enforces. The text and
-                // headers ride along in the envelope allowance.
-                val encoded = all.sumOf { attachmentWireSize(it.bytes.size.toLong()) } + ENVELOPE_BYTES
+                val encoded = draftWireSize(all)
                 if (encoded > limit) {
                     // Whole KB on both sides: in MB a mail just over 1 MB and the
                     // 1 MB limit both read "1.0 MB".
@@ -597,10 +598,18 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
     private companion object {
         const val PING_INTERVAL_MS = 1_000L
         const val POLL_INTERVAL_MS = 15_000L
-        const val DEFAULT_MAX_MESSAGE = 10L shl 20
-        const val ENVELOPE_BYTES = 16 * 1024L
     }
 }
+
+private const val DEFAULT_MAX_MESSAGE = 10L shl 20
+private const val ENVELOPE_BYTES = 16 * 1024L
+
+/**
+ * The size the receiver enforces: the attachments as sent, with an
+ * allowance for the text and headers.
+ */
+fun draftWireSize(attachments: List<DraftAttachment>): Long =
+    attachments.sumOf { attachmentWireSize(it.bytes.size.toLong()) } + ENVELOPE_BYTES
 
 /**
  * The bytes an attachment of [n] bytes takes in the sent mail: base64 in

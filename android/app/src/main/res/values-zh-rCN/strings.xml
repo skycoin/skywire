@@ -1148,6 +1148,7 @@
     <string name="mail_bad_address">不是 SkyMail 地址：%1$s</string>
     <string name="mail_no_recipient">请添加收件人。</string>
     <string name="mail_attachments_too_big">这些附件在传输时会膨胀到 %1$s，而一封邮件大约只能有 %2$s。</string>
+    <string name="mail_sent_size">发送时约 %1$s，上限 %2$s。邮件以文本形式携带文件，体积会增大约三分之一。</string>
     <string name="mail_result_title">没有全部送达</string>
     <string name="mail_result_delivered">已通过 %1$s 送达</string>
     <string name="mail_result_failed">未送达：%1$s</string>
@@ -1156,6 +1157,7 @@
     <string name="mail_setting_on">邮箱开启</string>
     <string name="mail_setting_on_desc">在你的地址收取邮件。关闭期间，发给你的邮件会被拒收。</string>
     <string name="mail_usage">已用 %1$s，共 %2$s</string>
+    <string name="mail_usage_encoded">邮件按发送时的形式保存，因此附件占用的空间比原文件多约三分之一。</string>
     <string name="mail_limits">超过 %1$s 的邮件会被拒收，超过 %2$d 天的邮件会被删除。</string>
     <string name="mail_allowed_title">谁可以给你写信</string>
     <string name="mail_allowed_everyone">所有人。添加公钥后，只接收列表中这些公钥的邮件。</string>

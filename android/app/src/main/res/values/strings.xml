@@ -1202,6 +1202,7 @@
     <string name="mail_bad_address">Not a SkyMail address: %1$s</string>
     <string name="mail_no_recipient">Add a recipient.</string>
     <string name="mail_attachments_too_big">These attachments become %1$s in transit — a message can be about %2$s.</string>
+    <string name="mail_sent_size">About %1$s when sent, of %2$s allowed. Mail carries files as text, which makes them about a third bigger.</string>
     <string name="mail_result_title">Not everyone got it</string>
     <string name="mail_result_delivered">Delivered over %1$s</string>
     <string name="mail_result_failed">Not delivered: %1$s</string>
@@ -1210,6 +1211,7 @@
     <string name="mail_setting_on">Mailbox on</string>
     <string name="mail_setting_on_desc">Receive mail at your address. While it is off, mail to you is refused.</string>
     <string name="mail_usage">%1$s of %2$s used</string>
+    <string name="mail_usage_encoded">Mail is kept as it was sent, so attachments take about a third more than the files.</string>
     <string name="mail_limits">Messages over %1$s are refused, and mail older than %2$d days is deleted.</string>
     <string name="mail_allowed_title">Who can write to you</string>
     <string name="mail_allowed_everyone">Everyone. Add a key to accept mail only from the keys you list.</string>

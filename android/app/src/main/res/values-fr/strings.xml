@@ -1242,6 +1242,7 @@
     <string name="mail_bad_address">Ce n’est pas une adresse SkyMail : %1$s</string>
     <string name="mail_no_recipient">Ajoutez un destinataire.</string>
     <string name="mail_attachments_too_big">Ces pièces jointes deviennent %1$s en transit — un message peut faire environ %2$s.</string>
+    <string name="mail_sent_size">Environ %1$s à l’envoi, sur %2$s autorisés. Le courrier transporte les fichiers sous forme de texte, ce qui les grossit d’environ un tiers.</string>
     <string name="mail_result_title">Tout le monde ne l’a pas reçu</string>
     <string name="mail_result_delivered">Livré via %1$s</string>
     <string name="mail_result_failed">Non livré : %1$s</string>
@@ -1250,6 +1251,7 @@
     <string name="mail_setting_on">Boîte aux lettres activée</string>
     <string name="mail_setting_on_desc">Recevoir du courrier à votre adresse. Pendant qu’elle est éteinte, le courrier pour vous est refusé.</string>
     <string name="mail_usage">%1$s sur %2$s utilisés</string>
+    <string name="mail_usage_encoded">Le courrier est gardé tel qu’envoyé, donc les pièces jointes prennent environ un tiers de plus que les fichiers.</string>
     <string name="mail_limits">Les messages dépassant %1$s sont refusés, et le courrier de plus de %2$d jours est supprimé.</string>
     <string name="mail_allowed_title">Qui peut vous écrire</string>
     <string name="mail_allowed_everyone">Tout le monde. Ajoutez une clé pour n’accepter que le courrier des clés listées.</string>
