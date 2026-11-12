@@ -61,7 +61,7 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 | apps | list, start, stop, autostart, settings, logs, help | yes | |
 | | app catalog, add app, add another instance | yes | `apps/catalog` |
 | | flags form | yes | "Edit flags" in an app's settings |
-| | filter dialog, multi select actions | no | |
+| | filter (name, port, state, autostart), multi select start, stop, autostart | yes | |
 | chat | direct messages: peers, history, send, reply, delete | yes | polls every 3 s instead of SSE; read receipts not shown |
 | | rooms: list, messages, send, create, join, invite, add member | yes | moderation (ban, mute, approve) not ported |
 | | voice calls, skychat password | no | |
