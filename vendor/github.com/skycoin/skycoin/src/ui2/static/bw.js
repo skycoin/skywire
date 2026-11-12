@@ -67,13 +67,21 @@
 		try { locked = localStorage.getItem(LOCKED); } catch (_) { return Promise.reject(new Error(msg('error'))); }
 		if (locked) {
 			if (appPassword === null) return Promise.resolve(null);
-			return decrypt(locked, appPassword).then(JSON.parse);
+			return decrypt(locked, appPassword).then(function (s) { return JSON.parse(s).concat(readTemp()); });
 		}
 		var plain = localStorage.getItem(WALLETS);
-		return Promise.resolve(plain ? JSON.parse(plain) : []);
+		return Promise.resolve((plain ? JSON.parse(plain) : []).concat(readTemp()));
+	}
+	// Temporary wallets live in this tab's sessionStorage, still encrypted,
+	// and are gone when the tab closes. The Angular wallet keeps them in
+	// memory only, so it never sees them.
+	var TEMP = 'ui2TempWallets';
+	function readTemp() {
+		try { return JSON.parse(sessionStorage.getItem(TEMP) || '[]'); } catch (_) { return []; }
 	}
 	function writeStored(list) {
-		var s = JSON.stringify(list);
+		try { sessionStorage.setItem(TEMP, JSON.stringify(list.filter(function (w) { return w.temporary; }))); } catch (_) { /* private mode */ }
+		var s = JSON.stringify(list.filter(function (w) { return !w.temporary; }));
 		if (localStorage.getItem(LOCKED)) {
 			return encrypt(s, appPassword).then(function (c) {
 				localStorage.setItem(LOCKED, c);
@@ -113,6 +121,7 @@
 	// summary is the public part of a stored wallet, as ui2.BrowserWallet.
 	function summary(w) {
 		var s = { label: w.label || '', encrypted: !!w.encryptedSeed, addresses: [] };
+		if (w.temporary) s.temporary = true;
 		if (isBip44(w)) {
 			var a = w.accounts[0];
 			s.type = 'bip44';
@@ -153,6 +162,20 @@
 		if (r === null || r === undefined) throw new Error('the cipher could not ' + name);
 		if (r.error) throw new Error(r.error);
 		return r;
+	}
+	// initialState is what the first address of a deterministic or
+	// post-quantum wallet with seed comes from, in the Angular wallet's form:
+	// the seed's hex, or pq:<hex>:<index> for a post-quantum wallet.
+	function initialState(seed, type) {
+		return type === 'pq' ? 'pq:' + asciiToHex(seed) + ':0' : asciiToHex(seed);
+	}
+	// step derives the address of state, its key and the state after it.
+	function step(c, state) {
+		var pq = /^pq:([0-9a-f]*):(\d+)$/.exec(state);
+		if (!pq) return call(c, 'generateAddress', [state]);
+		var i = parseInt(pq[2], 10);
+		var a = call(c, 'generatePQAddress', [pq[1], i]);
+		return { address: a.address, secret: a.secret, nextSeed: 'pq:' + pq[1] + ':' + (i + 1) };
 	}
 	function asciiToHex(s) {
 		var out = '';
@@ -287,8 +310,9 @@
 			var label = $('bw-label').value.trim();
 			var pw = $('bw-password').value, pw2 = $('bw-password2').value;
 			var seed = load ? normalize($('bw-seed').value) : generated;
-			var type = load ? $('bw-type').value : 'bip44';
-			var passphrase = load ? $('bw-passphrase').value : '';
+			var type = $('bw-type').value;
+			var passphrase = type === 'bip44' ? $('bw-passphrase').value : '';
+			var temp = load && $('bw-temp').checked;
 			if (!label) return setError(msg('label'));
 			if (!seed) return setError(msg('seed'));
 			if (!load && normalize($('bw-seed-confirm').value) !== seed) return setError(msg('seed-confirm'));
@@ -316,13 +340,13 @@
 						});
 					});
 				}
-				// A deterministic wallet: each address's seed is the next
-				// seed of the one before, from the hex of the seed text.
+				// A deterministic or post-quantum wallet: each address comes
+				// from the state the one before it leaves.
 				var chain = [];
-				var next = asciiToHex(seed);
+				var next = initialState(seed, type);
 				var derive = function (start, n) {
 					while (chain.length < start + n) {
-						var a = call(c, 'generateAddress', [next]);
+						var a = step(c, next);
 						chain.push({ address: a.address, nextSeed: a.nextSeed });
 						next = a.nextSeed;
 					}
@@ -331,14 +355,17 @@
 				return scan(derive, 1).then(function (kept) {
 					var after = kept[kept.length - 1].nextSeed;
 					return Promise.all([encrypt(seed, pw), encrypt(after, pw)]).then(function (secrets) {
-						return {
+						return Object.assign({
 							coinId: 0, needSeedConfirmation: false, label: label,
 							addresses: kept.map(function (a) { return { address: a.address }; }),
 							encryptedSeed: secrets[0], encryptedNextSeed: secrets[1],
-						};
+						}, type === 'pq' ? { walletType: 'pq' } : {});
 					});
 				});
-			}).then(save).catch(function (err) {
+			}).then(function (w) {
+				if (temp) w.temporary = true;
+				return save(w);
+			}).catch(function (err) {
 				setStatus('');
 				setError(err && err.message ? err.message : String(err));
 				btn.disabled = false;
@@ -365,7 +392,7 @@
 				if (!sec.seed) throw new Error(msg('wrong-password'));
 				if (isBip44(w)) {
 					if (call(c, 'bip44AccountXPub', [sec.seed, sec.passphrase]) !== w.accounts[0].accountXpubKey) throw new Error(msg('wrong-password'));
-				} else if (call(c, 'generateAddress', [asciiToHex(sec.seed)]).address !== w.addresses[0].address) {
+				} else if (step(c, initialState(sec.seed, w.walletType)).address !== w.addresses[0].address) {
 					throw new Error(msg('wrong-password'));
 				}
 				return sec;
@@ -375,9 +402,9 @@
 	// deterministicChain is the wallet's addresses with their secret keys,
 	// one more after them, and the seed that comes after that one.
 	function deterministicChain(c, w, sec) {
-		var out = [], next = asciiToHex(sec.seed);
+		var out = [], next = initialState(sec.seed, w.walletType);
 		for (var i = 0; i <= w.addresses.length; i++) {
-			var a = call(c, 'generateAddress', [next]);
+			var a = step(c, next);
 			out.push({ address: a.address, secret: a.secret });
 			next = a.nextSeed;
 		}
@@ -420,19 +447,57 @@
 		return keys;
 	}
 
-	// checkSign fails unless the outputs pay exactly the reviewed amount to
-	// the reviewed address, and everything else comes back to the wallet.
-	function checkSign(s, w, fresh, to) {
+	// droplets reads a coin amount as millionths, or NaN.
+	function droplets(s) {
+		var m = /^(\d*)(?:\.(\d{0,6}))?$/.exec((s || '').trim());
+		if (!m || (m[1] === '' && !m[2])) return NaN;
+		return parseInt(m[1] || '0', 10) * 1e6 + parseInt(((m[2] || '') + '000000').slice(0, 6), 10);
+	}
+
+	// formDests are the destinations the form asks for, read here rather
+	// than taken from the server: bulk lines when there are any, else the rows.
+	function formDests(form) {
+		var out = [];
+		var bulk = form.elements.bulk ? form.elements.bulk.value.trim() : '';
+		if (bulk) {
+			bulk.split('\n').forEach(function (line) {
+				var f = line.split(',').map(function (x) { return x.trim(); });
+				if (f.length >= 2 && f[0]) out.push({ to: f[0], coins: droplets(f[1]) });
+			});
+			return out;
+		}
+		var to = form.querySelectorAll('#send-rows [name=to]'), coins = form.querySelectorAll('#send-rows [name=coins]');
+		for (var i = 0; i < to.length; i++) {
+			if (to[i].value.trim()) out.push({ to: to[i].value.trim(), coins: droplets(coins[i].value) });
+		}
+		return out;
+	}
+
+	// checkSign fails unless the outputs pay each destination the form asked
+	// for exactly what it asked, and everything else comes back to the
+	// wallet. A move has no form destination: it goes to the fresh address.
+	function checkSign(s, w, fresh, want) {
 		var own = {};
 		summary(w).addresses.forEach(function (a) { own[a.address] = true; });
 		own[fresh.change] = true;
-		if (s.to !== to) throw new Error(msg('mismatch'));
-		var paid = 0;
+		if (!want) {
+			if (s.dests.length !== 1 || s.dests[0].to !== fresh.receive) throw new Error(msg('mismatch'));
+			want = s.dests;
+		}
+		var asked = {}, paid = {};
+		want.forEach(function (d) {
+			if (!(d.coins > 0)) throw new Error(msg('mismatch'));
+			asked[d.to] = (asked[d.to] || 0) + d.coins;
+		});
 		s.outputs.forEach(function (o) {
-			if (o.address === to) paid += o.coins;
+			if (asked[o.address] !== undefined) paid[o.address] = (paid[o.address] || 0) + o.coins;
 			else if (!own[o.address]) throw new Error(msg('mismatch'));
 		});
-		if (paid !== s.coins || !s.inputs.length) throw new Error(msg('mismatch'));
+		Object.keys(asked).forEach(function (a) {
+			var p = paid[a] || 0;
+			if (own[a] ? p < asked[a] : p !== asked[a]) throw new Error(msg('mismatch'));
+		});
+		if (!s.inputs.length) throw new Error(msg('mismatch'));
 	}
 
 	// remember stores the fresh addresses the transaction pays, before it is
@@ -475,8 +540,10 @@
 			var w = list.filter(ours).find(function (x) { return firstAddress(x) === id; });
 			if (!w) throw new Error(msg('missing'));
 			$('bw-data').value = JSON.stringify(summary(w));
+			document.body.dispatchEvent(new CustomEvent('bw-ready'));
 			form.addEventListener('submit', function (e) {
 				e.preventDefault();
+				if (e.submitter) $('bw-unsigned').value = '';
 				setError('');
 				var pw = $('bw-send-password').value;
 				cipher().then(function (c) {
@@ -500,8 +567,7 @@
 			btn.disabled = true;
 			try {
 				var s = JSON.parse(box.getAttribute('data-bw-sign'));
-				var to = form.elements.to ? form.elements.to.value.trim() : session.fresh.receive;
-				checkSign(s, session.w, session.fresh, to);
+				checkSign(s, session.w, session.fresh, form.elements.from ? null : formDests(form));
 				var keys = keysOf(session.c, session.w, session.sec, s.inputs.map(function (i) { return i.address; }));
 				var inputs = s.inputs.map(function (i) { return { hash: i.hash, secret: keys[i.address], address: i.address }; });
 				var raw = call(session.c, 'prepareTransaction', [JSON.stringify(inputs), JSON.stringify(s.outputs)]);
@@ -522,6 +588,32 @@
 			}
 		});
 
+		// Unsigned asks for the same review without signing. The fresh change
+		// address it pays is stored before the transaction is shown.
+		document.addEventListener('click', function (e) {
+			if (!e.target.closest || !e.target.closest('[data-bw-unsigned]')) return;
+			$('bw-unsigned').value = '1';
+			form.requestSubmit();
+		});
+		document.addEventListener('htmx:afterSwap', function (e) {
+			if (!e.detail.target || e.detail.target.id !== 'review' || !session) return;
+			var box = document.querySelector('[data-bw-unsigned-tx]');
+			if (!box) return;
+			var done = session;
+			session = null;
+			try {
+				var s = JSON.parse(box.getAttribute('data-bw-unsigned-tx'));
+				checkSign(s, done.w, done.fresh, formDests(form));
+				remember(id, done.fresh, s, done.pw).catch(function (err) {
+					box.hidden = true;
+					setError(err && err.message ? err.message : msg('error'));
+				});
+			} catch (err) {
+				box.hidden = true;
+				setError(err.message);
+			}
+		});
+
 		// Once the node took the transaction the form is done: a second send
 		// from this page would derive the same fresh address again.
 		var sent = false;
@@ -534,11 +626,11 @@
 		});
 	}
 
-	// nextSeedAfter is the seed after the first count addresses of a
-	// deterministic wallet with seed.
-	function nextSeedAfter(c, seed, count) {
-		var next = asciiToHex(seed);
-		for (var i = 0; i < count; i++) next = call(c, 'generateAddress', [next]).nextSeed;
+	// nextSeedAfter is the state after the first count addresses of a
+	// deterministic or post-quantum wallet of type with seed.
+	function nextSeedAfter(c, seed, count, type) {
+		var next = initialState(seed, type);
+		for (var i = 0; i < count; i++) next = step(c, next).nextSeed;
 		return next;
 	}
 
@@ -567,10 +659,10 @@
 			return withList(function (list) {
 				var w = list.filter(ours).find(function (x) { return firstAddress(x) === id; });
 				if (!w) throw new Error(msg('missing'));
-				if (w.walletType === 'pq') throw new Error(msg('unsupported'));
 				return Promise.resolve(f(w, list)).then(function () { return writeStored(list); });
 			}).then(function () {
-				window.location.href = done === 'deleted' ? './' : 'bw/wallet?id=' + encodeURIComponent(id) + '&done=' + done;
+				if (typeof done === 'function') done = done();
+				window.location.href = 'bw/wallet?id=' + encodeURIComponent(id) + '&done=' + done;
 			});
 		}
 		var ops = {
@@ -594,9 +686,9 @@
 						}
 						var pw = field(form, 'password');
 						return secretsOf(c, w, pw).then(function (sec) {
-							var next = nextSeedAfter(c, sec.seed, w.addresses.length);
+							var next = nextSeedAfter(c, sec.seed, w.addresses.length, w.walletType);
 							for (var i = 0; i < n; i++) {
-								var g = call(c, 'generateAddress', [next]);
+								var g = step(c, next);
 								w.addresses.push({ address: g.address });
 								next = g.nextSeed;
 							}
@@ -607,6 +699,50 @@
 							return encrypt(next, pw).then(function (e) { w.encryptedNextSeed = e; });
 						});
 					}, 'added&n=' + n);
+				});
+			},
+			scan: function (form) {
+				return cipher().then(function (c) {
+					var found = 0;
+					return change(function (w) {
+						// More is the used addresses after the wallet's last ones,
+						// derived from start until a batch of 20 has none in use.
+						var more = function (derive, start) {
+							return scan(function (s, n) { return derive(start + s, n); }, 0);
+						};
+						if (isBip44(w)) {
+							var a = w.accounts[0];
+							var xp = function (chain) {
+								return function (s, n) { return call(c, 'bip44XPubAddresses', [a.accountXpubKey, chain, s, n]); };
+							};
+							return Promise.all([more(xp(0), a.externalAddresses.length), more(xp(1), a.changeAddresses.length)]).then(function (r) {
+								r[0].forEach(function (x) { a.externalAddresses.push({ address: x.address }); });
+								r[1].forEach(function (x) { a.changeAddresses.push({ address: x.address }); });
+								w.addresses = a.externalAddresses.concat(a.changeAddresses);
+								found = r[0].length + r[1].length;
+							});
+						}
+						var pw = field(form, 'password');
+						return secretsOf(c, w, pw).then(function (sec) {
+							var chain = [], next = nextSeedAfter(c, sec.seed, w.addresses.length, w.walletType);
+							var derive = function (s, n) {
+								while (chain.length < s + n) {
+									var g = step(c, next);
+									chain.push({ address: g.address, nextSeed: g.nextSeed });
+									next = g.nextSeed;
+								}
+								return chain.slice(s, s + n);
+							};
+							return more(derive, 0).then(function (kept) {
+								found = kept.length;
+								if (!found) return null;
+								kept.forEach(function (x) { w.addresses.push({ address: x.address }); });
+								var after = kept[kept.length - 1].nextSeed;
+								if (!w.encryptedSeed) { w.nextSeed = after; return null; }
+								return encrypt(after, pw).then(function (e) { w.encryptedNextSeed = e; });
+							});
+						});
+					}, function () { return 'scanned&n=' + found; });
 				});
 			},
 			seed: function (form) {
@@ -630,7 +766,7 @@
 				return cipher().then(function (c) {
 					return change(function (w) {
 						return secretsOf(c, w, pw).then(function (sec) {
-							if (!isBip44(w) && !sec.nextSeed) sec.nextSeed = nextSeedAfter(c, sec.seed, w.addresses.length);
+							if (!isBip44(w) && !sec.nextSeed) sec.nextSeed = nextSeedAfter(c, sec.seed, w.addresses.length, w.walletType);
 							return sealSecrets(w, sec, nw);
 						});
 					}, 'reset');
@@ -646,8 +782,8 @@
 						if (isBip44(w)) {
 							if (call(c, 'bip44AccountXPub', [seed, sec.passphrase]) !== w.accounts[0].accountXpubKey) throw new Error(msg('wrong-seed'));
 						} else {
-							if (call(c, 'generateAddress', [asciiToHex(seed)]).address !== w.addresses[0].address) throw new Error(msg('wrong-seed'));
-							sec.nextSeed = nextSeedAfter(c, seed, w.addresses.length);
+							if (step(c, initialState(seed, w.walletType)).address !== w.addresses[0].address) throw new Error(msg('wrong-seed'));
+							sec.nextSeed = nextSeedAfter(c, seed, w.addresses.length, w.walletType);
 						}
 						return sealSecrets(w, sec, nw);
 					}, 'reset');
@@ -675,6 +811,147 @@
 		});
 	}
 
+	// hexBytes and bytesHex convert between hex and bytes.
+	function hexBytes(h) {
+		var out = new Uint8Array(h.length / 2);
+		for (var i = 0; i < out.length; i++) out[i] = parseInt(h.substr(i * 2, 2), 16);
+		return out;
+	}
+	function bytesHex(b) {
+		var s = '';
+		for (var i = 0; i < b.length; i++) s += ('0' + b[i].toString(16)).slice(-2);
+		return s;
+	}
+
+	// signInputs signs job's inputs with keys, as the Angular wallet's joint
+	// transaction service does: each signature covers SHA256(inner hash ||
+	// input hash) and goes in the input's slot of the encoded transaction
+	// (src/coin/transactions.go: length u32, type u8, inner hash, then the
+	// u32 counted 65 byte signatures).
+	function signInputs(job, keys) {
+		var extras = window.SkycoinCipherExtras;
+		if (!extras || typeof extras.signHash !== 'function') return Promise.reject(new Error(msg('error')));
+		var raw = job.raw;
+		return job.inputs.reduce(function (p, input) {
+			return p.then(function () {
+				var data = new Uint8Array(64);
+				data.set(hexBytes(job.inner), 0);
+				data.set(hexBytes(input.hash), 32);
+				return crypto.subtle.digest('SHA-256', data).then(function (d) {
+					var sig = extras.signHash(bytesHex(new Uint8Array(d)), keys[input.address]);
+					if (!sig || sig.error || !/^[0-9a-f]{130}$/i.test(sig)) throw new Error(msg('mismatch'));
+					var start = (4 + 1 + 32 + 4 + input.index * 65) * 2;
+					raw = raw.substring(0, start) + sig.toLowerCase() + raw.substring(start + 130);
+				});
+			});
+		}, Promise.resolve()).then(function () { return raw; });
+	}
+
+	// txFlow lets a browser wallet review, sign and make joint transactions.
+	// The chosen wallet's public part goes in #bw-data; its keys stay here.
+	function txFlow() {
+		var sel = $('bw-tx-wallet'), wallets = {};
+		withList(function (list) {
+			list.filter(ours).forEach(function (w) {
+				var id = firstAddress(w);
+				wallets[id] = w;
+				var o = document.createElement('option');
+				o.value = id;
+				o.textContent = w.label || id;
+				sel.appendChild(o);
+			});
+		}).catch(function (err) { setError(err && err.message ? err.message : msg('error')); });
+		sel.addEventListener('change', function () {
+			var w = wallets[sel.value];
+			$('bw-data').value = w ? JSON.stringify(summary(w)) : '';
+			document.body.dispatchEvent(new CustomEvent('bw-wallet'));
+		});
+		document.addEventListener('click', function (e) {
+			if (!e.target.closest || !e.target.closest('#bw-tx-sign')) return;
+			var box = document.querySelector('[data-bw-tx-sign]');
+			var w = box && wallets[box.getAttribute('data-bw-wallet')];
+			var out = $('bw-tx-error');
+			if (!w) { out.textContent = msg('missing'); return; }
+			var job = JSON.parse(box.getAttribute('data-bw-tx-sign'));
+			var btn = $('bw-tx-sign');
+			btn.disabled = true;
+			out.textContent = '';
+			var pw = $('bw-tx-password').value;
+			cipher().then(function (c) {
+				return secretsOf(c, w, pw).then(function (sec) {
+					$('bw-tx-password').value = '';
+					return signInputs(job, keysOf(c, w, sec, job.inputs.map(function (i) { return i.address; })));
+				});
+			}).then(function (raw) {
+				htmx.ajax('POST', 'tx/review', { target: '#tx-review', swap: 'innerHTML', values: { rawtx: raw, wallet: $('bw-data').value } });
+			}).catch(function (err) {
+				btn.disabled = false;
+				out.textContent = err && err.message ? err.message : msg('error');
+			});
+		});
+	}
+
+	// appPasswordFlow sets, changes or removes the app password that
+	// encrypts the whole stored list, as the Angular wallet's app password
+	// page does (lockedWallets holds the list encrypted, wallets holds it
+	// when there is none). The wallets inside stay encrypted either way.
+	function appPasswordFlow() {
+		var locked = !!localStorage.getItem(LOCKED);
+		document.querySelectorAll('[data-bw-app]').forEach(function (f) {
+			var op = f.getAttribute('data-bw-app');
+			f.closest('details').hidden = locked ? op === 'set' : op !== 'set';
+		});
+		function val(f, n) { var e = f.querySelector('[data-f="' + n + '"]'); return e ? e.value : ''; }
+		var ops = {
+			set: function (f) {
+				var nw = val(f, 'new');
+				if (!nw) throw new Error(msg('new-password'));
+				if (nw !== val(f, 'new2')) throw new Error(msg('password-confirm'));
+				var plain = localStorage.getItem(WALLETS) || '[]';
+				return encrypt(plain, nw).then(function (c) {
+					localStorage.setItem(LOCKED, c);
+					localStorage.removeItem(WALLETS);
+				});
+			},
+			change: function (f) {
+				var nw = val(f, 'new');
+				if (!nw) throw new Error(msg('new-password'));
+				if (nw !== val(f, 'new2')) throw new Error(msg('password-confirm'));
+				return decrypt(localStorage.getItem(LOCKED), val(f, 'current')).catch(function () {
+					throw new Error(msg('wrong-password'));
+				}).then(function (s) { return encrypt(s, nw); }).then(function (c) { localStorage.setItem(LOCKED, c); });
+			},
+			remove: function (f) {
+				return decrypt(localStorage.getItem(LOCKED), val(f, 'current')).catch(function () {
+					throw new Error(msg('wrong-password'));
+				}).then(function (s) {
+					localStorage.setItem(WALLETS, s);
+					localStorage.removeItem(LOCKED);
+				});
+			},
+		};
+		document.addEventListener('submit', function (e) {
+			var f = e.target.closest && e.target.closest('form[data-bw-app]');
+			if (!f) return;
+			e.preventDefault();
+			var out = f.querySelector('.op-error');
+			out.textContent = '';
+			Promise.resolve().then(function () { return ops[f.getAttribute('data-bw-app')](f); }).then(function () {
+				window.location.href = 'bw/app-password?done=' + f.getAttribute('data-bw-app');
+			}).catch(function (err) { out.textContent = err && err.message ? err.message : msg('error'); });
+		});
+	}
+
+	// The unlock form can erase a locked list whose password is lost, as
+	// the Angular wallet's lock screen does.
+	document.addEventListener('click', function (e) {
+		var b = e.target.closest && e.target.closest('[data-bw-erase]');
+		if (!b || !window.confirm(b.getAttribute('data-bw-erase'))) return;
+		localStorage.removeItem(LOCKED);
+		localStorage.removeItem(WALLETS);
+		window.location.reload();
+	});
+
 	document.addEventListener('DOMContentLoaded', function () {
 		var fail = function (err) {
 			var e = $('bw-page-error') || $('bw-error');
@@ -694,6 +971,10 @@
 			createFlow(mode === 'load');
 		} else if (mode === 'send') {
 			sendFlow(page.getAttribute('data-bw-id'));
+		} else if (mode === 'tx') {
+			txFlow();
+		} else if (mode === 'app-password') {
+			appPasswordFlow();
 		}
 	});
 })();

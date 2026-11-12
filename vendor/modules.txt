@@ -1012,7 +1012,7 @@ github.com/shoenig/go-m1cpu
 # github.com/shopspring/decimal v1.6.0
 ## explicit; go 1.10
 github.com/shopspring/decimal
-# github.com/skycoin/skycoin v0.28.8-0.20261111233454-c8a48d826578
+# github.com/skycoin/skycoin v0.28.8-0.20261112002817-5dec99010101
 ## explicit; go 1.27.0
 github.com/skycoin/skycoin/cmd/explorer/commands
 github.com/skycoin/skycoin/cmd/newcoin/commands
