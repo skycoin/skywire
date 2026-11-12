@@ -1,4 +1,4 @@
-// Package appnet pkg/app/appnet/direct_mux_precedence_test.go c3-app-net
+// Package appnet pkg/app/appnet/direct_mux_precedence_test.go c2-vis-appsvc
 package appnet
 
 import (

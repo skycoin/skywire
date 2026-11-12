@@ -1,4 +1,4 @@
-// Package proxystatus pkg/proxystatus/requests.go c4-app-web
+// Package proxystatus pkg/proxystatus/requests.go c2-app-web
 package proxystatus
 
 import (

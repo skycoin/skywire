@@ -1,4 +1,4 @@
-// Package commands cmd/svc/transport-discovery/commands/root_test.go: unit
+// Package commands cmd/svc/transport-discovery/commands/root_test.go unit
 // tests for the testable surface of the transport-discovery root command —
 // the JSON example helpers, commaSplit, buildConfig (flags + --config overlay),
 // mergeFile, the command metadata/flags, and Execute's help path.

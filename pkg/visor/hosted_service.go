@@ -1,4 +1,4 @@
-// Package visor pkg/visor/hosted_service.go
+// Package visor pkg/visor/hosted_service.go c3-vis-core
 package visor
 
 import (

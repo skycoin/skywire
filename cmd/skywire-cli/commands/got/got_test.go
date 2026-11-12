@@ -1,4 +1,4 @@
-// Package cligot got_test.go: unit tests for the got CLI's URL parsing,
+// Package cligot cmd/skywire-cli/commands/got/got_test.go unit tests for the got CLI's URL parsing,
 // header/body helpers, byte formatting, the got client factory, and command
 // wiring. The request/download/head paths require a running visor RPC or
 // network and are not exercised here.

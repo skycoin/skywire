@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package cligot cmd/skywire-cli/commands/got/roots_js.go
+// Package cligot cmd/skywire-cli/commands/got/roots_js.go c4-vis-cli
 package cligot
 
 import "github.com/skycoin/skywire/pkg/wasmhv/cabundle"

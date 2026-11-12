@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/group_file_test.go
+// Package commands cmd/apps/skychat/commands/group_file_test.go c4-app-chat
 //
 // Unit coverage for the group file-share feature: the file-reference envelope
 // that rides a group feed (encode/parse), the read-side enrichment that adds

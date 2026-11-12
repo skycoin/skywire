@@ -1,3 +1,5 @@
+// Package rpctest internal/rpctest/rpctest.go c0-com-http
+//
 // Package rpctest checks gobrpc service registrations, in particular the
 // reflection-free handlers rpcgen writes for TinyGo builds. Run the tests with
 // -tags tinygo under standard Go to exercise the gobimpl HandleFunc path.

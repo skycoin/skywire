@@ -1,4 +1,4 @@
-// Package skysocks pkg/skysocks/client_resolver_stack_test.go
+// Package skysocks pkg/skysocks/client_resolver_stack_test.go c4-app-proxy
 //
 // The whole stack in one process, with no stand-ins between the browser and the
 // mesh dial: a real skynetweb resolver runtime, published through the real

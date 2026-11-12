@@ -1,4 +1,4 @@
-// Package servicedisc pkg/servicedisc/auth_test.go: unit tests for the
+// Package servicedisc pkg/servicedisc/auth_test.go unit tests for the
 // authenticated paths (RegisterEntry/postEntry, DeleteEntry, Register) using
 // a fake service-discovery server that speaks the httpauthclient nonce
 // handshake.

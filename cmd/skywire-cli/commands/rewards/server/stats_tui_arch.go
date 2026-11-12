@@ -1,4 +1,4 @@
-// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/stats_tui_arch.go c5-reward-server
+// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/stats_tui_arch.go c4-vis-cli
 //
 // The fleet's CPU architectures, as a pie.
 //

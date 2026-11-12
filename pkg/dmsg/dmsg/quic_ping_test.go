@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package dmsg pkg/dmsg/dmsg/quic_ping_test.go
+// Package dmsg pkg/dmsg/dmsg/quic_ping_test.go c1-net-dmsg
 package dmsg
 
 import (

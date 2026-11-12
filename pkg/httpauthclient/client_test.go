@@ -1,4 +1,4 @@
-// Package httpauthclient internal/httpauth/client_test.go
+// Package httpauthclient pkg/httpauthclient/client_test.go c0-com-http
 package httpauthclient
 
 import (

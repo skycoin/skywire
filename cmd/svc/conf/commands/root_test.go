@@ -1,4 +1,4 @@
-// Package commands cmd/svc/conf/commands/root_test.go: unit tests for the conf
+// Package commands cmd/svc/conf/commands/root_test.go unit tests for the conf
 // root command — subcommand registration / metadata, the scheme filtering
 // (filterServices), the JSON-printing helpers and the three subcommand Run
 // closures (output captured from stdout), and Execute's --help path.

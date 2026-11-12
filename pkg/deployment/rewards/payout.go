@@ -1,3 +1,4 @@
+// Package rewards pkg/deployment/rewards/payout.go c4-app-rewards
 package rewards
 
 import (

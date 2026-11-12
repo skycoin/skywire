@@ -1,4 +1,4 @@
-// Package visor pkg/visor/service_over_skynet.go
+// Package visor pkg/visor/service_over_skynet.go c3-vis-core
 package visor
 
 import (

@@ -1,4 +1,4 @@
-// Package commands cmd/svc/service-discovery/commands/root_test.go: unit tests
+// Package commands cmd/svc/service-discovery/commands/root_test.go unit tests
 // for the testable surface of the service-discovery root command — the JSON
 // example helpers, commaSplit, buildConfig (flags + --config overlay),
 // mergeFile, the command metadata/flags, and Execute's help path. The tiny

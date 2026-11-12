@@ -1,4 +1,4 @@
-// Package clidmsg cmd/skywire-cli/commands/dmsg/chat_tui.go c5-cli-dmsg
+// Package clidmsg cmd/skywire-cli/commands/dmsg/chat_tui.go c4-vis-cli
 //
 // The screen of `cli dmsg chat`, drawn with progkit: the conversation, a line
 // to type into, and the recipient to pick first when none was given. In websh

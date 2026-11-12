@@ -1,4 +1,4 @@
-// Package visor pkg/visor/voice_ringback_test.go
+// Package visor pkg/visor/voice_ringback_test.go c3-vis-core
 package visor
 
 import (

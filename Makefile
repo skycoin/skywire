@@ -3,7 +3,7 @@
 .PHONY : update-deps update-dmsg update-skycoin push-deps
 .PHONY : build clean install format  bin build-race netview-wasm check-netview-wasm
 .PHONY : build-mobile android-mobile android-mobile-check android-mobile-ndk android-mobile-x86_64 android-apk android-aab android-apk-debug android-sh-apk check-mobile-version
-.PHONY : generate services vet check-cg check-help check-inner check-ci hostbridge-dist
+.PHONY : generate services vet check-cg check-descriptors check-help check-inner check-ci hostbridge-dist
 .PHONY : e2e-build e2e-run e2e-test e2e-stop e2e-clean e2e-skychat
 
 # --match 'v[0-9]*' pins this to the SKYWIRE release tags. The repo also carries
@@ -152,7 +152,7 @@ check: ## Run linters and tests (lint, check-cg, check-help, test). Serialized v
 		$(MAKE) --no-print-directory -f $(firstword $(MAKEFILE_LIST)) check-inner; \
 	fi
 
-check-inner: lint check-cg check-browseui check-help test ## Internal: the actual check targets, run inside flock by 'make check'. Don't call directly unless you've already acquired .make-check.lock.
+check-inner: lint check-descriptors check-cg check-browseui check-help test ## Internal: the actual check targets, run inside flock by 'make check'. Don't call directly unless you've already acquired .make-check.lock.
 
 
 # BROWSEUI_ENTRYPOINTS: embedded browser scripts that define a global when they
@@ -212,7 +212,7 @@ check-help: ## Cursory check of the help menus
 vet: ## Run go vet (the non-golangci-lint half of 'lint')
 	CGO_ENABLED=0 ${OPTS} go vet -mod=vendor -tags 'withoutsystray withoutgotop' ./...
 
-check-ci: vet check-cg check-help test ## CI check: like 'check' but skips golangci-lint (CI runs it as a separate pinned, cached step). Keeps go vet + config-gen smoke + tests.
+check-ci: vet check-descriptors check-cg check-help test ## CI check: like 'check' but skips golangci-lint (CI runs it as a separate pinned, cached step). Keeps go vet + config-gen smoke + tests.
 
 check-windows: lint-windows test-windows ## Run linters and tests on windows image
 

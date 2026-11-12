@@ -1,3 +1,4 @@
+// Package skymail pkg/skymail/service.go c4-app-mail
 package skymail
 
 import (

@@ -1,4 +1,4 @@
-// Package skysocksc cmd/skywire-cli/commands/proxy/settings_test.go
+// Package skysocksc cmd/skywire-cli/commands/proxy/settings_test.go c4-vis-cli
 package skysocksc
 
 import (

@@ -1,4 +1,4 @@
-// Package spec pkg/transport/spec/spec_test.go
+// Package spec pkg/transport/spec/spec_test.go c2-net-transport
 //
 // PersistentTransports is a pure schema type with no executable statements, so
 // there is no statement coverage to gain here. These tests guard its JSON wire

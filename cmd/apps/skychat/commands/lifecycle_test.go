@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/lifecycle_test.go
+// Package commands cmd/apps/skychat/commands/lifecycle_test.go c4-app-chat
 //
 // Coverage for the long-running / lifecycle surface that was still at 0%: the
 // two SSE stream handlers (/sse and /events), the DM send handler, the

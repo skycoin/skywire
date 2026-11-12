@@ -1,4 +1,4 @@
-// Package visor pkg/visor/init_dmsg_skywire_test.go — pins the
+// Package visor pkg/visor/init_dmsg_skywire_test.go c3-vis-core — pins the
 // Phase 3 wiring contract: PK extractor refuses non-skywire conns
 // (defense-in-depth before the whitelist gate), and the dmsgpty
 // dialer chain is skywire-first / dmsg-fallback.

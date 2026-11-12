@@ -1,4 +1,4 @@
-// Package gcmon pkg/gcmon/gcmon.go c1-util-debug
+// Package gcmon pkg/gcmon/gcmon.go c0-com-util
 //
 // A small sampler over the standard runtime/metrics package. It keeps a fixed
 // ring of samples so garbage collector behavior can be read off a live

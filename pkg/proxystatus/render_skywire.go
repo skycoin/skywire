@@ -1,4 +1,4 @@
-// Package proxystatus pkg/proxystatus/render_skywire.go
+// Package proxystatus pkg/proxystatus/render_skywire.go c2-app-web
 package proxystatus
 
 import (

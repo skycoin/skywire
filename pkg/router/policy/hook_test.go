@@ -1,4 +1,4 @@
-// Package policy pkg/router/policy/hook_test.go — pins the
+// Package policy pkg/router/policy/hook_test.go c2-net-routing — pins the
 // Loader → DialHook adapter. Tests the loader-side semantics
 // (script defines decide_route returning mux/min_hops/fallback)
 // translate cleanly into the router-facing DialAdjustment shape.

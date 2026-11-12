@@ -1,6 +1,6 @@
 //go:build !js
 
-// Package launcher pkg/app/launcher/proc_env_native.go c2-app-launcher
+// Package launcher pkg/app/launcher/proc_env_native.go c2-vis-appsvc
 package launcher
 
 import "github.com/skycoin/skywire/pkg/app/appserver"

@@ -1,4 +1,4 @@
-// Package router pkg/router/settings_catalog_test.go
+// Package router pkg/router/settings_catalog_test.go c2-net-routing
 package router
 
 import (

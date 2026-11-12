@@ -1,4 +1,4 @@
-// Package visor pkg/visor/hypervisor_handlers_pair.go c3-vis-api
+// Package visor pkg/visor/hypervisor_handlers_pair.go c3-vis-core
 //
 // Pre-auth pairing endpoints (#4484 stage 5). A desk tab this hypervisor
 // serves has no session yet; it learns its own standing from GET /pair/status

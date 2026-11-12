@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/render_media_test.go
+// Package commands cmd/apps/skychat/commands/render_media_test.go c4-app-chat
 //
 // Coverage for the media-in-chat additive fields on the legacy /sse
 // stream: a file event carries file_* metadata (+ a ready-made

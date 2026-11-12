@@ -1,4 +1,4 @@
-// Package dmsgdisc dmsgdisc_test.go: unit tests for config loading, the
+// Package dmsgdisc pkg/services/dmsgdisc/dmsgdisc_test.go unit tests for config loading, the
 // service factory, the pure helpers, and the bounded/early-return paths of
 // the run loop (pollServersUntilFound, updateServers, openStore, Run's
 // store-open failure) that don't require redis or a live dmsg network.

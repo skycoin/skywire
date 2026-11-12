@@ -1,3 +1,5 @@
+// Package cliproxy pkg/cliout/cliproxy/cliproxy.go c4-vis-cli
+//
 // Package cliproxy is the output shape of the `skywire cli proxy` commands.
 //
 // Most of these mutate something and then say so. A sentence is fine for a

@@ -1,4 +1,4 @@
-// Package sn sn_test.go: unit tests for config loading (ParseBlock /
+// Package sn pkg/services/sn/sn_test.go unit tests for config loading (ParseBlock /
 // LoadFile), the service factory + New, the getHTTPClient / plainHTTPClient
 // helpers, and the early error-return paths of Run (missing config_path
 // file, missing keys) that don't require a live dmsg network.

@@ -1,6 +1,6 @@
 //go:build !wasm && !(js && wasm)
 
-// Package visorconfig pkg/visor/visorconfig/walletconfig_native.go c3-app-wallet
+// Package visorconfig pkg/visor/visorconfig/walletconfig_native.go c3-vis-core
 package visorconfig
 
 // walletCustodyDiskCapable: this build has a real filesystem and can run the

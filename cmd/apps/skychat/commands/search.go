@@ -1,3 +1,4 @@
+// Package commands cmd/apps/skychat/commands/search.go c4-app-chat
 package commands
 
 import (

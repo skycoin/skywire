@@ -1,4 +1,4 @@
-// Package clivisor cmd/skywire-cli/commands/visor/hv_map_test.go
+// Package clivisor cmd/skywire-cli/commands/visor/hv_map_test.go c4-vis-cli
 package clivisor
 
 import (

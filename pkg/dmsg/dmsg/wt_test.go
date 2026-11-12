@@ -1,6 +1,6 @@
 //go:build !tinygo && !(js && wasm)
 
-// Package dmsg pkg/dmsg/dmsg/wt_test.go
+// Package dmsg pkg/dmsg/dmsg/wt_test.go c1-net-dmsg
 package dmsg
 
 import (

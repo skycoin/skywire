@@ -1,4 +1,4 @@
-// Package tcpnoise pkg/dmsg/tcpnoise/tcpnoise_test.go
+// Package tcpnoise pkg/dmsg/tcpnoise/tcpnoise_test.go c4-vis-cli
 package tcpnoise
 
 import (

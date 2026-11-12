@@ -1,4 +1,4 @@
-// Package router delivery_crc_test.go: the in-mux delivery check.
+// Package router pkg/router/delivery_crc_test.go the in-mux delivery check.
 package router
 
 import (

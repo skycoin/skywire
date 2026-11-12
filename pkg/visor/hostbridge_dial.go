@@ -1,6 +1,6 @@
 //go:build !(tinygo && js)
 
-// Package visor pkg/visor/hostbridge_dial.go c3-vis-wasm
+// Package visor pkg/visor/hostbridge_dial.go c3-vis-core
 package visor
 
 import (

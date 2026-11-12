@@ -1,5 +1,6 @@
 //go:build !tinygo
 
+// Package dmsg pkg/dmsg/dmsg/stream_census.go c1-net-dmsg
 package dmsg
 
 import (

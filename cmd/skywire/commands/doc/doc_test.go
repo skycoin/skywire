@@ -1,4 +1,4 @@
-// Package doc doc_test.go: unit tests for the markdown doc generator —
+// Package doc cmd/skywire/commands/doc/doc_test.go unit tests for the markdown doc generator —
 // the pure page/render/sanitize helpers, the cobra-tree walker (collect /
 // visibleChildren / flagUsagesIncludingHidden), the runCapture exec wrapper
 // (success / failure / timeout against a stub script), and the RootCmd Run

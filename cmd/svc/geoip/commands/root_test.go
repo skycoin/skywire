@@ -1,4 +1,4 @@
-// Package commands cmd/svc/geoip/commands/root_test.go: unit tests for the
+// Package commands cmd/svc/geoip/commands/root_test.go unit tests for the
 // geoip root command — the JSON example helpers, the exported wrappers
 // (EmbeddedGeoIP / LookupIP), lookupIP against the embedded GeoLite2 DB,
 // ipFromRequest header/remote-addr precedence, the HTTP API server

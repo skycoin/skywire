@@ -1,4 +1,4 @@
-// Package visor pkg/visor/execwasm_serve.go c3-vis-api
+// Package visor pkg/visor/execwasm_serve.go c3-vis-core
 package visor
 
 import (

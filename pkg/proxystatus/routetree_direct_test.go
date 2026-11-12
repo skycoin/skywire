@@ -1,4 +1,4 @@
-// Package proxystatus pkg/proxystatus/routetree_direct_test.go c3-vis-core
+// Package proxystatus pkg/proxystatus/routetree_direct_test.go c2-app-web
 package proxystatus
 
 import (

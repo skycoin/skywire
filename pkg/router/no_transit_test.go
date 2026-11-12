@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package router pkg/router/no_transit_test.go c2-net-router
+// Package router pkg/router/no_transit_test.go c2-net-routing
 package router
 
 import (

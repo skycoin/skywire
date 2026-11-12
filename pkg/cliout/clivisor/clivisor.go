@@ -1,3 +1,5 @@
+// Package clivisor pkg/cliout/clivisor/clivisor.go c4-vis-cli
+//
 // Package clivisor is the output shape of the `skywire cli visor` commands.
 package clivisor
 

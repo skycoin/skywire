@@ -1,4 +1,4 @@
-// Package servicedisc pkg/servicedisc/client_test.go: unit tests for the
+// Package servicedisc pkg/servicedisc/client_test.go unit tests for the
 // HTTPClient query-building / Services path and the Configured/NewClient
 // helpers.
 package servicedisc

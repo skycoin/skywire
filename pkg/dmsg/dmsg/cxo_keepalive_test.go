@@ -1,4 +1,4 @@
-// Package dmsg pkg/dmsg/dmsg/cxo_keepalive_test.go: while a registration-over-
+// Package dmsg pkg/dmsg/dmsg/cxo_keepalive_test.go while a registration-over-
 // CXO feed is healthy on the epoch of the last update, the periodic client
 // re-registration is never due; a new epoch or an unhealthy feed makes it due.
 package dmsg

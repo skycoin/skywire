@@ -1,4 +1,4 @@
-// Package httputil pkg/httputil/httputil_more_test.go: unit tests for the HTTP
+// Package httputil pkg/httputil/httputil_more_test.go unit tests for the HTTP
 // helpers — error wrapping, health fetch, JSON read/write, query parsing,
 // address split, and the logger middlewares.
 package httputil

@@ -1,4 +1,4 @@
-// Package skysettings pkg/skysocks/skysettings/skysettings_test.go
+// Package skysettings pkg/skysocks/skysettings/skysettings_test.go c2-app-proxy
 package skysettings
 
 import (

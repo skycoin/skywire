@@ -1,4 +1,4 @@
-// Package pterm cmd/skywire-cli/cliutil/pterm/pterm_test.go
+// Package pterm cmd/skywire-cli/cliutil/pterm/pterm_test.go c4-vis-cli
 package pterm
 
 import (

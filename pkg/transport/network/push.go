@@ -1,3 +1,4 @@
+// Package network pkg/transport/network/push.go c2-net-transport
 package network
 
 import "github.com/skycoin/skywire/pkg/dmsg/noise"

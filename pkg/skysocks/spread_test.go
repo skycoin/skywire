@@ -1,4 +1,4 @@
-// Package skysocks pkg/skysocks/spread_test.go — the spread policy's tables
+// Package skysocks pkg/skysocks/spread_test.go c4-app-proxy — the spread policy's tables
 // and its two end-to-end share bounds.
 package skysocks
 

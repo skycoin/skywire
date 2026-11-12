@@ -1,4 +1,4 @@
-// Package dmsg pkg/dmsg/dmsg/session_handshake_tail_test.go c2-dmsg-core
+// Package dmsg pkg/dmsg/dmsg/session_handshake_tail_test.go c1-net-dmsg
 package dmsg
 
 import (

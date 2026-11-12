@@ -1,4 +1,4 @@
-// Package transport pkg/transport/managed_transport_close_test.go
+// Package transport pkg/transport/managed_transport_close_test.go c2-net-transport
 package transport
 
 import (

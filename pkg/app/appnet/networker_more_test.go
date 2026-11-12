@@ -1,4 +1,4 @@
-// Package appnet pkg/app/appnet/networker_more_test.go: unit tests for the
+// Package appnet pkg/app/appnet/networker_more_test.go unit tests for the
 // dmsg networker dial/listen wrappers, the top-level PingContextWith* helper
 // branches that require a *SkywireNetworker, and the SkywireNetworker
 // dial/ping early error (canceled context) paths.

@@ -1,4 +1,4 @@
-// Package servicedisc pkg/servicedisc/cxo_keepalive_test.go: an unchanged
+// Package servicedisc pkg/servicedisc/cxo_keepalive_test.go an unchanged
 // heartbeat skips the HTTP POST while a KeepaliveSink is healthy on the epoch
 // of the last registration, and never on a timer.
 package servicedisc

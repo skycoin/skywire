@@ -1,4 +1,4 @@
-// Package visor pkg/visor/cxo_keepalive_healthy_test.go: a recent announce is
+// Package visor pkg/visor/cxo_keepalive_healthy_test.go a recent announce is
 // not enough to skip an HTTP keepalive; the service must be subscribed, and
 // the epoch stays put while the subscription stays on one conn.
 package visor

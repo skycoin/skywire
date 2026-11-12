@@ -1,4 +1,4 @@
-// Package treestore pkg/cxo/treestore/subscriber_quiet_test.go c3-cxo-tree
+// Package treestore pkg/cxo/treestore/subscriber_quiet_test.go c2-net-cxo
 package treestore
 
 import (

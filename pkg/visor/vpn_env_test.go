@@ -1,4 +1,4 @@
-// Package visor pkg/visor/vpn_env_test.go
+// Package visor pkg/visor/vpn_env_test.go c3-vis-core
 package visor
 
 import (

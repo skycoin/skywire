@@ -1,4 +1,4 @@
-// Package commands cmd/dmsg/dmsgprobe/commands/dmsgprobe_more_test.go
+// Package commands cmd/dmsg/dmsgprobe/commands/dmsgprobe_more_test.go c1-net-dmsg
 //
 // Covers RunE's input-validation branches that return before any dmsg/tcp I/O:
 // a malformed --via spec, an invalid destination public key, and an invalid

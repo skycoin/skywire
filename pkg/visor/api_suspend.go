@@ -1,4 +1,4 @@
-// Package visor pkg/visor/api_suspend.go
+// Package visor pkg/visor/api_suspend.go c3-vis-core
 package visor
 
 import (

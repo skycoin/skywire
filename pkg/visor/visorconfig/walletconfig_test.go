@@ -1,4 +1,4 @@
-// Package visorconfig pkg/visor/visorconfig/walletconfig_test.go c3-app-wallet
+// Package visorconfig pkg/visor/visorconfig/walletconfig_test.go c3-vis-core
 package visorconfig
 
 import (

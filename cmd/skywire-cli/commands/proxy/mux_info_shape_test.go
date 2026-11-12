@@ -1,4 +1,4 @@
-// Package skysocksc cmd/skywire-cli/commands/proxy/mux_info_shape_test.go c2-net-routing
+// Package skysocksc cmd/skywire-cli/commands/proxy/mux_info_shape_test.go c4-vis-cli
 //
 // The `proxy mux info` header, where a session's SHAPE and its move history
 // are read. Both halves regressed live on 2026-09-23: the header printed

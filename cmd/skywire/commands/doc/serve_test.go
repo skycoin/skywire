@@ -1,4 +1,4 @@
-// Package doc cmd/skywire/commands/doc/serve_test.go c1-cli-doc
+// Package doc cmd/skywire/commands/doc/serve_test.go c4-vis-cli
 package doc
 
 import (

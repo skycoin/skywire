@@ -1,4 +1,4 @@
-// Package skysocksc cmd/skywire-cli/commands/proxy/settings.go
+// Package skysocksc cmd/skywire-cli/commands/proxy/settings.go c4-vis-cli
 //
 // `proxy settings` — the live tuning knobs of a RUNNING skysocks-client.
 //

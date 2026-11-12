@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/pairing_handlers_test.go
+// Package commands cmd/apps/skychat/commands/pairing_handlers_test.go c4-app-chat
 //
 // Unit coverage for the /pair HTTP surface that pair_inbox_handler_test.go
 // left untested: pairRootHandler (add/list), pairItemHandler (remove/send),

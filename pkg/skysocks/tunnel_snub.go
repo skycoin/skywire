@@ -1,4 +1,4 @@
-// Package skysocks pkg/skysocks/tunnel_snub.go — the per-TUNNEL snub, borrowed
+// Package skysocks pkg/skysocks/tunnel_snub.go c4-app-proxy — the per-TUNNEL snub, borrowed
 // from bittorrent.
 //
 // A previous attempt at this bounded time-to-first-byte per CHUNK and

@@ -1,4 +1,4 @@
-// Package cmdutil pkg/cmdutil/pprof_test.go
+// Package cmdutil pkg/dmsg/cmdutil/pprof_test.go c1-net-dmsg
 package cmdutil
 
 import (

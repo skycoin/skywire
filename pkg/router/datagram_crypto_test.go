@@ -1,4 +1,4 @@
-// Package router pkg/router/datagram_crypto_test.go: unit tests
+// Package router pkg/router/datagram_crypto_test.go unit tests
 // for the per-datagram AEAD layer. Stage 3 of #2607.
 
 package router

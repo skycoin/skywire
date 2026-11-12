@@ -1,4 +1,4 @@
-// Package appnet pkg/app/appnet/local_service_test.go
+// Package appnet pkg/app/appnet/local_service_test.go c2-vis-appsvc
 package appnet
 
 import (

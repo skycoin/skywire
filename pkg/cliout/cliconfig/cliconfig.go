@@ -1,3 +1,5 @@
+// Package cliconfig pkg/cliout/cliconfig/cliconfig.go c4-vis-cli
+//
 // Package cliconfig is the output shape of the `skywire cli config` commands.
 package cliconfig
 

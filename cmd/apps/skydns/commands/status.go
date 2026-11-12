@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skydns/commands/status.go
+// Package commands cmd/apps/skydns/commands/status.go c4-app-vpn
 package commands
 
 import (

@@ -1,4 +1,4 @@
-// Package dmsghttp pkg/dmsghttp/http_test.go
+// Package dmsghttp pkg/dmsg/dmsghttp/http_test.go c1-net-dmsg
 package dmsghttp
 
 import (

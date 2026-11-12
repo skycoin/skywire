@@ -1,4 +1,4 @@
-// Package dmsgclient dmsgclient_test.go: unit tests for flag parsing,
+// Package dmsgclient pkg/dmsg/dmsgclient/dmsgclient_test.go unit tests for flag parsing,
 // the caching/fallback discovery-client wrappers, and the fallback HTTP
 // round tripper. The dmsg-server-backed Start* paths are integration
 // territory and are not exercised here.

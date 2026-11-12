@@ -1,4 +1,4 @@
-// Package commands cmd/dmsg/dmsgip/commands/dmsgip_test.go
+// Package commands cmd/dmsg/dmsgip/commands/dmsgip_test.go c1-net-dmsg
 //
 // The RunE closure inlines everything and ends in a live dmsg connect + LookupIP
 // (and Fatals on a bad --dmsgconf), so only its early validation is reachable as

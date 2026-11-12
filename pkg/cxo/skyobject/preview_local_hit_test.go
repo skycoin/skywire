@@ -1,4 +1,4 @@
-// Package skyobject pkg/cxo/skyobject/preview_local_hit_test.go:
+// Package skyobject pkg/cxo/skyobject/preview_local_hit_test.go
 // pins (*Preview).Get preferring a locally-held object over the remote
 // getter. The pre-fix guard was
 //

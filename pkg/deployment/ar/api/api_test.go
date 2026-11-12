@@ -1,4 +1,4 @@
-// Package api api_test.go: unit tests for the address-resolver HTTP API —
+// Package api pkg/deployment/ar/api/api_test.go unit tests for the address-resolver HTTP API —
 // pure helpers, the JSON/health/transports handlers, and the bind / delBind
 // / resolve / deregister handlers driven directly with injected auth + chi
 // route context (bypassing the httpauth signing middleware).

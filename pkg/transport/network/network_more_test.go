@@ -1,4 +1,4 @@
-// Package network network_more_test.go: unit tests for the transport
+// Package network pkg/transport/network/network_more_test.go unit tests for the transport
 // accessors, listener, generic client, address-resolver dial logic, and
 // the small helpers in this package.
 package network

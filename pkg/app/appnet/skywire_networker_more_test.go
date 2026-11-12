@@ -1,4 +1,4 @@
-// Package appnet pkg/app/appnet/skywire_networker_more_test.go: unit tests for
+// Package appnet pkg/app/appnet/skywire_networker_more_test.go unit tests for
 // the SkywireNetworker listener/serve plumbing and helpers that don't require a
 // live router — Listen/ListenContext, the skywireListener accept queue,
 // serve/close dispatch, readWithTimeout, and SetAppDirectMux's nil path.

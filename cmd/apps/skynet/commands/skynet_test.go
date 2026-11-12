@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skynet/commands/skynet_test.go
+// Package commands cmd/apps/skynet/commands/skynet_test.go c4-app-skynet
 //
 // Covers createRPCClient, the one helper callable without a live visor app
 // environment. The rest of the package (RunSkynet) sits behind app.NewClient,

@@ -1,5 +1,6 @@
 //go:build !mobile
 
+// Package commands cmd/apps/skymail/commands/offline.go c4-app-mail
 package commands
 
 // offline turns on mail for visors that are offline on the desktop and

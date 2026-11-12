@@ -1,4 +1,4 @@
-// Package appcommon pkg/app/appcommon/mocks_exercise_test.go: drives every
+// Package appcommon pkg/app/appcommon/mocks_exercise_test.go drives every
 // method of the mockery-generated MockAddr/MockConn/MockListener so the
 // generated implementations are exercised.
 package appcommon

@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package deskhost pkg/wasmhv/deskhost/desk_tour_js.go c4-wasm-desk
+// Package deskhost pkg/wasmhv/deskhost/desk_tour_js.go c3-vis-wasm
 //
 // The desk tour: a guided walk through the DESKTOP a visor serves — the
 // launcher, the mesh browser, the shell, the shared filesystem, mail, the

@@ -1,3 +1,4 @@
+// Package transport pkg/transport/managed_transport_push.go c2-net-transport
 package transport
 
 import (
@@ -139,10 +140,11 @@ func (ps *pushState) kick() {
 type pushResult int
 
 const (
-	pushIdle  pushResult = iota // nothing more was ready
-	pushMore                    // the budget ran out with data maybe left
-	pushRetry                   // readCh was full
-	pushEnded                   // the transport ended
+	_         pushResult = iota
+	pushIdle             // nothing more was ready
+	pushMore             // the budget ran out with data maybe left
+	pushRetry            // readCh was full
+	pushEnded            // the transport ended
 )
 
 // run reads what is ready and passes it on. buf belongs to the worker.

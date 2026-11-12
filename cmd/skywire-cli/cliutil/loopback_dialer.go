@@ -1,3 +1,4 @@
+// Package cliutil cmd/skywire-cli/cliutil/loopback_dialer.go c4-vis-cli
 package cliutil
 
 import (

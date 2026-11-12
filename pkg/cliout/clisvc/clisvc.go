@@ -1,3 +1,5 @@
+// Package clisvc pkg/cliout/clisvc/clisvc.go c4-vis-cli
+//
 // Package clisvc is the output shape of the `skywire cli svc` and
 // `skywire cli resolver` commands.
 package clisvc

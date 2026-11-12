@@ -1,3 +1,4 @@
+// Package logserver pkg/visor/logserver/heapdump.go c3-vis-core
 package logserver
 
 import (

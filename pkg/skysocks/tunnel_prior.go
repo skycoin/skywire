@@ -1,4 +1,4 @@
-// Package skysocks pkg/skysocks/tunnel_prior.go — the capacity PRIOR a tunnel
+// Package skysocks pkg/skysocks/tunnel_prior.go c4-app-proxy — the capacity PRIOR a tunnel
 // carries before it has carried anything.
 //
 // The defect this answers. A standby tunnel is held open, pinged and kept

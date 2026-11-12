@@ -1,4 +1,4 @@
-// Package skysocks pkg/skysocks/spread.go — the spread policy.
+// Package skysocks pkg/skysocks/spread.go c4-app-proxy — the spread policy.
 //
 // The object under a range-split download or a striped upload is a set of
 // independent chunks, and every chunk is placed on one tunnel. Who places them

@@ -1,6 +1,6 @@
 //go:build !js
 
-// Package pty pkg/pty/ui_socket.go c2-app-pty
+// Package pty pkg/pty/ui_socket.go c3-vis-pty
 package pty
 
 import (

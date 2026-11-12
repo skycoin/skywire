@@ -1,3 +1,5 @@
+// Package router pkg/router/mux_counters.go c2-net-routing
+//
 // Package router mux_counters.go: cumulative, process-lifetime tallies of
 // mux state transitions whose only other record is the bounded MuxEvent
 // ring (mux_events.go), which drops old entries under sustained churn.

@@ -1,4 +1,4 @@
-// Package api pkg/deployment/sd/api/charts.go
+// Package api pkg/deployment/sd/api/charts.go c4-net-discovery
 package api
 
 import (

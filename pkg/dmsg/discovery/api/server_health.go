@@ -1,4 +1,4 @@
-// Package api pkg/dmsg/discovery/api/server_health.go c2-dmsg-core
+// Package api pkg/dmsg/discovery/api/server_health.go c4-net-discovery
 package api
 
 import (

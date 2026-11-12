@@ -1,4 +1,4 @@
-// Package cliroute cmd/skywire-cli/commands/route/settings_dial_test.go
+// Package cliroute cmd/skywire-cli/commands/route/settings_dial_test.go c4-vis-cli
 package cliroute
 
 import (

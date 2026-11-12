@@ -1,4 +1,4 @@
-// Package router pkg/router/pool_compose_idle_test.go
+// Package router pkg/router/pool_compose_idle_test.go c2-net-routing
 //
 // pool.compose_idle: an ACTIVE tunnel of a role-reporting app is held at
 // pool.active_width legs whether or not it is carrying anything. The mux is

@@ -1,4 +1,4 @@
-// Package commands cmd/dmsg/self-ping/commands/self-ping_test.go
+// Package commands cmd/dmsg/self-ping/commands/self-ping_test.go c1-net-dmsg
 //
 // Covers parseServerEntry, the pure pk@ip:port parser behind the --srv flag.
 // The RunE closure performs a live dmsg self-ping and is not unit-testable

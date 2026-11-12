@@ -1,4 +1,4 @@
-// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/stats_tui_sn.go c5-reward-server
+// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/stats_tui_sn.go c4-vis-cli
 //
 // The route setup nodes, in the terminal panel.
 //

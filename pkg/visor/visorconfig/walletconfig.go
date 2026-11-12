@@ -1,4 +1,4 @@
-// Package visorconfig pkg/visor/visorconfig/walletconfig.go c3-app-wallet
+// Package visorconfig pkg/visor/visorconfig/walletconfig.go c3-vis-core
 package visorconfig
 
 // Wallet custody modes — WHERE the keys and wallet files live. This is the one

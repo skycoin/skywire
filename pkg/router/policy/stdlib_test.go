@@ -1,4 +1,4 @@
-// Package policy pkg/router/policy/stdlib_test.go — tests for
+// Package policy pkg/router/policy/stdlib_test.go c2-net-routing — tests for
 // the geo / transports / peers / logging stdlib modules.
 package policy
 

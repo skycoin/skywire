@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/filexfer_transfer_test.go
+// Package commands cmd/apps/skychat/commands/filexfer_transfer_test.go c4-app-chat
 //
 // Unit coverage for the file-transfer core that the existing filexfer tests
 // left at 0%: the auto-accept policy (acceptInbound / isEstablishedPeer /

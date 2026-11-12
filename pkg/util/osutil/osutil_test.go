@@ -1,6 +1,6 @@
 //go:build !windows
 
-// Package osutil pkg/util/osutil/osutil_test.go: unit tests for the process and
+// Package osutil pkg/util/osutil/osutil_test.go unit tests for the process and
 // socket-file helpers (unix variants).
 package osutil
 

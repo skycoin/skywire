@@ -1,4 +1,4 @@
-// Package skydns pkg/skydns/upstream.go
+// Package skydns pkg/skydns/upstream.go c4-app-vpn
 package skydns
 
 import (

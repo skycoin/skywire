@@ -1,4 +1,4 @@
-// Package commands ui_page_test.go
+// Package commands cmd/apps/skychat/commands/ui_page_test.go c4-app-chat
 package commands
 
 import (

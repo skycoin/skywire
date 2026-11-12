@@ -1,4 +1,4 @@
-// Package appserver pkg/app/appserver/dial_app_knobs.go
+// Package appserver pkg/app/appserver/dial_app_knobs.go c2-vis-appsvc
 //
 // The dial path's read of the live per-app knobs.
 //

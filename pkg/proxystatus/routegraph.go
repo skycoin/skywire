@@ -1,4 +1,4 @@
-// Package proxystatus pkg/proxystatus/routegraph.go c4-app-web
+// Package proxystatus pkg/proxystatus/routegraph.go c2-app-web
 //
 // RouteGraph projects a surface Snapshot's live route-group state into the small
 // node/edge subgraph the status.skysocks page hands to the GPU force-directed

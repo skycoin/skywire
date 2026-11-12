@@ -1,4 +1,4 @@
-// Package commands cmd/svc/stun-server/commands/root_test.go: unit tests for
+// Package commands cmd/svc/stun-server/commands/root_test.go unit tests for
 // the stun-server root command. Covers the registered flags and their
 // defaults, the command metadata, Execute's --help path, and the RootCmd.Run
 // closure. Run ends in logger.Fatal (os.Exit) when stun.New(...).Run returns

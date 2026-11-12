@@ -1,4 +1,4 @@
-// Package visor pkg/visor/api_proxy_tunnel.go
+// Package visor pkg/visor/api_proxy_tunnel.go c3-vis-core
 //
 // Per-tunnel teardown: close ONE of an app's tunnels and let the app's own
 // standby pool replace it.

@@ -1,5 +1,6 @@
 //go:build mobile
 
+// Package commands cmd/apps/skymail/commands/offline_mobile.go c4-app-mail
 package commands
 
 // offline is off in the phone apps, which have no Outbox view yet: a send

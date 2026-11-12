@@ -1,4 +1,4 @@
-// Package appserver pkg/app/appserver/notify_test.go
+// Package appserver pkg/app/appserver/notify_test.go c2-vis-appsvc
 //
 // Coverage for the app→visor notification seam. The security-relevant property
 // is app attribution: the App field is taken from the calling proc's own

@@ -1,4 +1,4 @@
-// Package dmsgtracker manager_test.go: unit tests for the Manager's
+// Package dmsgtracker pkg/visor/dmsgtracker/manager_test.go unit tests for the Manager's
 // deterministic surface — error classification, the done/isDone helper,
 // constructor defaults, and the Get / GetBulk / Close / InProgressCount
 // methods exercised without a live dmsg client (dc == nil, so no serve

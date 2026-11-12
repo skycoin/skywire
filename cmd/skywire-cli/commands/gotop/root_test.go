@@ -1,6 +1,6 @@
 //go:build !withoutgotop && !tinygo
 
-// Package cligotop root_test.go: unit tests for the gotop CLI's pure
+// Package cligotop cmd/skywire-cli/commands/gotop/root_test.go unit tests for the gotop CLI's pure
 // formatting helpers, the in-memory log capture, the text-mode stats
 // renderer, and the gRPC device data-transform methods.
 package cligotop

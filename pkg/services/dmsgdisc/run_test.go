@@ -1,4 +1,4 @@
-// Package dmsgdisc run_test.go: covers Run's http-mode startup path by
+// Package dmsgdisc pkg/services/dmsgdisc/run_test.go covers Run's http-mode startup path by
 // pointing openStore at a tiny in-process fake that speaks just enough of the
 // redis wire protocol (RESP2) for go-redis's connection PING to succeed. This
 // lets Run get past openStore without a real redis and exercise the

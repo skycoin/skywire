@@ -1,4 +1,4 @@
-// Package proxystatus pkg/proxystatus/routetree.go c4-app-web
+// Package proxystatus pkg/proxystatus/routetree.go c2-app-web
 //
 // RouteTree is the single shared adapter that projects a surface Snapshot's
 // live route-group state into a bilateral tree model (pkg/bitree). BOTH the

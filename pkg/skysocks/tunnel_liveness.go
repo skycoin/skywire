@@ -1,4 +1,4 @@
-// Package skysocks pkg/skysocks/tunnel_liveness.go
+// Package skysocks pkg/skysocks/tunnel_liveness.go c4-app-proxy
 //
 // What the pool is allowed to call dead.
 //

@@ -1,6 +1,6 @@
 //go:build mobile
 
-// Package visor pkg/visor/api_browse_jar_mobile.go c3-vis-browse
+// Package visor pkg/visor/api_browse_jar_mobile.go c3-vis-core
 package visor
 
 import "net/http"

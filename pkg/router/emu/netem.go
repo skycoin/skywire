@@ -1,4 +1,4 @@
-// Package emu pkg/router/emu/netem.go
+// Package emu pkg/router/emu/netem.go c2-net-routing
 //
 // Package emu is an in-process network emulator for the router's multipath
 // legs. It provides a pair of connected endpoints that satisfy

@@ -1,6 +1,6 @@
 //go:build !no_ci
 
-// Package store pkg/discovery/store/redis_test.go
+// Package store pkg/dmsg/discovery/store/redis_test.go c1-net-dmsg
 package store
 
 import (

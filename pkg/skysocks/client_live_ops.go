@@ -1,4 +1,4 @@
-// Package skysocks pkg/skysocks/client_live_ops.go
+// Package skysocks pkg/skysocks/client_live_ops.go c4-app-proxy
 //
 // The operations a live knob change asks of the tunnels already held.
 //

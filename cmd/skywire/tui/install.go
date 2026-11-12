@@ -1,4 +1,4 @@
-// Package tui cmd/skywire/tui/install.go
+// Package tui cmd/skywire/tui/install.go c4-vis-cli
 package tui
 
 import (

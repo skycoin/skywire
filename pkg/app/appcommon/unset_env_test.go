@@ -1,4 +1,4 @@
-// Package appcommon pkg/app/appcommon/unset_env_test.go: the internal app env cleanup
+// Package appcommon pkg/app/appcommon/unset_env_test.go the internal app env cleanup
 package appcommon
 
 import (

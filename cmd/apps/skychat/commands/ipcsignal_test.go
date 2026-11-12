@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/ipcsignal_test.go
+// Package commands cmd/apps/skychat/commands/ipcsignal_test.go c4-app-chat
 //
 // Unit coverage for the IPC shutdown-signal handler.
 //

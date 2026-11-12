@@ -1,3 +1,5 @@
+// Package alerts pkg/alerts/settings.go c3-vis-core
+//
 // Package alerts sends mail and webhook alerts when watched visors go
 // offline, when they come back, and when their storage starts to fail.
 package alerts

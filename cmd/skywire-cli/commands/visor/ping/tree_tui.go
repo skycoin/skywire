@@ -1,4 +1,4 @@
-// Package clivisorping cmd/skywire-cli/commands/visor/ping/tree_tui.go c5-cli-visor
+// Package ping cmd/skywire-cli/commands/visor/ping/tree_tui.go c4-vis-cli
 //
 // The screen of `visor ping tree`; the command spec stays in tree.go.
 package ping
