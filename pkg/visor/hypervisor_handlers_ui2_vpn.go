@@ -16,8 +16,8 @@ import (
 // and flags reuse the apps tab's routes.
 
 func (hv *Hypervisor) ui2VPNRoutes(r *httputil.Router) {
-	r.Get("/ui2/visors/{pk}/vpn", hv.ui2VPN(false))
-	r.Get("/ui2/visors/{pk}/vpn/body", hv.ui2VPN(true))
+	r.Get("/visors/{pk}/vpn", hv.ui2VPN(false))
+	r.Get("/visors/{pk}/vpn/body", hv.ui2VPN(true))
 }
 
 func (hv *Hypervisor) ui2VPN(body bool) http.HandlerFunc {
@@ -33,8 +33,8 @@ func (hv *Hypervisor) ui2VPN(body bool) http.HandlerFunc {
 
 // ui2VPNPickRoutes are the server picker of the vpn tab.
 func (hv *Hypervisor) ui2VPNPickRoutes(r *httputil.Router) {
-	r.Get("/ui2/visors/{pk}/vpn/servers", hv.ui2VPNServers())
-	r.Post("/ui2/visors/{pk}/vpn/use", hv.ui2VPNUse())
+	r.Get("/visors/{pk}/vpn/servers", hv.ui2VPNServers())
+	r.Post("/visors/{pk}/vpn/use", hv.ui2VPNUse())
 }
 
 // ui2VPNServers lists the public servers the service discovery knows, read

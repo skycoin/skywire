@@ -18,28 +18,28 @@ templ Layout(title, classic string) {
 		</head>
 		<body data-unreachable={ T(ctx, "ui2.unreachable") } data-hvpk={ From(ctx).HVPK }>
 			<header class="top">
-				<a class="brand" href="ui2/">
+				<a class="brand" href="./">
 					<img src="assets/img/skywire-icon.png" alt="" width="32" height="32"/>
 					<span>Skywire</span>
 				</a>
 				<button class="icon-btn menu-btn" type="button" aria-expanded="false" aria-controls="top-menu" aria-label={ T(ctx, "ui2.menu") } data-menu-toggle><span class="mi">menu</span></button>
 				<div class="menu-items" id="top-menu">
 					<nav class="home">
-						<a href="ui2/">{ T(ctx, "nodes.title") }</a>
+						<a href="./">{ T(ctx, "nodes.title") }</a>
 						if From(ctx).HVPK != "" {
 							<a href={ templ.URL(VisorURL(From(ctx).HVPK, "info")) }>{ T(ctx, "nodes.local-visor-title") }</a>
 						}
-						<a href="ui2/rewards">{ T(ctx, "nodes.rewards-title") }</a>
-						<a href="ui2/resources">{ T(ctx, "nodes.resources-title") }</a>
+						<a href="rewards">{ T(ctx, "nodes.rewards-title") }</a>
+						<a href="resources">{ T(ctx, "nodes.resources-title") }</a>
 						if From(ctx).TPViz {
 							<a href="tp-viz/">{ T(ctx, "node.details.tpviz.title") }</a>
 						}
-						<a href="ui2/network">{ T(ctx, "nodes.network-title") }</a>
-						<a href="ui2/transports">{ T(ctx, "nodes.transports-title") }</a>
-						<a href="ui2/uptime">{ T(ctx, "nodes.uptime-title") }</a>
-						<a href="ui2/services">{ T(ctx, "nodes.services-health-title") }</a>
+						<a href="network">{ T(ctx, "nodes.network-title") }</a>
+						<a href="transports">{ T(ctx, "nodes.transports-title") }</a>
+						<a href="uptime">{ T(ctx, "nodes.uptime-title") }</a>
+						<a href="services">{ T(ctx, "nodes.services-health-title") }</a>
 						<a href="route-viz">{ T(ctx, "ui2.route-viz") }</a>
-						<a href="ui2/settings">{ T(ctx, "settings.title") }</a>
+						<a href="settings">{ T(ctx, "settings.title") }</a>
 					</nav>
 					<span class="spacer"></span>
 					<div class="tools">
@@ -49,9 +49,9 @@ templ Layout(title, classic string) {
 							}
 						</select>
 						<button class="icon-btn" type="button" data-theme-toggle title={ T(ctx, "ui2.theme") } aria-label={ T(ctx, "ui2.theme") }><span class="mi">brightness_6</span></button>
-						<a class="btn sm" href={ templ.URL(classic) }>{ T(ctx, "ui2.classic") }</a>
+						<a class="btn sm" href={ templ.URL("angular/" + classic) }>{ T(ctx, "ui2.classic") }</a>
 						if From(ctx).Auth {
-							<button class="btn sm" type="button" hx-post="ui2/logout" hx-confirm={ T(ctx, "common.logout-confirmation") }>{ T(ctx, "common.logout") }</button>
+							<button class="btn sm" type="button" hx-post="logout" hx-confirm={ T(ctx, "common.logout-confirmation") }>{ T(ctx, "common.logout") }</button>
 						}
 					</div>
 				</div>
@@ -68,7 +68,7 @@ templ Layout(title, classic string) {
 templ VisorLayout(pk, seg string) {
 	@Layout(tabTitle(ctx, seg), ClassicURL(pk, seg)) {
 		<div class="visor-head">
-			<a class="icon-btn" href="ui2/" aria-label={ T(ctx, "nodes.title") }><span class="mi">arrow_back</span></a>
+			<a class="icon-btn" href="./" aria-label={ T(ctx, "nodes.title") }><span class="mi">arrow_back</span></a>
 			<div class="vh">
 				<div class="vh-title">
 					if pk == From(ctx).HVPK {
@@ -99,7 +99,7 @@ templ NotPorted(pk, seg string) {
 	@VisorLayout(pk, seg) {
 		<h1>{ tabTitle(ctx, seg) }</h1>
 		<p class="dim">{ T(ctx, "ui2.not-ported") }</p>
-		<p><a class="btn primary" href={ templ.URL(ClassicURL(pk, seg)) }>{ T(ctx, "ui2.classic-tab") }</a></p>
+		<p><a class="btn primary" href={ templ.URL("angular/" + ClassicURL(pk, seg)) }>{ T(ctx, "ui2.classic-tab") }</a></p>
 	}
 }
 

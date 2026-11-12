@@ -12,7 +12,7 @@ templ LoginPage(create bool, errMsg string) {
 				<h1>{ T(ctx, "ui2.login") }</h1>
 			}
 			@ErrorBox(errMsg)
-			<form class="form" method="post" action="ui2/login">
+			<form class="form" method="post" action="login">
 				<input type="hidden" name="create" value={ boolStr(create) }/>
 				<label>
 					{ T(ctx, "ui2.username") }

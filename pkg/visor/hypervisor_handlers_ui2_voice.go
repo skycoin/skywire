@@ -17,9 +17,9 @@ import (
 // /skychat/voice routes the Angular tab uses. Local visor only, like them.
 
 func (hv *Hypervisor) ui2VoiceRoutes(r *httputil.Router) {
-	r.Get("/ui2/visors/{pk}/chat/voice", hv.ui2Voice(""))
+	r.Get("/visors/{pk}/chat/voice", hv.ui2Voice(""))
 	for _, op := range []string{"call", "answer", "decline", "hangup", "mute"} {
-		r.Post("/ui2/visors/{pk}/chat/voice/"+op, hv.ui2Voice(op))
+		r.Post("/visors/{pk}/chat/voice/"+op, hv.ui2Voice(op))
 	}
 }
 

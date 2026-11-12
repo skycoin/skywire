@@ -40,7 +40,7 @@ var vpnUICmd = &cobra.Command{
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to read in config: %v", err))
 			}
-			url = fmt.Sprintf("http://127.0.0.1%s/#/vpn/%s/", clivisor.HypervisorPort(cmd.Flags()), conf.PK.Hex())
+			url = fmt.Sprintf("http://127.0.0.1%s/angular/#/vpn/%s/", clivisor.HypervisorPort(cmd.Flags()), conf.PK.Hex())
 		} else {
 			rpcClient, err := clirpc.Client(cmd.Flags())
 			if err != nil {
@@ -50,7 +50,7 @@ var vpnUICmd = &cobra.Command{
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to connect; is skywire running?: %v", err))
 			}
-			url = fmt.Sprintf("http://127.0.0.1%s/#/vpn/%s/", clivisor.HypervisorPort(cmd.Flags()), overview.PubKey.Hex())
+			url = fmt.Sprintf("http://127.0.0.1%s/angular/#/vpn/%s/", clivisor.HypervisorPort(cmd.Flags()), overview.PubKey.Hex())
 		}
 		if err := webbrowser.Open(url); err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to open VPN UI in browser:: %v", err))
@@ -71,7 +71,7 @@ var vpnURLCmd = &cobra.Command{
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Failed to read in config: %v", err))
 			}
-			url = fmt.Sprintf("http://127.0.0.1%s/#/vpn/%s/", clivisor.HypervisorPort(cmd.Flags()), conf.PK.Hex())
+			url = fmt.Sprintf("http://127.0.0.1%s/angular/#/vpn/%s/", clivisor.HypervisorPort(cmd.Flags()), conf.PK.Hex())
 		} else {
 			rpcClient, err := clirpc.Client(cmd.Flags())
 			if err != nil {
@@ -81,7 +81,7 @@ var vpnURLCmd = &cobra.Command{
 			if err != nil {
 				internal.PrintFatalRPCError(cmd.Flags(), err)
 			}
-			url = fmt.Sprintf("http://127.0.0.1%s/#/vpn/%s/", clivisor.HypervisorPort(cmd.Flags()), overview.PubKey.Hex())
+			url = fmt.Sprintf("http://127.0.0.1%s/angular/#/vpn/%s/", clivisor.HypervisorPort(cmd.Flags()), overview.PubKey.Hex())
 		}
 
 		output := struct {

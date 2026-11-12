@@ -14,7 +14,7 @@ import (
 )
 
 func (hv *Hypervisor) ui2WalletRoutes(r *httputil.Router) {
-	r.Get("/ui2/visors/{pk}/wallet", hv.withCtx(hv.ui2VisorCtx, func(w http.ResponseWriter, r *http.Request, _ *httpCtx) {
+	r.Get("/visors/{pk}/wallet", hv.withCtx(hv.ui2VisorCtx, func(w http.ResponseWriter, r *http.Request, _ *httpCtx) {
 		hv.render(w, r, ui2.WalletPage(r.PathValue("pk"), hv.ui2WalletState()))
 	}))
 }

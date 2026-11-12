@@ -83,7 +83,7 @@ func netRowClass(e netview.Entry) string {
 }
 
 func (v NetView) url() string {
-	return "ui2/network/body"
+	return "network/body"
 }
 
 func NetViewPage(v NetView) templ.Component {

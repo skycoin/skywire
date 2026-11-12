@@ -15,7 +15,7 @@ import (
 // does.
 
 func (hv *Hypervisor) ui2RewardsListRoutes(r *httputil.Router) {
-	r.Get("/ui2/rewards", hv.ui2RewardsList())
+	r.Get("/rewards", hv.ui2RewardsList())
 }
 
 func (hv *Hypervisor) ui2RewardsList() http.HandlerFunc {

@@ -19,8 +19,8 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/ui2"
 )
 
-// The server rendered UI at /ui2/ (pkg/visor/ui2), beside the Angular one at
-// "/". Its handlers read and write through the same ctx.API as the JSON
+// The server rendered UI (pkg/visor/ui2) at the root, with the Angular one at
+// /angular/. Its handlers read and write through the same ctx.API as the JSON
 // routes, behind the same session and CSRF checks, so they work for the local
 // visor and remote ones. Every URL they write is relative, so the pages also
 // work under the /vnet/<port>/ prefix of the in-tab visor.
@@ -34,25 +34,26 @@ var ui2Catalog = sync.OnceValue(func() *ui2.Catalog {
 	return ui2.NewCatalog(sub)
 })
 
-// ui2Routes registers the /ui2 pages. Static files and the login page are
+// ui2Routes registers the pages. The visor list at "/" is ui2Home, which the
+// root handler serves. Static files and the login page are
 // public, like the Angular bundle.
 func (hv *Hypervisor) ui2Routes(r *httputil.Router) {
-	r.Handle("/ui2/static/{file}", ui2Static())
-	r.Get("/ui2", func(w http.ResponseWriter, _ *http.Request) { ui2Redirect(w, "ui2/") })
+	r.Handle("/static/{file}", ui2Static())
+	r.Get("/ui2", ui2Legacy)
+	r.HandleFunc("/ui2/{rest...}", ui2Legacy)
 	r.Group(func(r *httputil.Router) {
 		r.Use(httputil.CompressMin(httputil.CompressMinBytes, 5))
-		r.Get("/ui2/login", hv.ui2LoginPage())
-		r.Post("/ui2/login", hv.ui2LoginPost())
-		r.Post("/ui2/logout", hv.ui2Logout())
+		r.Get("/login", hv.ui2LoginPage())
+		r.Post("/login", hv.ui2LoginPost())
+		r.Post("/logout", hv.ui2Logout())
 	})
 	r.Group(func(r *httputil.Router) {
 		r.Use(hv.ui2Auth, httputil.CompressMin(httputil.CompressMinBytes, 5))
-		r.Get("/ui2/", hv.ui2Nodes(false))
-		r.Get("/ui2/nodes", hv.ui2Nodes(true))
-		r.Get("/ui2/visors/{pk}", func(w http.ResponseWriter, r *http.Request) {
+		r.Get("/nodes", hv.ui2Nodes(true))
+		r.Get("/visors/{pk}", func(w http.ResponseWriter, r *http.Request) {
 			ui2Redirect(w, r.PathValue("pk")+"/info")
 		})
-		r.Get("/ui2/visors/{pk}/{tab}", hv.ui2NotPorted())
+		r.Get("/visors/{pk}/{tab}", hv.ui2NotPorted())
 		hv.ui2NodesRoutes(r)
 		hv.ui2BulkRoutes(r)
 		hv.ui2HVSettingsRoutes(r)
@@ -83,14 +84,12 @@ func (hv *Hypervisor) ui2Routes(r *httputil.Router) {
 		hv.ui2SettingsRoutes(r)
 		hv.ui2AlertsRoutes(r)
 	})
-	// Without this an unknown /ui2 path would fall through to the Angular UI.
-	r.HandleFunc("/ui2/{rest...}", http.NotFound)
 }
 
 // ui2Static serves the CSS, JS and htmx gzipped. A request naming the file's
 // current content hash in ?v= may be cached for good.
 func ui2Static() http.Handler {
-	files := http.StripPrefix("/ui2/static/", http.FileServerFS(ui2.Static()))
+	files := http.StripPrefix("/static/", http.FileServerFS(ui2.Static()))
 	return httputil.CompressMin(httputil.CompressMinBytes, 5)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		v := ui2.AssetVersion(r.PathValue("file"))
 		if v != "" {
@@ -112,6 +111,26 @@ func ui2Redirect(w http.ResponseWriter, loc string) {
 	w.WriteHeader(http.StatusSeeOther)
 }
 
+// ui2Home is the visor list at the root, behind the session.
+func (hv *Hypervisor) ui2Home() http.Handler {
+	return hv.ui2Auth(httputil.CompressMin(httputil.CompressMinBytes, 5)(hv.ui2Nodes(false)))
+}
+
+// ui2Legacy moves a /ui2/... URL from before ui2 was the root to the same
+// path at the root, with a relative Location for the /vnet/<port>/ prefix.
+func ui2Legacy(w http.ResponseWriter, r *http.Request) {
+	rest := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, "/ui2"), "/")
+	loc := ui2.BaseFor(r.URL.Path) + rest
+	if loc == "" {
+		loc = "./"
+	}
+	if r.URL.RawQuery != "" {
+		loc += "?" + r.URL.RawQuery
+	}
+	w.Header().Set("Location", loc)
+	w.WriteHeader(http.StatusMovedPermanently)
+}
+
 // ui2Auth sends a request without a session to the login page: a page load
 // by redirect, an htmx request by HX-Redirect.
 func (hv *Hypervisor) ui2Auth(next http.Handler) http.Handler {
@@ -125,11 +144,11 @@ func (hv *Hypervisor) ui2Auth(next http.Handler) http.Handler {
 			return
 		}
 		if r.Header.Get("HX-Request") != "" {
-			w.Header().Set("HX-Redirect", "ui2/login")
+			w.Header().Set("HX-Redirect", "login")
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		ui2Redirect(w, ui2.BaseFor(r.URL.Path)+"ui2/login")
+		ui2Redirect(w, ui2.BaseFor(r.URL.Path)+"login")
 	})
 }
 
@@ -272,7 +291,7 @@ func (hv *Hypervisor) ui2Logout() http.HandlerFunc {
 			callJSON(w, r, hv.users.Logout(), nil)
 		}
 		if r.Header.Get("HX-Request") != "" {
-			w.Header().Set("HX-Redirect", "ui2/login")
+			w.Header().Set("HX-Redirect", "login")
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}

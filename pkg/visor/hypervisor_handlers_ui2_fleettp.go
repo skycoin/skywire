@@ -14,8 +14,8 @@ import (
 // The transports of the whole network, read from /api/network/transports.
 
 func (hv *Hypervisor) ui2FleetTpsRoutes(r *httputil.Router) {
-	r.Get("/ui2/transports", hv.ui2FleetTps(false))
-	r.Get("/ui2/transports/body", hv.ui2FleetTps(true))
+	r.Get("/transports", hv.ui2FleetTps(false))
+	r.Get("/transports/body", hv.ui2FleetTps(true))
 }
 
 func (hv *Hypervisor) ui2FleetTps(body bool) http.HandlerFunc {

@@ -16,9 +16,9 @@ import (
 // The uptime tab of the server rendered UI.
 
 func (hv *Hypervisor) ui2UptimeRoutes(r *httputil.Router) {
-	r.Get("/ui2/visors/{pk}/uptime", hv.ui2Uptime(false))
-	r.Get("/ui2/visors/{pk}/uptime/bars", hv.ui2Uptime(true))
-	r.Get("/ui2/visors/{pk}/uptime/services", hv.ui2ServiceUptimes())
+	r.Get("/visors/{pk}/uptime", hv.ui2Uptime(false))
+	r.Get("/visors/{pk}/uptime/bars", hv.ui2Uptime(true))
+	r.Get("/visors/{pk}/uptime/services", hv.ui2ServiceUptimes())
 }
 
 // ui2Uptime serves the tab, or with bars set only the part that refreshes.

@@ -101,7 +101,7 @@ func newUI2FakeServer(t *testing.T, api visorapi.API) string {
 	hv.ui2Routes(r)
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
-	return srv.URL + "/ui2/visors/" + pk.Hex()
+	return srv.URL + "/visors/" + pk.Hex()
 }
 
 func ui2HX(t *testing.T, method, u, ct, body string) (int, string) {
@@ -248,10 +248,10 @@ func TestUI2Islands(t *testing.T) {
 
 func TestUI2CatalogPage(t *testing.T) {
 	srv, _, pk := newUI2Server(t, true)
-	code, body := ui2Do(t, ui2Req(t, http.MethodGet, srv.URL+"/ui2/visors/"+pk.Hex()+"/apps/catalog", "", ""))
+	code, body := ui2Do(t, ui2Req(t, http.MethodGet, srv.URL+"/visors/"+pk.Hex()+"/apps/catalog", "", ""))
 	require.Equal(t, http.StatusOK, code, body)
 	require.Contains(t, body, `id="catalog"`)
-	require.Contains(t, body, `hx-get="ui2/visors/`+pk.Hex()+`/apps/catalog/body"`)
+	require.Contains(t, body, `hx-get="visors/`+pk.Hex()+`/apps/catalog/body"`)
 }
 
 // TestUI2WalletHostsSkycoinWeb frames skycoin-web's own wallet once the app

@@ -40,7 +40,7 @@ func TestAppsOf(t *testing.T) {
 	require.True(t, a.Official[1].Running())
 
 	out := renderString(t, func(ctx context.Context, b *strings.Builder) error { return AppsRows(a).Render(ctx, b) })
-	require.Contains(t, out, `hx-put="ui2/visors/pk/apps/skysocks-client-2/state"`)
+	require.Contains(t, out, `hx-put="visors/pk/apps/skysocks-client-2/state"`)
 	require.Contains(t, out, `{"run":""}`, "a running app offers stop")
 	require.Contains(t, out, `{"run":"1"}`, "a stopped app offers start")
 	require.Contains(t, out, "boom")
@@ -48,7 +48,7 @@ func TestAppsOf(t *testing.T) {
 	x, ok := a.Find("mine")
 	require.True(t, ok)
 	out = renderString(t, func(ctx context.Context, b *strings.Builder) error { return AppSettings("pk", x, "").Render(ctx, b) })
-	require.Contains(t, out, `hx-put="ui2/visors/pk/apps/mine/settings"`)
+	require.Contains(t, out, `hx-put="visors/pk/apps/mine/settings"`)
 	require.Contains(t, out, `name="autostart" value="1" checked`)
 }
 
@@ -71,7 +71,7 @@ func TestTransportsOf(t *testing.T) {
 
 	out := renderString(t, func(ctx context.Context, b *strings.Builder) error { return TransportsBody(tv).Render(ctx, b) })
 	require.Contains(t, out, b.Hex(), "keys are shown whole")
-	require.Contains(t, out, `hx-delete="ui2/visors/pk/transports/`+tps[0].ID.String()+`"`)
+	require.Contains(t, out, `hx-delete="visors/pk/transports/`+tps[0].ID.String()+`"`)
 	require.Contains(t, out, "transports.offline")
 }
 

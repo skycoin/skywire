@@ -291,7 +291,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
 
       return 'http://' + url + port;
     } else if (app.name.toLocaleLowerCase() === 'vpn-client' && this.nodePK) {
-      return location.origin + '/#/vpn/' + this.nodePK + '/status';
+      return location.origin + '/angular/#/vpn/' + this.nodePK + '/status';
     } else if (
       (app.name.toLocaleLowerCase() === 'skydex-market' ||
         app.name.toLocaleLowerCase() === 'skydex-client') &&

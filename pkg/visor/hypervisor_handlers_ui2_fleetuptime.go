@@ -14,8 +14,8 @@ import (
 // The uptime of every visor, read from /api/network/visor-uptime.
 
 func (hv *Hypervisor) ui2FleetUptimeRoutes(r *httputil.Router) {
-	r.Get("/ui2/uptime", hv.ui2FleetUptime(false))
-	r.Get("/ui2/uptime/body", hv.ui2FleetUptime(true))
+	r.Get("/uptime", hv.ui2FleetUptime(false))
+	r.Get("/uptime/body", hv.ui2FleetUptime(true))
 }
 
 func (hv *Hypervisor) ui2FleetUptime(body bool) http.HandlerFunc {

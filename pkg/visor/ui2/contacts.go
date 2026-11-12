@@ -120,5 +120,5 @@ func (l List) url(rest string) string { return contactsURL(l.PK, rest) }
 func (f Form) url(rest string) string { return contactsURL(f.PK, rest) }
 
 func contactsURL(pk, rest string) string {
-	return "ui2/visors/" + pk + "/contacts" + rest
+	return "visors/" + pk + "/contacts" + rest
 }

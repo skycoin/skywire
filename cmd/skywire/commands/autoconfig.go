@@ -562,7 +562,7 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 			msg2(fmt.Sprintf("Desk (the wasm-visor hypervisor UI) on:\n%shttp://127.0.0.1:%s%s", colorRed, deskPort, colorReset))
 		}
 		if pubkey != "" {
-			vpnURL := fmt.Sprintf("http://127.0.0.1:%s/#/vpn/%s", hvPort, pubkey)
+			vpnURL := fmt.Sprintf("http://127.0.0.1:%s/angular/#/vpn/%s", hvPort, pubkey)
 			msg2(fmt.Sprintf("Use the vpn:\n%s%s%s", colorRed, vpnURL, colorReset))
 		}
 

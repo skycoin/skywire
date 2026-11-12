@@ -13,9 +13,9 @@ import (
 // The bandwidth tab: the visor's own per transport traffic store.
 
 func (hv *Hypervisor) ui2BandwidthRoutes(r *httputil.Router) {
-	r.Get("/ui2/visors/{pk}/bandwidth", hv.ui2Bandwidth(""))
-	r.Get("/ui2/visors/{pk}/bandwidth/body", hv.ui2Bandwidth("body"))
-	r.Get("/ui2/visors/{pk}/bandwidth/tp", hv.ui2Bandwidth("tp"))
+	r.Get("/visors/{pk}/bandwidth", hv.ui2Bandwidth(""))
+	r.Get("/visors/{pk}/bandwidth/body", hv.ui2Bandwidth("body"))
+	r.Get("/visors/{pk}/bandwidth/tp", hv.ui2Bandwidth("tp"))
 }
 
 func (hv *Hypervisor) ui2Bandwidth(op string) http.HandlerFunc {

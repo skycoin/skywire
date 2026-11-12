@@ -98,7 +98,7 @@ func LoginPage(create bool, errMsg string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<form class=\"form\" method=\"post\" action=\"ui2/login\"><input type=\"hidden\" name=\"create\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<form class=\"form\" method=\"post\" action=\"login\"><input type=\"hidden\" name=\"create\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

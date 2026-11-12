@@ -15,10 +15,10 @@ import (
 // service, a service's /health payload, and the route setup nodes' stats.
 
 func (hv *Hypervisor) ui2ServicesRoutes(r *httputil.Router) {
-	r.Get("/ui2/services", hv.ui2Services(false))
-	r.Get("/ui2/services/body", hv.ui2Services(true))
-	r.Get("/ui2/services/drill", hv.ui2ServiceDrill())
-	r.Get("/ui2/services/rsn", hv.ui2RSN())
+	r.Get("/services", hv.ui2Services(false))
+	r.Get("/services/body", hv.ui2Services(true))
+	r.Get("/services/drill", hv.ui2ServiceDrill())
+	r.Get("/services/rsn", hv.ui2RSN())
 }
 
 func (hv *Hypervisor) ui2Services(body bool) http.HandlerFunc {

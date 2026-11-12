@@ -578,7 +578,7 @@ func getVPNAddr(conf *visorconfig.V1) string {
 		return ""
 	}
 
-	return hvAddr + "/#/vpn/" + conf.PK.Hex() + "/status"
+	return hvAddr + "/angular/#/vpn/" + conf.PK.Hex() + "/status"
 }
 
 func rpcClientSystray(conf *visorconfig.V1, logger *logging.Logger) visorapi.API {

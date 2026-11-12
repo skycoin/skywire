@@ -63,16 +63,16 @@ func TestNodesRender(t *testing.T) {
 	require.NoError(t, NodesPage(ns, "").Render(ctx, &b))
 	out := b.String()
 	require.Contains(t, out, `<base href="../">`)
-	require.Contains(t, out, `data-href="ui2/visors/`+pk.Hex()+`/info"`)
+	require.Contains(t, out, `data-href="visors/`+pk.Hex()+`/info"`)
 	require.Contains(t, out, pk.Hex(), "keys are shown whole")
 	require.Contains(t, out, "2 / 4")
-	require.Contains(t, out, `hx-get="ui2/nodes"`)
+	require.Contains(t, out, `hx-get="nodes"`)
 }
 
 func TestBaseFor(t *testing.T) {
-	require.Equal(t, "../", BaseFor("/ui2/"))
-	require.Equal(t, "../", BaseFor("/ui2/login"))
-	require.Equal(t, "../../../", BaseFor("/ui2/visors/pk/info"))
+	require.Equal(t, "./", BaseFor("/"))
+	require.Equal(t, "./", BaseFor("/login"))
+	require.Equal(t, "../../", BaseFor("/visors/pk/info"))
 	require.Equal(t, "./", BaseFor("/"))
 }
 

@@ -31,7 +31,7 @@ const tourAppName = "tour"
 
 // dashboardTourURL opens the dashboard with its own tour running, which is
 // where this one hands off.
-const dashboardTourURL = "http://vnet:8001/?embed=1&tour=1#/?embed=1"
+const dashboardTourURL = "http://vnet:8001/angular/?embed=1&tour=1#/?embed=1"
 
 // deskPanel is the taskbar, so the launcher step can open its menu.
 var deskPanel *desk.Panel

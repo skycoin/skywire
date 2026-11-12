@@ -90,8 +90,8 @@ func TestWalletHandlerRouting(t *testing.T) {
 		for _, rest := range []string{"", "index.html"} {
 			w := httptest.NewRecorder()
 			h(w, walletReq(rest))
-			if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "../#/wallet" {
-				t.Errorf("%q: status=%d location=%q, want 303 to ../#/wallet", rest, w.Code, w.Header().Get("Location"))
+			if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "../angular/#/wallet" {
+				t.Errorf("%q: status=%d location=%q, want 303 to ../angular/#/wallet", rest, w.Code, w.Header().Get("Location"))
 			}
 		}
 	})
@@ -189,7 +189,7 @@ func TestWalletHandlerUI2(t *testing.T) {
 
 	w = httptest.NewRecorder()
 	h(w, walletReq(""))
-	require.Equal(t, "../#/wallet", w.Header().Get("Location"), "the wallet page is still the dashboard's")
+	require.Equal(t, "../angular/#/wallet", w.Header().Get("Location"), "the wallet page is still the dashboard's")
 }
 
 // recordingApp stands in for the skycoin-web app, noting each path it gets.

@@ -18,11 +18,11 @@ import (
 // and the push devices.
 
 func (hv *Hypervisor) ui2AlertsRoutes(r *httputil.Router) {
-	r.Get("/ui2/visors/{pk}/settings/alerts", hv.ui2Alerts(""))
-	r.Put("/ui2/visors/{pk}/settings/alerts", hv.ui2Alerts("save"))
-	r.Post("/ui2/visors/{pk}/settings/alerts/test", hv.ui2Alerts("test"))
-	r.Post("/ui2/visors/{pk}/settings/alerts/push", hv.ui2Alerts("push-add"))
-	r.Delete("/ui2/visors/{pk}/settings/alerts/push/{id}", hv.ui2Alerts("push"))
+	r.Get("/visors/{pk}/settings/alerts", hv.ui2Alerts(""))
+	r.Put("/visors/{pk}/settings/alerts", hv.ui2Alerts("save"))
+	r.Post("/visors/{pk}/settings/alerts/test", hv.ui2Alerts("test"))
+	r.Post("/visors/{pk}/settings/alerts/push", hv.ui2Alerts("push-add"))
+	r.Delete("/visors/{pk}/settings/alerts/push/{id}", hv.ui2Alerts("push"))
 }
 
 var (
