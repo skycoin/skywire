@@ -45,6 +45,12 @@ interface WalletCore {
     /** On restore: probe the network for used addresses. (receive, change) counts, each ≥ minimum. */
     suspend fun scanUsed(seed: KeySource): Pair<Int, Int>
 
+    /**
+     * Grow a wallet past the addresses it holds to the last used one within the gap.
+     * (receive, change) counts, never below the given ones; null where a chain has no such scan.
+     */
+    suspend fun scanPast(seed: KeySource, receiveCount: Int, changeCount: Int): Pair<Int, Int>? = null
+
     suspend fun balance(book: AddressBook): WalletBalance
 
     /** The wallet's unspent outputs; empty where a chain has no coin control. */

@@ -54,8 +54,11 @@ class WalletRepository private constructor(private val context: Context) {
     private val seeds = WalletSeedStore(context)
     private val json = Json { ignoreUnknownKeys = true }
 
-    /** Wallet id → when a failed address scan may be tried again. See settleAddressScan. */
+    /** Wallet id → when a failed address scan may be tried again. See discoverAddresses. */
     private val scanRetryAfter = ConcurrentHashMap<String, Long>()
+
+    /** Wallet id → when it last looked past its addresses for used ones. */
+    private val discoveredAt = ConcurrentHashMap<String, Long>()
 
     // connect and read bound the ways a call can STALL; nothing bounds how
     // long a call that is making progress may take, because nothing bounds
@@ -712,52 +715,40 @@ class WalletRepository private constructor(private val context: Context) {
         val found = wallet(walletId) ?: error("unknown wallet")
         val spec = coin(found.coinId) ?: error("unknown coin")
         val core = coreFor(spec)
-        // Ask again, if the question is still open: reading a balance from
-        // half a wallet's addresses is a wrong number, not a stale one.
-        val meta = settleAddressScan(found, core)
+        // A balance read from half a wallet's addresses is a wrong number, not a stale one.
+        val meta = discoverAddresses(found, core)
         val book = AddressBook(meta.receiveAddresses, meta.changeAddresses)
         val balance = core.balance(book)
         val previous = cachedSnapshot(walletId)
         val history = runCatching { core.history(book) }.getOrNull()
         val snapshot = mergeSnapshot(balance, history, previous, System.currentTimeMillis())
         cacheFile(walletId).writeText(json.encodeToString(WalletSnapshot.serializer(), snapshot))
+        if (spec.kind == CoinKind.SKY_FIBER && meta.derivation == Derivation.BIP44) keepFreshReceive(meta, core, snapshot)
         snapshot
     }
 
     /**
-     * Finish a restore's address discovery when it could not be done at the
-     * time, and record that it is done.
-     *
-     * Runs on refresh of a wallet whose scan is still open, which is what
-     * makes a restore on a bad connection a temporary state rather than a
-     * permanent one. Costs nothing once settled — the flag is checked first.
-     *
-     * A failure backs off rather than retrying on the next tick. The screen
-     * refreshes every 30 seconds and a scan is the same expensive question as
-     * a history fetch, so retrying at that cadence would put a wallet on a
-     * connection too poor to answer it into a loop pulling megabytes it can
-     * never finish, on what is usually metered data. The back-off is held in
-     * memory only: a restart is a fresh try, which is what a user who has
-     * moved onto a better network would expect.
-     *
-     * The address lists only ever grow here. A scan reports how many
-     * addresses the CHAIN has seen, which is not the same as how many the
-     * wallet holds: [newReceiveAddress] hands out further ones locally, and
-     * an address a user has been given out must not disappear because nobody
-     * has paid it yet.
+     * Grows the wallet to the used addresses past the ones it holds: a pending restore on every
+     * refresh, a fiber wallet every [DISCOVERY_INTERVAL_MS] as rewards pay an xpub's next address.
      */
-    private suspend fun settleAddressScan(meta: WalletMeta, core: WalletCore): WalletMeta {
-        if (!meta.addressScanPending) return meta
+    private suspend fun discoverAddresses(meta: WalletMeta, core: WalletCore): WalletMeta {
         val now = System.currentTimeMillis()
         if (now < (scanRetryAfter[meta.id] ?: 0L)) return meta
+        if (!meta.addressScanPending && now - (discoveredAt[meta.id] ?: 0L) < DISCOVERY_INTERVAL_MS) return meta
         val seed = keys(meta) ?: return meta
-        val scanned = runCatching { core.scanUsed(seed) }.getOrNull()
+        val scanned = runCatching {
+            core.scanPast(seed, meta.receiveAddresses.size, meta.changeAddresses.size)
+                ?: if (meta.addressScanPending) core.scanUsed(seed) else return meta.also { discoveredAt[it.id] = now }
+        }.getOrNull()
         if (scanned == null) {
             scanRetryAfter[meta.id] = now + SCAN_RETRY_BACKOFF_MS
             return meta
         }
         scanRetryAfter.remove(meta.id)
+        discoveredAt[meta.id] = now
         val (receiveCount, changeCount) = scanned
+        val grows = receiveCount > meta.receiveAddresses.size || changeCount > meta.changeAddresses.size
+        if (!grows && !meta.addressScanPending) return meta
         val book = core.deriveAddresses(
             seed,
             maxOf(receiveCount, meta.receiveAddresses.size),
@@ -766,6 +757,17 @@ class WalletRepository private constructor(private val context: Context) {
         val settled = settledAddresses(meta, book, System.currentTimeMillis())
         putWallets(wallets().first().map { if (it.id == settled.id) settled else it })
         return settled
+    }
+
+    /** A BIP 44 wallet whose last receive address has been paid gets the next one, so there is always a fresh one to give out. */
+    private suspend fun keepFreshReceive(meta: WalletMeta, core: WalletCore, snapshot: WalletSnapshot) {
+        val last = meta.receiveAddresses.lastOrNull() ?: return
+        if (!addressUsed(last, snapshot)) return
+        val seed = keys(meta) ?: return
+        val book = core.deriveAddresses(seed, meta.receiveAddresses.size + 1, meta.changeAddresses.size)
+        putWallets(wallets().first().map {
+            if (it.id == meta.id && it.receiveAddresses == meta.receiveAddresses) it.copy(receiveAddresses = book.receive) else it
+        })
     }
 
     // --- send ---
@@ -877,6 +879,9 @@ class WalletRepository private constructor(private val context: Context) {
 
         /** Long enough that a scan the link cannot carry is not retried in a loop. */
         private val SCAN_RETRY_BACKOFF_MS = TimeUnit.MINUTES.toMillis(5)
+
+        /** How often a settled fiber wallet looks past its addresses; the first refresh after a start always does. */
+        private val DISCOVERY_INTERVAL_MS = TimeUnit.MINUTES.toMillis(2)
 
         private val KEY_WALLETS = stringPreferencesKey("wallets")
         private val KEY_NODE_URLS = stringPreferencesKey("node_urls")
