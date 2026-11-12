@@ -22,7 +22,7 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 | | edit label, remove visor, remove all offline | yes | labels in the same localStorage entry as Angular |
 | | bulk select: restart, reward address, add, start and stop app | yes | |
 | | update one or all visors | n/a | Angular calls visors/{pk}/update/..., which the hypervisor does not serve |
-| `/nodes/rewards` | list with reward columns | no | |
+| `/nodes/rewards` | reward address and last seven days of rewards per visor | yes | `ui2/rewards` |
 | `/nodes/services-health` | deployment service health, /health payload, RSN stats | yes | `ui2/services` |
 | `/nodes/network` | network view (SD, TPD and UT), filters, refresh | yes | `ui2/network`, paged 100 to a page |
 | `/nodes/visualizer` | network graph | partial | cosmos-go WebGL page, linked as tp-viz and route-viz, not reimplemented |

@@ -29,6 +29,7 @@ templ Layout(title, classic string) {
 						if From(ctx).HVPK != "" {
 							<a href={ templ.URL(VisorURL(From(ctx).HVPK, "info")) }>{ T(ctx, "nodes.local-visor-title") }</a>
 						}
+						<a href="ui2/rewards">{ T(ctx, "nodes.rewards-title") }</a>
 						<a href="ui2/resources">{ T(ctx, "nodes.resources-title") }</a>
 						if From(ctx).TPViz {
 							<a href="tp-viz/">{ T(ctx, "node.details.tpviz.title") }</a>

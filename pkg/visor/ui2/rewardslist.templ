@@ -1,0 +1,97 @@
+package ui2
+
+import (
+	"strconv"
+	"time"
+)
+
+// RewardsList is the visor list's rewards view, as node-list.component.ts
+// with showRewardsInfo: each visor's reward address and its rewards of
+// the last seven days.
+type RewardsList struct {
+	Dates []string // newest first
+	Rows  []RewardRow
+}
+
+// RewardRow is one visor of the rewards view.
+type RewardRow struct {
+	Node
+	Daily map[string]RewardDay
+	Total float64
+	Err   string
+}
+
+// LastDays is the last n UTC dates, newest first.
+func LastDays(now time.Time, n int) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = now.UTC().AddDate(0, 0, -i).Format(time.DateOnly)
+	}
+	return out
+}
+
+func shortDate(d string) string {
+	t, err := time.Parse(time.DateOnly, d)
+	if err != nil {
+		return d
+	}
+	return t.Format("Jan 2")
+}
+
+func sky(v float64) string { return strconv.FormatFloat(v, 'f', 3, 64) }
+
+templ RewardsListPage(l RewardsList) {
+	@Layout(T(ctx, "nodes.rewards-title"), "#/nodes/rewards") {
+		<section class="card" data-labels>
+			<div class="head"><h1>{ T(ctx, "nodes.rewards-title") }</h1></div>
+			<div class="table-wrap">
+				<table class="list">
+					<thead>
+						<tr>
+							<th class="state"><span class="sr">{ T(ctx, "nodes.state") }</span></th>
+							<th>{ T(ctx, "nodes.label") }</th>
+							<th>{ T(ctx, "nodes.key") }</th>
+							<th>{ T(ctx, "nodes.reward-address") }</th>
+							for _, d := range l.Dates {
+								<th class="num">{ shortDate(d) }</th>
+							}
+							<th class="num">{ T(ctx, "nodes.reward-total") }</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, r := range l.Rows {
+							<tr class={ templ.KV("offline", !r.Online) }>
+								<td class="state"><span class={ "dot", templ.KV("on", r.Online), templ.KV("off", !r.Online) }></span></td>
+								<td data-label={ T(ctx, "nodes.label") }>
+									<div class="lbl-line"><a href={ templ.URL(VisorURL(r.PK, "rewards")) } data-label-for={ r.PK }>{ r.Name() }</a></div>
+									<div class="small dim" data-host-for={ r.PK } hidden>{ r.Name() }</div>
+								</td>
+								<td data-label={ T(ctx, "nodes.key") }><span class="mono small pk-text" title={ r.PK }>{ r.PK }</span></td>
+								<td data-label={ T(ctx, "nodes.reward-address") }>
+									if r.Reward != "" {
+										<span class="mono small pk-text" title={ r.Reward }>{ r.Reward }</span>
+									} else {
+										<span class="dim">{ T(ctx, "nodes.reward-not-set") }</span>
+									}
+									if r.Err != "" {
+										<div class="small error">{ r.Err }</div>
+									}
+								</td>
+								for _, d := range l.Dates {
+									<td class="num small" data-label={ shortDate(d) }>
+										if day, ok := r.Daily[d]; ok && day.Amount > 0 {
+											<span class={ templ.KV("ok", day.Sent) } title={ day.TxID }>{ sky(day.Amount) }</span>
+										} else {
+											<span class="dim">-</span>
+										}
+									</td>
+								}
+								<td class="num" data-label={ T(ctx, "nodes.reward-total") }><strong>{ sky(r.Total) }</strong></td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		</section>
+	}
+}
