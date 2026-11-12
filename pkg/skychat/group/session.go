@@ -675,6 +675,8 @@ func (cfg Config) newPublisher(pc treestore.PubConfig) (*treestore.Publisher, er
 		// visor can be a full federated member.
 		pc.InMemoryDB = true
 	}
+	// Chat is interactive: publish a lone message at once, coalesce bursts.
+	pc.LeadingEdge = true
 	if cfg.DmsgC != nil {
 		return treestore.NewWithDMSG(cfg.DmsgC, cfg.MySK, pc)
 	}

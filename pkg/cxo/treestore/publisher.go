@@ -114,6 +114,7 @@ type Publisher struct {
 	keepRoots int
 
 	batchWindow  time.Duration
+	leadingEdge  bool
 	wakeup       chan struct{}
 	done         chan struct{}
 	cleanupNudge chan struct{} // 1-buffered; non-blocking send from publishRoot
@@ -185,6 +186,10 @@ type Config struct {
 	// live, long enough to coalesce bursts.
 	BatchWindow time.Duration
 
+	// LeadingEdge publishes the first change after a quiet BatchWindow at
+	// once and coalesces only the changes that follow it, for chat feeds.
+	LeadingEdge bool
+
 	// Logger overrides the default tag-based logger.
 	Logger *logging.Logger
 
@@ -223,6 +228,7 @@ type Config struct {
 // just to set a data directory.
 type PubConfig struct {
 	BatchWindow time.Duration   // see Config.BatchWindow
+	LeadingEdge bool            // see Config.LeadingEdge
 	Logger      *logging.Logger // see Config.Logger
 	InMemoryDB  bool            // forwarded to skyobject.Config
 	DataDir     string          // forwarded to skyobject.Config (ignored if InMemoryDB)
@@ -314,6 +320,7 @@ func NewWithDMSG(dmsgC *dmsg.Client, sk cipher.SecKey, conf PubConfig) (*Publish
 
 	p, err := New(cxoNode, sk, Config{
 		BatchWindow:         conf.BatchWindow,
+		LeadingEdge:         conf.LeadingEdge,
 		Logger:              conf.Logger,
 		sharedAllow:         allow,
 		DropPublishedLeaves: conf.DropPublishedLeaves,
@@ -370,6 +377,7 @@ func NewWithTCP(listenAddr string, sk cipher.SecKey, conf PubConfig) (*Publisher
 
 	p, err := New(cxoNode, sk, Config{
 		BatchWindow:         conf.BatchWindow,
+		LeadingEdge:         conf.LeadingEdge,
 		Logger:              conf.Logger,
 		sharedAllow:         allow,
 		DropPublishedLeaves: conf.DropPublishedLeaves,
@@ -425,6 +433,7 @@ func New(cxoNode *node.Node, sk cipher.SecKey, conf Config) (*Publisher, error) 
 		root:         newMemNode(),
 		allow:        allow,
 		batchWindow:  conf.BatchWindow,
+		leadingEdge:  conf.LeadingEdge,
 		wakeup:       make(chan struct{}, 1),
 		done:         make(chan struct{}),
 		cleanupNudge: make(chan struct{}, 1),
@@ -1180,7 +1189,7 @@ func (p *Publisher) runLoop() {
 			}
 		case <-p.wakeup:
 			// Coalesce: wait the batch window, then publish.
-			timer := time.NewTimer(p.batchWindow)
+			timer := time.NewTimer(p.coalesceWait())
 			select {
 			case <-timer.C:
 			case <-p.done:
@@ -1195,6 +1204,20 @@ func (p *Publisher) runLoop() {
 			}
 		}
 	}
+}
+
+// coalesceWait is how long runLoop waits after a wakeup before publishing.
+// With leadingEdge it is only what remains of the window since the last
+// publish, so the publish rate stays at most one per window.
+func (p *Publisher) coalesceWait() time.Duration {
+	if !p.leadingEdge {
+		return p.batchWindow
+	}
+	last := p.lastPublishNs.Load()
+	if last == 0 {
+		return 0
+	}
+	return max(p.batchWindow-time.Since(time.Unix(0, last)), 0)
 }
 
 // heartbeatDue reports whether a quiet feed should republish. With no conn it
