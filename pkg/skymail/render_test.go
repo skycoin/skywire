@@ -59,3 +59,18 @@ func TestRenderReducesHTMLOnlyMailToText(t *testing.T) {
 	require.NotContains(t, r.Text, "alert")
 	require.False(t, strings.Contains(r.Text, "<"))
 }
+
+// TestBigAttachmentComesBackWhole: a 4.9 MB file came back cut to 4 MiB.
+func TestBigAttachmentComesBackWhole(t *testing.T) {
+	song := make([]byte, 5138022)
+	for i := range song {
+		song[i] = byte(i * 7)
+	}
+	raw := compose("a@example.com", Outgoing{To: []string{"b@example.com"}, Attachments: []OutgoingAttachment{{Name: "song.mp3", Data: song}}}, "<id@x>")
+	r, err := Render(raw)
+	require.NoError(t, err)
+	require.Equal(t, len(song), r.Attachments[0].Size)
+	got, err := ExtractAttachment(raw, 0)
+	require.NoError(t, err)
+	require.Equal(t, song, got.Data)
+}
