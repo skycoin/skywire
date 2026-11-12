@@ -1,4 +1,4 @@
-// Package skyobject pkg/cxo/skyobject/lastroot_missing_cxds_test.go:
+// Package skyobject pkg/cxo/skyobject/lastroot_missing_cxds_test.go
 // pins the behavior of Index.LastRoot and Container.rootByHash when
 // CXDS no longer holds the bytes for a hash the index still
 // references — the exact prod failure mode after #2676 + #2677 made

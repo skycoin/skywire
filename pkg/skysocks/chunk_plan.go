@@ -1,4 +1,4 @@
-// Package skysocks pkg/skysocks/chunk_plan.go — chunk granularity for a
+// Package skysocks pkg/skysocks/chunk_plan.go c4-app-proxy — chunk granularity for a
 // range-split download and for a striped upload (planUploadChunk, at the foot
 // of this file, is the same arithmetic without the probe chunk).
 //

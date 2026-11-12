@@ -1,4 +1,4 @@
-// Package router pkg/router/router_min_hops_test.go — the visor-global
+// Package router pkg/router/router_min_hops_test.go c2-net-routing — the visor-global
 // min-hops setting is part of every dial's constraint, not a default that a
 // caller passing no options overrides.
 //

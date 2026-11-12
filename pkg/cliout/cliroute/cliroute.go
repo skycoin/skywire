@@ -1,3 +1,5 @@
+// Package cliroute pkg/cliout/cliroute/cliroute.go c4-vis-cli
+//
 // Package cliroute is the output shape of the `skywire cli route` commands.
 //
 // It lives here rather than in a function body so callers, and the e2e suite,

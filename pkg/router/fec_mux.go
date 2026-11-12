@@ -1,4 +1,4 @@
-// Package router pkg/router/fec_mux.go — wiring the systematic Cauchy-RS erasure
+// Package router pkg/router/fec_mux.go c2-net-routing — wiring the systematic Cauchy-RS erasure
 // core (fec.go, #4270) into the packet-mux striping / reorder data plane.
 //
 // The aggregation wall is head-of-line blocking: the no-skip reorder frontier

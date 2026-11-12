@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/reply_test.go
+// Package commands cmd/apps/skychat/commands/reply_test.go c4-app-chat
 //
 // Unit coverage for quoted replies: the envelope round-trip, the cheap
 // detection gate, history/map enrichment, and the DM /sse read boundary

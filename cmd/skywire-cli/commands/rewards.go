@@ -1,5 +1,6 @@
 //go:build !js
 
+// Package commands cmd/skywire-cli/commands/rewards.go c4-vis-cli
 package commands
 
 import (

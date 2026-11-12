@@ -1,4 +1,4 @@
-// Package noise pkg/noise/read_write_test.go
+// Package noise pkg/dmsg/noise/read_writer_test.go c1-net-dmsg
 package noise
 
 import (

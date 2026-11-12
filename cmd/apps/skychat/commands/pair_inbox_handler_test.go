@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/pair_inbox_handler_test.go
+// Package commands cmd/apps/skychat/commands/pair_inbox_handler_test.go c4-app-chat
 //
 // Unit test for the /pair/inbox HTTP handler added to close the
 // shipping gap from #2699: the CLI `cli skychat pair poll` builds

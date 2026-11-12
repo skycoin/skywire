@@ -1,4 +1,4 @@
-// Package visor pkg/visor/pty_forwarding.go c3-vis-pty
+// Package visor pkg/visor/pty_forwarding.go c3-vis-core
 package visor
 
 import (

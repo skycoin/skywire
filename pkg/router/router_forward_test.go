@@ -1,4 +1,4 @@
-// Package router pkg/router/router_forward_test.go
+// Package router pkg/router/router_forward_test.go c2-net-routing
 //
 // The regression test for the all-paths blackout of 2026-09-18: a transit peer
 // that stops draining must cost its own frames and nothing else.

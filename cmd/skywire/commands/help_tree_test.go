@@ -1,4 +1,4 @@
-// Package commands cmd/skywire/commands/help_tree_test.go
+// Package commands cmd/skywire/commands/help_tree_test.go c4-vis-cli
 package commands
 
 import (

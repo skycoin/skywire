@@ -1,3 +1,5 @@
+// Package clihv pkg/cliout/clihv/clihv.go c4-vis-cli
+//
 // Package clihv is the output shape of the `skywire cli hv` commands that
 // return a value. Most of them stream — a transcript, a page's console, CDP
 // events as they arrive — and have no single result to shape; those are

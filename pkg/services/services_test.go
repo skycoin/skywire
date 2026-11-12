@@ -1,4 +1,4 @@
-// Package services services_test.go: unit tests for the three top-level
+// Package services pkg/services/services_test.go unit tests for the three top-level
 // files — the Duration JSON wrapper (duration.go), the block/registry
 // primitives (services.go), and the file parsing + supervisor (run.go).
 package services

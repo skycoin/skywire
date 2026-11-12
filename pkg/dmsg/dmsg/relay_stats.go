@@ -1,4 +1,4 @@
-// Package dmsg pkg/dmsg/dmsg/relay_stats.go c2-dmsg-core
+// Package dmsg pkg/dmsg/dmsg/relay_stats.go c1-net-dmsg
 package dmsg
 
 import "sync/atomic"

@@ -1,5 +1,6 @@
 //go:build android && cgo
 
+// Package commands cmd/skywire/commands/sh_window_android.go c4-vis-cli
 package commands
 
 import (

@@ -1,4 +1,4 @@
-// Package visorconfig pkg/visor/visorconfig/preserve_test.go
+// Package visorconfig pkg/visor/visorconfig/preserve_test.go c3-vis-core
 // — pins unknown-key preservation across load → modify → flush.
 package visorconfig
 

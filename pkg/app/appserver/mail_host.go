@@ -1,3 +1,4 @@
+// Package appserver pkg/app/appserver/mail_host.go c2-vis-appsvc
 package appserver
 
 import (

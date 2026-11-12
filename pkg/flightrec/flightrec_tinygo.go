@@ -1,6 +1,6 @@
 //go:build tinygo
 
-// Package flightrec pkg/flightrec/flightrec_tinygo.go c1-util-debug
+// Package flightrec pkg/flightrec/flightrec_tinygo.go c0-com-util
 //
 // TinyGo has no runtime/trace flight recorder, so every entry point here is a
 // no-op and the handler answers 404 the way the native one does when stopped.

@@ -1,4 +1,4 @@
-// Package transport pkg/transport/manager_inbound_test.go
+// Package transport pkg/transport/manager_inbound_test.go c2-net-transport
 package transport
 
 import (

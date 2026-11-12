@@ -1,4 +1,4 @@
-// Package cliout pkg/cliout/filter.go
+// Package cliout pkg/cliout/filter.go c0-com-util
 //
 // Output post-processors shared by every command that renders through Print,
 // plus the flag registration and the --help --json hook so a single call wires

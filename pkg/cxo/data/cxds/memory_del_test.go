@@ -1,4 +1,4 @@
-// Package cxds pkg/cxo/data/cxds/memory_del_test.go: pins the
+// Package cxds pkg/cxo/data/cxds/memory_del_test.go pins the
 // memoryCXDS.Del invariant that Set+Del returns the underlying map
 // to its original size. Pre-fix Del decremented amountAll/volumeAll
 // but never executed `delete(m.kvs, key)`, leaking the value bytes

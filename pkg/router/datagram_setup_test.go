@@ -1,4 +1,4 @@
-// Package router pkg/router/datagram_setup_test.go: integration test
+// Package router pkg/router/datagram_setup_test.go integration test
 // for the route-setup-side datagram sibling (#2607 stage-4b). Verifies
 // the receive path end to end WITH crypto: a datagram sealed by an
 // initiator-side cipher (same master key, derived from the shared

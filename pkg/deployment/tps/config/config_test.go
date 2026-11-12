@@ -1,4 +1,4 @@
-// Package config pkg/deployment/tps/config/config_test.go: unit tests for the
+// Package config pkg/deployment/tps/config/config_test.go unit tests for the
 // transport-setup config reader.
 package config
 

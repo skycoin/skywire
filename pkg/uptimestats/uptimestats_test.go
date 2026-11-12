@@ -1,4 +1,4 @@
-// Package uptimestats pkg/uptimestats/uptimestats_test.go
+// Package uptimestats pkg/uptimestats/uptimestats_test.go c2-net-discovery
 package uptimestats
 
 import (

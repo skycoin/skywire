@@ -1,5 +1,6 @@
 //go:build !js
 
+// Package transport pkg/transport/dmsg_fallback_native.go c2-net-transport
 package transport
 
 // DmsgRelayFallback is whether the visor may mint a DMSG-type transport when

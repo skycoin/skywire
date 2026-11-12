@@ -1,4 +1,4 @@
-// Package clivisorping cmd/skywire-cli/commands/visor/ping/mux_bandwidth_tui_impl.go c5-cli-visor
+// Package ping cmd/skywire-cli/commands/visor/ping/mux_bandwidth_tui_impl.go c4-vis-cli
 //
 // The screen of `visor ping mux-bw-tui`; the command spec stays in
 // mux_bandwidth_tui.go.

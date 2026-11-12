@@ -1,3 +1,5 @@
+// Package clitps pkg/cliout/clitps/clitps.go c4-vis-cli
+//
 // Package clitps is the output shape of the `skywire cli tps` commands, which
 // manage the transport-setup-node key.
 package clitps

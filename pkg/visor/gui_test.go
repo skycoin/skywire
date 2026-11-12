@@ -1,6 +1,6 @@
 //go:build !withoutsystray && !tinygo
 
-// Package visor pkg/visor/gui_test.go
+// Package visor pkg/visor/gui_test.go c3-vis-core
 package visor
 
 import (

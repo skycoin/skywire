@@ -1,4 +1,4 @@
-// Package packetfilter pkg/transport/network/packetfilter/packetfilter_test.go:
+// Package packetfilter pkg/transport/network/packetfilter/packetfilter_test.go
 // unit tests for the address and KCP-conversation pfilter implementations.
 package packetfilter
 

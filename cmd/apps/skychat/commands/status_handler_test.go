@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/status_handler_test.go
+// Package commands cmd/apps/skychat/commands/status_handler_test.go c4-app-chat
 //
 // Coverage for the /status operator surface: it must always return 200
 // with a well-formed JSON object carrying the documented health fields,

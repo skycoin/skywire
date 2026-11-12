@@ -1,4 +1,4 @@
-// Package router pkg/router/noise_route_group_delegate_test.go
+// Package router pkg/router/noise_route_group_delegate_test.go c2-net-routing
 //
 // Coverage for the NoiseRouteGroup net.Conn/stat delegators (they simply
 // forward to the wrapped RouteGroup but had no direct test), plus the

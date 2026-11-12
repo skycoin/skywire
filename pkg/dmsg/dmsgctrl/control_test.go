@@ -1,4 +1,4 @@
-// Package dmsgctrl pkg/dmsgctrl/control_test.go
+// Package dmsgctrl pkg/dmsg/dmsgctrl/control_test.go c1-net-dmsg
 package dmsgctrl
 
 import (

@@ -1,4 +1,4 @@
-// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/statscxo.go c5-reward-server
+// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/statscxo.go c4-vis-cli
 //
 // CXO as the first source for the statistics pages, with HTTP-over-dmsg
 // kept behind it.

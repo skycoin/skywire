@@ -1,4 +1,4 @@
-// Package flags pkg/flags/rain_test.go: unit tests for the help backdrop
+// Package flags pkg/flags/rain_test.go unit tests for the help backdrop
 // wiring (InitRain) and, more to the point, for every case in which it must
 // keep its hands off the output.
 package flags

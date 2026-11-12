@@ -1,3 +1,4 @@
+// Package visor pkg/visor/vhost_sites.go c3-vis-core
 package visor
 
 import (

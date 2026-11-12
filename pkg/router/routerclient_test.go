@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package routerclient pkg/router/routerclient_test.go
+// Package router pkg/router/routerclient_test.go
 package router
 
 import (

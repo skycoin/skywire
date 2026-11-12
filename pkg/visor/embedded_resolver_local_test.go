@@ -1,4 +1,4 @@
-// Package visor pkg/visor/embedded_resolver_local_test.go
+// Package visor pkg/visor/embedded_resolver_local_test.go c3-vis-core
 package visor
 
 import (

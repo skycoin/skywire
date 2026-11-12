@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/presence_test.go
+// Package commands cmd/apps/skychat/commands/presence_test.go c4-app-chat
 //
 // Unit coverage for peer presence: the PK parser, the watch set + snapshot
 // store, the concurrent sweep, and the /presence handler's request shapes. The

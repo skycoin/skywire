@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package deskhost pkg/wasmhv/deskhost/desk_rpc_js.go c4-wasm-desk
+// Package deskhost pkg/wasmhv/deskhost/desk_rpc_js.go c3-vis-wasm
 //
 // The tab visor's API as the desk's windows reach it: over vnet to its RPC
 // port, the methods `skywire cli` calls, rather than a CLI process per click.

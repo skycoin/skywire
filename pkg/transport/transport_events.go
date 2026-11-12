@@ -1,3 +1,4 @@
+// Package transport pkg/transport/transport_events.go c2-net-transport
 package transport
 
 import (

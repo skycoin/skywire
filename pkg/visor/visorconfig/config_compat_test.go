@@ -1,4 +1,4 @@
-// Package visorconfig pkg/visor/visorconfig/config_compat_test.go
+// Package visorconfig pkg/visor/visorconfig/config_compat_test.go c3-vis-core
 // — pins the legacy "dmsgpty" → V1.Pty migration.
 package visorconfig
 

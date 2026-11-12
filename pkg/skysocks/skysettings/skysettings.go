@@ -1,4 +1,4 @@
-// Package skysettings pkg/skysocks/skysettings/skysettings.go
+// Package skysettings pkg/skysocks/skysettings/skysettings.go c2-app-proxy
 //
 // A process-scoped registry of the skysocks-client tuning knobs the mux bench
 // sweeps. Every entry's DEFAULT is the constant the client compiled with, so a

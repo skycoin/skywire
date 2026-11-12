@@ -1,4 +1,4 @@
-// Package skysocks pkg/skysocks/tunnel_depth.go — the per-tunnel queue depth,
+// Package skysocks pkg/skysocks/tunnel_depth.go c4-app-proxy — the per-tunnel queue depth,
 // sized from the bandwidth-delay product.
 //
 // chunk.per_tunnel (2) and upload.concurrency (4) are FIXED queue depths,

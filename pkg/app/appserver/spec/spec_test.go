@@ -1,4 +1,4 @@
-// Package spec pkg/app/appserver/spec/spec_test.go
+// Package spec pkg/app/appserver/spec/spec_test.go c2-vis-appsvc
 //
 // AppConfig is a pure schema type with no executable statements, so there is no
 // statement coverage to gain here. These tests instead guard the JSON wire

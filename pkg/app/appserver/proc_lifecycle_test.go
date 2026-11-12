@@ -1,4 +1,4 @@
-// Package appserver pkg/app/appserver/proc_lifecycle_test.go: tests that drive
+// Package appserver pkg/app/appserver/proc_lifecycle_test.go tests that drive
 // the external-process Start/Stop lifecycle and the RPC gateway setter
 // handlers.
 package appserver

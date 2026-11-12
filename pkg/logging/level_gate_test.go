@@ -1,4 +1,4 @@
-// Package logging pkg/logging/level_gate_test.go c0-com-util
+// Package logging pkg/logging/level_gate_test.go c0-com-log
 package logging
 
 import (

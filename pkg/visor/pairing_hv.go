@@ -1,4 +1,4 @@
-// Package visor pkg/visor/pairing_hv.go c3-vis-api
+// Package visor pkg/visor/pairing_hv.go c3-vis-core
 //
 // Hypervisor pairing (#4484 stage 5). A peer that holds a same-origin
 // transport to this visor (a desk tab the hypervisor serves) or that tried the

@@ -1,4 +1,4 @@
-// Package router pkg/router/router_mux_remote_leg_test.go
+// Package router pkg/router/router_mux_remote_leg_test.go c2-net-routing
 //
 // Regression coverage for the setup-node churn measured on sn1
 // (0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557): 80-88%

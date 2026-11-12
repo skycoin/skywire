@@ -1,4 +1,4 @@
-// Package api bind_quic_wt_test.go: unit tests for the QUIC and WebTransport
+// Package api pkg/deployment/ar/api/bind_quic_wt_test.go unit tests for the QUIC and WebTransport
 // bind handlers, which share bindForType with STCPR but store under their own
 // transport type. Driven directly with injected auth (bypassing the httpauth
 // signing middleware), mirroring TestBind.

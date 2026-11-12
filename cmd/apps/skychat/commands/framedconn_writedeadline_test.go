@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/framedconn_writedeadline_test.go:
+// Package commands cmd/apps/skychat/commands/framedconn_writedeadline_test.go
 // pins the bounded-write behavior of framedConn.WriteFrameDeadline so a
 // slow / hung peer transport can't pin the /message HTTP handler
 // goroutine indefinitely.

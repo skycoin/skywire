@@ -1,4 +1,4 @@
-// Package node pkg/cxo/node/conn_init_idempotent_test.go: pins the
+// Package node pkg/cxo/node/conn_init_idempotent_test.go pins the
 // idempotency of Node.onConnInitErr / Node.onConnInit so a second
 // caller that reaches the same Conn (the production race shape:
 // isNew handshaker fails + isPending waiter's waitForInit returns

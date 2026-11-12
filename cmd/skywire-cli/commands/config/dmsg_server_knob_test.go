@@ -1,4 +1,4 @@
-// Package config cmd/skywire-cli/commands/config/dmsg_server_knob_test.go c0-cli
+// Package cliconfig cmd/skywire-cli/commands/config/dmsg_server_knob_test.go c0-cli
 package cliconfig
 
 import (

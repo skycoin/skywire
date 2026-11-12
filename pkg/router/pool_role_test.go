@@ -1,4 +1,4 @@
-// Package router pkg/router/pool_role_test.go
+// Package router pkg/router/pool_role_test.go c2-net-routing
 //
 // The three gates the rig run of 2026-09-22 asked for (bench/2026-09-22,
 // compose set T2xL2: 32 groups, 37 leg_added, 13 leg_removed, compose 50 MB up

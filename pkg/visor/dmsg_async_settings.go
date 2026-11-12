@@ -1,4 +1,4 @@
-// Package visor pkg/visor/dmsg_async_settings.go
+// Package visor pkg/visor/dmsg_async_settings.go c3-vis-core
 package visor
 
 import (

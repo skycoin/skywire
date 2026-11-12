@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package setup pkg/setup/id_reserver_test.go
+// Package router pkg/router/id_reserver_test.go
 package router
 
 import (

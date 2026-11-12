@@ -1,4 +1,4 @@
-// Package router pkg/router/pool_legs_test.go
+// Package router pkg/router/pool_legs_test.go c2-net-routing
 //
 // Coverage for POOL-SOURCED MUX LEGS (pool_legs.go): an active tunnel's extra
 // legs are built on the routes its own STANDBY sibling tunnels already hold,

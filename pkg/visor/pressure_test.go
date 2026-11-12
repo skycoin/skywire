@@ -1,4 +1,4 @@
-// Package visor pkg/visor/pressure_test.go
+// Package visor pkg/visor/pressure_test.go c3-vis-core
 package visor
 
 import (

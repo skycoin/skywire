@@ -1,4 +1,4 @@
-// Package router pkg/router/router_intake.go c3-rtr-core
+// Package router pkg/router/router_intake.go c2-net-routing
 //
 // Intake diagnostics for `visor state`: what the router's single inbound
 // packet loop is doing with what the transports hand it. Counted here rather

@@ -1,4 +1,4 @@
-// Package proxyfront pkg/proxyfront/proxyfront.go
+// Package proxyfront pkg/proxyfront/proxyfront.go c2-app-proxy
 //
 // One listener, two proxy protocols. The resolving proxies speak SOCKS5; this
 // lets the same port also answer HTTP proxy requests (CONNECT and absolute-URL

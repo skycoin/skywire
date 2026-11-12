@@ -1,4 +1,4 @@
-// Package sdmetrics metrics_test.go: unit tests for the Empty and
+// Package sdmetrics pkg/deployment/sd/metrics/metrics_test.go unit tests for the Empty and
 // VictoriaMetrics implementations of the Metrics interface. The setters are
 // fire-and-forget; the tests assert both implementations satisfy Metrics,
 // construct cleanly, and accept calls without panicking. For VictoriaMetrics

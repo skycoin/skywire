@@ -1,4 +1,4 @@
-// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/stats_tui_dmsg.go c5-reward-server
+// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/stats_tui_dmsg.go c4-vis-cli
 //
 // The dmsg layer, in the terminal panel.
 //

@@ -1,4 +1,4 @@
-// Package commands ui_delete_chat_test.go
+// Package commands cmd/apps/skychat/commands/ui_delete_chat_test.go c4-app-chat
 package commands
 
 import (

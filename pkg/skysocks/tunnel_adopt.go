@@ -1,4 +1,4 @@
-// Package skysocks pkg/skysocks/tunnel_adopt.go
+// Package skysocks pkg/skysocks/tunnel_adopt.go c4-app-proxy
 //
 // The app half of LEG ADOPTION (router/leg_adopt.go): a chain the router split
 // out of a tunnel into packet-level standby — a LEG RESERVE — made a stream-level

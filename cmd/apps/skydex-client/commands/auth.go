@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skydex-client/commands/auth.go
+// Package commands cmd/apps/skydex-client/commands/auth.go c4-app-wallet
 //
 // HTTP basic-auth gate for the SkyDEX trading UI. Off by default; on when a
 // password file is configured and non-empty. The file format is the one

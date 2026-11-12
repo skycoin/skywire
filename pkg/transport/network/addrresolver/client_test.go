@@ -1,4 +1,4 @@
-// Package addrresolver pkg/transport/network/addrresolver/client_test.go
+// Package addrresolver pkg/transport/network/addrresolver/client_test.go c2-net-transport
 package addrresolver
 
 import (

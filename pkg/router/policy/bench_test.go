@@ -1,4 +1,4 @@
-// Package policy pkg/router/policy/bench_test.go — perf budget
+// Package policy pkg/router/policy/bench_test.go c2-net-routing — perf budget
 // regression test for the Indonesia-Friday policy. The RFC's
 // per-dial budget is 50ms; this benchmark confirms we have
 // comfortable margin (target: <1ms on ARM, sub-100µs on amd64).

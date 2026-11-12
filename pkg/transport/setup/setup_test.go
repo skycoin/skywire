@@ -1,4 +1,4 @@
-// Package setup setup_test.go: unit tests for the transport-setup RPC
+// Package setup pkg/transport/setup/setup_test.go unit tests for the transport-setup RPC
 // gateway and listener. The gateway delegates to a *transport.Manager; the
 // success paths (saving/listing/removing real transports) require a live
 // transport network and are exercised by the integration suite. Here we

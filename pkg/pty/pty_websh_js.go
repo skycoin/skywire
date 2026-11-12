@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package pty pkg/pty/pty_websh_js.go c2-app-pty
+// Package pty pkg/pty/pty_websh_js.go c3-vis-pty
 package pty
 
 import (

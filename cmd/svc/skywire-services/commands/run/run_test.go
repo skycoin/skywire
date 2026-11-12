@@ -1,4 +1,4 @@
-// Package run cmd/svc/skywire-services/commands/run/run_test.go: unit tests for
+// Package run cmd/svc/skywire-services/commands/run/run_test.go unit tests for
 // the `skywire svc run` supervisor command — the RunE branches (--list,
 // missing --config, LoadFile failure, unknown service type), the command
 // metadata/flags, and Execute-style invocation via cobra. The happy path

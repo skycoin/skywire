@@ -1,6 +1,6 @@
 //go:build (js && wasm) || tinygo
 
-// Package commands cmd/apps/skydex-market/commands/root_stub.go
+// Package commands cmd/apps/skydex-market/commands/root_stub.go c4-app-wallet
 //
 // Browser (js/wasm) stand-in for the skydex-market wrapper. The market engine
 // stores its book in SQLite (modernc.org/sqlite → a userland libc that does

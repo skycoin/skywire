@@ -1,4 +1,4 @@
-// Package api pkg/deployment/tpd/api/dmsg_roles.go
+// Package api pkg/deployment/tpd/api/dmsg_roles.go c4-net-discovery
 package api
 
 import (

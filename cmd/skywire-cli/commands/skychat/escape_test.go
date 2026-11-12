@@ -1,4 +1,4 @@
-// Package cliskychat cmd/skywire-cli/commands/skychat/escape_test.go
+// Package cliskychat cmd/skywire-cli/commands/skychat/escape_test.go c4-vis-cli
 package cliskychat
 
 import (

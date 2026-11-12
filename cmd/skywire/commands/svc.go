@@ -1,5 +1,6 @@
 //go:build !js && !tinygo
 
+// Package commands cmd/skywire/commands/svc.go c4-vis-cli
 package commands
 
 import (

@@ -1,4 +1,4 @@
-// Package visor pkg/visor/hypervisor_attached_graph.go c3-vis-api
+// Package visor pkg/visor/hypervisor_attached_graph.go c3-vis-core
 //
 // The hypervisor's attached visors report their transports in the Summary it
 // polls every hypervisorBackgroundPollInterval. AttachedTransportEntries turns

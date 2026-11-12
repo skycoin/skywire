@@ -1,4 +1,4 @@
-// Package sn stats_handler_test.go: access control and payload shape of the
+// Package sn pkg/services/sn/stats_handler_test.go access control and payload shape of the
 // setup-node /stats handler.
 package sn
 

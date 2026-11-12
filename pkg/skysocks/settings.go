@@ -1,4 +1,4 @@
-// Package skysocks pkg/skysocks/settings.go
+// Package skysocks pkg/skysocks/settings.go c4-app-proxy
 //
 // The client's side of the live settings surface. The registry itself lives in
 // pkg/skysocks/skysettings (import-free, so the CLI can read the catalog); this

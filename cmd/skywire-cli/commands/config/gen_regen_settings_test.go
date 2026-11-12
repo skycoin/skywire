@@ -1,4 +1,4 @@
-// Package cliconfig cmd/skywire-cli/commands/config/gen_regen_settings_test.go c0-cli
+// Package cliconfig cmd/skywire-cli/commands/config/gen_regen_settings_test.go c4-vis-cli
 package cliconfig
 
 import (

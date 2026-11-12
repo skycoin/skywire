@@ -1,4 +1,4 @@
-// Package router pkg/router/fec_flush.go — idle-flush policy for the packet-mux
+// Package router pkg/router/fec_flush.go c2-net-routing — idle-flush policy for the packet-mux
 // FEC tail (fec_mux.go, #4270).
 //
 // THE WEAKNESS THIS CLOSES. Fixed-block FEC only emits repair when a block fills

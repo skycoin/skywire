@@ -1,4 +1,4 @@
-// Package appserver pkg/app/appserver/app_settings.go
+// Package appserver pkg/app/appserver/app_settings.go c2-vis-appsvc
 //
 // Per-app live tuning settings — the one visor→app value channel the mux bench
 // needs, built the only way the existing app RPC allows.

@@ -1,3 +1,5 @@
+// Package clitp pkg/cliout/clitp/clitp.go c4-vis-cli
+//
 // Package clitp is the output shape of the `skywire cli tp` commands.
 //
 // It exists because the shape was previously written down three times: twice

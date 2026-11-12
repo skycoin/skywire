@@ -1,4 +1,4 @@
-// Package dmsgdisc reconcile_test.go: unit tests for mergeServersByPK, the pure
+// Package dmsgdisc pkg/services/dmsgdisc/reconcile_test.go unit tests for mergeServersByPK, the pure
 // static-config ∪ live-registry reconciliation that keeps the discovery's
 // dmsg-server session set current (registered address wins over drifted config).
 package dmsgdisc

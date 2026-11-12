@@ -1,3 +1,4 @@
+// Package visorapi pkg/visor/visorapi/charts.go c3-vis-core
 package visorapi
 
 import "time"

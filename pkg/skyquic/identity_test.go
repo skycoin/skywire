@@ -1,4 +1,4 @@
-// Package skyquic pkg/skyquic/identity_test.go: tests the skywire-PK-bound
+// Package skyquic pkg/skyquic/identity_test.go tests the skywire-PK-bound
 // QUIC TLS identity (option A).
 package skyquic
 

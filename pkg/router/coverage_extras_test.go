@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package router pkg/router/coverage_extras_test.go
+// Package router pkg/router/coverage_extras_test.go c2-net-routing
 //
 // Focused unit coverage for small, pure-logic helpers that had no direct
 // test: the ClientPool lifecycle ops, the cascade ackRegistry unregister

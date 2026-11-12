@@ -1,4 +1,4 @@
-// Package proxystatus pkg/proxystatus/font.go c4-app-web
+// Package proxystatus pkg/proxystatus/font.go c2-app-web
 package proxystatus
 
 // mononokiWoff2 is the base64-encoded WOFF2 data for the mononoki monospace font,

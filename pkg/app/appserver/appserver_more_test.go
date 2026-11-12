@@ -1,4 +1,4 @@
-// Package appserver pkg/app/appserver/appserver_more_test.go: additional unit
+// Package appserver pkg/app/appserver/appserver_more_test.go additional unit
 // tests broadening coverage of the small helpers (errors, app_state, stderr),
 // the Proc getters/setters and NewProc constructor, and the procManager
 // lifecycle methods.

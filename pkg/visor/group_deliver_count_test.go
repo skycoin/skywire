@@ -1,4 +1,4 @@
-// Package visor pkg/visor/group_deliver_count_test.go
+// Package visor pkg/visor/group_deliver_count_test.go c3-vis-core
 //
 // Targeted coverage for the deliverCount counter added to groupInbox
 // for drop-site localization. The full layer-counter surface (also

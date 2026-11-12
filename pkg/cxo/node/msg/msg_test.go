@@ -1,4 +1,4 @@
-// Package msg pkg/cxo/node/msg/msg_test.go: unit tests for the CXO node
+// Package msg pkg/cxo/node/msg/msg_test.go unit tests for the CXO node
 // message wire format — encode/decode round-trips, type stringification, and
 // the decode error paths.
 package msg

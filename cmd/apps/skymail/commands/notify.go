@@ -1,3 +1,4 @@
+// Package commands cmd/apps/skymail/commands/notify.go c4-app-mail
 package commands
 
 import (

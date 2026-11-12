@@ -1,4 +1,4 @@
-// Package visor pkg/visor/hostbridge_sockets_test.go c3-vis-wasm
+// Package visor pkg/visor/hostbridge_sockets_test.go c3-vis-core
 package visor
 
 import (

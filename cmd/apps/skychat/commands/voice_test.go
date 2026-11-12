@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/voice_test.go
+// Package commands cmd/apps/skychat/commands/voice_test.go c4-app-chat
 //
 // Unit coverage for the browser-facing /voice HTTP proxy: each handler relays
 // to the visor's Voice* RPC (a fake here) and shapes the response, 503s when the

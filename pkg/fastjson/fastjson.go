@@ -1,3 +1,5 @@
+// Package fastjson pkg/fastjson/fastjson.go c0-com-util
+//
 // Package fastjson is the JSON codec shared by packages that bind the name
 // json to something else. It is encoding/json under both Go and TinyGo.
 package fastjson

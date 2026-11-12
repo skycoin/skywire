@@ -1,4 +1,4 @@
-// Package policy pkg/router/policy/evaluator_test.go — end-to-end
+// Package policy pkg/router/policy/evaluator_test.go c2-net-routing — end-to-end
 // tests pinning the operator-facing semantics: load a script,
 // inject a clock so the test asserts time-dependent decisions
 // deterministically, verify the returned RouteSpec matches what

@@ -1,4 +1,4 @@
-// Package visor pkg/visor/rpc_client_mock_test.go: exercises the mock
+// Package visor pkg/visor/rpc_client_mock_test.go exercises the mock
 // RPC client (the in-process API test double) across its full method
 // set. The mock returns canned/random data with no network, so invoking
 // every API method via reflection with zero-value arguments covers the

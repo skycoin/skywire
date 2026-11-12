@@ -1,4 +1,4 @@
-// Package skysocks pkg/skysocks/client_shape.go
+// Package skysocks pkg/skysocks/client_shape.go c4-app-proxy
 //
 // The app half of the mux SHAPE axis (docs/design/mux-shape-axis.md step 6).
 //

@@ -1,5 +1,6 @@
 //go:build !linux
 
+// Package alerts pkg/alerts/storage_other.go c3-vis-core
 package alerts
 
 // CheckStorage reports nothing outside Linux.

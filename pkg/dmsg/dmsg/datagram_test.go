@@ -1,4 +1,4 @@
-// Package dmsg pkg/dmsg/datagram_test.go: tests the session datagram API
+// Package dmsg pkg/dmsg/dmsg/datagram_test.go tests the session datagram API
 // (#2607 dmsg-over-QUIC). The QUIC round-trip itself needs two live QUIC
 // sessions (covered by integration/live tests); here we assert the
 // non-QUIC contract.

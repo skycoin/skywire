@@ -1,4 +1,4 @@
-// Package deskhost pkg/wasmhv/deskhost/shell_exec_js.go c3-wasm-visor
+// Package deskhost pkg/wasmhv/deskhost/shell_exec_js.go c3-vis-wasm
 //
 // A headless websh: one command line run in a shell with no terminal
 // attached, its output returned as text. This is what a CDP-driven harness

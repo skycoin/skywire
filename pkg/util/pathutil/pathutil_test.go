@@ -1,4 +1,4 @@
-// Package pathutil pkg/util/pathutil/pathutil_test.go: unit tests for the path
+// Package pathutil pkg/util/pathutil/pathutil_test.go unit tests for the path
 // existence, directory and atomic-write helpers.
 package pathutil
 

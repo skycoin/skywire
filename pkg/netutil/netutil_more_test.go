@@ -1,4 +1,4 @@
-// Package netutil pkg/netutil/netutil_more_test.go: unit tests for the port
+// Package netutil pkg/netutil/netutil_more_test.go unit tests for the port
 // reserver, the pure IP/address helpers, and the connection copier.
 package netutil
 

@@ -1,3 +1,5 @@
+// Package cliout pkg/cliout/cliout.go c0-com-util
+//
 // Package cliout renders skywire-cli command results.
 //
 // A command produces ONE value. This package decides how it is written: as

@@ -1,4 +1,4 @@
-// Package execwasm pkg/wasmhv/execwasm/serve_test.go c3-wasm-embed
+// Package execwasm pkg/wasmhv/execwasm/serve_test.go c3-vis-wasm
 package execwasm
 
 import (

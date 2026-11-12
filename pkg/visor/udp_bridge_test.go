@@ -1,4 +1,4 @@
-// Package visor pkg/visor/udp_bridge_test.go: unit tests for the
+// Package visor pkg/visor/udp_bridge_test.go unit tests for the
 // UDPBridge type. Stage 4 of #2607.
 //
 // Tests wire a real net.UDPConn (loopback) as the "local" side and

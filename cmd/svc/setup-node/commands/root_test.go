@@ -1,4 +1,4 @@
-// Package commands cmd/svc/setup-node/commands/root_test.go: unit tests for the
+// Package commands cmd/svc/setup-node/commands/root_test.go unit tests for the
 // testable surface of the setup-node root command — the JSON example helpers,
 // the command metadata/flags wired up in init(), and Execute's help path. The
 // RootCmd.Run / checkHealthCmd.Run closures boot a dmsg-serving node (or call

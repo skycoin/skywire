@@ -1,4 +1,4 @@
-// Package treestore pkg/cxo/treestore/subscription_test.go: Subscriptions finds
+// Package treestore pkg/cxo/treestore/subscription_test.go Subscriptions finds
 // the conn once a peer subscribes to the feed, and only for that peer.
 package treestore
 

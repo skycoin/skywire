@@ -1,4 +1,4 @@
-// Package commands dmsgcurl_test.go: unit tests for the dmsgcurl helpers
+// Package commands cmd/dmsg/dmsgcurl/commands/dmsgcurl_test.go unit tests for the dmsgcurl helpers
 // (HTTP request building, fatal-error classification, output-file
 // preparation, cancellable copy, progress reporting) plus the no-network
 // early-return paths of handleRequest and the RootCmd RunE callback.

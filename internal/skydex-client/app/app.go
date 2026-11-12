@@ -1,3 +1,5 @@
+// Package app internal/skydex-client/app/app.go c4-app-wallet
+//
 // Package app wraps the Skywire app client for the skydex-client application,
 // mirroring internal/skydex-market/app.
 package app

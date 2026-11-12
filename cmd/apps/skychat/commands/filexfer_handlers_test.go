@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/filexfer_handlers_test.go
+// Package commands cmd/apps/skychat/commands/filexfer_handlers_test.go c4-app-chat
 //
 // Unit coverage for the file-transfer HTTP surface and its helpers that don't
 // need a live mesh: the enabled-networks gate, the upload/path source resolver,

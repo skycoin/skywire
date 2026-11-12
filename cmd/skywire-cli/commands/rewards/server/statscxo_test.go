@@ -1,4 +1,4 @@
-// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/statscxo_test.go c5-reward-server
+// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/statscxo_test.go c4-vis-cli
 //
 // Tests for the two arithmetic claims the CXO move rests on:
 //

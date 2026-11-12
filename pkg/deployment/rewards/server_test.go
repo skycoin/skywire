@@ -1,4 +1,4 @@
-// Package rewards pkg/deployment/rewards/server_test.go
+// Package rewards pkg/deployment/rewards/server_test.go c4-app-rewards
 package rewards
 
 import (

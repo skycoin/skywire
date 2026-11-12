@@ -1,4 +1,4 @@
-// Package emu pkg/router/emu/conn.go
+// Package emu pkg/router/emu/conn.go c2-net-routing
 package emu
 
 import (

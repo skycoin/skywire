@@ -1,4 +1,4 @@
-// Package skysocks pkg/skysocks/pool_auto.go
+// Package skysocks pkg/skysocks/pool_auto.go c4-app-proxy
 //
 // Auto-sizing the standby pool (--standby-pool -1, the default).
 //

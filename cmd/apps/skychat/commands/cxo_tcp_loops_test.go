@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/cxo_tcp_loops_test.go
+// Package commands cmd/apps/skychat/commands/cxo_tcp_loops_test.go c4-app-chat
 //
 // Coverage for the CXO-over-native-TCP loops: startCXOTCP, startCXOGroup,
 // cxoDialUntilConnected, publishCXO and surfaceCXOInbound.

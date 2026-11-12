@@ -1,4 +1,4 @@
-// Package skyobject pkg/cxo/skyobject/cache_batch_lockorder_test.go
+// Package skyobject pkg/cxo/skyobject/cache_batch_lockorder_test.go c2-net-cxo
 //
 // Pins the lock order between Cache.mx and bbolt's writer lock, which
 // WithBatch is the only place able to invert (it opens the writer, then

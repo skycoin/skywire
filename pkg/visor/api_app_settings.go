@@ -1,4 +1,4 @@
-// Package visor pkg/visor/api_app_settings.go
+// Package visor pkg/visor/api_app_settings.go c3-vis-core
 //
 // The visor half of the live app-settings surface: a map of tuning knobs per
 // app, held on the proc manager and PULLED by the app on a tick it already

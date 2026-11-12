@@ -1,3 +1,4 @@
+// Package visor pkg/visor/status_visor.go c3-vis-core
 package visor
 
 import (

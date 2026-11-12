@@ -1,4 +1,4 @@
-// Package utclient pkg/utclient/client_test.go
+// Package utclient pkg/utclient/client_test.go c2-net-discovery
 package utclient
 
 import (

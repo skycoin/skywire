@@ -1,4 +1,4 @@
-// Package httputil pkg/httputil/recover.go
+// Package httputil pkg/httputil/recover.go c0-com-http
 package httputil
 
 import (

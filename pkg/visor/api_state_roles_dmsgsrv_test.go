@@ -1,4 +1,4 @@
-// Package visor pkg/visor/api_state_roles_dmsgsrv_test.go c3-vis-api
+// Package visor pkg/visor/api_state_roles_dmsgsrv_test.go c3-vis-core
 package visor
 
 import (

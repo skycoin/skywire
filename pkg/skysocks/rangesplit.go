@@ -1,4 +1,4 @@
-// Package skysocks pkg/skysocks/rangesplit.go — transparent HTTP range-splitting.
+// Package skysocks pkg/skysocks/rangesplit.go c4-app-proxy — transparent HTTP range-splitting.
 //
 // A browser or plain HTTP client pointed at the skysocks SOCKS5 proxy issues an
 // ordinary GET. When the origin is reachable over plaintext HTTP (port 80) and

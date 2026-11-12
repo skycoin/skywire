@@ -1,4 +1,4 @@
-// Package transport pkg/transport/managed_transport_writelock_test.go c1-net-tp
+// Package transport pkg/transport/managed_transport_writelock_test.go c2-net-transport
 package transport
 
 import (

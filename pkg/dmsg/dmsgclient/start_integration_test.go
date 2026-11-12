@@ -1,4 +1,4 @@
-// Package dmsgclient start_integration_test.go: integration tests for the
+// Package dmsgclient pkg/dmsg/dmsgclient/start_integration_test.go integration tests for the
 // direct-client Start* paths, driven against a real (localhost) dmsg server.
 // These cover the connect-and-Ready paths that the pure unit tests can't
 // reach. The HTTP-discovery paths (StartDmsg / StartDmsgWithSyntheticDiscovery)

@@ -1,4 +1,4 @@
-// Package dmsgtest pkg/dmsg/dmsgtest/server_stats_test.go
+// Package dmsgtest pkg/dmsg/dmsgtest/server_stats_test.go c1-net-dmsg
 package dmsgtest
 
 import (

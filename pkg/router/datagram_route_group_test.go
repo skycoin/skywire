@@ -1,4 +1,4 @@
-// Package router pkg/router/datagram_route_group_test.go: unit
+// Package router pkg/router/datagram_route_group_test.go unit
 // tests for the DatagramRouteGroup type. Stage 2 of #2607.
 //
 // These tests exercise the type in isolation — Handle is called

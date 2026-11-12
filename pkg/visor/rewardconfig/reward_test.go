@@ -1,4 +1,4 @@
-// Package rewardconfig pkg/visor/rewardconfig/reward_test.go
+// Package rewardconfig pkg/visor/rewardconfig/reward_test.go c3-vis-core
 package rewardconfig
 
 import (

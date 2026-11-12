@@ -1,4 +1,4 @@
-// Package dmsg pkg/dmsg/dmsg/client_relay.go
+// Package dmsg pkg/dmsg/dmsg/client_relay.go c1-net-dmsg
 //
 // A dmsg client as a RELAY (#4484 stage 3): a peer that cannot, or should not,
 // hold its own dmsg server sessions attaches to this client over a skywire

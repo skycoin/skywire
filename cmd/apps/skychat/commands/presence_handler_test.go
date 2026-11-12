@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/presence_handler_test.go
+// Package commands cmd/apps/skychat/commands/presence_handler_test.go c4-app-chat
 //
 // Drives the REAL presenceHandler past its visor-RPC gate, and covers the
 // eviction arm of presenceStore.record.

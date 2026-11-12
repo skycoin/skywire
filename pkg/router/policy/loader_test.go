@@ -1,4 +1,4 @@
-// Package policy pkg/router/policy/loader_test.go — tests for
+// Package policy pkg/router/policy/loader_test.go c2-net-routing — tests for
 // the @filepath / inline / noop loader paths and the file-watcher
 // hot-reload semantics.
 package policy

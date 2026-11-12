@@ -1,4 +1,4 @@
-// Package skydns pkg/skydns/doh.go
+// Package skydns pkg/skydns/doh.go c4-app-vpn
 package skydns
 
 import (

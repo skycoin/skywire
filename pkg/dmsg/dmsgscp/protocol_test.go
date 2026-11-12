@@ -1,4 +1,4 @@
-// Package dmsgscp pkg/dmsg/dmsgscp/protocol_test.go: unit coverage
+// Package dmsgscp pkg/dmsg/dmsgscp/protocol_test.go unit coverage
 // for the wire-protocol parser/writer + path-traversal guard.
 // Integration tests (real dmsg.Client end-to-end) are intentionally
 // skipped — those run live against peer visors.

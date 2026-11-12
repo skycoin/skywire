@@ -1,4 +1,4 @@
-// Package router pkg/router/recovery_diag_test.go
+// Package router pkg/router/recovery_diag_test.go c2-net-routing
 //
 // Coverage for the loss-recovery diagnostics surfaced as the `recovery` object
 // in `visor state --select mux_route_groups` / `proxy mux info --json`: the

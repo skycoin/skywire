@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/cxo_tcp_test.go
+// Package commands cmd/apps/skychat/commands/cxo_tcp_test.go c4-app-chat
 //
 // Unit coverage for the CXO-over-TCP peer-spec parser.
 package commands

@@ -1,4 +1,4 @@
-// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/visorbw.go c5-reward-server
+// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/visorbw.go c4-vis-cli
 //
 // Writes each settled day of TPD's per-visor bandwidth feed to
 // hist/<date>_bandwidth.json, the file the reward calculation pays pool 2

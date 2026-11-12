@@ -1,4 +1,4 @@
-// Package skysocks pkg/skysocks/rangesplit_https.go — HTTPS (TLS-terminating)
+// Package skysocks pkg/skysocks/rangesplit_https.go c4-app-proxy — HTTPS (TLS-terminating)
 // range-splitting.
 //
 // The plaintext splitter (rangesplit.go) cannot see the GET inside a :443 CONNECT.

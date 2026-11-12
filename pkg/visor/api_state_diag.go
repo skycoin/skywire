@@ -1,4 +1,4 @@
-// Package visor pkg/visor/api_state_diag.go c3-vis-api
+// Package visor pkg/visor/api_state_diag.go c3-vis-core
 //
 // The `diag` section of `visor state`: the in-process plumbing — router
 // intake, transport read queue and per-transport handlers/pong health, VStream

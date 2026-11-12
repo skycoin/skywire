@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/forward_test.go
+// Package commands cmd/apps/skychat/commands/forward_test.go c4-app-chat
 //
 // The test that matters most here is the one asserting what is NOT in the
 // envelope. Everything else is round-tripping.

@@ -1,4 +1,4 @@
-// Package router pkg/router/pool_role_seed_test.go
+// Package router pkg/router/pool_role_seed_test.go c2-net-routing
 //
 // The role has to be on the group BEFORE the dial decides how wide it may be.
 // The rig run of 2026-09-22 (bench/2026-09-22/63bb131cf-smoke, compose set at

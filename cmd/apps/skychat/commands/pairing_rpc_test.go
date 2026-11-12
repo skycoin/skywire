@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/pairing_rpc_test.go
+// Package commands cmd/apps/skychat/commands/pairing_rpc_test.go c4-app-chat
 //
 // Unit tests for the retry-on-shutdown helper. The watchdog and dial
 // paths are integration-shaped (need a real TCP listener + visor RPC

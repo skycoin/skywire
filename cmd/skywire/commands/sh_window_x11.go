@@ -1,5 +1,6 @@
 //go:build unix && !android && !ios && !tinygo && !(withgio && cgo)
 
+// Package commands cmd/skywire/commands/sh_window_x11.go c4-vis-cli
 package commands
 
 import "github.com/0magnet/progterm/x11term"

@@ -1,4 +1,4 @@
-// Package cligot got_http_test.go: exercises the dl / req / head command Run
+// Package cligot cmd/skywire-cli/commands/got/got_http_test.go exercises the dl / req / head command Run
 // closures over a local httptest server (the HTTP path, no visor needed) and
 // the skywire-scheme funcs' no-visor error paths.
 package cligot

@@ -1,4 +1,4 @@
-// Package visor pkg/visor/ping_mu_concurrency_test.go
+// Package visor pkg/visor/ping_mu_concurrency_test.go c3-vis-core
 //
 // Pins the contract that PingOnceWithEcho releases ping.mu before
 // any wire I/O — so N parallel pump goroutines on DIFFERENT

@@ -1,4 +1,4 @@
-// Package dmsg pkg/dmsg/dmsg/relay_local.go
+// Package dmsg pkg/dmsg/dmsg/relay_local.go c1-net-dmsg
 //
 // The LOCAL half of the relay (see client_relay.go). AcceptRelaySession takes a
 // plain net.Conn and keeps the attached peer's own identity, so the pipe under

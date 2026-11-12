@@ -1,3 +1,5 @@
+// Package main internal/rpcgen/main.go c4-vis-cli
+//
 // Command rpcgen writes reflection-free gobrpc handlers for a net/rpc
 // receiver. TinyGo's reflect has no Value.Call or Type.Method, so the same
 // generated handlers serve both the Go and the TinyGo build.

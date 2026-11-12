@@ -1,4 +1,4 @@
-// Package skysocks pkg/skysocks/client_meshname_test.go
+// Package skysocks pkg/skysocks/client_meshname_test.go c4-app-proxy
 //
 // The one listener answers mesh names as well as the clearnet: a <pk>.skynet
 // CONNECT is handed to the visor's resolving proxy and never reaches the exit,

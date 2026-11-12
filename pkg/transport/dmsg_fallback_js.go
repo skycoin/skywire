@@ -1,5 +1,6 @@
 //go:build js
 
+// Package transport pkg/transport/dmsg_fallback_js.go c2-net-transport
 package transport
 
 // DmsgRelayFallback is false in a browser: a tab cannot make a direct

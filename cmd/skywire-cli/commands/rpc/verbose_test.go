@@ -1,4 +1,4 @@
-// Package clirpc verbose_test.go: unit tests for the verbose log-stream
+// Package clirpc cmd/skywire-cli/commands/rpc/verbose_test.go unit tests for the verbose log-stream
 // helpers — emitEntry formatting, the OpenVerbose/WithVerbose filter guards,
 // and the WaitSubscribed select arms — without a live gRPC server.
 package clirpc

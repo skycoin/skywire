@@ -1,3 +1,4 @@
+// Package autoconfigui pkg/skywireconfig/autoconfigui/tui.go c4-vis-cli
 package autoconfigui
 
 import (

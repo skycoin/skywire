@@ -1,4 +1,4 @@
-// Package visor pkg/visor/api_browse_ws.go c3-vis-browse
+// Package visor pkg/visor/api_browse_ws.go c3-vis-core
 package visor
 
 import (

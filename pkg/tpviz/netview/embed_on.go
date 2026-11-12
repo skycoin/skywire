@@ -1,5 +1,6 @@
 //go:build !mobile
 
+// Package netview pkg/tpviz/netview/embed_on.go c4-app-rewards
 package netview
 
 import _ "embed"

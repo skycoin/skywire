@@ -1,3 +1,5 @@
+// Package climdisc pkg/cliout/climdisc/climdisc.go c4-vis-cli
+//
 // Package climdisc is the output shape of the `skywire cli mdisc` commands,
 // which read the dmsg discovery.
 package climdisc

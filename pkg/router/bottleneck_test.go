@@ -1,4 +1,4 @@
-// Package router pkg/router/bottleneck_test.go
+// Package router pkg/router/bottleneck_test.go c2-net-routing
 //
 // Unit coverage for shared-bottleneck detection (RFC 8382): the per-leg OWD
 // summary statistics, the similarity/grouping heuristic over synthetic sample

@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/tcp_direct_loops_test.go
+// Package commands cmd/apps/skychat/commands/tcp_direct_loops_test.go c4-app-chat
 //
 // Coverage for the TCP-direct transport loops, which were the last of the
 // lifecycle set still at 0%: runTCPListen, acceptTCPConn, runTCPPeerDialers,

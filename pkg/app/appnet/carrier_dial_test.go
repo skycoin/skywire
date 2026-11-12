@@ -1,4 +1,4 @@
-// Package appnet pkg/app/appnet/carrier_dial_test.go c3-app-net
+// Package appnet pkg/app/appnet/carrier_dial_test.go c2-vis-appsvc
 package appnet
 
 import (
