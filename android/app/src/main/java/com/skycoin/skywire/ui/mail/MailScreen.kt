@@ -964,6 +964,13 @@ private fun ComposeView(state: MailUiState, viewModel: MailViewModel) {
                 }
             }
         }
+        if (draft.attachments.isNotEmpty()) {
+            Text(
+                stringResource(R.string.mail_sent_size, formatBytes(draftWireSize(draft.attachments)), formatBytes(state.messageLimit)),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         OutlinedButton(onClick = { picker.launch(arrayOf("*/*")) }, enabled = !state.sending) {
             Icon(Icons.Rounded.AttachFile, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
@@ -1054,6 +1061,11 @@ private fun SettingsView(state: MailUiState, viewModel: MailViewModel) {
             Text(
                 stringResource(R.string.mail_usage, formatBytes(status.usage), formatBytes(total)),
                 style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                stringResource(R.string.mail_usage_encoded),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (total > 0) {
                 Spacer(Modifier.height(6.dp))

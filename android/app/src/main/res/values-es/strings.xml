@@ -1244,6 +1244,7 @@
     <string name="mail_bad_address">No es una dirección de SkyMail: %1$s</string>
     <string name="mail_no_recipient">Añade un destinatario.</string>
     <string name="mail_attachments_too_big">Estos adjuntos ocupan %1$s en tránsito; un mensaje puede ser de unos %2$s.</string>
+    <string name="mail_sent_size">Unos %1$s al enviarlo, de %2$s permitidos. El correo lleva los archivos como texto, lo que los hace un tercio más grandes.</string>
     <string name="mail_result_title">No llegó a todos</string>
     <string name="mail_result_delivered">Entregado por %1$s</string>
     <string name="mail_result_failed">No entregado: %1$s</string>
@@ -1252,6 +1253,7 @@
     <string name="mail_setting_on">Buzón encendido</string>
     <string name="mail_setting_on_desc">Recibe correo en tu dirección. Mientras está apagado, el correo para ti se rechaza.</string>
     <string name="mail_usage">%1$s de %2$s en uso</string>
+    <string name="mail_usage_encoded">El correo se guarda tal como se envió, así que los adjuntos ocupan un tercio más que los archivos.</string>
     <string name="mail_limits">Se rechazan los mensajes de más de %1$s y se elimina el correo de más de %2$d días.</string>
     <string name="mail_allowed_title">Quién puede escribirte</string>
     <string name="mail_allowed_everyone">Todos. Añade una clave para aceptar correo solo de las claves de tu lista.</string>
