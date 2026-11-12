@@ -4,6 +4,7 @@ import android.text.format.DateFormat
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -186,14 +187,28 @@ fun ThreadScreen(vm: ChatViewModel, key: String, onBack: () -> Unit) {
     val rows = remember(messages) { buildRows(messages) }
     val listState = rememberLazyListState()
     val atBottom by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset < 80 } }
-    LaunchedEffect(atBottom) { repo.setAtBottom(key, atBottom) }
+    // Whether new messages follow the reader down. Only the reader's own drag turns it
+    // off: an insert moves the list too, and so does a follow scroll the next message cut short.
+    var follow by remember { mutableStateOf(true) }
+    LaunchedEffect(listState) {
+        var dragged = false
+        launch { listState.interactionSource.interactions.collect { if (it is DragInteraction.Start) dragged = true } }
+        snapshotFlow { listState.isScrollInProgress }.collect { scrolling ->
+            if (!scrolling && dragged) {
+                dragged = false
+                follow = atBottom
+            }
+        }
+    }
+    LaunchedEffect(atBottom) { if (atBottom) follow = true }
+    LaunchedEffect(follow) { repo.setAtBottom(key, follow) }
 
     // New messages follow the reader down only while they are at the bottom (or it is their own).
     // Read during composition, before the insert is laid out: the list keeps its
     // anchor item, so afterwards the old newest row sits at index 1.
     var lastNewest by remember { mutableStateOf(messages.lastOrNull()?.key) }
     val newestKey = messages.lastOrNull()?.key
-    val wasAtBottom = remember(newestKey) { atBottom }
+    val wasAtBottom = remember(newestKey) { atBottom || follow }
     LaunchedEffect(newestKey) {
         val newest = messages.lastOrNull() ?: return@LaunchedEffect
         if (newest.key != lastNewest) {
@@ -216,6 +231,7 @@ fun ThreadScreen(vm: ChatViewModel, key: String, onBack: () -> Unit) {
         val i = rows.indexOfFirst { it is Row2.Msg && kotlin.math.abs(it.m.ts - ts) < 1000 }
         if (i < 0) return
         val k = (rows[i] as Row2.Msg).m.key
+        follow = i == 0
         scope.launch {
             listState.animateScrollToItem(i)
             highlight = k
