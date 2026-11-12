@@ -600,13 +600,16 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * The phone's killswitch preference is authoritative over whatever the
-     * visor's config carries — the same deal [TransportPreference] has. The
-     * app is not running yet at this point, so this only rewrites config.
+     * visor's config carries — the same deal [TransportPreference] has. An
+     * args change restarts the app, so a tunnel already up (started from the
+     * hub) is left alone. The stored value is read here, not from state that
+     * may not have loaded yet.
      */
     private suspend fun applyStoredKillswitch() {
-        val wanted = mutable.value.killswitch
+        val wanted = prefs.boolean(VpnArgs.PREF_KILLSWITCH).first()
         runCatching {
             val current = api.app(VpnArgs.APP)
+            if (current.running || current.status == AppState.STATUS_STARTING) return
             if (VpnArgs.killswitch(current.args) != wanted) {
                 api.updateApp(VpnArgs.APP, killswitch = wanted)
             }
