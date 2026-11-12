@@ -84,7 +84,7 @@ func (a *ui2FakeAPI) MailSetSettings(u visorapi.MailSettingsUpdate) error {
 	return nil
 }
 
-func newUI2FakeServer(t *testing.T, api *ui2FakeAPI) string {
+func newUI2FakeServer(t *testing.T, api visorapi.API) string {
 	t.Helper()
 	pk, _ := cipher.GenerateKeyPair()
 	hv := &Hypervisor{
@@ -271,4 +271,40 @@ func TestUI2ChatIsNative(t *testing.T) {
 	_, body := ui2Do(t, ui2Req(t, http.MethodGet, base+"/chat", "", ""))
 	require.Contains(t, body, `id="chat-form"`)
 	require.NotContains(t, body, "<iframe")
+}
+
+type ui2ProxyAPI struct {
+	ui2FakeAPI
+	enabled  map[string]bool
+	upstream string
+}
+
+func (a *ui2ProxyAPI) EmbeddedProxies() (*visorapi.EmbeddedProxiesStatus, error) {
+	return &visorapi.EmbeddedProxiesStatus{
+		DmsgWeb:   &visorapi.EmbeddedProxyInfo{Running: a.enabled["dmsg"], SocksAddr: "127.0.0.1:4445"},
+		SkynetWeb: &visorapi.EmbeddedProxyInfo{Running: a.enabled["skynet"], UpstreamSOCKS: a.upstream},
+	}, nil
+}
+
+func (a *ui2ProxyAPI) SetEmbeddedProxyEnabled(kind string, on bool) error {
+	a.enabled[kind] = on
+	return nil
+}
+
+func (a *ui2ProxyAPI) SetEmbeddedProxyUpstream(_, addr string) error {
+	a.upstream = addr
+	return nil
+}
+
+func TestUI2WebProxy(t *testing.T) {
+	api := &ui2ProxyAPI{enabled: map[string]bool{}}
+	base := newUI2FakeServer(t, api)
+	_, body := ui2Do(t, ui2Req(t, http.MethodGet, base+"/web-proxy", "", ""))
+	require.Contains(t, body, "127.0.0.1:4445")
+	form := "application/x-www-form-urlencoded"
+	_, body = ui2HX(t, http.MethodPut, base+"/web-proxy/enabled", form, "on=1")
+	require.True(t, api.enabled["skynet"] && api.enabled["dmsg"], "both resolvers switch together")
+	require.Contains(t, body, `id="wp"`)
+	_, _ = ui2HX(t, http.MethodPut, base+"/web-proxy/upstream", form, "addr=127.0.0.1:1080")
+	require.Equal(t, "127.0.0.1:1080", api.upstream)
 }

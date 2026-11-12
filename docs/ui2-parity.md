@@ -70,7 +70,7 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 | rewards | address, history, rules | yes | |
 | dmsg | sessions, clients, connect all, session count | yes | Angular folds it into info |
 | skynet | forwarded ports and forwards | no | |
-| web-proxy | resolving proxy settings | no | |
+| web-proxy | resolving proxy status, on/off, upstream | yes | |
 | vpn | VPN client | no | |
 | resources | host stats and resource monitor | partial | host, process and runtime figures, no history charts |
 | terminal | dmsgpty terminal | yes | embeds the hypervisor pty page |
