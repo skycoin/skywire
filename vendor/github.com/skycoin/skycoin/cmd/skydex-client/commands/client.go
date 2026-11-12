@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/0magnet/logrus"
+
+	"github.com/skycoin/skycoin/cmd/skydex-client/skydexui"
 )
 
 //go:embed static
@@ -50,29 +52,15 @@ func Run(ctx context.Context, cfg Config, dialer MarketDialer, log logrus.FieldL
 // is canceled. Any path that isn't a real asset falls back to index.html so
 // client-side routes resolve.
 func serveUI(ctx context.Context, log logrus.FieldLogger, sess *session, addr string) {
-	distFS, err := fs.Sub(uiFS, "static")
+	handler, err := uiHandler(sess)
 	if err != nil {
 		log.Errorf("skydex-client: failed to open embedded UI: %v", err)
 		return
 	}
-	fileServer := http.FileServer(http.FS(distFS))
-
-	mux := http.NewServeMux()
-	registerAPI(mux, sess)
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		name := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
-		if name == "" {
-			name = "index.html"
-		}
-		if _, statErr := fs.Stat(distFS, name); statErr != nil {
-			r.URL.Path = "/"
-		}
-		fileServer.ServeHTTP(w, r)
-	})
 
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           mux,
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() { //nolint
@@ -85,4 +73,32 @@ func serveUI(ctx context.Context, log logrus.FieldLogger, sess *session, addr st
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Errorf("skydex-client: UI server stopped: %v", err)
 	}
+}
+
+// uiHandler is the embedded SPA, the /ui2 client and the local control API.
+// Writes from another site are refused on all of them, so no other page can
+// place or cancel orders through the API.
+func uiHandler(sess *session) (http.Handler, error) {
+	distFS, err := fs.Sub(uiFS, "static")
+	if err != nil {
+		return nil, err
+	}
+	fileServer := http.FileServer(http.FS(distFS))
+
+	mux := http.NewServeMux()
+	registerAPI(mux, sess)
+	// The server rendered client, beside the React one until it reaches parity.
+	mux.Handle("/ui2/", http.StripPrefix("/ui2", skydexui.Handler(uiMarket{sess})))
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		name := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
+		if name == "" {
+			name = "index.html"
+		}
+		if _, statErr := fs.Stat(distFS, name); statErr != nil {
+			r.URL.Path = "/"
+		}
+		fileServer.ServeHTTP(w, r)
+	})
+
+	return skydexui.SameOriginWrites(mux), nil
 }
