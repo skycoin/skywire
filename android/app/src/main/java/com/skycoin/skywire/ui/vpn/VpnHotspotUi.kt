@@ -171,12 +171,13 @@ private fun InfoLine(label: String, value: String, onCopy: () -> Unit) {
 
 /**
  * The system's hotspot & tethering screen has no public action. Try the Settings
- * app's entries, then the wireless settings one tap away from it.
+ * app's exported entry first: Honor opens TetherSettings and closes it at once,
+ * with no error to fall back on. Then the wireless settings one tap away.
  */
 private fun openHotspotSettings(context: Context): Boolean {
     val tries = listOf(
-        Intent(Intent.ACTION_MAIN).setClassName("com.android.settings", "com.android.settings.TetherSettings"),
         Intent(Intent.ACTION_MAIN).setClassName("com.android.settings", "com.android.settings.Settings\$TetherSettingsActivity"),
+        Intent(Intent.ACTION_MAIN).setClassName("com.android.settings", "com.android.settings.TetherSettings"),
         Intent(Settings.ACTION_WIRELESS_SETTINGS),
     )
     return tries.any { intent ->
