@@ -25,8 +25,8 @@ type DMSG struct {
 
 	mx sync.Mutex
 
-	isListening bool
-	cs          map[cipher.PubKey]*Conn // remote PK -> connection
+	listening bool
+	cs        map[cipher.PubKey]*Conn // remote PK -> connection
 }
 
 func newDMSG(n *Node, factory *transport.DMSGFactory) *DMSG {
@@ -79,7 +79,7 @@ func (d *DMSG) Listen() error {
 	d.mx.Lock()
 	defer d.mx.Unlock()
 
-	if d.isListening {
+	if d.listening {
 		return ErrAlreadyListen
 	}
 
@@ -87,7 +87,7 @@ func (d *DMSG) Listen() error {
 		return err
 	}
 
-	d.isListening = true
+	d.listening = true
 	return nil
 }
 

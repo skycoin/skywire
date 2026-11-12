@@ -21,8 +21,8 @@ type TCP struct {
 	//
 	mx sync.Mutex
 
-	address     string // listening address
-	isListening bool
+	address   string // listening address
+	listening bool
 
 	cs map[string]*Conn // address -> conn
 }
@@ -81,7 +81,7 @@ func (t *TCP) Listen(address string) (err error) {
 	t.mx.Lock()
 	defer t.mx.Unlock()
 
-	if t.isListening == true { //nolint:staticcheck
+	if t.listening == true { //nolint:staticcheck
 		return ErrAlreadyListen
 	}
 
@@ -89,7 +89,7 @@ func (t *TCP) Listen(address string) (err error) {
 		return
 	}
 
-	t.isListening = true
+	t.listening = true
 	// Use actual listener address (important when port is 0)
 	t.address = t.TCPFactory.ListenerAddress()
 	return
@@ -212,8 +212,8 @@ type UDP struct {
 
 	mx sync.Mutex
 
-	address     string
-	isListening bool
+	address   string
+	listening bool
 
 	cs map[string]*Conn // connections
 }
@@ -262,7 +262,7 @@ func (u *UDP) Listen(address string) (err error) {
 	u.mx.Lock()
 	defer u.mx.Unlock()
 
-	if u.isListening == true { //nolint:staticcheck
+	if u.listening == true { //nolint:staticcheck
 		return ErrAlreadyListen
 	}
 
@@ -271,7 +271,7 @@ func (u *UDP) Listen(address string) (err error) {
 	}
 
 	u.address = address
-	u.isListening = true
+	u.listening = true
 	return
 }
 
@@ -381,6 +381,6 @@ func (u *UDP) connections() (cs []string) { //nolint:unused
 	return
 }
 
-func factoryConnStr(fc *transport.Connection, isIncoming bool) string {
-	return connString(isIncoming, fc.IsTCP(), fc.GetRemoteAddr().String())
+func factoryConnStr(fc *transport.Connection, incoming bool) string {
+	return connString(incoming, fc.IsTCP(), fc.GetRemoteAddr().String())
 }

@@ -370,8 +370,8 @@ var pathParamRe = regexp.MustCompile(`\{([^/}]+)\}`)
 // the inline JS finds this row's inputs by DOM traversal, so no id is needed.
 func writeEndpoint(b *strings.Builder, base string, ep svcendpoints.Endpoint) {
 	pathParams := pathParamRe.FindAllStringSubmatch(ep.Path, -1)
-	isPost := strings.EqualFold(ep.Method, "POST")
-	simple := !isPost && len(pathParams) == 0 && len(ep.Query) == 0
+	post := strings.EqualFold(ep.Method, "POST")
+	simple := !post && len(pathParams) == 0 && len(ep.Query) == 0
 
 	b.WriteString(`<div class="ep">`)
 
@@ -416,7 +416,7 @@ func writeEndpoint(b *strings.Builder, base string, ep svcendpoints.Endpoint) {
 	dataAttrs := fmt.Sprintf(`data-base="%s" data-path="%s"`,
 		html.EscapeString(base), html.EscapeString(ep.Path))
 
-	if isPost {
+	if post {
 		fmt.Fprintf(b, `<button type="button" onclick="skySend(this)" %s>Send</button>`, dataAttrs)
 		b.WriteString("</div>") // close inputs row
 		body := ep.Body

@@ -565,8 +565,8 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 
 	// First pass: filter entries and prepare for bulk fetch
 	type filteredEntry struct {
-		entry  *transport.Entry
-		isLive bool
+		entry *transport.Entry
+		live  bool
 	}
 	var filtered []filteredEntry
 
@@ -577,19 +577,19 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 		}
 
 		// Apply live filter
-		isLive := expiredIDs == nil || !expiredIDs[entry.ID]
+		live := expiredIDs == nil || !expiredIDs[entry.ID]
 		switch query.Live {
 		case "true":
-			if !isLive {
+			if !live {
 				continue
 			}
 		case "false":
-			if isLive {
+			if live {
 				continue
 			}
 		}
 
-		filtered = append(filtered, filteredEntry{entry: entry, isLive: isLive})
+		filtered = append(filtered, filteredEntry{entry: entry, live: live})
 	}
 
 	if len(filtered) == 0 {
@@ -716,7 +716,7 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 		metric := TransportMetric{
 			ID:    idStrs[i],
 			Type:  string(f.entry.Type),
-			Live:  f.isLive,
+			Live:  f.live,
 			Daily: bwByEntry[i],
 		}
 		if metric.Daily == nil {
@@ -766,24 +766,24 @@ const metricsChunkCmds = 2000
 // the day carries no bandwidth.
 func dailyBandwidth(result map[string]string, dateStr, kASent, kARecv, kBSent, kBRecv string) (DailyEdgeBandwidth, bool) {
 	var aSent, aRecv, bSent, bRecv uint64
-	hasPerEdge := false
+	perEdge := false
 	if val, ok := result[kASent]; ok {
 		aSent = parseBWUint(val)
-		hasPerEdge = true
+		perEdge = true
 	}
 	if val, ok := result[kARecv]; ok {
 		aRecv = parseBWUint(val)
-		hasPerEdge = true
+		perEdge = true
 	}
 	if val, ok := result[kBSent]; ok {
 		bSent = parseBWUint(val)
-		hasPerEdge = true
+		perEdge = true
 	}
 	if val, ok := result[kBRecv]; ok {
 		bRecv = parseBWUint(val)
-		hasPerEdge = true
+		perEdge = true
 	}
-	if hasPerEdge && (aSent+aRecv+bSent+bRecv) > 0 {
+	if perEdge && (aSent+aRecv+bSent+bRecv) > 0 {
 		_, sameNet := result[sameNetworkField]
 		m := DailyEdgeBandwidth{
 			Date:        dateStr,

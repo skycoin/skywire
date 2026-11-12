@@ -1688,7 +1688,7 @@ func putAt(root *memNode, segs []string, value []byte) error {
 		}
 	}()
 	for i, seg := range segs[:len(segs)-1] {
-		if _, isLeaf := cur.leaves[seg]; isLeaf {
+		if _, ok := cur.leaves[seg]; ok {
 			return &PathConflictError{Path: joinSegs(segs[:i+1]), Existing: "leaf"}
 		}
 		next, ok := cur.subs[seg]
@@ -1703,7 +1703,7 @@ func putAt(root *memNode, segs []string, value []byte) error {
 		chain = append(chain, cur)
 	}
 	last := segs[len(segs)-1]
-	if _, isSub := cur.subs[last]; isSub {
+	if _, ok := cur.subs[last]; ok {
 		return &PathConflictError{Path: joinSegs(segs), Existing: "sub-tree"}
 	}
 	cur.leaves[last] = value

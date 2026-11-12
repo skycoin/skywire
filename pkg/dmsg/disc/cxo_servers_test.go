@@ -19,9 +19,9 @@ func TestCXOServersClient(t *testing.T) {
 	require.NoError(t, primary.PostEntry(ctx, e))
 
 	fromFeed := &Entry{Static: pk, Server: &Server{Address: "2.2.2.2:80"}}
-	hasAnswer := true
+	answered := true
 	c := NewCXOServersClient(primary, func(context.Context) ([]*Entry, bool) {
-		if !hasAnswer {
+		if !answered {
 			return nil, false
 		}
 		return []*Entry{fromFeed}, true
@@ -30,7 +30,7 @@ func TestCXOServersClient(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "2.2.2.2:80", got[0].Server.Address, "answered from the feed")
 
-	hasAnswer = false
+	answered = false
 	got, err = c.AllServers(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "1.1.1.1:80", got[0].Server.Address, "no feed answer asks the discovery")

@@ -162,12 +162,12 @@ func InstallHelpTree(root *cobra.Command) {
 	installHelpTree(root, true)
 }
 
-func installHelpTree(c *cobra.Command, isRoot bool) {
+func installHelpTree(c *cobra.Command, root bool) {
 	// Snapshot the children first: InstallHelp adds `help` and `tree` to c,
 	// and recursing into those would be pointless at best.
 	children := append([]*cobra.Command(nil), c.Commands()...)
 	switch {
-	case isRoot || c.HasAvailableSubCommands():
+	case root || c.HasAvailableSubCommands():
 		InstallHelp(c)
 	case c.Runnable() && !c.DisableFlagParsing && !isHelpCmd(c):
 		installHelpCmd(c)
@@ -250,10 +250,10 @@ func printTreeChildren(c *cobra.Command, prefix string) {
 		visible = append(visible, child)
 	}
 	for i, child := range visible {
-		isLast := i == len(visible)-1
+		last := i == len(visible)-1
 		branch := "├── "
 		nextPrefix := prefix + "│   "
-		if isLast {
+		if last {
 			branch = "└── "
 			nextPrefix = prefix + "    "
 		}

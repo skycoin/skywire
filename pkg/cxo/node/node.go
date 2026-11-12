@@ -478,24 +478,24 @@ func (n *Node) pendingConnCap() int {
 
 // initConn initializes new connection.
 func (n *Node) initConn(
-	fc *transport.Connection, isIncoming bool) (*Conn, error) {
+	fc *transport.Connection, incoming bool) (*Conn, error) {
 
 	var (
 		addr    = fc.GetRemoteAddr().String()
-		connStr = connString(isIncoming, fc.IsTCP(), addr)
+		connStr = connString(incoming, fc.IsTCP(), addr)
 	)
 
 	n.Debugf(ConnHskPin, "[%s] init connection", connStr)
 
 	// Get existing connection or create new one.
-	c, isNew, isPending, err := n.onNewConn(fc, isIncoming)
+	c, created, pending, err := n.onNewConn(fc, incoming)
 	if err != nil {
 		return nil, err
 	}
 
 	switch {
 	// In case of existing connection return it.
-	case !isNew && !isPending:
+	case !created && !pending:
 		// A connection to/from this address already exists, so `c` is that
 		// EXISTING Conn and the freshly-accepted/-dialed `fc` we were handed is a
 		// duplicate that nobody will use. Close it — its readLoop/writeLoop
@@ -512,11 +512,11 @@ func (n *Node) initConn(
 	// 1. Request for new incoming connection from the same address will fail.
 	// 2. Request for new outgoing connection to the same address will return existing
 	//    connection (or error) after it finishes handshake.
-	case !isNew && isPending:
-		if isIncoming {
+	case !created && pending:
+		if incoming {
 			return nil, errors.New("already have incoming pending connection")
 		}
-		// Wait for the in-flight isNew goroutine to publish the init
+		// Wait for the in-flight created goroutine to publish the init
 		// result on c.initq. If it fails, that goroutine has already
 		// called onConnInitErr (deletes from pendConns, sets initErr,
 		// closes initq). The waiter must only propagate the error —
@@ -537,7 +537,7 @@ func (n *Node) initConn(
 		return c, nil
 
 	// In case of new connection perform/accept handshake.
-	case isNew:
+	case created:
 		if err = c.handshake(); err != nil {
 			err = fmt.Errorf("handshake failed: %s", err)
 			n.onConnInitErr(c, err)
@@ -563,10 +563,10 @@ func (n *Node) initConn(
 // any concurrent removeConn — not the pre-insert snapshot a
 // separate locked read would have given.
 func (n *Node) onNewConn(
-	fc *transport.Connection, isIncoming bool) (c *Conn, isNew, isPending bool, err error) {
+	fc *transport.Connection, incoming bool) (c *Conn, created, pending bool, err error) {
 
 	addr := fc.GetRemoteAddr().String()
-	c = n.newConnection(fc, isIncoming)
+	c = n.newConnection(fc, incoming)
 
 	maxConns := n.config.MaxConnections
 	maxPending := n.config.MaxPendingConnections
@@ -580,19 +580,19 @@ func (n *Node) onNewConn(
 		return nil
 	}
 
-	existing, isPend, isFresh, capErr := n.conns.reservePending(addr, c, capCheck)
+	existing, pending, fresh, capErr := n.conns.reservePending(addr, c, capCheck)
 	if capErr != nil {
 		return nil, false, false, capErr
 	}
-	if !isFresh {
-		return existing, false, isPend, nil
+	if !fresh {
+		return existing, false, pending, nil
 	}
 	return c, true, false, nil
 }
 
 // onConnInitErr atomically removes pending connection and signals
 // about initConn failure. Idempotent: c.initClosed gates the close
-// of initq so a double-call (which pre-fix the isPending branch of
+// of initq so a double-call (which pre-fix the pending branch of
 // initConn triggered, double-closing initq and panicking the visor
 // under handshake-failure load) becomes a no-op after the first.
 //

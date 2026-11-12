@@ -1474,7 +1474,7 @@ func getClientEntry(ctx context.Context, dc disc.APIClient, clientPK cipher.PubK
 	<<< Update interval helpers >>>
 */
 
-func (c *EntityCommon) updateIsDue() (lastUpdate time.Time, isDue bool) {
+func (c *EntityCommon) updateIsDue() (lastUpdate time.Time, due bool) {
 	lastUpdate = time.Unix(0, c.lastUpdate.Load())
 	if c.cxoKeepsEntryAlive() {
 		return lastUpdate, false

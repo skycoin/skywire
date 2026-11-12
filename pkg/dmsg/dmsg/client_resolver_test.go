@@ -137,7 +137,7 @@ func TestEntryResolverTimeoutDoesNotStallDial(t *testing.T) {
 	if wedged.lastCtx == nil {
 		t.Fatal("resolver was not called")
 	}
-	if _, hasDeadline := wedged.lastCtx.Deadline(); !hasDeadline {
+	if _, deadlineSet := wedged.lastCtx.Deadline(); !deadlineSet {
 		t.Error("resolver was called without a deadline")
 	}
 }

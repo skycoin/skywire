@@ -462,7 +462,7 @@ func readTimelineLine(ctx context.Context, client redis.UniversalClient, tlKey s
 // false when no bit is set.
 func renderTimeline(raw []byte) (string, bool) {
 	var buf [timelineSlots]byte
-	hasAny := false
+	anyFound := false
 	for slot := range timelineSlots {
 		byteIdx := slot / 8
 		if byteIdx >= len(raw) {
@@ -473,12 +473,12 @@ func renderTimeline(raw []byte) (string, bool) {
 		// matching pkg/visor/stats/bitmap.go and pkg/serviceuptime.
 		if raw[byteIdx]&(1<<uint(7-slot%8)) != 0 {
 			buf[slot] = '.'
-			hasAny = true
+			anyFound = true
 		} else {
 			buf[slot] = ' '
 		}
 	}
-	if !hasAny {
+	if !anyFound {
 		return "", false
 	}
 	return string(buf[:]), true

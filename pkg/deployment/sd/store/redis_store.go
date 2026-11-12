@@ -652,7 +652,7 @@ func (s *redisStore) GetDailyTimeline(ctx context.Context, pkHex string, now tim
 		}
 		raw := []byte(str)
 		var buf [timelineSlots]byte
-		hasAny := false
+		anyFound := false
 		for slot := range timelineSlots {
 			// Redis bit ordering: offset 0 is the MSB of byte 0 (matches GETBIT).
 			byteIdx := slot / 8
@@ -662,12 +662,12 @@ func (s *redisStore) GetDailyTimeline(ctx context.Context, pkHex string, now tim
 			}
 			if bit == 1 {
 				buf[slot] = '.'
-				hasAny = true
+				anyFound = true
 			} else {
 				buf[slot] = ' '
 			}
 		}
-		if hasAny {
+		if anyFound {
 			timelines[dates[i]] = string(buf[:])
 		}
 	}

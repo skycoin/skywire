@@ -59,13 +59,13 @@ func (s *Session) handleJoinRequest(c net.Conn, payload []byte) {
 
 	s.membersMu.RLock()
 	handler := s.onJoinRequest
-	isBanned := s.isBannedLocked(pk)
+	banned := s.isBannedLocked(pk)
 	name := s.cfg.Record.Name
 	s.membersMu.RUnlock()
 
 	resp := JoinResponseMsg{GroupID: s.cfg.Record.ID, Name: name}
 	switch {
-	case isBanned:
+	case banned:
 		resp.Status = JoinStatusBanned
 		resp.Reason = "this public key is banned from the group"
 	case handler == nil:

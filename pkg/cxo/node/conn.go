@@ -35,9 +35,9 @@ type Conn struct {
 	// sharding moved the init signal off the global mutex (so accept
 	// and removeConn paths no longer serialize on init), and the
 	// guard had to follow. Guards close(initq) against a double-close
-	// race: pre-fix the isPending branch of Node.initConn called
+	// race: pre-fix the pending branch of Node.initConn called
 	// onConnInitErr a second time after its waitForInit returned the
-	// error already published by the isNew handshaker, panicking the
+	// error already published by the created handshaker, panicking the
 	// whole visor with "close of closed channel" under sustained
 	// handshake-failure load (e.g. when dmsg-discovery is CPU-starved
 	// and every per-peer ConnectPK times out). Idempotency here means
@@ -81,14 +81,14 @@ type Conn struct {
 }
 
 func (n *Node) newConnection(
-	fc *transport.Connection, isIncoming bool) *Conn {
+	fc *transport.Connection, incoming bool) *Conn {
 
 	c := &Conn{
 		Connection: fc,
 
 		n: n,
 
-		incoming: isIncoming,
+		incoming: incoming,
 
 		initq: make(chan struct{}),
 
@@ -277,14 +277,14 @@ func (c *Conn) HasFeed(feed cipher.PubKey) bool {
 	return c.n.fs.hasConnFeed(c, feed)
 }
 
-func connString(isIncoming, isTCP bool, addr string) (s string) {
-	if isIncoming == true { //nolint:staticcheck
+func connString(incoming, tcp bool, addr string) (s string) {
+	if incoming == true { //nolint:staticcheck
 		s = "↓ "
 	} else {
 		s = "↑ "
 	}
 
-	if isTCP == true { //nolint:staticcheck
+	if tcp == true { //nolint:staticcheck
 		s += "tcp://"
 	} else {
 		s += "udp://"

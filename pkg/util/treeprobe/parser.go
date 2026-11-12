@@ -61,14 +61,14 @@ func (p *Parser) Next() (*Decoded, error) {
 			continue
 		}
 		// Skip lines that are all whitespace.
-		isBlank := true
+		blank := true
 		for _, b := range line {
 			if b != ' ' && b != '\t' && b != '\r' {
-				isBlank = false
+				blank = false
 				break
 			}
 		}
-		if isBlank {
+		if blank {
 			continue
 		}
 

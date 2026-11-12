@@ -250,14 +250,14 @@ func (cli *CLI) captureEnv() []string {
 	}
 
 	// If TERM is not set, default to a sensible value
-	hasTerm := false
+	withTerm := false
 	for _, e := range env {
 		if strings.HasPrefix(e, "TERM=") {
-			hasTerm = true
+			withTerm = true
 			break
 		}
 	}
-	if !hasTerm {
+	if !withTerm {
 		env = append(env, "TERM=xterm-256color")
 	}
 

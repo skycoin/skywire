@@ -106,8 +106,8 @@ func RemoveObjects(c *skyobject.Container) (err error) {
 			// by MaxFillingTime (see head.go / #3562): when the fill times out
 			// it Unwants, the object leaves the cache, and the next sweep
 			// reclaims it. Do not "fix" this by deleting cached keys.
-			_, isCached := cached[key]
-			return !isCached, nil
+			_, ok := cached[key]
+			return !ok, nil
 		})
 
 	return

@@ -49,8 +49,8 @@ var ErrSendStopped = errors.New("cxo transport: send stopped")
 // through a queue that a writer goroutine drains only while it is non-empty,
 // so an idle connection holds no goroutine of its own.
 type Connection struct {
-	conn  net.Conn
-	isTCP bool
+	conn net.Conn
+	tcp  bool
 
 	mu          sync.RWMutex
 	closed      bool
@@ -68,10 +68,10 @@ type Connection struct {
 	done    chan struct{}
 }
 
-func newConnection(conn net.Conn, isTCP bool) *Connection {
+func newConnection(conn net.Conn, tcp bool) *Connection {
 	return &Connection{
 		conn:  conn,
-		isTCP: isTCP,
+		tcp:   tcp,
 		space: make(chan struct{}, 1),
 		done:  make(chan struct{}),
 	}
@@ -84,7 +84,7 @@ func (c *Connection) GetRemoteAddr() net.Addr {
 
 // IsTCP returns true if this is a TCP connection.
 func (c *Connection) IsTCP() bool {
-	return c.isTCP
+	return c.tcp
 }
 
 // IsClosed returns true if the connection has been closed.
