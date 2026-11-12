@@ -1,0 +1,146 @@
+================================================================================
+Applying the KCG Go Standards to skywire — assessment & actions
+================================================================================
+
+date: 2026-07-06  ·  repo: github.com/skycoin/skywire (verified against tree)
+
+--------------------------------------------------------------------------------
+BOTTOM LINE
+--------------------------------------------------------------------------------
+
+skywire already satisfies the PORTABLE core of the corpus, mostly by Go
+construction, not by effort:
+
+  - KG1  layering/no-cycles ...... GUARANTEED by go build (zero import cycles).
+  - KG2  single-writer ........... the dominant style is goroutine-owns-state +
+                                   channel, or a struct + mutex with one logical
+                                   owner (SessionManager, transport.Manager,
+                                   procManager, router loops). Enforced at
+                                   runtime by `go test -race`.
+  - KG4  typed handles ........... cipher.PubKey / routing.RouteID / transport.ID
+                                   / network.Type are defined types, maps keyed
+                                   by them. The most-Go-aligned rule, already met.
+  - KG7  interfaces at consumer .. ~109 interfaces, all -er/plain-named, defined
+                                   beside their users; NO dedicated interface-
+                                   only package. Go idiom, correctly inverting
+                                   the C# assembly-isolation rule.
+  - KG13 single binary / modular . one `skywire` binary, cobra subcommands,
+                                   composition at pkg/visor. A live match for
+                                   pattern-modular-monolith + single-entry-point.
+  - KG14 one-version deps ........ go.mod/go.sum/vendor pin one version repo-wide
+                                   (nuget-CPM for free).
+  - KG15 colocation .............. dir==package; no *enums/*ids split packages.
+  - no-claude-files .............. git tree currently has no tracked CLAUDE.md /
+                                   .claude. (Add a .gitignore guard to keep it.)
+
+So "apply the standards to skywire" is NOT a refactor campaign. The Go compiler
++ the existing .golangci.yml + the race detector already are the compliance
+engine for the parts that port. What remains is (a) one small design note, and
+(b) an OPTIONAL, evaluate-first set of linters that mechanize the review-only
+principles. Neither is urgent; both are presented for a decision, not applied
+unilaterally (the user asked to "see about applying ... if needed").
+
+--------------------------------------------------------------------------------
+1. THE ONE CONCRETE FINDING (review-only, NOT a bug)
+--------------------------------------------------------------------------------
+
+KG11 / antipattern-manager-ownership AP1: a managed object stores a back-
+reference to its manager.
+
+  pkg/app/appserver/proc.go:64   m  ProcManager        // child -> parent ptr
+  pkg/app/appserver/proc.go:89   NewProc(..., m ProcManager, ...)
+  pkg/app/appserver/proc.go:297  pm, ok := p.m.(*procManager)   // asserts back
+
+In C# this is the retained-manager-pointer anti-pattern. In Go it is SAFE:
+same package (appserver), an interface value, no import cycle, no stale-pointer
+risk under GC. It is exactly the child->parent coupling KG11 discourages, and
+the type-assertion back to the concrete *procManager (proc.go:297) is a mild
+smell (the interface isn't sufficient, so it reaches through it).
+
+Verdict: leave it unless appserver is being refactored anyway. If touched, the
+Go-idiomatic fix is to widen the ProcManager interface so the assertion at :297
+is unnecessary, or to pass the one capability Proc needs (a callback/small
+interface) instead of the whole manager. This is a KG7/KG10 improvement, low
+value, not worth a standalone PR.
+
+No cross-package leaf->manager back-imports were found (those would be a compile
+error anyway).
+
+--------------------------------------------------------------------------------
+2. OPTIONAL LINTER ADDITIONS (mechanize the review-only principles)
+--------------------------------------------------------------------------------
+
+skywire's .golangci.yml (v2) currently enables: errcheck, gosec, ineffassign,
+misspell, nakedret, revive, staticcheck, unconvert, unparam, unused. It does
+NOT configure depguard, gochecknoglobals, gochecknoinits, or gomodguard.
+
+Adding these would convert ~4 principles from review-only to CI-enforced:
+
+  depguard          -> KG1  import DIRECTION (layering), the corpus's #1 ask.
+                           The compiler already bans cycles; depguard bans the
+                           non-cycle upward/peer/UI-into-core edges.
+  gochecknoglobals  -> KG9  no package-level mutable globals (no singletons).
+  gochecknoinits    -> KG9  no init() registration side-effects.
+  gomodguard        -> KG14 one lib per purpose (ban competing json/ws/quic libs).
+
+RISK / WHY "EVALUATE FIRST", NOT "APPLY NOW":
+  - gochecknoglobals and gochecknoinits are NOISY on an established daemon. Go
+    codebases legitimately have package-level loggers, sentinel errors
+    (var ErrX = errors.New(...)), lookup tables, and a few init()s. Turning
+    these on repo-wide would light up dozens of pre-existing, ACCEPTABLE cases
+    and demand a wave of //nolint or exclusions. Only worth it with an agreed
+    allowlist and appetite for the churn.
+  - depguard is HIGH-VALUE but needs the layer map written by hand (which
+    packages may import which). Get it slightly wrong and it blocks legitimate
+    PRs. Best rolled out in "warn"/non-blocking mode first, on a couple of
+    edges everyone agrees on (e.g. "pkg/transport must not import pkg/visor",
+    "core must not import the hv-ui serve package"), then tightened.
+  - gomodguard is cheap and low-risk (skywire already has de-facto single libs:
+    coder/websocket, one QUIC, one JSON path) — the safest of the four.
+
+RECOMMENDATION: if any are adopted, start with depguard in non-blocking mode on
+2-3 uncontroversial edges + gomodguard pinning the already-chosen libs. Defer
+gochecknoglobals/gochecknoinits unless the team wants a globals audit. See
+golangci-additions.txt for the exact stanza. This is a proposal; it changes CI
+behavior for every contributor, so it should be a deliberate, separate PR with
+sign-off — not folded into unrelated work.
+
+--------------------------------------------------------------------------------
+3. WHAT NOT TO DO (guard against over-application)
+--------------------------------------------------------------------------------
+
+Do NOT, in the name of these standards:
+  - split types into *enums/*ids packages (fights KG15 + creates cycle pressure);
+  - introduce a dedicated interface-only package (§4 C2 — anti-idiomatic);
+  - rename identifiers to Fof_/Fon_, [Name]Interface, Uid, Init1/Init2 (§4 C1/
+    C2/C3/C5 — revive/stylecheck reject these);
+  - rewrite pointer fields (parent links, *Manager fields, caches) into ID
+    indirection (§4 C6 — GC makes this pointless and un-Go);
+  - split stateful types into anemic-data + all-logic pairs (§4 C7);
+  - wrap the stdlib behind adapter packages (§4 C10);
+  - treat the 7 validation-gates as a CI gate — they are a PR-description
+    checklist; skywire's machine gate stays `make format check`.
+
+Every one of those would make the codebase LESS idiomatic while claiming
+"standards compliance." The standard here explicitly says Go wins those
+conflicts.
+
+--------------------------------------------------------------------------------
+4. SUGGESTED NEXT STEP (if the team wants to act)
+--------------------------------------------------------------------------------
+
+Smallest useful, lowest-risk increment:
+  1. Add a .gitignore guard for CLAUDE.md/.claude (no-claude-files, trivial).
+  2. Add gomodguard pinning the already-chosen libs (KG14, near-zero churn).
+  3. Add depguard in NON-BLOCKING mode on the 2-3 agreed edges (KG1), watch a
+     few PRs, then flip to blocking.
+Leave gochecknoglobals/gochecknoinits, and every §4 item, alone.
+
+That captures the real, portable value of the corpus (enforced layering
+direction + dependency hygiene) for a few lines of config and no code churn,
+while the compiler + race detector + existing linters keep doing the heavy
+lifting they already do.
+
+================================================================================
+END
+================================================================================

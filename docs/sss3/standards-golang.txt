@@ -1,0 +1,386 @@
+================================================================================
+KCG Game Standards — Go Adaptation — THE STANDARD
+================================================================================
+
+version 1.0  ·  2026-07-06  ·  applies-to: github.com/skycoin/skywire + siblings
+source: ../kcg-game-standards/ (full corpus)  ·  extends: sss-standards-golang.txt
+
+--------------------------------------------------------------------------------
+0. PHILOSOPHY (READ FIRST)
+--------------------------------------------------------------------------------
+
+The corpus is a C#/Unity data-oriented game-engine standard. Its deep values —
+separate data from behavior, one writer per piece of state, strict downward
+layering, no singletons, typed handles instead of bare ints, prefer plain data
++ functions over interface hierarchies — are GOOD values and most of them
+survive translation to Go. Its *mechanisms* — .csproj assemblies, generational-
+ID object pools, a per-frame tick, LMAX ring buffers, Fof/Fon prefixes, manual
+object lifetime — mostly do not, because Go supplies a better native answer
+(the GC, goroutines+channels=CSP, structural interfaces, the compiler's import-
+cycle ban, defined types).
+
+Two facts dominate every verdict:
+
+  (1) GO'S COMPILER ENFORCES THE CROWN JEWELS FOR FREE. Import cycles are a hard
+      build error. That single rule subsumes — more strictly than the C#
+      standards' convention+grep — every layering / state-isolation /
+      no-back-reference / assembly-isolation / import-depth / object-colocation
+      rule in the corpus. If it compiles, it has no cycles.
+
+  (2) THE RACE DETECTOR ENFORCES SINGLE-WRITER FOR FREE (at runtime). The
+      corpus's single most-emphasized idea — one writer per piece of state — is
+      exactly what `go test -race` / `go build -race` catches. No C# static
+      rule can prove this; Go can, dynamically.
+
+What is left for humans/linters: import *direction* (depguard), package-level
+mutable globals + init() (gochecknoglobals/gochecknoinits), one-lib-per-purpose
+(gomodguard), and the judgement calls (single-owner design, narrow interfaces).
+
+Guiding rule: idiomatic Go beats transliterated C#. Conflicts are documented
+in §4, not fixed in the tree.
+
+--------------------------------------------------------------------------------
+1. THE GO QUALITY KERNEL (KG1..KG16)
+--------------------------------------------------------------------------------
+
+The portable intent of the whole corpus, distilled. KG1..KG10 carry forward the
+SSS adaptation's kernel; KG11..KG16 are new from the broader game-standards set.
+
+KG1  ACYCLIC, DOWNWARD LAYERING. The package graph is acyclic (compiler-
+     guaranteed) AND points from specific -> generic. Leaf packages
+     (cipher, skywire-utilities) import nothing internal; cmd/* is the
+     composition root that imports everything. [layering, avoid-layer-skipping,
+     import-depth-doctrine, systems-isolation, instance-state-import,
+     c2-dps-global, sts-sim-no-client, standards-architecture]
+     Enforced: go build (cycles, free) + depguard (direction, optional).
+
+KG2  SINGLE WRITER PER STATE. Each mutable field/collection has exactly ONE
+     logical owner. Express it as a struct owning a map/slice + a mutex, OR a
+     goroutine owning the state and receiving mutations over a channel ("share
+     memory by communicating"). No field written from multiple goroutines
+     without that ownership. [principle-single-writer + its Halstead analysis,
+     single-assignment (spirit), async-to-csp, no-action-chaining]
+     Enforced: go test -race (runtime, the real proof). Static: review.
+
+KG3  ERRORS RETURNED, WRAPPED, CHECKED. Return error, wrap with %w, check it
+     (errcheck). Library code does not panic on recoverable conditions; panic
+     only for truly-unreachable invariants, logged panic-safe. [inverts C#
+     exceptions; determinism's "no hidden control flow"]
+     Enforced: golangci-lint errcheck; review for panic discipline.
+
+KG4  TYPED HANDLES, NOT BARE INTS/STRINGS. Domain identities are defined types
+     (cipher.PubKey, routing.RouteID, transport.ID, network.Type), non-
+     interchangeable without explicit conversion; maps keyed by them.
+     [avoid-raw-int-casts (the most Go-aligned rule in the corpus), id-naming,
+     gid-uid, no-direct-entity-pointers (kernel only)]
+     Enforced: the compiler (defined types don't mix). Serialization round-trips
+     are the documented escape hatch (// raw OK: wire format).
+
+KG5  ZERO VALUE = INVALID/UNSET. For iota const groups and id types, make the
+     zero value mean Unknown/Invalid/unset (iota starts at 0). [EnumFirstValue,
+     avoid-raw-int-casts]  Enforced: review.
+
+KG6  BUILD-TAG / FILENAME DISCIPLINE FOR PLATFORM SPLITS. Keep untagged files
+     pure; push hostile deps behind //go:build tags and _js.go / _native.go /
+     _tinygo.go / _<goos>.go suffixes. This is how skywire keeps js/wasm +
+     TinyGo + native coherent. [locality, single-entry-point, colocation]
+     Enforced: go build per-GOOS; review.
+
+KG7  INTERFACES AT THE CONSUMER, SMALL, -er-NAMED. Accept interfaces, return
+     concrete structs. Define the interface in the package that USES it, keep
+     it 1-3 methods, name it -er. NEVER a dedicated interface-only package
+     (the C# assembly-isolation habit; Go inverts it). An interface earns its
+     place only at a real behavioral seam (2+ impls whose logic differs) — not
+     to read fields, tag a type, or abstract one concrete impl you own.
+     [data-driven-over-interfaces, antipattern-interface-abuse/chaining,
+     interface-assembly-isolation (inverted), no-overloading, the OOP thesis]
+     Enforced: golangci-lint interfacebloat (oversize only); review.
+
+KG8  DATA-DRIVEN DISPATCH. Model a type as plain data (struct, exported fields)
+     + free functions. For a CLOSED variant set, dispatch with a switch on a
+     kind/enum (fast, exhaustively checkable); for an OPEN/plugin set, a
+     map[kind]func(...) registry. Reach for an interface only above that.
+     [injectable-vs-hardcoded-dispatch, data-driven-over-interfaces]
+     Enforced: golangci-lint exhaustive (enum switches); review.
+
+KG9  NO SINGLETONS / NO HIDDEN GLOBAL STATE. No package-level mutable globals
+     for shared state, no init()-populated global registries, no service
+     locator. Construct dependencies in main / New… and pass them down
+     (explicit DI by argument). Immutable package-level config vars are fine.
+     [no-singleton, context-purity, dependency direction]
+     Enforced: golangci-lint gochecknoglobals + gochecknoinits (near-exact);
+     review for sync.Once lazy globals.
+
+KG10 NARROW INPUTS, RESERVED context.Context. Pass a function exactly what it
+     reads (a small interface or the specific fields), not a god-struct, so its
+     behavior is a function of declared inputs. context.Context carries
+     request-scope/cancellation ONLY — never a dependency bag, never a data-
+     input bundle (don't name input structs Ctx). [context-purity,
+     pattern-context-struct, principle-locality]
+     Enforced: golangci-lint containedctx/contextcheck (narrow); review.
+
+KG11 SINGLE-OWNER MANAGERS, NO CHILD->PARENT BACK-REFERENCE. A "manager" is a
+     struct that owns a collection of ONE type keyed by a typed handle, with
+     New…/Add/Get/Close, owned by exactly one owner that constructs it in its
+     own New…. A managed object should not store a pointer back to its manager
+     (child->parent coupling; across packages it would also be an import
+     cycle). [manager-definition, antipattern-manager-ownership,
+     object-no-manager-backreference, domain-state-manager-object-hierarchy]
+     Enforced: go build (cross-package cycles); race detector (aliasing);
+     review (same-package back-refs).
+
+KG12 CSP CONCURRENCY: BOUNDED POOLS, EXPLICIT FAN-OUT/IN, NO REENTRANT CHAINS.
+     Use goroutines+channels (=CSP) as the concurrency model. Worker pools are
+     bounded (errgroup.SetLimit / semaphore), with an explicit barrier
+     (WaitGroup.Wait) and a deterministic drain when order matters. A handler
+     must not synchronously call another handler's mutating method on shared
+     state — hand off via channel to the owning goroutine and return ("fire and
+     return"), which prevents the main-loop freezes and reentrant deadlocks.
+     [worker-pool, async-to-csp, no-action-chaining, action-event-effect-pipeline]
+     Enforced: go test -race, go.uber.org/goleak; review.
+
+KG13 SINGLE BINARY, SELF-REGISTERING MODULES, ONE COMPOSITION ROOT. One
+     executable; subsystems are wired in one place (cobra subcommands,
+     http.ServeMux mounts); modules self-register their surface rather than
+     being hard-called peer-to-peer. All wiring lives at the root, not in
+     chained constructors (avoid constructor-triggers-constructor cascades;
+     the "register-before-serve" class of startup bugs is exactly what a
+     centralized-init discipline prevents). [modular-monolith, single-entry-
+     point, systems-isolation, standards-architecture centralized init]
+     Enforced: linker drops unreachable code; go vet; review.
+
+KG14 ONE LIBRARY PER PURPOSE, WRAP ONLY VOLATILE DEPS. One JSON lib, one
+     websocket lib, one QUIC lib — module-wide (go.mod gives single-version
+     pinning free). Funnel a GENUINELY swappable/instrumented external dep
+     through one internal adapter package; do NOT blanket-wrap the stdlib
+     (importing encoding/json, net/http, time directly is correct Go).
+     [dependency-wrapping, third-party-via-kcg-lib, dotnet-library-wrapping,
+     nuget-central-package-management (free via go.mod)]
+     Enforced: go.mod (versions, free); gomodguard/depguard (ban competing or
+     raw deps, optional); review.
+
+KG15 LOCALITY / COLOCATION. A feature is one cohesive package; a type lives
+     with its closely-coupled IDs/enums/helpers, not scattered into fooenums/
+     fooids packages. Directory == package (Go law); no code subfolders inside
+     a package. Keep the tree shallow. [locality, object-colocation, assembly-
+     folder-no-subfolders, standards-architecture]
+     Enforced: go build (dir==package); review for cohesion.
+
+KG16 BOOLEAN & CQS NAMING (Go spelling). Bools read as questions:
+     Is/Has/Can/Should. Mutators are verbs (Close, Dial, Serve); no Get- prefix
+     on getters (Name() not GetName()). Acronyms stay all-caps in Go spelling
+     (ID not Id, PK, URL). A command mutates; a query returns — no artificial
+     prefix. [boolean-naming, banned-verbs, language-usage; INVERTS Fof/Fon,
+     Interface-suffix, Init1/Init2]  Enforced: revive/stylecheck (rejects
+     Get-prefix, underscores, I-prefix, Id spelling); review for bool prefixes.
+
+--------------------------------------------------------------------------------
+2. FULL VERDICT TABLE (by cluster)
+--------------------------------------------------------------------------------
+
+Legend: [A]=ADOPT  [~]=ADAPT  [X]=N-A-FOR-GO. "free" = already enforced by the
+Go toolchain with no action.
+
+--- 2.A  CORE ARCHITECTURE PRINCIPLES -----------------------------------------
+[A] principle-layering ............. acyclic downward deps. go build=free; depguard=direction. CROWN JEWEL. -> KG1
+[A] principle-locality ............. feature in one package. review. -> KG15
+[A] principle-single-entry-point ... one binary, flags/subcommands select mode. skywire's cobra binary is a live match. -> KG13
+[A] principle-no-singleton ......... no static Instance / global registry; inject deps. gochecknoglobals+gochecknoinits. -> KG9
+[A] standards-architecture ......... dir=package(free)+centralized init(ADOPT)+layer dir; UI/render bits [X]. -> KG1,KG13,KG15
+[~] principle-single-writer ........ one owner per state; owning goroutine+chan or mutex. race detector. BIGGEST IDEA. -> KG2
+[~] principle-context-purity ....... accept narrow interfaces, not god-structs; don't abuse context.Context. -> KG10
+[~] principle-systems-isolation .... composition root wires peers; siblings don't import each other. (router->transport is a legit layer dep, not a peer violation.) -> KG1,KG13
+[~] principle-avoid-layer-skipping . centralize cross-cutting concerns (logging) but keep DIRECT stdlib imports (Go wins). -> KG14
+[~] principle-dependency-wrapping .. one lib per concern; wrap volatile deps only, not the stdlib. gomodguard/depguard. -> KG14
+[~] principle-determinism .......... only nugget: don't depend on map-iteration order; seed RNG deliberately. Rest [X] (Go is legit concurrent/non-deterministic). -> KG2
+[X] principle-single-assignment .... per-frame write-once. No frame. (kernel "compute in locals, assign once" is trivially idiomatic.)
+[X] principle-state-action-separation total data-vs-behavior split is anti-idiomatic; Go attaches methods to data. (see §4)
+[X] principle-frame-purity ......... last-frame/next-frame double-buffer. No frame graph.
+[X] analysis-single-writer-benefits  Halstead O(S^2)->O(S) proof = RATIONALE for KG2, not a rule.
+[~] standards-state-isolation ...... cross-domain reference by handle, keep data packages acyclic. go build=free. -> KG1,KG4
+
+--- 2.B  ANTI-INTERFACE / DATA-DRIVEN -----------------------------------------
+[A] commentary-oop-is-cancer ....... the manifesto = Go's own ethos: data+functions, no getter/setter ceremony, no speculative interface, composition not inheritance. -> KG7,KG8
+[A] standard-injectable-vs-hardcoded closed set -> switch on enum; open set -> map[kind]func registry. exhaustive lint. -> KG8
+[~] data-driven-over-interfaces .... prefer struct+funcs; interface only at a real seam. (Reject "no 1-method interface" — io.Reader is THE Go idiom.) -> KG7,KG8
+[~] antipattern-interface-abuse .... don't hide field access behind a method set; pass the concrete struct. -> KG7
+[~] antipattern-interface-chaining . constructors return concrete types ("return structs"). (Interfaces composing interfaces, net.Conn, is fine.) -> KG7
+[~] standard-properties-vs-templates name by behavior: lookup table vs New…() factory. Drop Properties/Template vocab. -> KG16
+[~] principle-no-overloading ....... Go has no overloading (free); keep the SRP split (state / action / io). -> KG7,KG16
+[X] interface-assembly-naming-conv . [Name]Interface suffix + dedicated assembly. Go: -er, at consumer. (see §4)
+[X] standard-interface-assembly-isolation dedicated interface-only assembly. Go INVERTS this. (see §4)
+
+--- 2.C  PORTABLE PATTERNS ----------------------------------------------------
+[A] pattern-worker-pool ............ N goroutines over jobs chan + WaitGroup barrier + drain. errgroup.SetLimit. -> KG12
+[A] pattern-modular-monolith ....... single binary, self-registering modules (ServeMux/cobra). skywire IS this. -> KG13
+[A] pattern-async-to-csp-refactor .. GOAL adopt (message-passing ownership); MECHANISM [X] (channels replace the LMAX ring buffer). -> KG2,KG12
+[~] pattern-context-struct ......... pass only what's used; prefer small interface params; DON'T name input bundles Ctx (reserved). -> KG10
+[~] pattern-gather-compute-apply ... functional-core/imperative-shell (pure transform, I/O at edges); delta/intent machinery [X] (no frame). atomic.Add for additive counters. -> KG2
+[~] pattern-controller-state-separ.. keep wire/serialized types (gob/json) free of behavior; logic in methods elsewhere. (Full split = anemic, un-Go.) -> KG7
+[~] standard-action-event-effect-pipe unidirectional channel pipeline; import direction mirrors data direction (compiler-enforced). Labels are game vocab. -> KG1,KG12
+[~] standard-no-action-chaining .... don't synchronously chain handler->handler on shared state; hand off to owner goroutine and return. race detector. -> KG2,KG12
+[~] pattern-interface-action-state . Go interfaces are behavior-only by construction (free); Fof/Fon split [X]. -> KG7
+[~] pattern-template-property-mgr .. separate immutable config/lookup from runtime container; acyclic (free). Taxonomy [X]. -> KG4,KG15
+[~] pattern-deferred-loading ....... lazy init on first use (sync.Once) where it earns it; not a mandate. review.
+
+--- 2.D  NAMING & CODING -------------------------------------------------------
+[A] standard-boolean-naming ........ Is/Has/Can/Should. (Drop C# _underscore private rule.) revive-friendly. -> KG16
+[A] standards-avoid-raw-int-casts .. defined types over raw int; maps keyed by them; zero=unset. THE most Go-aligned rule. compiler-enforced. -> KG4,KG5
+[~] standards-naming-guidelines .... only germ = layered dep direction; [Name]Interface + PascalCase-namespace + hyphen-assembly are [X]. -> KG1
+[~] standards-naming-banned-verbs .. ban naming after unused framework patterns (Inject*); Manager/Handle/Process blanket-ban too strong for Go (http.Handler is idiomatic). review. -> KG16
+[~] standard-clear-hierarchical .... ADOPT anti-vagueness for EXPORTED ids; REJECT the long Domain…Kind chain and the short-name ban (i/err/ok/ctx/short receivers are Go law). revive stutter check. -> KG16
+[~] standard-id-naming-conventions . ADOPT typed-ID kernel; DROP Uid/Gid/Idx/Fid vocab; Go spells it ID (all-caps). -> KG4
+[~] standard-init-vs-load-naming ... germ: don't call disk/deserialize I/O "Init", call it Load*. But `init` is a reserved Go keyword; use New…()+Run/Serve, not Init1/Init2. -> KG13,KG16
+[~] init-vs-load-naming-rules ...... only durable bit: one loader per content type (DRY/single-source-of-truth). Rest [X]. -> KG14
+[~] standard-language-usage ........ not code — log/report prose: be specific & typed ("5 of 7 transports for pk <full-key>"). Aligns with the never-truncate-PK rule. review.
+[~] standard-gid-uid-relationship .. only germ: internal handle vs stable external identity (PubKey=external/wire, RouteID=internal). Pool machinery [X]. -> KG4
+[X] standards-fof-fon-naming ....... Fof_/Fon_ underscore prefixes. revive/stylecheck REJECT underscores + Get-prefix. CQS goal kept via KG16. (see §4)
+[X] standards-coding ............... .csproj ImplicitUsings/GlobalUsings/nullable knobs. No Go analogue (imports explicit by compiler). free.
+
+--- 2.E  BUILD / ASSEMBLY / ORGANIZATION --------------------------------------
+[A] standards-object-colocation .... type + its enums/ids/manager in one package. go build cycles push the split only when needed. -> KG15
+[A] standard-assembly-folder-no-subfolders  one folder = one unit = one namespace. Go LAW (dir==package). free. -> KG15
+[A] standard-no-claude-files-in-repos  no CLAUDE.md/.claude tracked. Ports directly; add .gitignore guard. (skywire currently clean.)
+[A] standards-nuget-central-package-mgmt  one pinned version repo-wide. go.mod+go.sum+MVS give this FREE. -> KG14
+[~] standards-import-depth-doctrine  keep directional DAG + forbidden edges; drop the hop-count budget. go build + depguard. -> KG1
+[~] standards-system-import-policy . only the composition root imports executors; peers talk via channels/interfaces. go build + depguard. -> KG1,KG13
+[~] standards-validation-gates ..... 7 design-review gates = a PR-DESCRIPTION checklist, NOT the CI gate. (G6 no-magic-numbers has a lint analog.) skywire's real gate = make format check. review.
+[~] standards-third-party-via-kcg-lib funnel a FEW swappable deps through one adapter pkg; don't mass-wrap. gomodguard/depguard. -> KG14
+[~] standards-dotnet-library-wrapping mostly [X] (don't wrap the stdlib); germ = gateway a dangerous primitive through one pkg (e.g. all dialing through one layer). depguard/forbidigo. -> KG14
+[~] http-naming-and-typing ......... typed values over stringly-typed HTTP (type RequestPath string); ONE source of truth for route strings, client never imports handler (compiler-enforced). -> KG4,KG1
+[X] standards-assembly-naming ...... c[1-5]-domain.quadrant-system triple-encoded names. dir==package (free); no taxonomy.
+[X] standards-build-rules .......... /build/ output confinement + copy-into-kcg-lib chain. Dissolved by the go build cache + module graph.
+[X] avoid-shit-pathing ............. hand-edited .csproj relative path hygiene. Go imports are canonical module paths (free).
+
+--- 2.F  MANAGER / OWNERSHIP / STATE-IMPORT -----------------------------------
+[~] manager-definition-and-naming .. manager = owns a pool of one type by typed handle, single owner, New…/Get/Close. Name for the domain, no forced *Manager suffix. -> KG11
+[~] antipattern-manager-ownership .. avoid child->manager back-ptr (AP1), manager-of-managers facade (AP2), external init (AP3), global->instance (AP5). AP4 (separate assembly) [X]. -> KG11
+[~] standards-object-no-manager-backreference  leaf type must not import/embed its owning manager (cross-pkg = cycle). Go escape: define a narrow interface in the child. go build. -> KG11
+[~] instance-state-import-restrictions  low, dependency-free types package; logic packages import it, never the reverse. go build + depguard. -> KG1,KG4
+[~] standards-c2-dps-global-no-import-instance  shared/global pkg must not import per-instance pkg (direction inward). depguard. -> KG1
+[~] standards-sts-sim-no-client-import  core/daemon must not import UI/presentation; UI depends on core, talks back via events/RPC. depguard. skywire follows (RPC/gob bridge). -> KG1
+[X] standards-domain-state-manager-object-hierarchy  the *-domain/*-state/*-manager/*-object suffix ladder. Ownership-tree kernel -> KG11; naming [X].
+[X] no-direct-entity-pointers ...... store generational IDs not pointers. GC moots the dangling-pointer reason. Kernel (cross-boundary handle) -> KG4. (see §4)
+[X] standard-pointer-at-rest ....... "no raw pointer at rest, ever." Anti-idiomatic in Go — pointer fields are normal & safe. (see §4)
+
+--- 2.G  GAME/UNITY-SPECIFIC — bucketed N-A-FOR-GO wholesale -------------------
+All of these have no analogue in an event-driven network daemon:
+  principle-rendering-* (luminance-first / late-perceptual-mapping / physical-
+    lighting / physical-vs-perceived-luminance / relative-perceived-brightness /
+    monitor-curve-calibration / display-profiles), standards-color-operations,
+    standards-hue-interpolation, standards-shader, standards-position-representation
+  principle-strict-ecs / pattern-strict-ecs / standard-strict-ecs, guide-entitas-*,
+    behavior-tree-node-handle-allocation, spatial-hash-list, frame-local-entity-cache,
+    pattern-renderer-map, standard-camera-stays-in-simulation-domain
+  standard-object-pool-hashing, standard-event-pool-lifecycle, standard-event-queue-
+    container, standards-ecs-event-system-naming  (Go: channels + GC, not pools)
+  objective-amo-* (muscle/sensor/controller biology), standard-target-point-ownership,
+    standard-alife-content-single-folder-single-call, standard-game-initialization,
+    standards-asset-loading, pattern-hot-loading, standards-task-metadata-normalization,
+    standard-task-system-aspirations, DOMAINS.txt, DME-VIOLATION-CLEANUP-INTENT
+  standards-quadrant-layout, assembly-quad-domain-system-organization,
+    api-assembly-naming, ASSEMBLY-VIOLATION-CLEANUP-GUIDELINES, standard-http-mod-api
+Portable slivers already captured: cross-boundary typed handles (KG4), single-
+owner (KG2/KG11), channels-over-pools (KG12).
+
+The 41 code-rules/ files (C0001-ban-var … C0010-layer-violation, etc.) were
+mapped in the earlier sss-standards-golang.txt §2 (≈45 N/A, ≈15 ADOPT) and are
+not re-litigated here; layer-violation -> KG1, ban-* language toggles -> free.
+
+--------------------------------------------------------------------------------
+3. WHAT THE GO TOOLCHAIN ENFORCES FOR FREE (the real baseline)
+--------------------------------------------------------------------------------
+
+  go build      NO IMPORT CYCLES (hard error) -> subsumes layering, state-
+                isolation, no-cross-pkg-back-reference, assembly-isolation,
+                import-depth, object-colocation-splitting, client-not-import-
+                handler. dir==package. no unused imports.
+  gofmt/goimports  canonical format, brace style, import grouping. Non-negotiable.
+  go vet        printf, shadow, struct-tag, copylocks, unreachable.
+  go test -race SINGLE-WRITER / data-race detection -> the real enforcer of KG2.
+  go.mod/go.sum ONE pinned version per dep, module-wide (nuget-CPM for free).
+  golangci-lint (skywire .golangci.yml today): errcheck, gosec, ineffassign,
+                misspell, nakedret, revive, staticcheck, unconvert, unparam,
+                unused; line-length 120, gocyclo 10, goconst.
+
+Net: the majority of the corpus's PORTABLE intent (no cycles, no dead code,
+explicit imports, checked errors, no data races, one dep version) is already a
+CI gate on every skywire PR. That is the honest "compliance engine." The corpus
+adds review-time judgement (KG2 ownership, KG7 interface placement, KG11 single
+owner) and OPTIONALLY a few linters (see golangci-additions.txt) that mechanize
+KG1 direction, KG9 no-globals, KG14 one-lib.
+
+--------------------------------------------------------------------------------
+4. DIRECT CONFLICTS — rules that are ANTI-IDIOMATIC in Go (do NOT port)
+--------------------------------------------------------------------------------
+
+These are the places where transliterating the C# standard would DEGRADE the Go
+codebase and be flagged by Go's own linters. Go wins; documented, not fixed.
+
+ C1  Fof_/Fon_ function prefixes (fof-fon, interface-action-state). Underscores
+     in identifiers + Get-prefix are rejected by revive/stylecheck ST1003. Go
+     does CQS by convention: Position() queries, Move() mutates.
+ C2  [Name]Interface suffix + dedicated interface-only assembly (interface-
+     assembly-naming, interface-assembly-isolation). Go: interfaces are -er-
+     named, small, defined AT THE CONSUMER; a dedicated interface package is a
+     smell and creates cycle pressure. Go structurally inverts this rule.
+ C3  Init1/Init2 phase naming (init-vs-load). `init` is a RESERVED Go identifier
+     with package-load semantics; overloading it is a keyword clash. Use New…()
+     + Run/Serve.
+ C4  "Short / single-letter names banned" + maximal Domain…Kind name chains
+     (clear-hierarchical, naming-guidelines). Effective Go MANDATES short scope-
+     proportional names (i, r, err, ok, ctx, short receivers) and package
+     qualification over long compounds. varnamelen configured to ban i/r would
+     itself be the bug.
+ C5  Id/Uid spelling & "avoid generic Id" (id-naming, gid-uid). Go's initialism
+     rule spells it ID (all-caps); RouteID/transport.ID are correct. The TYPED-
+     ID concept is ADOPT (KG4); the C# spelling is N-A.
+ C6  Pointer-at-rest / no-direct-entity-pointers absolutism (pointer-at-rest,
+     no-direct-entity-pointers). GC makes stale pointers a non-problem; pointer
+     fields (parent links, caches, *Manager fields) are normal, safe Go and must
+     NOT be rewritten into ID indirection. Only the cross-BOUNDARY handle idea
+     ports (KG4).
+ C7  Total state/behavior split (state-action-separation, controller-state,
+     domain-state-manager hierarchy). Go idiom attaches methods to data types;
+     an all-data "anemic" struct + separate all-logic type fights the method set
+     and interface model. Keep only "wire/serialized types stay behavior-free."
+ C8  Determinism-as-a-global-rule + no-async (determinism). A P2P daemon is
+     legitimately concurrent and non-deterministic (network I/O, timing);
+     goroutines/channels are the point. Keep only "no map-order dependence,
+     deliberate RNG seeding."
+ C9  Per-frame constructs (single-assignment, frame-purity, gather-compute-apply
+     delta/intent). No frame tick exists; do not synthesize one.
+ C10 Blanket stdlib/dependency wrapping (dotnet-library-wrapping, dependency-
+     wrapping taken maximally). Importing encoding/json, net/http, time, os
+     directly is correct Go. Wrap only genuinely volatile/swappable deps.
+
+--------------------------------------------------------------------------------
+5. REVIEW PROCEDURE (Go)
+--------------------------------------------------------------------------------
+
+Machine gate (binary pass/fail, already CI on skywire):
+  1. gofmt -l $(git ls-files '*.go' | grep -v vendor)      # must be empty
+  2. go vet ./...                                           # clean
+  3. golangci-lint run                                      # repo .golangci.yml
+  4. go build ./... && go test -race ./...                 # no cycles; no races
+  (skywire shorthand: `make format check`. The Linux/Windows E2E Docker job is
+   a known flaky NON-gate — do not block on it.)
+
+Reviewer judgement (not automatable), per PR:
+  5. KG1  layering DIRECTION (not just acyclicity) — did this add an upward or
+          peer import? (mechanizable with depguard — see golangci-additions.txt)
+  6. KG2  single writer — is any new shared field written from >1 goroutine
+          without one owner? (the race detector catches the provable cases)
+  7. KG7  interface placement — defined at the consumer, small, -er, at a real
+          seam? Or a speculative 1-impl abstraction / data-getter?
+  8. KG9  any new package-level mutable global / init() registration / singleton?
+  9. KG11 single owner — new manager constructed by its owner, no child->parent
+          back-reference?
+ 10. KG14 new dependency — does a lib for this purpose already exist in go.mod?
+
+Anything in §4 appearing in a diff is a red flag: it means C# was transliterated
+instead of written as Go.
+
+================================================================================
+END — Go adaptation of the KCG game standards
+================================================================================
