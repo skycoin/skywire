@@ -43,7 +43,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InterruptedIOException
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import java.util.Base64
+import java.util.Locale
 
 /** A file picked for the draft, read in full: a Skymail message is 1 MiB by default. */
 class DraftAttachment(val name: String, val mime: String, val bytes: ByteArray)
@@ -248,7 +253,7 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
                     to = to,
                     skynet = to.trimEnd().trimEnd('>').endsWith(SkymailAddress.SKYNET, ignoreCase = true),
                     subject = subject,
-                    body = "\n\n" + string(R.string.mail_reply_header, m.date, m.from) + "\n" + quoted,
+                    body = "\n\n" + string(R.string.mail_reply_header, localDate(m.date), m.from) + "\n" + quoted,
                     inReplyTo = m.messageId,
                 ),
             )
@@ -586,6 +591,9 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun string(id: Int, vararg args: Any): String = getApplication<Application>().getString(id, *args)
 
+    private fun localDate(header: String): String =
+        localMailDate(header, ZoneId.systemDefault(), getApplication<Application>().resources.configuration.locales[0])
+
     private companion object {
         const val PING_INTERVAL_MS = 1_000L
         const val POLL_INTERVAL_MS = 15_000L
@@ -608,4 +616,16 @@ fun formatBytes(n: Long): String = when {
     n >= 1L shl 20 -> "%.1f MB".format(n / (1024.0 * 1024.0))
     n >= 1L shl 10 -> "%.0f KB".format(n / 1024.0)
     else -> "$n B"
+}
+
+/**
+ * A Date header in [zone], or the header as it came when it does not parse.
+ * Senders write it in their own offset, often UTC (RFC 5322 section 3.3).
+ */
+fun localMailDate(header: String, zone: ZoneId, locale: Locale): String {
+    val text = header.substringBefore('(').trim()
+    val sent = runCatching { ZonedDateTime.parse(text, DateTimeFormatter.RFC_1123_DATE_TIME) }
+        .getOrNull() ?: return header
+    return sent.withZoneSameInstant(zone)
+        .format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).withLocale(locale))
 }
