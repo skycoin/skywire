@@ -53,6 +53,23 @@ templ FleetUptimeBody(f FleetUptime) {
 				<span><span class="fb lvl4"></span>{ T(ctx, "uptime.legend-up") }</span>
 				<span><span class="fb future"></span>{ T(ctx, "uptime.legend-future") }</span>
 			</p>
+			if vh := f.Versions; len(vh.Areas) > 0 {
+				<div class="card sub">
+					<div class="small"><strong>{ T(ctx, "uptime.version-history-title") }</strong> <span class="dim">({ T(ctx, "uptime.version-history-threshold") })</span></div>
+					<svg class="vh-chart" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={ T(ctx, "uptime.version-history-title") }>
+						for _, a := range vh.Areas {
+							<polygon points={ a.Points } fill={ a.Color } fill-opacity="0.75" stroke={ a.Color } stroke-width="0.3"></polygon>
+						}
+					</svg>
+					<div class="bar small dim"><span>{ vh.First }</span><span class="spacer"></span><span>{ vh.Mid }</span><span class="spacer"></span><span>{ vh.Last }</span></div>
+					<div class="fleet-legend small">
+						for _, a := range vh.Areas {
+							<span><span class="fb" style={ "background:" + a.Color }></span>{ a.Version } ({ itoa(a.Latest) })</span>
+						}
+					</div>
+					<p class="small dim">{ T(ctx, "uptime.version-history-latest") }: <strong>{ vh.Last }</strong> ({ T(ctx, "uptime.version-history-total") }: { itoa(vh.LatestTotal) })</p>
+				</div>
+			}
 			<div class="fleet" data-labels>
 				if len(f.Ticks) > 0 {
 					<div class="fleet-row ticks small dim">

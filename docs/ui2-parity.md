@@ -28,7 +28,7 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 | `/nodes/visualizer` | network graph | partial | cosmos-go WebGL page, linked as tp-viz and route-viz, not reimplemented |
 | `/nodes/resources` | CPU, memory, disk and traffic of every visor | yes | `ui2/resources` |
 | `/nodes/uptime` | uptime of every visor | yes | `ui2/uptime` |
-| | version history chart | no | |
+| | version history chart | yes | |
 | `/nodes/transports` | transports across the network: compact and tree views, window, edges, offline | yes | `ui2/transports`, paged; seen live only in the "feed still syncing" state |
 | `/settings` | change password | yes | `ui2/settings` |
 | | refresh rate, theme, language | yes | the refresh rate sets the visor list poll |
@@ -72,7 +72,7 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 | skynet | forwarded ports (add, toggles, whitelist, remove) and reverse proxies | yes | new ui2 keys are English only; the Angular tab has no translations to copy |
 | web-proxy | resolving proxy status, on/off, upstream | yes | |
 | vpn | vpn-client and vpn-server: state, start, stop, settings, flags | partial | no public server list picker; the server key is set through Edit flags |
-| resources | host stats and resource monitor | partial | host, process and runtime figures, no history charts |
+| resources | host stats and resource monitor | yes | history charts kept in the browser for the last 120 samples |
 | terminal | dmsgpty terminal | yes | embeds the hypervisor pty page |
 | wallet | wallet | yes | frames skycoin-web's ui2 when the app runs, else says how to start it |
 | logs | runtime logs with filter and search | yes | |

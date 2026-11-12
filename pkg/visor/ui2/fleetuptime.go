@@ -4,6 +4,7 @@ package ui2
 import (
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -29,6 +30,7 @@ type FleetUptime struct {
 	Err      string
 	Fetched  string
 	Blocks   int
+	Versions VersionHistory
 	Managed  int
 	Reported int
 }
@@ -101,6 +103,7 @@ func blockLevel(b block) string {
 // manages; unless all is set only they are shown.
 func FleetUptimeOf(sums []FleetSummary, managed map[string]bool, all bool, days int, now time.Time) FleetUptime {
 	f := FleetUptime{Days: days, All: all, Reported: len(sums)}
+	f.Versions = VersionHistoryOf(sums)
 	dateSet := map[string]bool{}
 	for _, s := range sums {
 		for d := range s.Timeline {
@@ -219,4 +222,94 @@ func fleetTone(p float64) string {
 		return "warn-text"
 	}
 	return "error"
+}
+
+// VersionArea is one version's band of the version history chart.
+type VersionArea struct {
+	Version string
+	Color   string
+	Points  string
+	Latest  int
+}
+
+// VersionHistory is the stacked chart of how many visors ran each version
+// with at least 75% daily uptime, as the Angular fleet uptime page draws it.
+type VersionHistory struct {
+	Areas       []VersionArea
+	First, Last string
+	Mid         string
+	LatestTotal int
+}
+
+var versionPalette = []string{
+	"#3399FF", "#FF6633", "#33CC66", "#FFCC00", "#CC66FF",
+	"#FF3399", "#66CCCC", "#FF9933", "#9966FF", "#66CC33",
+	"#FF6666", "#00CCCC",
+}
+
+func normalizeVersion(v string) string {
+	v = strings.TrimSpace(v)
+	for _, s := range []string{"+dirty", " dirty", "-dirty"} {
+		v = strings.ReplaceAll(v, s, "")
+	}
+	return strings.TrimSpace(v)
+}
+
+// VersionHistoryOf counts each visor once a day toward its version when its
+// daily uptime reached 75%. It is empty with fewer than two days.
+func VersionHistoryOf(sums []FleetSummary) VersionHistory {
+	counts := map[string]map[string]int{}
+	for _, s := range sums {
+		v := normalizeVersion(s.Version)
+		if v == "" {
+			continue
+		}
+		for d, up := range s.Daily {
+			if f, err := strconv.ParseFloat(up, 64); err != nil || f < 75 {
+				continue
+			}
+			if counts[d] == nil {
+				counts[d] = map[string]int{}
+			}
+			counts[d][v]++
+		}
+	}
+	dates := make([]string, 0, len(counts))
+	vset := map[string]bool{}
+	maxTotal := 0
+	for d, m := range counts {
+		dates = append(dates, d)
+		t := 0
+		for v, n := range m {
+			vset[v] = true
+			t += n
+		}
+		maxTotal = max(maxTotal, t)
+	}
+	var h VersionHistory
+	if len(dates) < 2 || maxTotal == 0 {
+		return h
+	}
+	sort.Strings(dates)
+	versions := make([]string, 0, len(vset))
+	for v := range vset {
+		versions = append(versions, v)
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(versions)))
+	h.First, h.Last, h.Mid = dates[0], dates[len(dates)-1], dates[len(dates)/2]
+	cum := make([]int, len(dates))
+	x := func(i int) string { return strconv.FormatFloat(float64(i)*100/float64(len(dates)-1), 'f', 2, 64) }
+	y := func(n int) string { return strconv.FormatFloat(100-float64(n)*100/float64(maxTotal), 'f', 2, 64) }
+	for vi, v := range versions {
+		var top, bottom []string
+		for i, d := range dates {
+			n := counts[d][v]
+			top = append(top, x(i)+","+y(cum[i]+n))
+			bottom = append([]string{x(i) + "," + y(cum[i])}, bottom...)
+			cum[i] += n
+		}
+		h.Areas = append(h.Areas, VersionArea{Version: v, Color: versionPalette[vi%len(versionPalette)], Points: strings.Join(append(top, bottom...), " "), Latest: counts[h.Last][v]})
+	}
+	h.LatestTotal = cum[len(cum)-1]
+	return h
 }

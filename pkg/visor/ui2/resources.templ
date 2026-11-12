@@ -1,6 +1,10 @@
 package ui2
 
-import "github.com/skycoin/skywire/pkg/visor/visorapi"
+import (
+	"strconv"
+
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
+)
 
 // ResourcesPage is the host resources of every visor this hypervisor
 // manages.
@@ -90,13 +94,21 @@ templ ResourceRows(rows []ResRow, sampled string) {
 templ VisorResourcesPage(v VisorRes) {
 	@VisorLayout(v.PK, "resources") {
 		<div class="head"><h1>{ T(ctx, "node.resource-monitor.title") }</h1></div>
+		<div class="ov" id="res-charts" data-charts>
+			@resChart("cpu", T(ctx, "node.resource-monitor.cpu"), "%")
+			@resChart("mem", T(ctx, "node.resource-monitor.memory"), "%")
+			@resChart("tx", T(ctx, "node.resource-monitor.net-tx"), "B/s")
+			@resChart("rx", T(ctx, "node.resource-monitor.net-rx"), "B/s")
+			@resChart("heap", T(ctx, "node.resource-monitor.heap"), "B")
+			@resChart("gor", T(ctx, "node.resource-monitor.goroutines"), "")
+		</div>
 		@VisorResLive(v)
 	}
 }
 
 // VisorResLive polls every 3 seconds.
 templ VisorResLive(v VisorRes) {
-	<div id="res-live" hx-get={ VisorURL(v.PK, "resources/live") } hx-trigger="every 3s [document.visibilityState === 'visible']" hx-swap="outerHTML">
+	<div id="res-live" hx-get={ VisorURL(v.PK, "resources/live") } hx-trigger="every 3s [document.visibilityState === 'visible']" hx-swap="outerHTML" { resSample(v)... }>
 		<h2>{ T(ctx, "node.resource-monitor.tab-host") }</h2>
 		@ErrorBox(v.HostErr)
 		if h := v.Host; h != nil {
@@ -141,4 +153,29 @@ templ resCard(label, value, tone, sub string) {
 			<div class="small dim">{ sub }</div>
 		}
 	</div>
+}
+
+// resChart is a history chart that ui2.js draws from the samples of each
+// poll, as the Angular resource monitor keeps them in the browser.
+templ resChart(key, label, unit string) {
+	<div class="ov-card chart" data-chart={ key } data-unit={ unit }>
+		<div class="small dim">{ label } <span class="chart-now"></span></div>
+		<svg viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="currentColor" stroke-width="1"></polyline></svg>
+	</div>
+}
+
+// resSample puts the poll's figures where ui2.js reads them.
+func resSample(v VisorRes) templ.Attributes {
+	a := templ.Attributes{}
+	f := func(x float64) string { return strconv.FormatFloat(x, 'f', 2, 64) }
+	if h := v.Host; h != nil {
+		a["data-s-cpu"], a["data-s-mem"] = f(h.CPUPercent), f(h.MemPercent)
+		if v.TxRate >= 0 {
+			a["data-s-tx"], a["data-s-rx"] = f(v.TxRate), f(v.RxRate)
+		}
+	}
+	if rt := v.Runtime; rt != nil {
+		a["data-s-heap"], a["data-s-gor"] = strconv.FormatUint(rt.MemHeapAlloc, 10), strconv.Itoa(rt.NumGoroutine)
+	}
+	return a
 }
