@@ -752,8 +752,8 @@ func (v *Visor) SetPublicAutoconnect(pAc bool) error {
 }
 
 // SetIsPublic sets is_public config of visor and flushes the config.
-func (v *Visor) SetIsPublic(isPublic bool) error {
-	v.conf.IsPublic = isPublic
+func (v *Visor) SetIsPublic(public bool) error {
+	v.conf.IsPublic = public
 	return v.conf.Flush()
 }
 

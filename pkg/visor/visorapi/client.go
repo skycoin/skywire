@@ -614,10 +614,10 @@ func (rc *rpcClient) SetAppNetworkInterface(appName, netifc string) error {
 }
 
 // SetAppSecure implements API.
-func (rc *rpcClient) SetAppSecure(appName string, isSecure bool) error {
+func (rc *rpcClient) SetAppSecure(appName string, secure bool) error {
 	return rc.Call("SetAppSecure", &SetAppBoolIn{
 		AppName: appName,
-		Val:     isSecure,
+		Val:     secure,
 	}, &struct{}{})
 }
 
@@ -853,8 +853,8 @@ func (rc *rpcClient) SetPublicAutoconnect(pAc bool) error {
 }
 
 // SetIsPublic implements API.
-func (rc *rpcClient) SetIsPublic(isPublic bool) error {
-	return rc.Call("SetIsPublic", &isPublic, &struct{}{})
+func (rc *rpcClient) SetIsPublic(public bool) error {
+	return rc.Call("SetIsPublic", &public, &struct{}{})
 }
 
 // GetIsPublic implements API.

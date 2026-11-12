@@ -299,8 +299,8 @@ func TestSetConfigFieldsRefusals(t *testing.T) {
 	// A per-knob router_settings write is NOT refused — it is a live path.
 	tgt, err := resolveConfigTarget(reflect.ValueOf(conf).Elem(), "routing.router_settings[dead_route_hold]")
 	require.NoError(t, err)
-	_, isLive := liveConfigFieldByPath[tgt.tmpl]
-	require.True(t, isLive)
+	_, ok := liveConfigFieldByPath[tgt.tmpl]
+	require.True(t, ok)
 }
 
 // TestSetConfigFieldsNotFileBacked: a restart-required field needs somewhere to

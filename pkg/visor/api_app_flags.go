@@ -205,13 +205,13 @@ func applyArgValues(flags []visorapi.AppFlag, args []string) {
 		if !strings.HasPrefix(a, "-") || a == "-" || a == "--" {
 			continue
 		}
-		key, val, hasVal := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		key, val, withVal := strings.Cut(strings.TrimLeft(a, "-"), "=")
 		idx, ok := byName[key]
 		if !ok {
 			continue
 		}
 		f := &flags[idx]
-		if !hasVal {
+		if !withVal {
 			if f.Type == visorapi.FlagTypeBool {
 				val = "true"
 			} else if i+1 < len(args) {

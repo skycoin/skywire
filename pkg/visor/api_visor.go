@@ -35,7 +35,7 @@ import (
 func (v *Visor) Overview() (*visorapi.Overview, error) {
 	var tSummaries []*visorapi.TransportSummary
 	var publicIP string
-	var isSymmetricNAT bool
+	var symmetricNAT bool
 	var natType string
 	if v == nil {
 		return &visorapi.Overview{}, ErrVisorNotAvailable
@@ -55,11 +55,11 @@ func (v *Visor) Overview() (*visorapi.Overview, error) {
 		switch sc.NATType {
 		case stun.NATNone, stun.NATFull, stun.NATRestricted, stun.NATPortRestricted:
 			publicIP = sc.PublicIP.IP()
-			isSymmetricNAT = false
+			symmetricNAT = false
 		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
-			isSymmetricNAT = true
+			symmetricNAT = true
 		case stun.NATError, stun.NATUnknown, stun.NATBlocked:
-			isSymmetricNAT = false
+			symmetricNAT = false
 			publicIP = sc.NATType.String()
 		}
 	}
@@ -82,7 +82,7 @@ func (v *Visor) Overview() (*visorapi.Overview, error) {
 		Transports:          tSummaries,
 		RoutesCount:         routesCount,
 		PublicIP:            publicIP,
-		IsSymmetricNAT:      isSymmetricNAT,
+		IsSymmetricNAT:      symmetricNAT,
 		NATType:             natType,
 		Hypervisors:         v.conf.Hypervisors,
 		ConnectedHypervisor: v.connectedHypervisorPKs(),
@@ -541,11 +541,11 @@ func (v *Visor) SetRewardAddress(p string) (string, error) {
 // opt-in for a single address, which is refused if it has sent coins or if
 // the skycoin node cannot say whether it has.
 func (v *Visor) SetSingleRewardAddress(p string) (string, error) {
-	p, isXpub, err := rewardconfig.ValidateRewardSetting(p, true)
+	p, xpub, err := rewardconfig.ValidateRewardSetting(p, true)
 	if err != nil {
 		return "", err
 	}
-	if !isXpub {
+	if !xpub {
 		e, err := v.RewardAddressExposure(p)
 		if err != nil {
 			return "", fmt.Errorf("could not check whether %s has sent coins, so it was not set: %w", p, err)

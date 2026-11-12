@@ -183,14 +183,14 @@ func dmsgServerSessions(srv *dmsg.Server) (total, peers int, clients []visorapi.
 		if ses == nil {
 			continue
 		}
-		isPeer := srv.IsPeerPK(pk)
-		if isPeer {
+		peer := srv.IsPeerPK(pk)
+		if peer {
 			peers++
 		}
 		clients = append(clients, visorapi.DmsgServerClient{
 			PK:      pk,
 			Streams: ses.NumStreams(),
-			Peer:    isPeer,
+			Peer:    peer,
 		})
 	}
 	// Stable order: a caller diffing two snapshots must not see map iteration
