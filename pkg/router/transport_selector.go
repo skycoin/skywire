@@ -581,7 +581,7 @@ func (ts *transportSelector) Rebuild(legs []groupLeg) {
 	// Auto mode: weight by inverse latency
 	weights := make([]int, n)
 	maxLatency := 0.0
-	hasLatency := false
+	latencyKnown := false
 
 	for i := range legs {
 		tp := legs[i].tp
@@ -594,11 +594,11 @@ func (ts *transportSelector) Rebuild(legs []groupLeg) {
 			maxLatency = lat
 		}
 		if lat > 0 {
-			hasLatency = true
+			latencyKnown = true
 		}
 	}
 
-	if !hasLatency {
+	if !latencyKnown {
 		// No latency data: equal weights (pure round-robin)
 		schedule := make([]int, 0, n)
 		for i := range legs {

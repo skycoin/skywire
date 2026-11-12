@@ -66,7 +66,7 @@ func (rg *RouteGroup) handleSACKPacket(packet routing.Packet) error {
 
 	lastContig := packet.SACKLastContiguousSeq()
 	words := packet.SACKWords()
-	dsackSeq, hasDSACK := packet.SACKDSACK()
+	dsackSeq, dsack := packet.SACKDSACK()
 
 	// Sender-side feedback accounting, recorded BEFORE any retransmit decision:
 	// "did the peer's SACK even arrive" is the first fork of a wedge diagnosis,
@@ -78,7 +78,7 @@ func (rg *RouteGroup) handleSACKPacket(packet routing.Packet) error {
 	// Normal reactive retransmit: holes overdue past the RACK threshold. Also
 	// advances the ack-progress edge (resets the TLP probe budget) and adapts the
 	// reorder factor from the DSACK signal (widen on a duplicate, decay otherwise).
-	retxSeqs := rg.mux.onSACKReceived(lastContig, words, dsackSeq, hasDSACK)
+	retxSeqs := rg.mux.onSACKReceived(lastContig, words, dsackSeq, dsack)
 	rg.mux.retxReqSACK.Add(uint64(len(retxSeqs)))
 
 	// Proactive HoL retransmit (CapHOLRetx): the frontier-blocking seq (and the

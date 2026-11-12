@@ -458,7 +458,7 @@ func (l *AppLauncher) StopApp(name string) (*appserver.Proc, error) {
 	// entry — apps[] is the operator's config-driven set; only
 	// procM.procs is mutated by Stop.
 	l.mx.Lock()
-	ac, hasAppConfig := l.apps[name]
+	ac, configured := l.apps[name]
 	l.mx.Unlock()
 
 	if err := l.procM.Stop(name); err != nil {
@@ -466,7 +466,7 @@ func (l *AppLauncher) StopApp(name string) (*appserver.Proc, error) {
 		return proc, err
 	}
 
-	if hasAppConfig && appcommon.RestartPolicy(ac.RestartPolicy) == appcommon.RestartAlways {
+	if configured && appcommon.RestartPolicy(ac.RestartPolicy) == appcommon.RestartAlways {
 		log.Info("RestartPolicy=Always: auto-restarting after operator stop (lockout safety)")
 		// Spawn the restart so the RPC caller's StopApp returns
 		// promptly. The 1s backoff matches watchAndRestart's so

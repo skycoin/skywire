@@ -84,14 +84,14 @@ func classifyUDP(p []byte) udpProto {
 	if len(p) >= 3 && p[0] >= 20 && p[0] <= 63 && p[1] == 0xfe {
 		return protoWebRTC
 	}
-	isKCPCmd := len(p) >= 5 && p[4] >= kcpCmdMin && p[4] <= kcpCmdMax
+	kcpCmd := len(p) >= 5 && p[4] >= kcpCmdMin && p[4] <= kcpCmdMax
 	// QUIC long header: header-form + fixed bit (0xC0), and not a KCP command in
 	// the byte-4 slot (a long-header QUIC Initial has a version byte there, not
 	// 81..84).
-	if p[0]&0xC0 == 0xC0 && !isKCPCmd {
+	if p[0]&0xC0 == 0xC0 && !kcpCmd {
 		return protoQUIC
 	}
-	if isKCPCmd {
+	if kcpCmd {
 		return protoSUDPH
 	}
 	return protoUnknown

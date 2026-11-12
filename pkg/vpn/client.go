@@ -455,18 +455,18 @@ func (c *Client) serveConn(conn net.Conn) error {
 
 	fmt.Printf("TUN %s all sets\n", tunIP)
 
-	isNewRoute := true
+	newRoute := true
 	if c.cfg.Killswitch {
 		c.prevTUNGatewayMu.Lock()
 		if c.prevTUNGateway.IsValid() {
-			isNewRoute = false
+			newRoute = false
 		}
 		c.prevTUNGateway = tunGateway
 		c.prevTUNGatewayMu.Unlock()
 	}
 
 	fmt.Printf("Routing all traffic through TUN %s: %v\n", tun.Name(), err)
-	if err := c.routeTrafficThroughTUN(tunGateway, isNewRoute); err != nil {
+	if err := c.routeTrafficThroughTUN(tunGateway, newRoute); err != nil {
 		return fmt.Errorf("error routing traffic through TUN %s: %w", tun.Name(), err)
 	}
 
@@ -574,9 +574,9 @@ func (c *Client) dialServeConn() error {
 	return nil
 }
 
-func (c *Client) routeTrafficThroughTUN(tunGateway netip.Addr, isNewRoute bool) error {
+func (c *Client) routeTrafficThroughTUN(tunGateway netip.Addr, newRoute bool) error {
 	// route all traffic through TUN gateway
-	if isNewRoute {
+	if newRoute {
 		if err := c.AddRoute(ipv4FirstHalfAddr, tunGateway.String()); err != nil {
 			return err
 		}

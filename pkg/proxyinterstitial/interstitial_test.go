@@ -41,15 +41,15 @@ func TestPageError(t *testing.T) {
 // inside <noscript> so it never doubles up with the retry script.
 func TestPageRetriesForever(t *testing.T) {
 	for _, tc := range []struct {
-		name    string
-		isError bool
-		every   int
+		name   string
+		failed bool
+		every  int
 	}{
 		{"transient", false, transientRefreshSeconds},
 		{"hard failure", true, errorRefreshSeconds},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			p := Page("example.dmsg", "", "dmsg", tc.isError)
+			p := Page("example.dmsg", "", "dmsg", tc.failed)
 			want := fmt.Sprintf(`<noscript><meta http-equiv="refresh" content="%d"></noscript>`, tc.every)
 			if !strings.Contains(p, want) {
 				t.Errorf("missing the no-JS refresh fallback %q", want)

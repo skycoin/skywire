@@ -183,13 +183,13 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 	// 2. Classify + read the browser's request head. Non-HTTP traffic on :80 (raw
 	//    tunnels, server-speaks-first protocols) is detected the instant the bytes
 	//    stop matching an HTTP method prefix and spliced with no meaningful delay.
-	reqHead, isHTTP, late := peekRequestHead(conn, rsHeadLimit)
+	reqHead, httpReq, late := peekRequestHead(conn, rsHeadLimit)
 	clearDeadlines(conn)
 	var (
 		req *http.Request
 		up  *uploadCandidate
 	)
-	if isHTTP {
+	if httpReq {
 		if r, perr := http.ReadRequest(bufio.NewReader(bytes.NewReader(reqHead))); perr == nil {
 			h := r.Host
 			if hh, _, e := net.SplitHostPort(h); e == nil {
@@ -244,7 +244,7 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 			// reason, which looks exactly like an empty reply.
 			reqHead, _, _ = continueRequestHead(conn, reqHead, rsHeadLimit)
 		}
-		if isHTTP || looksHTTP(reqHead) {
+		if httpReq || looksHTTP(reqHead) {
 			writeBadGateway(conn, connectFailure(host, reply, err, injectErr))
 		}
 		conn.Close()   //nolint:errcheck,gosec
@@ -1835,7 +1835,7 @@ var httpMethodTokens = []string{"GET ", "POST ", "PUT ", "HEAD ", "DELETE ", "OP
 // classifyHTTP reports whether buf is the start of an HTTP request. decided=false
 // means buf is still a strict prefix of some method token — read more before
 // deciding. An empty buf is always undecided.
-func classifyHTTP(buf []byte) (decided, isHTTP bool) {
+func classifyHTTP(buf []byte) (decided, httpReq bool) {
 	s := string(buf)
 	prefixOfSome := false
 	for _, m := range httpMethodTokens {
@@ -1854,17 +1854,17 @@ func classifyHTTP(buf []byte) (decided, isHTTP bool) {
 
 // peekRequestHead reads from conn just far enough to decide whether it carries an
 // HTTP request and, if so, to capture the whole header block (up to limit). It
-// returns isHTTP=false — with everything it read, for verbatim replay — the instant
+// returns httpReq=false — with everything it read, for verbatim replay — the instant
 // the bytes cannot be an HTTP method, when the head exceeds the cap, when extra
 // bytes trail the header terminator (pipelining we won't split), or on any error.
 // late reports the one undecided outcome: the client had not sent enough to name
 // a method by the range.classify_timeout deadline, so it may still be HTTP.
-func peekRequestHead(conn net.Conn, limit int) (head []byte, isHTTP, late bool) {
+func peekRequestHead(conn net.Conn, limit int) (head []byte, httpReq, late bool) {
 	return continueRequestHead(conn, nil, limit)
 }
 
 // continueRequestHead is peekRequestHead resumed over bytes already read.
-func continueRequestHead(conn net.Conn, prefix []byte, limit int) (head []byte, isHTTP, late bool) {
+func continueRequestHead(conn net.Conn, prefix []byte, limit int) (head []byte, httpReq, late bool) {
 	buf := append(make([]byte, 0, 1024), prefix...)
 	tmp := make([]byte, 1024)
 

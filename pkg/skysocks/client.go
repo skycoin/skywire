@@ -1561,12 +1561,12 @@ func (c *Client) promoteFastestStandby(dir spreadDir, reason string) *yamux.Sess
 		if m == nil || m.onBench(now) {
 			continue
 		}
-		bps, _, isPrior := m.capacityOrPrior(now, dir == spreadUp)
+		bps, _, prior := m.capacityOrPrior(now, dir == spreadUp)
 		if bps <= 0 {
 			continue // tier 3: promoteBestStandby's RTT rank owns these
 		}
 		tier := 1
-		if isPrior {
+		if prior {
 			tier = 2
 		}
 		if tier < bestTier || (tier == bestTier && bps > bestBps) {

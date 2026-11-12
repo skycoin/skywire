@@ -409,11 +409,11 @@ func hopClass(exit bool, level int) string {
 func hopClassMap(snap Snapshot) map[string]string {
 	exit := make(map[string]bool)
 	level := make(map[string]int)
-	mark := func(pk string, isExit bool, lvl int) {
+	mark := func(pk string, exitHop bool, lvl int) {
 		if pk == "" {
 			return
 		}
-		if isExit {
+		if exitHop {
 			exit[pk] = true
 			return
 		}

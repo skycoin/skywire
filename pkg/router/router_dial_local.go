@@ -283,8 +283,8 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 		return nil, nil, errors.New("discovery client not available")
 	}
 
-	isSelfPing := src == dst
-	log.Debugf("Calculating route locally from %s to %s (self-ping=%v)", src, dst, isSelfPing)
+	selfPing := src == dst
+	log.Debugf("Calculating route locally from %s to %s (self-ping=%v)", src, dst, selfPing)
 
 	// Collect local transports
 	var localTps []localTpRef
@@ -363,7 +363,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 			}
 		}
 	}
-	hasFirstHopExclusions := len(exclTpID) > 0 || len(exclPeer) > 0 || len(exclHopIP) > 0
+	excludeFirstHop := len(exclTpID) > 0 || len(exclPeer) > 0 || len(exclHopIP) > 0
 	// localFirstHopHeld reports whether a sibling tunnel already leaves over
 	// this local transport — by ID, by peer, or by the peer's IP.
 	localFirstHopHeld := func(tp localTpRef) bool {
@@ -457,7 +457,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 
 	// For self-ping, try 2-hop route through any available transport partner
 	// This allows testing the full route setup even without a direct self-transport
-	if isSelfPing {
+	if selfPing {
 		log.Debug("Self-ping: looking for 2-hop loopback route through transport partner")
 		for _, tp := range localTps {
 			intermediatePK := tp.remotePK
@@ -555,7 +555,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 		memoKey localRouteKey
 		// Transport-ID exclusions shape the answer too (a diversify dial's first-hop
 		// exclusions), so a dial carrying them must not be served another dial's path.
-		memoEnabled = len(excludeIntermediates) == 0 && !hasFirstHopExclusions && r.localRoutes != nil && snapGen != 0
+		memoEnabled = len(excludeIntermediates) == 0 && !excludeFirstHop && r.localRoutes != nil && snapGen != 0
 		localSig    uint64
 	)
 	if memoEnabled {
@@ -578,7 +578,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 	// nowhere else to go still gets an answer, and the caller's own gate
 	// decides whether to use it.
 	bfsTps := localTps
-	if hasFirstHopExclusions {
+	if excludeFirstHop {
 		keep := make([]localTpRef, 0, len(localTps))
 		for _, tp := range localTps {
 			if !localFirstHopHeld(tp) {

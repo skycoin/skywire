@@ -63,9 +63,9 @@ func classifyRouteLabel(label string) (RouteLabel, bool) {
 // aliases maps a human-friendly destination label (e.g. "skywire") to a PK, so
 // "skywire.dmsg" resolves exactly like "<pk>.dmsg". Nil/empty disables aliasing.
 func ParseResolverHost(host, suffix string, aliases map[string]cipher.PubKey) (vhost string, route []RouteLabel, dest cipher.PubKey, port uint16, err error) {
-	hostPart, portStr, hasPort := splitHostPort(host)
+	hostPart, portStr, withPort := splitHostPort(host)
 	port = 80
-	if hasPort {
+	if withPort {
 		p, perr := parseUint16(portStr)
 		if perr != nil {
 			return "", nil, cipher.PubKey{}, 0, fmt.Errorf("invalid port %q: %w", portStr, perr)

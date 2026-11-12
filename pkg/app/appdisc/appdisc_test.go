@@ -170,9 +170,9 @@ func TestAppUpdater(t *testing.T) {
 			if ok != tc.wantOK {
 				t.Errorf("ok = %v, want %v", ok, tc.wantOK)
 			}
-			_, isSvc := u.(*serviceUpdater)
-			if isSvc != tc.wantSvc {
-				t.Errorf("isServiceUpdater = %v, want %v", isSvc, tc.wantSvc)
+			_, service := u.(*serviceUpdater)
+			if service != tc.wantSvc {
+				t.Errorf("isServiceUpdater = %v, want %v", service, tc.wantSvc)
 			}
 		})
 	}

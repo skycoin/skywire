@@ -104,7 +104,7 @@ func (m *routeMux) decayRackFactor() {
 // edge (resetting the TLP probe budget when the contiguous point moves), adapts
 // the reorder factor from the DSACK signal, and returns the sequences to
 // retransmit. Replaces a bare processSACK call so all three effects stay in step.
-func (m *routeMux) onSACKReceived(lastContig uint32, words []uint64, dsackSeq uint32, hasDSACK bool) []uint32 {
+func (m *routeMux) onSACKReceived(lastContig uint32, words []uint64, dsackSeq uint32, dsack bool) []uint32 {
 	if !m.sackEnabled || m.retxBuf == nil {
 		return nil
 	}
@@ -114,7 +114,7 @@ func (m *routeMux) onSACKReceived(lastContig uint32, words []uint64, dsackSeq ui
 		m.lastAckedContig.Store(lastContig)
 		m.tlpProbeCount.Store(0)
 	}
-	if hasDSACK {
+	if dsack {
 		// The duplicate proves the ORIGINAL arrived after we had already
 		// retransmitted it, so its whole send→ack delay is a real delivery-delay
 		// sample — the one ProcessSACK cannot take (Karn: a retransmitted entry's

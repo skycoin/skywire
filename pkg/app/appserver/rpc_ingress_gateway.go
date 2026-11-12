@@ -361,12 +361,12 @@ func (r *RPCIngressGateway) ownsLocalPort(localPort routing.Port) bool {
 		return true
 	}
 	r.cm.DoRange(func(_ uint16, v any) bool {
-		conn, isConn := v.(net.Conn)
-		if !isConn || conn == nil {
+		conn, connOK := v.(net.Conn)
+		if !connOK || conn == nil {
 			return true
 		}
-		addr, isAddr := conn.LocalAddr().(appnet.Addr)
-		if isAddr && addr.Port == localPort {
+		addr, addrOK := conn.LocalAddr().(appnet.Addr)
+		if addrOK && addr.Port == localPort {
 			ok = true
 			return false
 		}

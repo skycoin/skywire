@@ -1579,11 +1579,11 @@ func (rg *RouteGroup) removeLegsByID(deadIDs []uuid.UUID, reason, hookEvent stri
 	remaining := len(rg.legs)
 	for i, lg := range rg.legs {
 		tp := lg.tp
-		isDead := false
+		dead := false
 		if tp != nil {
-			_, isDead = deadSet[tp.Entry.ID]
+			_, dead = deadSet[tp.Entry.ID]
 		}
-		if isDead && remaining > 1 {
+		if dead && remaining > 1 {
 			if lg.fwd != nil {
 				deadRuleIDs = append(deadRuleIDs, lg.fwd.KeyRouteID())
 			}

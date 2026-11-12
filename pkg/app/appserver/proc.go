@@ -606,8 +606,8 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 
 		wrappedConn := conn.(*appnet.WrappedConn)
 
-		skywireConn, isSkywireConn := wrappedConn.Conn.(*appnet.SkywireConn)
-		if !isSkywireConn {
+		skywireConn, skywireOK := wrappedConn.Conn.(*appnet.SkywireConn)
+		if !skywireOK {
 			summaries = append(summaries, ConnectionSummary{
 				Error: "Can't get such info from this conn",
 			})

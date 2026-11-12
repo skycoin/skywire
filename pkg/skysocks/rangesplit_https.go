@@ -180,9 +180,9 @@ func (c *Client) serveHTTPSRangeSplit(conn, stream net.Conn, target string) {
 
 	// 4. Read the browser's first plaintext request. Non-HTTP or non-splittable
 	//    traffic becomes a plaintext MITM splice, replaying what we read to the origin.
-	reqHead, isHTTP, _ := peekRequestHead(btls, rsHeadLimit)
+	reqHead, httpReq, _ := peekRequestHead(btls, rsHeadLimit)
 	clearDeadlines(btls)
-	if !isHTTP {
+	if !httpReq {
 		c.splicePrefixed(btls, otls, reqHead)
 		return
 	}
