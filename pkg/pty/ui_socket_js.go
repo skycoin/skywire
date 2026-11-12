@@ -8,8 +8,9 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/skycoin/skywire/pkg/logging"
 	"golang.org/x/net/websocket"
+
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // uiSocket is the terminal UI's websocket in a browser visor, served with

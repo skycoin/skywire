@@ -1,9 +1,10 @@
 // Package visorconfig pkg/visor/visorconfig/autoconnect.go c3-vis-core
 package visorconfig
 
-import "maps"
-
-import "slices"
+import (
+	"maps"
+	"slices"
+)
 
 // DefaultAutoconnectSiteLinks is how many transports of each site type
 // autoconnect keeps between two sites when SiteLinks is unset.

@@ -22,12 +22,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/cmdutil"
-
-	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/geoip"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // ---- example helpers / exported wrappers -----------------------------------

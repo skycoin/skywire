@@ -5,8 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // fire pushes one log entry through the hook with the given message.

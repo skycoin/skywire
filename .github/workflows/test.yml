@@ -61,7 +61,7 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          version: v2.15.0
 
       - name: Install Dependencies
         shell: bash
@@ -221,7 +221,7 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          version: v2.15.0
 
       # golangci-lint already ran via the action above; don't re-run it inside the
       # test step, where its exit code would abort before `go test` and hide any
@@ -282,7 +282,7 @@ jobs:
         env:
           CGO_ENABLED: '0'
         with:
-          version: latest
+          version: v2.15.0
           args: -c .golangci.yml --build-tags=withoutsystray,withoutgotop
 
       - name: Install Requirements

@@ -574,10 +574,16 @@ install-windows: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 install-static: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 	${STATIC_OPTS} go install -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' .
 
-lint: ## Run linters. Use make install-linters first
-	command -v golangci-lint || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
-	golangci-lint --version
-	CGO_ENABLED=0 ${OPTS} golangci-lint run -c .golangci.yml --build-tags 'withoutsystray withoutgotop' ./...
+# One golangci-lint for skywire, skycoin and skycoin.com. CI pins the same
+# version in .github/workflows/test.yml.
+GOLANGCI_LINT_VERSION := v2.15.0
+LINT_BIN := $(shell go env GOPATH)/bin
+GOLANGCI_LINT := $(LINT_BIN)/golangci-lint
+
+lint: ## Run linters. Installs the pinned golangci-lint when it is missing or another version
+	$(GOLANGCI_LINT) --version 2>/dev/null | grep -q ' $(GOLANGCI_LINT_VERSION:v%=%) ' || GOBIN=$(LINT_BIN) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	$(GOLANGCI_LINT) --version
+	CGO_ENABLED=0 ${OPTS} $(GOLANGCI_LINT) run -c .golangci.yml --build-tags 'withoutsystray withoutgotop' ./...
 	CGO_ENABLED=0 ${OPTS} go vet -mod=vendor -tags 'withoutsystray withoutgotop' ./...
 
 lint-extra: ## Run linters with extra checks.
@@ -588,7 +594,7 @@ gocyclo: ## Run gocyclo
 	gocyclo -over 14 .
 
 lint-windows: ## Run linters. Use make install-linters-windows first
-	powershell 'if (-not (Get-Command golangci-lint -ErrorAction SilentlyContinue)) { go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest }'
+	powershell 'if (-not (Get-Command golangci-lint -ErrorAction SilentlyContinue)) { go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) }'
 	powershell 'golangci-lint --version'
 	powershell '$$env:CGO_ENABLED=0; golangci-lint run -c .golangci.yml --build-tags "withoutsystray withoutgotop" ./...'
 
@@ -619,11 +625,11 @@ test-windows: ## Run tests on windows
 	${OPTS} go test ${TEST_OPTS_WINDOWS} ./internal/... ./pkg/... ./cmd/skywire-cli... ./cmd/skywire-visor... ./cmd/skywire... ./cmd/apps...
 
 install-linters: ## Install linters
-	${OPTS} go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+	${OPTS} go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 	${OPTS} go install golang.org/x/tools/cmd/goimports@latest github.com/FiloSottile/vendorcheck@latest
 
 install-linters-windows: ## Install linters
-	${OPTS} go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest golang.org/x/tools/cmd/goimports@latest
+	${OPTS} go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) golang.org/x/tools/cmd/goimports@latest
 
 tidy: ## Tidies and vendors dependencies.
 	${OPTS} go mod tidy -v

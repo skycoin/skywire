@@ -136,6 +136,10 @@ issues:
 formatters:
   enable:
     - gofmt
+    - goimports
   settings:
     gofmt:
       simplify: true
+    goimports:
+      local-prefixes:
+        - github.com/skycoin/skywire

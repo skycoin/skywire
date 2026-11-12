@@ -6,7 +6,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/transport/types"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 func perKeyCountsHexPerEdge(entries []*transport.Entry) map[string]map[string]int {

@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/coder/websocket"
+
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
