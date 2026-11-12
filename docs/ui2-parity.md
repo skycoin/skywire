@@ -69,7 +69,7 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 | contacts | list, add, edit, delete, import | yes | |
 | rewards | address, history, rules | yes | |
 | dmsg | sessions, clients, connect all, session count | yes | Angular folds it into info |
-| skynet | forwarded ports and forwards | no | |
+| skynet | forwarded ports (add, toggles, whitelist, remove) and reverse proxies | yes | new ui2 keys are English only; the Angular tab has no translations to copy |
 | web-proxy | resolving proxy status, on/off, upstream | yes | |
 | vpn | VPN client | no | |
 | resources | host stats and resource monitor | partial | host, process and runtime figures, no history charts |
