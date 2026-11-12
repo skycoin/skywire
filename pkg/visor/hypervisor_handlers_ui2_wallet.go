@@ -2,7 +2,7 @@
 package visor
 
 // The wallet tab hosts skycoin-web's own server rendered wallet, which the
-// hypervisor forwards at wallet/ui2/, and the coin node settings page.
+// hypervisor forwards at wallet/web/, and the coin node settings page.
 
 import (
 	"net/http"

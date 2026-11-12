@@ -33,6 +33,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
+	"github.com/skycoin/skywire/pkg/visor/ui2"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/wallet/coins"
 	"github.com/skycoin/skywire/pkg/wasmhv/browseui"
@@ -110,14 +111,23 @@ func (hv *Hypervisor) walletHandler() http.HandlerFunc {
 			case strings.HasPrefix(rest, "coin/"):
 				serveAt(app, w, r, "/"+rest)
 				return
-			case rest == "ui2":
-				ui2Redirect(w, "ui2/")
+			case rest == "web":
+				ui2Redirect(w, "web/")
 				return
-			// skycoin-web's server rendered wallet, and the assets, API and icon
-			// its pages load relative to /wallet/.
-			case strings.HasPrefix(rest, "ui2/"), strings.HasPrefix(rest, "assets/"),
-				strings.HasPrefix(rest, "api/"), rest == "favicon.ico":
-				serveAt(app, w, r, "/"+rest)
+			case rest == "ui2" || strings.HasPrefix(rest, "ui2/"):
+				// skycoin-web served its pages at /ui2/ before they moved to its root.
+				w.Header().Set("Location", ui2.BaseFor(r.URL.Path)+"wallet/web/"+strings.TrimPrefix(strings.TrimPrefix(rest, "ui2"), "/"))
+				w.WriteHeader(http.StatusMovedPermanently)
+				return
+			case rest == "web/angular" || strings.HasPrefix(rest, "web/angular/"):
+				// skycoin-web's own Angular wallet loads from the site root,
+				// which here is the dashboard, so the dashboard's wallet stands in.
+				ui2Redirect(w, ui2.BaseFor(r.URL.Path)+"angular/#/wallet")
+				return
+			case strings.HasPrefix(rest, "web/"):
+				// skycoin-web, its pages at its root and everything they load
+				// relative to them, under /wallet/web/.
+				serveAt(app, w, r, "/"+strings.TrimPrefix(rest, "web/"))
 				return
 			}
 		}

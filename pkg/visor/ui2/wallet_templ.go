@@ -17,7 +17,7 @@ const (
 )
 
 // WalletPage hosts skycoin-web's server rendered wallet, forwarded by the
-// hypervisor at wallet/ui2/, and the coin node settings page.
+// hypervisor at wallet/web/, and the coin node settings page.
 func WalletPage(pk, state string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -49,11 +49,11 @@ func WalletPage(pk, state string) templ.Component {
 			ctx = templ.InitializeContext(ctx)
 			switch state {
 			case WalletRunning:
-				templ_7745c5c3_Err = islandHead(T(ctx, "wallet.title"), T(ctx, "wallet.help"), "wallet/ui2/", T(ctx, "wallet.open-fullscreen")).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = islandHead(T(ctx, "wallet.title"), T(ctx, "wallet.help"), "wallet/web/", T(ctx, "wallet.open-fullscreen")).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<iframe class=\"island wallet\" src=\"wallet/ui2/\" title=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<iframe class=\"island wallet\" src=\"wallet/web/\" title=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

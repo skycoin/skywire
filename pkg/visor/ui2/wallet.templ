@@ -8,13 +8,13 @@ const (
 )
 
 // WalletPage hosts skycoin-web's server rendered wallet, forwarded by the
-// hypervisor at wallet/ui2/, and the coin node settings page.
+// hypervisor at wallet/web/, and the coin node settings page.
 templ WalletPage(pk, state string) {
 	@VisorLayout(pk, "wallet") {
 		switch state {
 			case WalletRunning:
-				@islandHead(T(ctx, "wallet.title"), T(ctx, "wallet.help"), "wallet/ui2/", T(ctx, "wallet.open-fullscreen"))
-				<iframe class="island wallet" src="wallet/ui2/" title={ T(ctx, "wallet.title") }></iframe>
+				@islandHead(T(ctx, "wallet.title"), T(ctx, "wallet.help"), "wallet/web/", T(ctx, "wallet.open-fullscreen"))
+				<iframe class="island wallet" src="wallet/web/" title={ T(ctx, "wallet.title") }></iframe>
 			case WalletStopped:
 				<h1>{ T(ctx, "wallet.title") }</h1>
 				<p><strong>{ T(ctx, "wallet.not-running") }</strong></p>
