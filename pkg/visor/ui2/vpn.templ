@@ -1,0 +1,86 @@
+package ui2
+
+// VPN is the vpn tab: the vpn-client and vpn-server apps, as
+// vpn.component.ts.
+type VPN struct {
+	PK     string
+	Client *App
+	Server *App
+	Err    string
+}
+
+// VPNOf picks the two apps out of the visor's apps.
+func VPNOf(a Apps) VPN {
+	v := VPN{PK: a.PK, Err: a.Err}
+	if x, ok := a.Find("vpn-client"); ok {
+		v.Client = &x
+	}
+	if x, ok := a.Find("vpn-server"); ok {
+		v.Server = &x
+	}
+	return v
+}
+
+func vpnStatus(x *App) string {
+	if x == nil {
+		return "vpn-tab.status.not-configured"
+	}
+	switch x.Status {
+	case 0:
+		return "vpn-tab.status.stopped"
+	case 1:
+		return "vpn-tab.status.running"
+	case 2:
+		return "vpn-tab.status.errored"
+	case 3:
+		return "vpn-tab.status.starting"
+	}
+	return "vpn-tab.status.unknown"
+}
+
+templ VPNPage(v VPN) {
+	@VisorLayout(v.PK, "vpn") {
+		<div class="head"><h1>{ T(ctx, "node.tabs.vpn") }</h1></div>
+		@VPNBody(v)
+		<div id="app-panel"></div>
+	}
+}
+
+// VPNBody polls every 10 seconds like the app list.
+templ VPNBody(v VPN) {
+	<div id="vpn" class="cat-grid" hx-get={ VisorURL(v.PK, "vpn/body") } hx-trigger="every 10s [document.visibilityState === 'visible']" hx-swap="outerHTML">
+		@ErrorBox(v.Err)
+		@vpnCard(v.PK, "vpn_lock", "vpn-tab.client", v.Client)
+		@vpnCard(v.PK, "dns", "vpn-tab.server", v.Server)
+	</div>
+}
+
+templ vpnCard(pk, icon, key string, x *App) {
+	<div class="card sub">
+		<div class="bar">
+			<span class="mi">{ icon }</span>
+			<strong>{ T(ctx, key+".title") }</strong>
+			<span class="spacer"></span>
+			if x != nil {
+				@appState(*x)
+			} else {
+				<span class="small dim">{ T(ctx, vpnStatus(x)) }</span>
+			}
+		</div>
+		if x == nil {
+			<p class="small dim">{ T(ctx, key+".not-configured") }</p>
+			<p><a class="btn sm" href={ templ.URL(VisorURL(pk, "apps/catalog")) }><span class="mi">apps</span>{ T(ctx, "apps.tabs.catalog") }</a></p>
+		} else {
+			<p class="small dim">{ T(ctx, key+".help") }</p>
+			<div class="bar">
+				if x.Running() {
+					<button class="btn" type="button" hx-put={ VisorURL(pk, "apps") + "/" + x.Name + "/state" } hx-vals='{"run":"","view":"vpn"}' hx-confirm={ T(ctx, "apps.stop-confirmation") } hx-target="#vpn" hx-swap="outerHTML" disabled?={ x.Status == 3 }><span class="mi">stop</span>{ T(ctx, "vpn-tab.stop") }</button>
+				} else {
+					<button class="btn primary" type="button" hx-put={ VisorURL(pk, "apps") + "/" + x.Name + "/state" } hx-vals='{"run":"1","view":"vpn"}' hx-target="#vpn" hx-swap="outerHTML"><span class="mi">play_arrow</span>{ T(ctx, "vpn-tab.start") }</button>
+				}
+				<button class="btn" type="button" hx-get={ VisorURL(pk, "apps") + "/" + x.Name + "/settings" } hx-target="#app-panel" hx-swap="innerHTML"><span class="mi">settings</span>{ T(ctx, "vpn-tab.settings") }</button>
+				<button class="btn" type="button" hx-get={ VisorURL(pk, "apps") + "/" + x.Name + "/flags" } hx-target="#app-panel" hx-swap="innerHTML"><span class="mi">tune</span>{ T(ctx, "app-settings.show-flags-form") }</button>
+			</div>
+		}
+	</div>
+}
