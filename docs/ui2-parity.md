@@ -40,7 +40,7 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 | `/settings/labels` | label list, edit, delete | yes | on `settings` |
 | `/app/:name/:key` | full page app host | no | |
 | `/vpn/...` | VPN client UI | no | |
-| `/wallet` | wallet | yes | the wallet tab frames skycoin-web's own ui2 at `wallet/ui2/` |
+| `/wallet` | wallet | yes | the wallet tab frames skycoin-web's own pages, forwarded at `wallet/web/` |
 | | language list en, es, de, pt, zh | yes | |
 
 ## Visor tabs
