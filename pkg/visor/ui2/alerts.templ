@@ -1,0 +1,126 @@
+package ui2
+
+// Alerts is the offline alerts form of a visor, as node-alerts.component.ts.
+type Alerts struct {
+	PK          string
+	Emails      string
+	Delay       string
+	Webhook     string
+	From        string
+	Relay       bool
+	Host        string
+	Port        string
+	Username    string
+	PasswordSet bool
+	StartTLS    bool
+	Watched     int
+	Offline     int
+	Push        []AlertPush
+	Results     []AlertResult
+	Err         string
+	Unavailable bool
+}
+
+// AlertPush is one device that gets push alerts.
+type AlertPush struct {
+	ID, Label, Endpoint string
+}
+
+// AlertResult is how one channel took a test or an alert.
+type AlertResult struct {
+	Channel, Target, Err string
+}
+
+// AlertDelays are the Angular form's offline delays.
+var AlertDelays = []struct{ Value, Label string }{
+	{"1m0s", "1 min"}, {"5m0s", "5 min"}, {"15m0s", "15 min"}, {"30m0s", "30 min"}, {"1h0m0s", "1 h"},
+}
+
+templ AlertsPanel(a Alerts) {
+	<section id="alerts" class="card sub">
+		<div class="head"><h2>{ T(ctx, "ui2.alerts.title") }</h2></div>
+		if a.Unavailable {
+			<p class="dim">{ T(ctx, "ui2.alerts.unavailable") }</p>
+		} else {
+			<p class="small dim">{ T(ctx, "ui2.alerts.help") }</p>
+			<p class="small">{ T(ctx, "ui2.alerts.watched", "n", itoa(a.Watched), "off", itoa(a.Offline)) }</p>
+			@ErrorBox(a.Err)
+			<form class="form narrow-form" hx-put={ VisorURL(a.PK, "settings/alerts") } hx-target="#alerts" hx-swap="outerHTML">
+				<label>
+					{ T(ctx, "ui2.alerts.emails") }
+					<input name="emails" value={ a.Emails } autocomplete="off"/>
+					<span class="small dim">{ T(ctx, "ui2.alerts.emails-help") }</span>
+				</label>
+				<label>
+					{ T(ctx, "ui2.alerts.delay") }
+					<select name="delay">
+						for _, d := range AlertDelays {
+							<option value={ d.Value } selected?={ d.Value == a.Delay }>{ d.Label }</option>
+						}
+					</select>
+					<span class="small dim">{ T(ctx, "ui2.alerts.delay-help") }</span>
+				</label>
+				<label>
+					{ T(ctx, "ui2.alerts.webhook") }
+					<input class="mono" name="webhook" value={ a.Webhook } placeholder="https://"/>
+					<span class="small dim">{ T(ctx, "ui2.alerts.webhook-help") }</span>
+				</label>
+				<label>
+					{ T(ctx, "ui2.alerts.from") }
+					<input name="from" value={ a.From }/>
+					<span class="small dim">{ T(ctx, "ui2.alerts.from-help") }</span>
+				</label>
+				<details class="add" open?={ a.Relay }>
+					<summary class="check"><input type="checkbox" name="relay" value="1" checked?={ a.Relay }/> { T(ctx, "ui2.alerts.relay") }</summary>
+					<div class="form">
+						<label>{ T(ctx, "ui2.alerts.host") }<input name="host" value={ a.Host }/></label>
+						<label>{ T(ctx, "ui2.alerts.port") }<input name="port" value={ a.Port } inputmode="numeric" placeholder="587"/></label>
+						<label>{ T(ctx, "ui2.alerts.username") }<input name="username" value={ a.Username } autocomplete="off"/></label>
+						<label>
+							{ T(ctx, "ui2.alerts.password") }
+							<input
+								type="password"
+								name="password"
+								autocomplete="new-password"
+								if a.PasswordSet {
+									placeholder={ T(ctx, "ui2.alerts.password-keep") }
+								}
+							/>
+						</label>
+						<label class="check"><input type="checkbox" name="starttls" value="1" checked?={ a.StartTLS }/> { T(ctx, "ui2.alerts.starttls") }</label>
+					</div>
+				</details>
+				<div class="bar">
+					<button class="btn primary" type="submit">{ T(ctx, "common.save") }</button>
+					<button class="btn" type="button" hx-post={ VisorURL(a.PK, "settings/alerts/test") } hx-target="#alerts" hx-swap="outerHTML">{ T(ctx, "ui2.alerts.test") }</button>
+				</div>
+			</form>
+			if len(a.Results) > 0 {
+				<ul class="small">
+					for _, r := range a.Results {
+						<li>
+							{ r.Channel } → <span class="mono">{ r.Target }</span>:
+							if r.Err != "" {
+								<span class="error">{ r.Err }</span>
+							} else {
+								<span class="ok">OK</span>
+							}
+						</li>
+					}
+				</ul>
+			}
+			<h3 class="small">{ T(ctx, "ui2.alerts.push") }</h3>
+			<p class="small dim">{ T(ctx, "ui2.alerts.push-help") }</p>
+			if len(a.Push) == 0 {
+				<p class="small dim">{ T(ctx, "ui2.alerts.push-none") }</p>
+			}
+			for _, p := range a.Push {
+				<div class="bar small">
+					<span>{ orDash(p.Label) }</span>
+					<span class="mono dim pk-text" title={ p.Endpoint }>{ p.Endpoint }</span>
+					<button class="btn sm" type="button" hx-delete={ VisorURL(a.PK, "settings/alerts/push/"+p.ID) } hx-target="#alerts" hx-swap="outerHTML">{ T(ctx, "ui2.alerts.remove") }</button>
+				</div>
+			}
+		}
+	</section>
+}
