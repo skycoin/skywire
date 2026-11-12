@@ -115,9 +115,9 @@ func (hv *Hypervisor) deleteMailMessage() http.HandlerFunc {
 	})
 }
 
-// mailSendWriteTimeout matches the phone app's budget for one send
-// (mailClient in android/.../api/VisorApi.kt).
-const mailSendWriteTimeout = 5 * time.Minute
+// mailSendWriteTimeout is the mailbox's send bound, and the phone app's budget
+// for one send (mailClient in android/.../api/VisorApi.kt) matches it.
+const mailSendWriteTimeout = skymail.SendTimeout
 
 func (hv *Hypervisor) postMailSend() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {

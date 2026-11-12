@@ -175,6 +175,8 @@ func (rc *rpcClient) Call(method string, args, reply any) error {
 		timeout = skyenv.UpdateRPCTimeout
 	case "ServiceHealth":
 		timeout = 2 * time.Minute
+	case "MailSend":
+		timeout = skymail.SendTimeout
 	}
 
 	if timeout != 0 {

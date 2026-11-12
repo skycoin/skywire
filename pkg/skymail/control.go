@@ -210,9 +210,12 @@ func (c Control) call(ctx context.Context, method, path string, q url.Values, in
 	return json.Unmarshal(raw, out)
 }
 
-// controlTimeout bounds a call to the mailbox. A send waits on the network,
-// and the visor's hypervisor handler lets that outlast its write timeout.
+// controlTimeout bounds a call to the mailbox other than a send.
 const controlTimeout = 2 * time.Minute
+
+// SendTimeout bounds a send, which relays the whole message on this call.
+// The relay runs on the request context, so a shorter bound cut large mail mid DATA.
+const SendTimeout = 10 * time.Minute
 
 func (c Control) ctx() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), controlTimeout)
@@ -275,7 +278,7 @@ func (c Control) Attachment(folder, id string, n int) (*AttachmentData, error) {
 
 // Send delivers out, as Mailbox.Send does.
 func (c Control) Send(out Outgoing) (*SendResult, error) {
-	ctx, cancel := c.ctx()
+	ctx, cancel := context.WithTimeout(context.Background(), SendTimeout)
 	defer cancel()
 	var rep SendReply
 	if err := c.call(ctx, http.MethodPost, "/send", nil, out, &rep); err != nil {

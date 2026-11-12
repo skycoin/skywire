@@ -107,8 +107,8 @@ class VisorApi(context: Context) {
      * an early timeout reads a sent mail as failed.
      */
     private val mailClient = client.newBuilder()
-        .readTimeout(5, TimeUnit.MINUTES)
-        .callTimeout(5, TimeUnit.MINUTES)
+        .readTimeout(10, TimeUnit.MINUTES)
+        .callTimeout(10, TimeUnit.MINUTES)
         // A send must never be replayed: OkHttp's silent retry on a stale
         // pooled connection would deliver the same mail twice.
         .retryOnConnectionFailure(false)
