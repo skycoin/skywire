@@ -1318,11 +1318,11 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 		// Self-detection requires the visor-supplied VisorPK; in
 		// --standalone mode appCl is nil and there's no self-loop
 		// path to special-case (TCP-direct handles loopback by host:port).
-		isSelf := false
+		self := false
 		if appCl != nil {
-			isSelf = pk == appCl.Config().VisorPK
+			self = pk == appCl.Config().VisorPK
 		}
-		if isSelf {
+		if self {
 			chatLog.Infof("Self-send via %s on port %d", netType, addr.Port)
 		}
 

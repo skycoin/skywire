@@ -22,10 +22,10 @@ import (
 // set — and `skywire autoconfig` regenerates on every run, so the reset
 // landed on every package update and (now) every dev-loop restart.
 func TestRegenPreservesVisorPersistedSettings(t *testing.T) {
-	restoreRegen, restoreOld, restoreConf := isRegen, oldConfCache, conf
-	t.Cleanup(func() { isRegen, oldConfCache, conf = restoreRegen, restoreOld, restoreConf })
+	restoreRegen, restoreOld, restoreConf := regenerate, oldConfCache, conf
+	t.Cleanup(func() { regenerate, oldConfCache, conf = restoreRegen, restoreOld, restoreConf })
 
-	isRegen = true
+	regenerate = true
 	oldConfCache = &visorconfig.V1{
 		Routing: &visorconfig.Routing{
 			RouterSettings:      map[string]string{"ecf_max_window": "8MiB"},
@@ -68,10 +68,10 @@ func TestRegenPreservesVisorPersistedSettings(t *testing.T) {
 // The same call must be a no-op on a fresh (non-regen) generate, so a
 // stale cache can never leak knobs into a brand-new config.
 func TestFreshGenCarriesNoPersistedSettings(t *testing.T) {
-	restoreRegen, restoreOld, restoreConf := isRegen, oldConfCache, conf
-	t.Cleanup(func() { isRegen, oldConfCache, conf = restoreRegen, restoreOld, restoreConf })
+	restoreRegen, restoreOld, restoreConf := regenerate, oldConfCache, conf
+	t.Cleanup(func() { regenerate, oldConfCache, conf = restoreRegen, restoreOld, restoreConf })
 
-	isRegen = false
+	regenerate = false
 	oldConfCache = &visorconfig.V1{
 		Routing:     &visorconfig.Routing{RouterSettings: map[string]string{"ecf_max_window": "8MiB"}},
 		AppSettings: map[string]visorconfig.AppSettingsEntry{"skysocks-client": {}},
@@ -89,10 +89,10 @@ func TestFreshGenCarriesNoPersistedSettings(t *testing.T) {
 // "auto" was the generated default, not an operator's choice, so a regen
 // replaces it with "none" while an explicit choice survives.
 func TestRegenDropsAutoMemoryLimit(t *testing.T) {
-	restoreRegen, restoreOld, restoreConf := isRegen, oldConfCache, conf
-	t.Cleanup(func() { isRegen, oldConfCache, conf = restoreRegen, restoreOld, restoreConf })
+	restoreRegen, restoreOld, restoreConf := regenerate, oldConfCache, conf
+	t.Cleanup(func() { regenerate, oldConfCache, conf = restoreRegen, restoreOld, restoreConf })
 
-	isRegen = true
+	regenerate = true
 	for old, want := range map[string]string{"auto": "none", "": "none", "none": "none", "1GiB": "1GiB"} {
 		oldConfCache = &visorconfig.V1{MemoryLimit: old}
 		conf = new(visorconfig.V1)

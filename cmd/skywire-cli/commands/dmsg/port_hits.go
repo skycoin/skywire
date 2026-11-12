@@ -39,7 +39,7 @@ even when nothing is listening to accept them.`,
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		hits := rpcClient.DmsgPortHits()
-		if isJSON, _ := cmd.Flags().GetBool(internal.JSONString); isJSON { //nolint:errcheck
+		if jsonOut, _ := cmd.Flags().GetBool(internal.JSONString); jsonOut { //nolint:errcheck
 			internal.PrintOutput(cmd.Flags(), hits, "")
 			return
 		}

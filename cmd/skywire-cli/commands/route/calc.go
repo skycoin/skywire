@@ -272,10 +272,10 @@ var calcCmd = &cobra.Command{
 		}
 
 		type routePair struct {
-			Forward        []routing.Hop `json:"forward"`
-			Reverse        []routing.Hop `json:"reverse"`
-			CumLatencyMS   float64       `json:"cum_latency_ms,omitempty"`
-			HasFullLatency bool          `json:"has_full_latency,omitempty"`
+			Forward       []routing.Hop `json:"forward"`
+			Reverse       []routing.Hop `json:"reverse"`
+			CumLatencyMS  float64       `json:"cum_latency_ms,omitempty"`
+			FullyMeasured bool          `json:"has_full_latency,omitempty"`
 		}
 		pairs := make([]routePair, len(routes))
 		for i, r := range routes {
@@ -299,13 +299,13 @@ var calcCmd = &cobra.Command{
 			for i := range pairs {
 				cum, allMeasured := cumulativeLatencyMS(pairs[i].Forward, latencyByTpID)
 				pairs[i].CumLatencyMS = cum
-				pairs[i].HasFullLatency = allMeasured
+				pairs[i].FullyMeasured = allMeasured
 			}
 			sort.SliceStable(pairs, func(i, j int) bool {
 				// All-measured wins ties against partially-measured;
 				// inside each class the lower cumulative latency wins.
-				if pairs[i].HasFullLatency != pairs[j].HasFullLatency {
-					return pairs[i].HasFullLatency
+				if pairs[i].FullyMeasured != pairs[j].FullyMeasured {
+					return pairs[i].FullyMeasured
 				}
 				return pairs[i].CumLatencyMS < pairs[j].CumLatencyMS
 			})
@@ -320,7 +320,7 @@ var calcCmd = &cobra.Command{
 				fmt.Fprintf(&textBuf, "[%d/%d]\n", i+1, len(pairs))
 			}
 			if calcByLatency {
-				if p.HasFullLatency {
+				if p.FullyMeasured {
 					fmt.Fprintf(&textBuf, "cumulative latency: %.2f ms\n", p.CumLatencyMS)
 				} else {
 					fmt.Fprintf(&textBuf, "cumulative latency: %.2f ms  (measured hops only; some unmeasured)\n", p.CumLatencyMS)
@@ -487,7 +487,7 @@ func streamRoutesViaGRPC(
 		Forward []routing.Hop `json:"forward"`
 		Reverse []routing.Hop `json:"reverse"`
 	}
-	isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
+	jsonOut, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
 	var collected []routePair
 
 	emitted := 0
@@ -500,7 +500,7 @@ func streamRoutesViaGRPC(
 		rev := reverseHops(fwd)
 		emitted++
 
-		if isJSON {
+		if jsonOut {
 			collected = append(collected, routePair{Forward: fwd, Reverse: rev})
 			return count == 0 || emitted < count
 		}
@@ -538,7 +538,7 @@ func streamRoutesViaGRPC(
 	if emitted == 0 {
 		return fmt.Errorf("no route found: %w", routeFinder.ErrRouteNotFound)
 	}
-	if isJSON {
+	if jsonOut {
 		// Single-route back-compat shape preserved when count=1.
 		if count == 1 && len(collected) == 1 {
 			out, _ := json.Marshal(collected[0]) //nolint:errcheck

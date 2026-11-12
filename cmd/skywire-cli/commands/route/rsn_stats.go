@@ -58,8 +58,8 @@ Requires the visor to have an embedded route setup-node configured
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 
-		isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
-		if isJSON {
+		jsonOut, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
+		if jsonOut {
 			internal.PrintOutput(cmd.Flags(), snap, "")
 			return
 		}

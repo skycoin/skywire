@@ -63,9 +63,9 @@ var (
 	dmsgServer            string
 	dmsgServerAddr        string // populated from --dmsg-server when given as pk@host:port; empty means "use discovery"
 	dmsgServerMaxAttempts int
-	isStoreLog            bool
-	isLogJSON             bool
-	isForceColor          bool
+	storeLog              bool
+	logJSON               bool
+	forceColor            bool
 	useRouteFinder        bool // override local route calculation to use route finder
 )
 
@@ -159,11 +159,11 @@ func init() {
 	hiddenflags = append(hiddenflags, "logtag")
 	RootCmd.Flags().StringVarP(&completion, "completion", "z", "", "[ bash | zsh | fish | powershell ]")
 	hiddenflags = append(hiddenflags, "completion")
-	RootCmd.Flags().BoolVarP(&isStoreLog, "storelog", "s", false, "store all logs to file")
+	RootCmd.Flags().BoolVarP(&storeLog, "storelog", "s", false, "store all logs to file")
 	hiddenflags = append(hiddenflags, "storelog")
-	RootCmd.Flags().BoolVar(&isLogJSON, "log-json", false, "also write structured JSON lines to <local_path>/log/skywire.jsonl (needs --storelog)")
+	RootCmd.Flags().BoolVar(&logJSON, "log-json", false, "also write structured JSON lines to <local_path>/log/skywire.jsonl (needs --storelog)")
 	hiddenflags = append(hiddenflags, "log-json")
-	RootCmd.Flags().BoolVar(&isForceColor, "forcecolor", false, "force color logging when out is not STDOUT")
+	RootCmd.Flags().BoolVar(&forceColor, "forcecolor", false, "force color logging when out is not STDOUT")
 	hiddenflags = append(hiddenflags, "forcecolor")
 	RootCmd.Flags().BoolVar(&useCsrf, "csrf", true, "Request a CSRF token for sensitive hypervisor API requests")
 	RootCmd.Flags().BoolVar(&useRouteFinder, "use-rf", false, "force use of route finder (disable local route calculation)")
@@ -361,9 +361,9 @@ func options() visor.Options {
 		DmsgServer:            dmsgServer,
 		DmsgServerAddr:        dmsgServerAddr,
 		DmsgServerMaxAttempts: dmsgServerMaxAttempts,
-		StoreLog:              isStoreLog,
-		LogJSON:               isLogJSON,
-		ForceColor:            isForceColor,
+		StoreLog:              storeLog,
+		LogJSON:               logJSON,
+		ForceColor:            forceColor,
 	}
 }
 

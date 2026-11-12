@@ -411,8 +411,8 @@ func readCXOTransportMetrics(mgr *cxosub.Manager, days int) ([]tpdstore.Transpor
 	byDate := make(map[string][][]byte)
 	var newest time.Time
 	ok := mgr.Walk(cxosub.FeedTPDMetrics, tpdstore.MetricsDayPrefix, func(path string, body []byte) bool {
-		date, isDay := tpdstore.MetricsDayDate(path)
-		if !isDay || len(body) == 0 {
+		date, day := tpdstore.MetricsDayDate(path)
+		if !day || len(body) == 0 {
 			return true
 		}
 		// Walk lends the snapshot's bytes and Gunzip of a raw body

@@ -59,7 +59,7 @@ func init() {
 	treeCmd.Flags().StringVar(&cacheFileUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location.")
 	treeCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
 	treeCmd.Flags().IntVarP(&padSpaces, "pad", "P", 15, "padding between tree and tpid")
-	treeCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only statistics")
+	treeCmd.Flags().BoolVarP(&stats, "stats", "s", false, "return only statistics")
 	treeCmd.Flags().StringVarP(&minVersion, "version", "v", "", "filter by minimum version (e.g., 1.3.34)")
 	treeCmd.Flags().BoolVarP(&keysOnly, "keys", "K", false, "output only reachable public keys (requires -k source)")
 	treeCmd.Flags().IntVarP(&maxHops, "hops", "H", 2, "max hops from source for --keys mode (1 or 2)")
@@ -236,7 +236,7 @@ var treeCmd = &cobra.Command{
 		})
 
 		// Stats mode
-		if isStats {
+		if stats {
 			cmdutil.Printf("Unique keys in Transport Discovery: %d\n", len(edgeCount))
 			cmdutil.Printf("Count of transports: %d\n", len(transports))
 
@@ -375,13 +375,13 @@ var treeCmd = &cobra.Command{
 		// Helper to format node with status colors
 		formatNode := func(pk string) string {
 			display := pk
-			isOnline := onlineSet[pk]
-			isOffline := offlineSet[pk]
+			online := onlineSet[pk]
+			offline := offlineSet[pk]
 
 			if !noFilterOnline {
-				if !isOnline && !isOffline {
+				if !online && !offline {
 					display = pterm.Red(pk) // Not in UT
-				} else if isOffline {
+				} else if offline {
 					display = pterm.Black(pterm.BgRed.Sprint(pk)) // Offline
 				}
 			}

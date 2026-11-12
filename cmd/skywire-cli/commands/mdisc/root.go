@@ -86,7 +86,7 @@ var (
 	cacheDirDMSGD string
 	cacheFilesAge int
 	mdURL         string
-	isStats       bool
+	stats         bool
 	// allEntries bool
 	masterLogger = logging.NewMasterLogger()
 )
@@ -108,7 +108,7 @@ func init() {
 	RootCmd.PersistentFlags().StringVar(&mdURL, "url", dep.DmsgDiscovery, "specify alternative DMSG discovery url")
 	// --stats only shapes the bare `mdisc` entries listing (count of
 	// dmsg clients), so it stays local to the root command.
-	RootCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "count the number of results")
+	RootCmd.Flags().BoolVarP(&stats, "stats", "s", false, "count the number of results")
 }
 
 // RootCmd is the command that contains sub-commands which interacts with DMSG services.
@@ -129,7 +129,7 @@ The bare command lists the dmsg clients registered in discovery (add
 		dmsgFullURL := mdURL + "/dmsg-discovery/entries"
 
 		dmsgclientkeys := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirDMSGD, dmsgFullURL), dmsgFullURL, cacheFilesAge)
-		if isStats {
+		if stats {
 			stats, _ := script.Echo(dmsgclientkeys).JQ(".[]").CountLines() //nolint:errcheck
 			internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d dmsg clients\n", stats), fmt.Sprintf("%d dmsg clients\n", stats))
 			return

@@ -34,10 +34,10 @@ func TestProseCoversEveryTree(t *testing.T) {
 			continue
 		}
 		// A tree counts as prose once it holds any markdown.
-		var hasMD bool
+		var mdFound bool
 		if err := fs.WalkDir(os.DirFS(e.Name()), ".", func(p string, d fs.DirEntry, err error) error {
 			if err == nil && !d.IsDir() && strings.HasSuffix(p, ".md") {
-				hasMD = true
+				mdFound = true
 			}
 			return nil
 		}); err != nil {
@@ -45,7 +45,7 @@ func TestProseCoversEveryTree(t *testing.T) {
 			// which is the opposite of the assertion below passing.
 			t.Fatalf("walk docs/%s/: %v", e.Name(), err)
 		}
-		if !hasMD {
+		if !mdFound {
 			continue
 		}
 		if _, err := fs.Stat(proseFS, e.Name()); err != nil {

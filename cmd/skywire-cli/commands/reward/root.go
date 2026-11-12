@@ -29,10 +29,10 @@ var (
 	rewardAddress        string
 	defaultRewardAddress string
 	output               string
-	isRead               bool
-	isRewarded           bool
-	isDeleteFile         bool
-	isAll                bool
+	read                 bool
+	rewarded             bool
+	deleteFile           bool
+	all                  bool
 	bulkPKsCSV           string
 	bulkAllVisors        bool
 	acceptRisk           bool
@@ -51,12 +51,12 @@ func init() {
 	cHiddenFlags = append(cHiddenFlags, "address")
 	rewardCmd.Flags().StringVarP(&output, "out", "o", "", "write reward address to: "+rewardFile)
 	cHiddenFlags = append(cHiddenFlags, "out")
-	if isRewarded {
+	if rewarded {
 		readFlagTxt = "\n" + defaultRewardAddress
 	}
-	rewardCmd.Flags().BoolVarP(&isRead, "read", "r", false, "print the skycoin reward address & exit"+readFlagTxt)
+	rewardCmd.Flags().BoolVarP(&read, "read", "r", false, "print the skycoin reward address & exit"+readFlagTxt)
 	cHiddenFlags = append(cHiddenFlags, "read")
-	rewardCmd.Flags().BoolVarP(&isDeleteFile, "delete", "d", false, "delete reward address file - opt out of rewards")
+	rewardCmd.Flags().BoolVarP(&deleteFile, "delete", "d", false, "delete reward address file - opt out of rewards")
 	cHiddenFlags = append(cHiddenFlags, "delete")
 	rewardCmd.Flags().StringVar(&bulkPKsCSV, "pks", "",
 		"comma-separated visor PKs (via hypervisor) to set reward address on")
@@ -64,7 +64,7 @@ func init() {
 		"apply reward address to every visor connected to this hypervisor (requires running hypervisor)")
 	rewardCmd.Flags().BoolVar(&acceptRisk, "accept-risk", false,
 		"set a single address instead of an xpub. It stops earning rewards once it sends coins")
-	rewardCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
+	rewardCmd.Flags().BoolVar(&all, "all", false, "show all flags")
 	for _, j := range cHiddenFlags {
 		rewardCmd.Flags().MarkHidden(j) //nolint:errcheck,gosec
 	}
@@ -177,7 +177,7 @@ func longText() string {
 		if err == nil && strings.TrimSpace(rwdAdd) != "" {
 			_, _, err = rewardconfig.ValidateRewardAddress(strings.TrimSpace(rwdAdd))
 			if err == nil {
-				isRewarded = true
+				rewarded = true
 				defaultRewardAddress = fmt.Sprintf("%s\n", rwdAdd)
 				return "\n    skycoin reward address set to:\n    " + strings.TrimSpace(rwdAdd) + "\n" + rewardAddressesText(rwdAdd)
 			}
@@ -194,7 +194,7 @@ func longText() string {
 		if err != nil {
 			cmdutil.Printf("    invalid address in reward config %v", err)
 		}
-		isRewarded = true
+		rewarded = true
 		defaultRewardAddress = fmt.Sprintf("%s\n", reward)
 		return "\n    skycoin reward address set to:\n    " + fmt.Sprintf("%s\n", reward) //+longtext
 	}
@@ -210,7 +210,7 @@ var rewardCmd = &cobra.Command{
 	Long: longtext,
 	PreRun: func(cmd *cobra.Command, _ []string) {
 		//--all unhides flags, prints help menu, and exits
-		if isAll {
+		if all {
 			for _, j := range cHiddenFlags {
 				f := cmd.Flags().Lookup(j)
 				f.Hidden = false
@@ -225,7 +225,7 @@ var rewardCmd = &cobra.Command{
 		if output == "" {
 			output = visorconfig.PackageConfig().LocalPath + "/" + skyenv.RewardFile
 		}
-		if isDeleteFile {
+		if deleteFile {
 			_, err := os.Stat(output)
 			if err != nil {
 				out1 := "reward file does not exist - reward address not set\n"
@@ -239,7 +239,7 @@ var rewardCmd = &cobra.Command{
 			internal.PrintError(cmd.Flags(), clienterr)
 		}
 
-		if isDeleteFile {
+		if deleteFile {
 			if clienterr == nil {
 				err := client.DeleteRewardAddress()
 				if err != nil {
@@ -256,7 +256,7 @@ var rewardCmd = &cobra.Command{
 			return
 		}
 		//print reward address and exit
-		if isRead {
+		if read {
 			// prefer RPC to get the visor's actual reward address
 			if clienterr == nil {
 				rwdAdd, err := client.GetRewardAddress()
@@ -310,11 +310,11 @@ var rewardCmd = &cobra.Command{
 		//remove any newline from rewardAddress string
 		rewardAddress = strings.TrimSuffix(rewardAddress, "\n")
 		//validate the skycoin address or xpub key
-		canonical, isXpub, err := rewardconfig.ValidateRewardSetting(rewardAddress, acceptRisk)
+		canonical, xpub, err := rewardconfig.ValidateRewardSetting(rewardAddress, acceptRisk)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		single := !isXpub
+		single := !xpub
 
 		// Bulk path: apply this address to multiple visors via the
 		// hypervisor's HVSetRewardAddress RPC. Triggered by --pks
@@ -460,7 +460,7 @@ func readRewardFile(cmdFlags *pflag.FlagSet) {
 // which stops it earning rewards and put its public key on chain.
 func warnIfExposed(client visorapi.API, addr string) {
 	addr = strings.TrimSpace(addr)
-	if _, isXpub, err := rewardconfig.ValidateRewardAddress(addr); err != nil || isXpub {
+	if _, xpub, err := rewardconfig.ValidateRewardAddress(addr); err != nil || xpub {
 		return
 	}
 	e, err := client.RewardAddressExposure(addr)
@@ -504,11 +504,11 @@ const shownRewardAddresses = 5
 // matched against the wallet's own address list. For a single address it is the risk of one.
 func rewardAddressesText(addr string) string {
 	addr = strings.TrimSpace(addr)
-	_, isXpub, err := rewardconfig.ValidateRewardAddress(addr)
+	_, xpub, err := rewardconfig.ValidateRewardAddress(addr)
 	if err != nil {
 		return ""
 	}
-	if !isXpub {
+	if !xpub {
 		return "\n" + rewardconfig.SingleAddressRisk + "\n"
 	}
 	addrs, err := rewardconfig.RewardAddresses(addr, shownRewardAddresses)

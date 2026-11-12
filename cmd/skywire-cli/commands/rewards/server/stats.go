@@ -1005,12 +1005,12 @@ func GenerateVisorBandwidthChartHTML(history []BandwidthHistoryEntry, chartWidth
 		topVisors = append(topVisors, v.PK)
 		topSet[v.PK] = true
 	}
-	hasOther := len(sorted) > maxVisors
+	overflow := len(sorted) > maxVisors
 
 	// Build list of labels (short PKs + "Other")
 	allLabels := make([]string, 0, len(topVisors)+1)
 	allLabels = append(allLabels, topVisors...)
-	if hasOther {
+	if overflow {
 		allLabels = append(allLabels, "Other")
 	}
 
@@ -1080,7 +1080,7 @@ func GenerateVisorBandwidthChartHTML(history []BandwidthHistoryEntry, chartWidth
 		}
 
 		// Draw "Other" aggregate
-		if hasOther {
+		if overflow {
 			var otherBW uint64
 			for pk, bw := range entry.ByVisor {
 				if !topSet[pk] {
@@ -1124,7 +1124,7 @@ func GenerateVisorBandwidthChartHTML(history []BandwidthHistoryEntry, chartWidth
 		sb.WriteString(fmt.Sprintf("<span style='display: inline-flex; align-items: center; gap: 4px;'><span style='display: inline-block; width: 12px; height: 12px; background: %s; flex-shrink: 0;'></span><span style='font-family: monospace; word-break: break-all;'>%s</span> (%s)</span>\n",
 			color, html.EscapeString(pk), formatBytesChart(visorTotals[pk])))
 	}
-	if hasOther {
+	if overflow {
 		var otherTotal uint64
 		for _, v := range sorted[maxVisors-1:] {
 			otherTotal += v.Total

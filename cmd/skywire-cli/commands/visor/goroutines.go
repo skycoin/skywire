@@ -315,15 +315,15 @@ func buildSummary(grs []goroutine, topN int, showLocks bool) string {
 	// — strip the duration for bucketing, but track max-age separately).
 	stateBuckets := map[string]*bucket{}
 	for _, g := range grs {
-		head, mins, hasAge := splitStateAge(g.State)
+		head, mins, aged := splitStateAge(g.State)
 		bk, ok := stateBuckets[head]
 		if !ok {
 			bk = &bucket{}
 			stateBuckets[head] = bk
 		}
 		bk.count++
-		if !hasAge {
-			bk.hasNoAge = true
+		if !aged {
+			bk.noAge = true
 		} else if mins > bk.maxMin {
 			bk.maxMin = mins
 		}
@@ -344,7 +344,7 @@ func buildSummary(grs []goroutine, topN int, showLocks bool) string {
 		age := ""
 		if r.bk.maxMin > 0 {
 			age = fmt.Sprintf("  (max age %dm)", r.bk.maxMin)
-		} else if r.bk.hasNoAge {
+		} else if r.bk.noAge {
 			age = "  (no age tag)"
 		}
 		fmt.Fprintf(&b, "  %5d  %s%s\n", r.bk.count, r.name, age)
@@ -468,8 +468,8 @@ func recordLockBucket(into map[string]*bucket, g goroutine, _ *regexp.Regexp) {
 		into[caller] = bk
 	}
 	bk.count++
-	_, mins, hasAge := splitStateAge(g.State)
-	if hasAge && mins > bk.maxMin {
+	_, mins, aged := splitStateAge(g.State)
+	if aged && mins > bk.maxMin {
 		bk.maxMin = mins
 	}
 }
@@ -492,7 +492,7 @@ func callerPastSync(stack string) string {
 // bucket is shared by buildSummary and lockSummary — must stay at
 // package scope so buildSummary's nested closure can reference it.
 type bucket struct {
-	count    int
-	maxMin   int
-	hasNoAge bool
+	count  int
+	maxMin int
+	noAge  bool
 }

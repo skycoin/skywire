@@ -88,7 +88,7 @@ func parseCallRecord(text string) (callRecord, bool) {
 	if !ok {
 		return callRecord{}, false
 	}
-	outcome, durationText, hasDuration := strings.Cut(body, callTextSep)
+	outcome, durationText, found := strings.Cut(body, callTextSep)
 	outcome = strings.TrimSpace(outcome)
 	switch outcome {
 	case callMissed, callIncoming, callOutgoing, callUnanswered:
@@ -100,7 +100,7 @@ func parseCallRecord(text string) (callRecord, bool) {
 		Outcome:   outcome,
 		Direction: map[bool]string{true: "out", false: "in"}[isOutgoingOutcome(outcome)],
 	}
-	if hasDuration {
+	if found {
 		rec.Seconds = parseCallDuration(durationText)
 	}
 	return rec, true

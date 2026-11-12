@@ -373,16 +373,16 @@ type keysByTypeOutput struct {
 }
 
 // collectKeysByType returns the sorted, de-duplicated hex public keys involved
-// in transports of tpType. When hasFilter is set, only transports touching
+// in transports of tpType. When filtered is set, only transports touching
 // filter are considered and only the PEER edge (the other end) is collected —
 // i.e. filter's peers on that transport type.
-func collectKeysByType(entries []*transport.Entry, tpType string, filter cipher.PubKey, hasFilter bool) []string {
+func collectKeysByType(entries []*transport.Entry, tpType string, filter cipher.PubKey, filtered bool) []string {
 	set := make(map[cipher.PubKey]struct{})
 	for _, e := range entries {
 		if string(e.Type) != tpType {
 			continue
 		}
-		if hasFilter {
+		if filtered {
 			switch filter {
 			case e.Edges[0]:
 				set[e.Edges[1]] = struct{}{}
@@ -410,24 +410,24 @@ func printKeysByType(cmd *cobra.Command, baseURL, tpType, pkFilter string) {
 	internal.Catch(cmd.Flags(), err)
 
 	var filter cipher.PubKey
-	hasFilter := pkFilter != ""
-	if hasFilter {
+	filtered := pkFilter != ""
+	if filtered {
 		internal.Catch(cmd.Flags(), filter.Set(pkFilter))
 	}
 
-	pks := collectKeysByType(entries, tpType, filter, hasFilter)
+	pks := collectKeysByType(entries, tpType, filter, filtered)
 
 	out := keysByTypeOutput{
 		Type:  tpType,
 		Count: len(pks),
 		PKs:   pks,
 	}
-	if hasFilter {
+	if filtered {
 		out.PK = filter.Hex()
 	}
 
 	var b strings.Builder
-	if hasFilter {
+	if filtered {
 		fmt.Fprintf(&b, "%d %s peer(s) of %s:\n", out.Count, tpType, out.PK)
 	} else {
 		fmt.Fprintf(&b, "%d public key(s) on %s transports:\n", out.Count, tpType)

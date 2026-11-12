@@ -24,12 +24,12 @@ func init() {
 	// instance with no $USER/$HOME, a container without a passwd entry — is
 	// not root; panicking here took the whole binary down in init.
 	if usrLvl, err := user.Current(); err == nil && usrLvl.Username == "root" {
-		isRoot = true
+		root = true
 	}
 	RootCmd.AddCommand(updateCmd)
 
 	updateCmd.Flags().SortFlags = false
-	updateCmd.Flags().BoolVarP(&isUpdateEndpoints, "endpoints", "a", false, "update server endpoints")
+	updateCmd.Flags().BoolVarP(&updateEndpoints, "endpoints", "a", false, "update server endpoints")
 	updateCmd.Flags().StringVar(&logLevel, "log-level", "", "level of logging in config")
 	updateCmd.Flags().StringVarP(&serviceConfURL, "url", "b", deployment.ProdConf.Conf, "service config URL")
 	updateCmd.Flags().StringVar(&setPublicAutoconnect, "public-autoconn", "", "change public autoconnect configuration")
@@ -37,15 +37,15 @@ func init() {
 	updateCmd.PersistentFlags().StringVarP(&input, "input", "i", "", "path of input config file.")
 	uHiddenFlags = append(uHiddenFlags, "input")
 	updateCmd.PersistentFlags().StringVarP(&output, "output", "o", "", "config file to output")
-	if isRoot {
+	if root {
 		if _, err := os.Stat(skyenv.SkywirePath + "/" + skyenv.ConfigJSON); err == nil {
-			updateCmd.PersistentFlags().BoolVarP(&isPkg, "pkg", "p", false, "update package config "+skyenv.SkywirePath+"/"+skyenv.ConfigJSON)
+			updateCmd.PersistentFlags().BoolVarP(&pkg, "pkg", "p", false, "update package config "+skyenv.SkywirePath+"/"+skyenv.ConfigJSON)
 			uHiddenFlags = append(uHiddenFlags, "pkg")
 		}
 	}
-	if !isRoot {
+	if !root {
 		if _, err := os.Stat(visorconfig.HomePath() + "/" + skyenv.ConfigName); err == nil {
-			updateCmd.PersistentFlags().BoolVarP(&isUsr, "user", "u", false, "update config at: $HOME/"+skyenv.ConfigName)
+			updateCmd.PersistentFlags().BoolVarP(&usr, "user", "u", false, "update config at: $HOME/"+skyenv.ConfigName)
 		}
 	}
 
@@ -56,23 +56,23 @@ func init() {
 	updateCmd.AddCommand(hyperVisorUpdateCmd)
 	hyperVisorUpdateCmd.Flags().SortFlags = false
 	hyperVisorUpdateCmd.Flags().StringVarP(&addHypervisorPKs, "add-pks", "+", "", "public keys of hypervisors that should be added to this visor")
-	hyperVisorUpdateCmd.Flags().BoolVarP(&isResetHypervisor, "reset", "r", false, "resets hypervisor configuration")
+	hyperVisorUpdateCmd.Flags().BoolVarP(&resetHypervisor, "reset", "r", false, "resets hypervisor configuration")
 
 	updateCmd.AddCommand(skySocksClientUpdateCmd)
 	skySocksClientUpdateCmd.Flags().SortFlags = false
 	skySocksClientUpdateCmd.Flags().StringVarP(&addSkysocksClientSrv, "add-server", "+", "", "add skysocks server address to skysock-client")
-	skySocksClientUpdateCmd.Flags().BoolVarP(&isResetSkysocksClient, "reset", "r", false, "reset skysocks-client configuration")
+	skySocksClientUpdateCmd.Flags().BoolVarP(&resetSkysocksClient, "reset", "r", false, "reset skysocks-client configuration")
 
 	updateCmd.AddCommand(skySocksServerUpdateCmd)
 	skySocksServerUpdateCmd.Flags().SortFlags = false
 	skySocksServerUpdateCmd.Flags().StringVarP(&skysocksWhitelist, "whitelist", "w", "", "comma-separated public keys allowed to connect (empty = allow all)")
-	skySocksServerUpdateCmd.Flags().BoolVarP(&isResetSkysocks, "reset", "r", false, "reset skysocks configuration")
+	skySocksServerUpdateCmd.Flags().BoolVarP(&resetSkysocks, "reset", "r", false, "reset skysocks configuration")
 
 	updateCmd.AddCommand(vpnClientUpdateCmd)
 	vpnClientUpdateCmd.Flags().SortFlags = false
 	vpnClientUpdateCmd.Flags().StringVarP(&setVPNClientKillswitch, "killsw", "x", "", "change killswitch status of vpn-client")
 	vpnClientUpdateCmd.Flags().StringVar(&addVPNClientSrv, "add-server", "", "add server address to vpn-client")
-	vpnClientUpdateCmd.Flags().BoolVarP(&isResetVPNclient, "reset", "r", false, "reset vpn-client configurations")
+	vpnClientUpdateCmd.Flags().BoolVarP(&resetVPNclient, "reset", "r", false, "reset vpn-client configurations")
 
 	updateCmd.AddCommand(vpnServerUpdateCmd)
 	vpnServerUpdateCmd.Flags().SortFlags = false
@@ -80,7 +80,7 @@ func init() {
 	vpnServerUpdateCmd.Flags().StringVar(&setVPNServerSecure, "secure", "", "change secure mode status of vpn-server")
 	vpnServerUpdateCmd.Flags().StringVar(&setVPNServerAutostart, "autostart", "", "change autostart of vpn-server")
 	vpnServerUpdateCmd.Flags().StringVar(&setVPNServerNetIfc, "netifc", "", "set default network interface")
-	vpnServerUpdateCmd.Flags().BoolVarP(&isResetVPNServer, "reset", "r", false, "reset vpn-server configurations")
+	vpnServerUpdateCmd.Flags().BoolVarP(&resetVPNServer, "reset", "r", false, "reset vpn-server configurations")
 }
 
 var updateCmd = &cobra.Command{
@@ -99,7 +99,7 @@ Top-level flags update service endpoints (-a/--endpoints), the log level
 (--log-level), public autoconnect (--public-autoconn true|false) and the routing
 min-hops (--set-minhop). Passing -b/--url a value implies --endpoints.`,
 	PreRun: func(_ *cobra.Command, _ []string) {
-		if isUpdateEndpoints && (serviceConfURL == "") {
+		if updateEndpoints && (serviceConfURL == "") {
 			serviceConfURL = deployment.ProdConf.Conf
 		}
 		setDefaults()
@@ -107,10 +107,10 @@ min-hops (--set-minhop). Passing -b/--url a value implies --endpoints.`,
 	},
 	Run: func(cmd *cobra.Command, _ []string) {
 		if cmd.Flags().Changed("url") {
-			isUpdateEndpoints = true
+			updateEndpoints = true
 		}
 		conf = initUpdate()
-		if isUpdateEndpoints {
+		if updateEndpoints {
 			// Reuse the same fetch chain `config gen` uses: DMSG first (the
 			// deployment is dmsg-only, so a plain http.Client can never reach
 			// the conf service), then plain HTTP, then the embedded
@@ -296,11 +296,11 @@ func setDefaults() {
 	if (input != "") && (output == "") {
 		output = input
 	}
-	if isPkg {
+	if pkg {
 		output = skyenv.SkywirePath + "/" + skyenv.ConfigJSON
 		input = skyenv.SkywirePath + "/" + skyenv.ConfigJSON
 	}
-	if isUsr {
+	if usr {
 		output = visorconfig.HomePath() + "/" + skyenv.ConfigName
 		input = visorconfig.HomePath() + "/" + skyenv.ConfigName
 	}
@@ -326,7 +326,7 @@ var hyperVisorUpdateCmd = &cobra.Command{
 				conf.Hypervisors = append(conf.Hypervisors, cipher.PubKey(keyParsed))
 			}
 		}
-		if isResetHypervisor {
+		if resetHypervisor {
 			conf.Hypervisors = []cipher.PubKey{}
 		}
 		saveConfig(conf)
@@ -349,7 +349,7 @@ var skySocksClientUpdateCmd = &cobra.Command{
 			}
 			changeAppsConfig(conf, "skysocks-client", "--srv", keyParsed.Hex())
 		}
-		if isResetSkysocksClient {
+		if resetSkysocksClient {
 			resetAppsConfig(conf, "skysocks-client")
 		}
 		saveConfig(conf)
@@ -369,7 +369,7 @@ var skySocksServerUpdateCmd = &cobra.Command{
 		if skysocksWhitelist != "" {
 			changeAppsConfig(conf, "skysocks", "--whitelist", skysocksWhitelist)
 		}
-		if isResetSkysocks {
+		if resetSkysocks {
 			resetAppsConfig(conf, "skysocks")
 		}
 		saveConfig(conf)
@@ -402,7 +402,7 @@ var vpnClientUpdateCmd = &cobra.Command{
 			}
 			changeAppsConfig(conf, "vpn-client", "--srv", keyParsed.Hex())
 		}
-		if isResetVPNclient {
+		if resetVPNclient {
 			resetAppsConfig(conf, "vpn-client")
 		}
 		saveConfig(conf)
@@ -452,7 +452,7 @@ var vpnServerUpdateCmd = &cobra.Command{
 		default:
 			logger.Fatal("Unrecognized vpn server autostart value: ", setVPNServerAutostart)
 		}
-		if isResetVPNServer {
+		if resetVPNServer {
 			resetAppsConfig(conf, "vpn-server")
 		}
 		saveConfig(conf)

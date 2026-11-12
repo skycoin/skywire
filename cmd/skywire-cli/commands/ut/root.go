@@ -97,8 +97,8 @@ var RootCmd = utCmd
 var (
 	pk            string
 	online        bool
-	isStats       bool
-	isMoreStats   bool
+	stats         bool
+	moreStats     bool
 	utURL         string
 	tpdURL        string
 	cacheDirUT    string
@@ -118,8 +118,8 @@ func init() {
 
 	utCmd.Flags().StringVarP(&pk, "pk", "k", "", "check uptime for the specified key")
 	utCmd.Flags().BoolVarP(&online, "on", "o", false, "list currently online visors")
-	utCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "count the number of results")
-	utCmd.Flags().BoolVarP(&isMoreStats, "stats2", "t", false, "with --on: tally online visors by version instead of listing PKs")
+	utCmd.Flags().BoolVarP(&stats, "stats", "s", false, "count the number of results")
+	utCmd.Flags().BoolVarP(&moreStats, "stats2", "t", false, "with --on: tally online visors by version instead of listing PKs")
 	utCmd.Flags().IntVarP(&minUT, "min", "n", 75, "list visors meeting minimum uptime percentage\n\r")
 	utCmd.Flags().StringVar(&cacheDirUT, "cdu", cacheDirPath(dep.TransportDiscovery), "UT cache dir (\"\" to disable)\n\r")
 	utCmd.Flags().StringVar(&cacheDirTPD, "cdt", cacheDirPath(dep.TransportDiscovery), "TPD cache dir (\"\" to disable)\n\r")
@@ -312,7 +312,7 @@ Set the cache dir to "" to avoid using cache files.`, getDeployment().TransportD
 			}
 			keys = filterByTP(keys)
 
-			if isStats {
+			if stats {
 				label := "visors"
 				if online {
 					label = "online visors"
@@ -331,7 +331,7 @@ Set the cache dir to "" to avoid using cache files.`, getDeployment().TransportD
 			versionSelector := baseSelector + " | select(.version == \"" + versionFilter + "\")"
 			keys, _ := script.Echo(uts).JQ(versionSelector+" | .pk").Match(pk).Replace("\"", "").Slice() //nolint:errcheck
 			keys = filterByTP(keys)
-			if isStats {
+			if stats {
 				label := "visors"
 				if online {
 					label = "online visors"
@@ -353,7 +353,7 @@ Set the cache dir to "" to avoid using cache files.`, getDeployment().TransportD
 
 		// Handle list-versions flag (without version filter)
 		if listVersions {
-			if isStats {
+			if stats {
 				internal.PrintPipe(cmd.Flags(), script.Echo(uts).JQ(baseSelector+" | .version").Freq().Replace("\"", ""))
 				return
 			}
@@ -364,11 +364,11 @@ Set the cache dir to "" to avoid using cache files.`, getDeployment().TransportD
 		if online {
 			utKeysOnline, _ := script.Echo(uts).JQ(".[] | select(.on) | .pk").Match(pk).Replace("\"", "").Slice() //nolint:errcheck
 			utKeysOnline = filterByTP(utKeysOnline)
-			if isStats {
+			if stats {
 				internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d visors online\n", len(utKeysOnline)), fmt.Sprintf("%d visors online\n", len(utKeysOnline)))
 				return
 			}
-			if isMoreStats {
+			if moreStats {
 				internal.PrintPipe(cmd.Flags(), script.Echo(uts).JQ(".[] | select(.on) | .version").Freq().Replace("\"", ""))
 				return
 			}
@@ -377,13 +377,13 @@ Set the cache dir to "" to avoid using cache files.`, getDeployment().TransportD
 			}
 			return
 		}
-		if isStats {
+		if stats {
 			keys, _ := script.Echo(uts).JQ(".[] | .pk").Replace("\"", "").Slice() //nolint:errcheck
 			keys = filterByTP(keys)
 			internal.PrintOutput(cmd.Flags(), fmt.Sprintf("%d visors\n", len(keys)), fmt.Sprintf("%d visors\n", len(keys)))
 			return
 		}
-		if isMoreStats {
+		if moreStats {
 			internal.PrintPipe(cmd.Flags(), script.Echo(uts).JQ(".[] | .version").Freq().Replace("\"", ""))
 			return
 		}

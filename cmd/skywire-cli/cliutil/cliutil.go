@@ -38,8 +38,8 @@ func Catch(cmdFlags *pflag.FlagSet, err error) {
 //
 //nolint:errcheck
 func PrintFatalError(cmdFlags *pflag.FlagSet, err error) {
-	isJSON, _ := cmdFlags.GetBool(JSONString)
-	if isJSON {
+	jsonOut, _ := cmdFlags.GetBool(JSONString)
+	if jsonOut {
 		writeJSONError(cmdutil.Stderr(), err)
 		cmdutil.Exit(1)
 	}
@@ -71,8 +71,8 @@ func rpcError(err error) error {
 //
 //nolint:errcheck
 func PrintError(cmdFlags *pflag.FlagSet, err error) {
-	isJSON, _ := cmdFlags.GetBool(JSONString)
-	if isJSON {
+	jsonOut, _ := cmdFlags.GetBool(JSONString)
+	if jsonOut {
 		writeJSONError(cmdutil.Stderr(), err)
 		return
 	}
@@ -137,8 +137,8 @@ func PrintOutput(cmdFlags *pflag.FlagSet, outputJSON, output any) {
 		return
 	}
 	jqFilter, _ := cmdFlags.GetString(cliout.JQFlag)
-	isJSON, _ := cmdFlags.GetBool(JSONString)
-	if isJSON || jqFilter != "" {
+	jsonOut, _ := cmdFlags.GetBool(JSONString)
+	if jsonOut || jqFilter != "" {
 		if outputJSON == nil {
 			return
 		}

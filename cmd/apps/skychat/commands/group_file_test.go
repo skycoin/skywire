@@ -119,8 +119,8 @@ func TestSendFileToVisorGroup(t *testing.T) {
 	if len(fake.sent) != 1 || fake.sent[0].ID != "gid-9" {
 		t.Fatalf("GroupSend calls = %+v, want one for gid-9", fake.sent)
 	}
-	meta, isFile := parseGroupFileText(fake.sent[0].Text)
-	if !isFile {
+	meta, file := parseGroupFileText(fake.sent[0].Text)
+	if !file {
 		t.Fatalf("published text is not a file envelope: %q", fake.sent[0].Text)
 	}
 	if meta.ID != fileID || meta.Name != "pic.png" || meta.Size != int64(len("imgbytes")) {

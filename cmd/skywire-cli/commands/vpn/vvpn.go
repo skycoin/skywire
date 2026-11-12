@@ -290,7 +290,7 @@ func init() {
 	listCmd.Flags().StringVar(&minVersion, "minv", "", "filter by minimum version (>=)")
 	listCmd.Flags().StringVar(&maxVersion, "maxv", "", "filter by maximum version (<=)")
 	listCmd.Flags().BoolVar(&showOffline, "offline", false, "show only offline servers (red)")
-	listCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the results")
+	listCmd.Flags().BoolVarP(&stats, "stats", "s", false, "return only a count of the results")
 	listCmd.Flags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")
 	clirpc.RegisterFetchFlags(listCmd)
 }
@@ -436,7 +436,7 @@ var listCmd = &cobra.Command{
 				}
 
 				count++
-				if !isStats {
+				if !stats {
 					countryCode := ""
 					if svc.Geo != nil {
 						countryCode = svc.Geo.Country
@@ -445,7 +445,7 @@ var listCmd = &cobra.Command{
 				}
 			}
 
-			if isStats {
+			if stats {
 				cmdutil.Printf("%d\n", count)
 			}
 			return
@@ -487,7 +487,7 @@ var listCmd = &cobra.Command{
 					}
 
 					count++
-					if !isStats {
+					if !stats {
 						countryCode := ""
 						if svc.Geo != nil {
 							countryCode = svc.Geo.Country
@@ -496,7 +496,7 @@ var listCmd = &cobra.Command{
 					}
 				}
 
-				if isStats {
+				if stats {
 					cmdutil.Printf("%d\n", count)
 				}
 				return
@@ -511,7 +511,7 @@ var listCmd = &cobra.Command{
 			}
 			sdJQ += ` | "\(.address | split(":")[0]) \(.geo.country) \(.version)"`
 
-			if isStats {
+			if stats {
 				count, err := script.Echo(sds).JQ(sdJQ).Replace(`"`, "").CountLines()
 				if err != nil {
 					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
@@ -583,7 +583,7 @@ var listCmd = &cobra.Command{
 				}
 
 				count++
-				if !isStats {
+				if !stats {
 					countryCode := ""
 					if svc.Geo != nil {
 						countryCode = svc.Geo.Country
@@ -592,7 +592,7 @@ var listCmd = &cobra.Command{
 				}
 			}
 
-			if isStats {
+			if stats {
 				cmdutil.Printf("%d\n", count)
 			}
 			return
@@ -617,7 +617,7 @@ var listCmd = &cobra.Command{
 		| "\((.address | split(":")[0])) \(.geo.country) \(.version)"
 		`
 
-		if isStats {
+		if stats {
 			count, err := script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, "").CountLines()
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
