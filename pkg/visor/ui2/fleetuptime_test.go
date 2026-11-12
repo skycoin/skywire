@@ -34,3 +34,20 @@ func TestFleetUptimeOf(t *testing.T) {
 	require.Equal(t, "<1%", FleetPct(0.5))
 	require.Equal(t, "100%", FleetPct(99.96))
 }
+
+func TestVersionHistoryOf(t *testing.T) {
+	sums := []FleetSummary{
+		{PK: "a", Version: "v1.3.110+dirty", Daily: map[string]string{"2026-11-10": "100", "2026-11-11": "80"}},
+		{PK: "b", Version: "v1.3.109", Daily: map[string]string{"2026-11-10": "90", "2026-11-11": "10"}},
+		{PK: "c", Version: "v1.3.110", Daily: map[string]string{"2026-11-11": "99"}},
+	}
+	h := VersionHistoryOf(sums)
+	require.Len(t, h.Areas, 2)
+	require.Equal(t, "v1.3.110", h.Areas[0].Version, "newest version first, dirty folded in")
+	require.Equal(t, 2, h.Areas[0].Latest)
+	require.Equal(t, 0, h.Areas[1].Latest, "b fell under 75% on the last day")
+	require.Equal(t, 2, h.LatestTotal)
+	require.Empty(t, VersionHistoryOf(sums[2:]).Areas, "one day is not a history")
+	out := renderEN(t, FleetUptimeBody(FleetUptime{Rows: []FleetRow{{PK: "a"}}, Versions: h}))
+	require.Contains(t, out, `style="background:#3399FF;"`)
+}

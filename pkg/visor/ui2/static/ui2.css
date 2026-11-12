@@ -513,3 +513,8 @@ fieldset.choice legend { padding: 0; margin-bottom: 4px; }
   .list.apps td.sel { float: right; padding: 6px 8px 0 0; }
   .list.apps td.sel::before { content: none; }
 }
+
+/* history charts */
+.ov-card.chart svg { width: 100%; height: 48px; display: block; color: var(--accent); }
+.chart-now { font-weight: 600; color: rgba(var(--fg), 0.9); }
+.vh-chart { width: 100%; height: 160px; display: block; }

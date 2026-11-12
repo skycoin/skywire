@@ -620,3 +620,37 @@ document.addEventListener('DOMContentLoaded', function () {
 	document.addEventListener('change', function (e) { if (e.target.matches && e.target.matches('#apps-rows input[name=sel]')) sync(); });
 	document.addEventListener('htmx:afterSettle', sync);
 })();
+
+// History charts: each poll of #res-live carries its figures as data-s-*
+// attributes, kept here for the last 120 samples and drawn as lines.
+(function () {
+	'use strict';
+	var hist = {}, max = 120, seen = null;
+	function fmt(v, unit) {
+		if (unit === '%') return v.toFixed(1) + '%';
+		if (unit === 'B' || unit === 'B/s') {
+			var u = ['B', 'KiB', 'MiB', 'GiB'], i = 0;
+			while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+			return v.toFixed(1) + ' ' + u[i] + (unit === 'B/s' ? '/s' : '');
+		}
+		return String(Math.round(v));
+	}
+	function draw() {
+		var live = document.getElementById('res-live');
+		if (!live || live === seen || !document.querySelector('[data-charts]')) return;
+		seen = live;
+		document.querySelectorAll('[data-chart]').forEach(function (c) {
+			var k = c.getAttribute('data-chart'), raw = live.getAttribute('data-s-' + k);
+			if (raw === null) return;
+			var h = hist[k] = hist[k] || [];
+			h.push(parseFloat(raw));
+			if (h.length > max) h.shift();
+			var unit = c.getAttribute('data-unit'), top = unit === '%' ? 100 : Math.max.apply(null, h) || 1;
+			var pts = h.map(function (v, i) { return (i * 120 / (max - 1)).toFixed(1) + ',' + (40 - v / top * 38).toFixed(1); });
+			c.querySelector('polyline').setAttribute('points', pts.join(' '));
+			c.querySelector('.chart-now').textContent = fmt(h[h.length - 1], unit);
+		});
+	}
+	document.addEventListener('htmx:afterSettle', draw);
+	document.addEventListener('DOMContentLoaded', draw);
+})();
