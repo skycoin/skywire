@@ -219,6 +219,10 @@ jobs:
             ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}-
             ${{ runner.os }}-gobuild-
 
+      # /bin/bash is bash 3.2 on macOS, which the script must keep working with.
+      - name: Check descriptors
+        run: /bin/bash scripts/check-descriptors.sh
+
       - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.15.0
@@ -276,6 +280,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}-
             ${{ runner.os }}-gobuild-
+
+      - name: Check descriptors
+        shell: bash
+        run: bash scripts/check-descriptors.sh
 
       # The lint make lint-windows runs, so the make step below only tests.
       - uses: golangci/golangci-lint-action@v9
