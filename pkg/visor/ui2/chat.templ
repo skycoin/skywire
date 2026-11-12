@@ -31,6 +31,7 @@ templ ChatPage(c Chat) {
 				</section>
 			</div>
 		} else {
+			@ChatPassword(c)
 			<div class="chat" data-labels>
 				@ChatPeers(c, false)
 				<section class="chat-main">
@@ -113,8 +114,18 @@ templ ChatRooms(c Chat, oob bool) {
 		for _, g := range c.Groups {
 			<a class={ "chat-peer", templ.KV("active", c.Group != nil && c.Group.ID == g.ID) } href={ templ.URL(c.url("?mode=groups&group=" + g.ID)) }>
 				{ g.Name }
-				<span class="small dim">{ string(g.Mode) } · { itoa(len(g.Members)) } { T(ctx, "skychat.members") }</span>
+				switch string(g.Status) {
+					case "awaiting_approval":
+						<span class="small badge" title="waiting for an admin to approve your request">pending</span>
+					case "denied":
+						<span class="small badge off" title="an admin declined your request">declined</span>
+					default:
+						<span class="small dim">{ string(g.Mode) } · { itoa(len(g.Members)) } { T(ctx, "skychat.members") } · { string(g.Role) }</span>
+				}
 			</a>
+			if string(g.Status) == "denied" {
+				<button class="btn sm" type="button" hx-post={ c.url("/groups/ask-again") } hx-vals={ jsonVals(map[string]string{"group": g.ID}) } hx-target="#chat-rooms" hx-swap="outerHTML">{ T(ctx, "skychat.ask-again") }</button>
+			}
 		}
 		<details class="add">
 			<summary class="btn sm"><span class="mi">add</span>{ T(ctx, "skychat.create-room") }</summary>
@@ -179,4 +190,40 @@ templ chatRoomTools(c Chat) {
 			</form>
 		}
 	</div>
+}
+
+// ChatPassword sets, changes or removes the password of skychat's
+// standalone page, as the Angular chat tab's password panel.
+templ ChatPassword(c Chat) {
+	<details id="chat-pw" class="add" open?={ c.PwErr != "" }>
+		<summary class="btn sm">
+			<span class="mi">lock</span>
+			if c.PwSet {
+				{ T(ctx, "skychat.password.change") }
+			} else {
+				{ T(ctx, "skychat.password.set") }
+			}
+		</summary>
+		<p class="small dim">
+			if c.PwSet {
+				{ T(ctx, "skychat.password.help-set") }
+			} else {
+				{ T(ctx, "skychat.password.help-unset") }
+			}
+		</p>
+		@ErrorBox(c.PwErr)
+		<form class="form narrow-form" hx-post={ c.url("/password") } hx-target="#chat-pw" hx-swap="outerHTML">
+			if c.PwSet {
+				<label>{ T(ctx, "skychat.password.old") }<input type="password" name="old" autocomplete="current-password"/></label>
+			}
+			<label>{ T(ctx, "skychat.password.new") }<input type="password" name="new" autocomplete="new-password"/></label>
+			<label>{ T(ctx, "skychat.password.confirm") }<input type="password" name="confirm" autocomplete="new-password"/></label>
+			<div class="bar">
+				<button class="btn primary" type="submit">{ T(ctx, "common.save") }</button>
+				if c.PwSet {
+					<button class="btn" type="submit" name="clear" value="1">{ T(ctx, "skychat.password.clear") }</button>
+				}
+			</div>
+		</form>
+	</details>
 }

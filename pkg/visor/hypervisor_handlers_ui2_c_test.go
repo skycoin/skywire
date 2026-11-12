@@ -39,6 +39,8 @@ type ui2FakeAPI struct {
 
 func (a *ui2FakeAPI) Apps() ([]*appserver.AppState, error) { return nil, nil }
 
+func (a *ui2FakeAPI) SkychatPasswordIsSet() (bool, error) { return false, nil }
+
 func (a *ui2FakeAPI) RuntimeLogsSince(since int64) (visorapi.RuntimeLogsDelta, error) {
 	var d visorapi.RuntimeLogsDelta
 	if int(since) < len(a.logs) {

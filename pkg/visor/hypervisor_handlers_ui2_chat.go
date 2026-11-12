@@ -31,6 +31,8 @@ func (hv *Hypervisor) ui2ChatRoutes(r *httputil.Router) {
 	r.Post("/ui2/visors/{pk}/chat/groups/join", hv.ui2Chat("gjoin"))
 	r.Get("/ui2/visors/{pk}/chat/groups/invite", hv.ui2Chat("ginvite"))
 	r.Post("/ui2/visors/{pk}/chat/groups/add-member", hv.ui2Chat("gadd"))
+	r.Post("/ui2/visors/{pk}/chat/groups/ask-again", hv.ui2Chat("gask"))
+	r.Post("/ui2/visors/{pk}/chat/password", hv.ui2Chat("password"))
 }
 
 // ui2SkychatCall runs one request against the local skychat app.
@@ -123,6 +125,7 @@ func (hv *Hypervisor) ui2Chat(op string) http.HandlerFunc {
 			if c.Peer != "" && pk.Set(c.Peer) != nil {
 				c.Peer = ""
 			}
+			c.PwSet, _ = ctx.API.SkychatPasswordIsSet() //nolint:errcheck
 			hv.render(w, r, ui2.ChatPage(hv.ui2ChatDM(c)))
 		case "log":
 			c = hv.ui2ChatDM(c)
@@ -156,7 +159,9 @@ func (hv *Hypervisor) ui2Chat(op string) http.HandlerFunc {
 				return
 			}
 			hv.render(w, r, ui2.ChatRoomLog(c))
-		case "gcreate", "gjoin", "ginvite", "gadd":
+		case "password":
+			hv.render(w, r, ui2.ChatPassword(hv.ui2ChatPassword(r, ctx, c)))
+		case "gcreate", "gjoin", "ginvite", "gadd", "gask":
 			var err error
 			switch op {
 			case "gcreate":
@@ -171,6 +176,8 @@ func (hv *Hypervisor) ui2Chat(op string) http.HandlerFunc {
 				var info visorapi.GroupInfo
 				info, err = ctx.API.GroupJoin(visorapi.GroupJoinArgs{Invite: strings.TrimSpace(r.FormValue("invite"))})
 				group = info.ID
+			case "gask":
+				_, err = ctx.API.GroupAskAgain(group)
 			case "ginvite":
 				c.Invite, err = ctx.API.GroupInvite(group)
 			case "gadd":
@@ -185,4 +192,35 @@ func (hv *Hypervisor) ui2Chat(op string) http.HandlerFunc {
 			hv.render(w, r, ui2.ChatRooms(c, false))
 		}
 	})
+}
+
+// ui2ChatPassword sets or clears the skychat password with the Angular
+// panel's checks: 6 to 64 characters, typed twice, and the current one to
+// change or clear a set password.
+func (hv *Hypervisor) ui2ChatPassword(r *http.Request, ctx *httpCtx, c ui2.Chat) ui2.Chat {
+	c.PwSet, _ = ctx.API.SkychatPasswordIsSet() //nolint:errcheck
+	old, nw := r.FormValue("old"), r.FormValue("new")
+	var err error
+	switch {
+	case r.FormValue("clear") != "":
+		if old == "" {
+			c.PwErr = hv.ui2T(r, "skychat.password.errors.old-required")
+			return c
+		}
+		err = ctx.API.ClearSkychatPassword(old)
+	case len(nw) < 6 || len(nw) > 64:
+		c.PwErr = hv.ui2T(r, "skychat.password.errors.length")
+		return c
+	case nw != r.FormValue("confirm"):
+		c.PwErr = hv.ui2T(r, "skychat.password.errors.mismatch")
+		return c
+	default:
+		err = ctx.API.SetSkychatPassword(old, nw)
+	}
+	if err != nil {
+		c.PwErr = err.Error()
+		return c
+	}
+	c.PwSet, _ = ctx.API.SkychatPasswordIsSet() //nolint:errcheck
+	return c
 }

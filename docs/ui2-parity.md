@@ -63,8 +63,9 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 | | flags form | yes | "Edit flags" in an app's settings |
 | | filter (name, port, state, autostart), multi select start, stop, autostart | yes | |
 | chat | direct messages: peers, history, send, reply, delete | yes | polls every 3 s instead of SSE; read receipts not shown |
-| | rooms: list, messages, send, create, join, invite, add member | yes | moderation (ban, mute, approve) not ported |
-| | voice calls, skychat password | no | |
+| | rooms: list, messages, send, create, join, invite, add member, pending and declined state, ask again | yes | moderation is CLI only, Angular has none either |
+| | skychat password | yes | |
+| | voice calls | no | needs browser audio capture and playback |
 | mail | mailbox, compose, settings | yes | |
 | contacts | list, add, edit, delete, import | yes | |
 | rewards | address, history, rules | yes | |
