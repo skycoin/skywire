@@ -30,6 +30,8 @@ type Host struct {
 	Listen func(network string) (net.Listener, error)
 	// Dialers reach a peer's Port, keyed by address suffix.
 	Dialers map[string]skymailbridge.Dialer
+	// Local reaches a peer on the local network over a direct link.
+	Local skymailbridge.Dialer
 	// PeerPK names the authenticated remote PK of an inbound connection.
 	PeerPK func(net.Conn) (cipher.PubKey, bool)
 	// Sealer seals and opens envelopes as PK. Nil turns sealed mail off.
@@ -85,6 +87,7 @@ func StartService(ctx context.Context, cfg ServiceConfig) (*Service, error) {
 		PK:        cfg.PK,
 		PeerPK:    cfg.PeerPK,
 		Dialers:   cfg.Dialers,
+		Local:     cfg.Local,
 		Limits:    saved.Over(cfg.Base),
 		Outbox:    cfg.Outbox,
 		OnDeliver: cfg.OnDeliver,

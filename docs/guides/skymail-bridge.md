@@ -26,7 +26,8 @@ skywire cli mail retry                  # try the Outbox now
 ```
 
 Because it is open to every PK by default, the mailbox keeps little: a
-message over 10 MiB is refused, a mailbox holding 64 MiB (every folder
+message with over 10 MiB of files is refused (the limit counts the files,
+not their base64 as sent), a mailbox holding 64 MiB (every folder
 together) refuses mail until some is deleted or expires, and mail older
 than 7 days is deleted. `mail settings` changes any of these live and
 keeps the change in `settings.json` beside the mail (`none` removes a
@@ -37,6 +38,10 @@ The suffix picks the network, strictly: `.dmsg` goes over dmsg (whose
 sessions may themselves ride skynet) and `.skynet` over a skywire
 route. A `.skynet` delivery that cannot get a route fails rather than
 taking dmsg instead; each delivery reports the network that carried it.
+The one exception is a recipient on the same local network, which the
+address resolver sees behind the same public IP: its mail goes over a
+direct link on the LAN whatever the suffix, and takes the suffix's network
+when that link cannot be made.
 
 In the browser desk the same actions are the ☰ **mail** app. The mailbox
 also delivers to a Postfix host set up as below:

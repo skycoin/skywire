@@ -51,17 +51,18 @@ func TestOversizedMessageIsRefusedAndTheSessionSurvives(t *testing.T) {
 	n := newTestNet()
 	a, b := n.addVisor(t), n.addVisor(t)
 	b.mb.SetLimits(Limits{MaxMessageSize: 4096})
+	wire := WireSize(4096)
 
 	tc, done := rawSession(t, n, a.pk, b.pk)
 	defer done()
-	require.Contains(t, cmd(t, tc, 250, "EHLO a"), "SIZE 4096")
-	cmd(t, tc, 552, "MAIL FROM:<x@y> SIZE=10000")
+	require.Contains(t, cmd(t, tc, 250, "EHLO a"), fmt.Sprintf("SIZE %d", wire))
+	cmd(t, tc, 552, "MAIL FROM:<x@y> SIZE=%d", wire+1)
 
 	cmd(t, tc, 250, "MAIL FROM:<%s>", addr("a", a.pk))
 	cmd(t, tc, 250, "RCPT TO:<%s>", addr("b", b.pk))
 	cmd(t, tc, 354, "DATA")
 	w := bufio.NewWriter(tc.W)
-	for range 200 {
+	for range wire/72 + 1 {
 		fmt.Fprintf(w, "%s\r\n", strings.Repeat("x", 70)) //nolint:errcheck
 	}
 	require.NoError(t, w.Flush())
@@ -75,6 +76,35 @@ func TestOversizedMessageIsRefusedAndTheSessionSurvives(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, inbox, 1)
 	require.Equal(t, "small", inbox[0].Subject)
+}
+
+// TestLimitCountsTheFiles: the limit is on the files a sender picks, so
+// attachments that add up to it arrive though base64 makes them bigger.
+func TestLimitCountsTheFiles(t *testing.T) {
+	n := newTestNet()
+	a, b := n.addVisor(t), n.addVisor(t)
+	const limit = 300 << 10
+	b.mb.SetLimits(Limits{MaxMessageSize: limit})
+	send := func(sizes ...int) *SendResult {
+		out := Outgoing{To: []string{addr("b", b.pk)}, Subject: "files", Body: strings.Repeat("text ", 200)}
+		for i, s := range sizes {
+			out.Attachments = append(out.Attachments, OutgoingAttachment{Name: fmt.Sprintf("file-%d.mp3", i), Data: make([]byte, s)})
+		}
+		res, _ := a.mb.Send(context.Background(), out) //nolint:errcheck
+		return res
+	}
+
+	at := send(limit*2/3, limit/3)
+	require.Empty(t, at.Recipients[0].Err, "files that add up to the limit arrive")
+	inbox, err := b.mb.List(FolderInbox)
+	require.NoError(t, err)
+	require.Len(t, inbox, 1)
+	raw, err := b.mb.Raw(FolderInbox, inbox[0].ID)
+	require.NoError(t, err)
+	require.Greater(t, len(raw), limit*4/3, "and take a third more as sent")
+
+	over := send(limit*2/3, limit/3+mimeAllowance)
+	require.Contains(t, over.Recipients[0].Err, "552")
 }
 
 func TestFullMailboxRefusesUntilRoomIsMade(t *testing.T) {

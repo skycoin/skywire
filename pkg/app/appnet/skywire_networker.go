@@ -116,6 +116,14 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 		opts.AppName = AppNameFromContext(ctx)
 	}
 
+	if opts.LocalOnly {
+		directConn, err := r.dialLocal(ctx, addr, opts)
+		if err != nil {
+			return nil, err
+		}
+		return &SkywireConn{Conn: directConn, freePort: freePort}, nil
+	}
+
 	// Only take the direct shortcut when the caller expressed NO routing
 	// preference: min-hops <= 1 AND no explicit mux request. opts.MinHops > 1
 	// means the caller wants intermediates (direct is 0 hops).
@@ -154,6 +162,27 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 		nrg:      conn.(*router.NoiseRouteGroup),
 		freePort: freePort,
 	}, nil
+}
+
+// ErrNoLocalLink is a local-only dial's answer when the peer has no direct
+// link and is not on this visor's local network.
+var ErrNoLocalLink = errors.New("no direct link to a peer on the local network")
+
+// dialLocal is the 0-hop direct dial over a transport to a peer on the local
+// network, which it makes when there is none. It honors min-hops like the
+// shortcut, so a visor set to route through others never takes it.
+func (r *SkywireNetworker) dialLocal(ctx context.Context, addr Addr, opts *router.DialOptions) (net.Conn, error) {
+	if r.appDirectMux == nil || !r.directShortcutEligible(opts, IsCarrierDial(ctx)) {
+		return nil, ErrNoLocalLink
+	}
+	if err := r.appDirectMux.EnsureLocalTransport(ctx, addr.PubKey); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrNoLocalLink, err)
+	}
+	conn, ok := r.tryDirectDial(addr, opts.AppName)
+	if !ok {
+		return nil, ErrNoLocalLink
+	}
+	return conn, nil
 }
 
 // directShortcutEligible reports whether a dial with these opts may take the

@@ -1178,7 +1178,7 @@
     <string name="mail_attachment_failed">Could not save the attachment: %1$s</string>
     <string name="mail_compose_title">New message</string>
     <string name="mail_to_hint">A SkyMail address, or a visor’s public key</string>
-    <string name="mail_via_hint">Every address in To and Cc goes over this network. dmsg needs no route; skynet is faster when one exists.</string>
+    <string name="mail_via_hint">Every address in To and Cc goes over this network. A recipient on your local network gets a direct link instead. dmsg needs no route; skynet is faster when one exists.</string>
     <string name="mail_contacts">Contacts</string>
     <string name="mail_no_contacts">No contacts yet. Add one, or save a sender from a message.</string>
     <string name="mail_contacts_shared">The visor’s contact book. SkyChat names people from it too.</string>
@@ -1196,7 +1196,7 @@
     <string name="mail_body">Message</string>
     <string name="mail_attach">Attach files</string>
     <string name="mail_remove">Remove</string>
-    <string name="mail_send_note">Mail goes out now, over dmsg for a .dmsg address. A recipient whose visor is offline does not get it, and nothing retries.</string>
+    <string name="mail_send_note">Mail goes out now. A recipient whose visor is offline does not get it, and nothing retries.</string>
     <string name="mail_send">Send</string>
     <string name="mail_sending">Sending…</string>
     <string name="mail_sent">Sent</string>
@@ -1204,8 +1204,8 @@
     <string name="mail_send_unknown">Still delivering: the visor has not answered yet. Check Sent in a few minutes before sending it again.</string>
     <string name="mail_bad_address">Not a SkyMail address: %1$s</string>
     <string name="mail_no_recipient">Add a recipient.</string>
-    <string name="mail_attachments_too_big">These attachments become %1$s in transit — a message can be about %2$s.</string>
-    <string name="mail_sent_size">About %1$s when sent, of %2$s allowed. Mail carries files as text, which makes them about a third bigger.</string>
+    <string name="mail_attachments_too_big">These files add up to %1$s, and a message can carry %2$s.</string>
+    <string name="mail_attachments_size">Attachments: %1$s of %2$s.</string>
     <string name="mail_result_title">Not everyone got it</string>
     <string name="mail_result_delivered">Delivered over %1$s</string>
     <string name="mail_result_failed">Not delivered: %1$s</string>

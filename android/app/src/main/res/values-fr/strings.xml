@@ -1218,7 +1218,7 @@
     <string name="mail_attachment_failed">Impossible d’enregistrer la pièce jointe : %1$s</string>
     <string name="mail_compose_title">Nouveau message</string>
     <string name="mail_to_hint">Une adresse SkyMail, ou la clé publique d’un visor</string>
-    <string name="mail_via_hint">Toutes les adresses de À et Cc passent par ce réseau. dmsg n’exige pas de route ; skynet est plus rapide quand il en existe une.</string>
+    <string name="mail_via_hint">Toutes les adresses de À et Cc passent par ce réseau. Un destinataire sur votre réseau local passe par un lien direct. dmsg n’exige pas de route ; skynet est plus rapide quand il en existe une.</string>
     <string name="mail_contacts">Contacts</string>
     <string name="mail_no_contacts">Pas encore de contacts. Ajoutez-en un, ou enregistrez un expéditeur depuis un message.</string>
     <string name="mail_contacts_shared">Le carnet de contacts du visor. SkyChat y prend aussi les noms.</string>
@@ -1236,7 +1236,7 @@
     <string name="mail_body">Message</string>
     <string name="mail_attach">Joindre des fichiers</string>
     <string name="mail_remove">Retirer</string>
-    <string name="mail_send_note">Le courrier part maintenant, via dmsg pour une adresse .dmsg. Un destinataire dont le visor est hors ligne ne le reçoit pas, et rien ne réessaie.</string>
+    <string name="mail_send_note">Le courrier part maintenant. Un destinataire dont le visor est hors ligne ne le reçoit pas, et rien ne réessaie.</string>
     <string name="mail_send">Envoyer</string>
     <string name="mail_sending">Envoi…</string>
     <string name="mail_sent">Envoyé</string>
@@ -1244,8 +1244,8 @@
     <string name="mail_send_unknown">Livraison en cours : le visor n’a pas encore répondu. Vérifiez Envoyés dans quelques minutes avant de renvoyer.</string>
     <string name="mail_bad_address">Ce n’est pas une adresse SkyMail : %1$s</string>
     <string name="mail_no_recipient">Ajoutez un destinataire.</string>
-    <string name="mail_attachments_too_big">Ces pièces jointes deviennent %1$s en transit — un message peut faire environ %2$s.</string>
-    <string name="mail_sent_size">Environ %1$s à l’envoi, sur %2$s autorisés. Le courrier transporte les fichiers sous forme de texte, ce qui les grossit d’environ un tiers.</string>
+    <string name="mail_attachments_too_big">Ces fichiers font %1$s au total, et un message peut en porter %2$s.</string>
+    <string name="mail_attachments_size">Pièces jointes : %1$s sur %2$s.</string>
     <string name="mail_result_title">Tout le monde ne l’a pas reçu</string>
     <string name="mail_result_delivered">Livré via %1$s</string>
     <string name="mail_result_failed">Non livré : %1$s</string>

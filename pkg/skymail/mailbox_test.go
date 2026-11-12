@@ -8,6 +8,7 @@ import (
 	"net/smtp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -350,4 +351,56 @@ func TestWhitelistPersistsAcrossReopen(t *testing.T) {
 	again, err = Open(Config{Dir: dir, PK: pk})
 	require.NoError(t, err)
 	require.Empty(t, again.Whitelist(), "clearing it opens the mailbox to everyone again")
+}
+
+// countingDialer counts its dials, and fails them while off is set.
+type countingDialer struct {
+	d     skymailbridge.Dialer
+	dials atomic.Int32
+	off   atomic.Bool
+}
+
+func (c *countingDialer) Dial(ctx context.Context, peer cipher.PubKey, port uint16) (net.Conn, error) {
+	c.dials.Add(1)
+	if c.off.Load() {
+		return nil, errors.New("peer is not on the local network")
+	}
+	return c.d.Dial(ctx, peer, port)
+}
+
+// TestLocalLinkComesFirst: a peer on the local network gets the mail over
+// the direct link, any other over its address's network, and a refusal
+// over the direct link is final.
+func TestLocalLinkComesFirst(t *testing.T) {
+	n := newTestNet()
+	local, named := &countingDialer{}, &countingDialer{}
+	a := n.addVisor(t, func(c *Config) {
+		local.d, named.d = n.dialerFor(c.PK), n.dialerFor(c.PK)
+		c.Dialers = map[string]skymailbridge.Dialer{".skynet": named}
+		c.Local = local
+	})
+	b := n.addVisor(t)
+	send := func(body string) RcptResult {
+		res, _ := a.mb.Send(context.Background(), Outgoing{To: []string{addr("b", b.pk)}, Body: body}) //nolint:errcheck
+		return res.Recipients[0]
+	}
+
+	require.Empty(t, send("near").Err)
+	require.EqualValues(t, 1, local.dials.Load())
+	require.Zero(t, named.dials.Load())
+
+	local.off.Store(true)
+	require.Empty(t, send("far").Err)
+	require.EqualValues(t, 2, local.dials.Load())
+	require.EqualValues(t, 1, named.dials.Load(), "not on the local network, so over the named network")
+
+	local.off.Store(false)
+	b.mb.SetLimits(Limits{MaxMessageSize: 1024})
+	r := send(strings.Repeat("x", int(WireSize(1024))))
+	require.Contains(t, r.Err, "552")
+	require.EqualValues(t, 1, named.dials.Load(), "a refusal is not sent again over the named network")
+
+	inbox, err := b.mb.List(FolderInbox)
+	require.NoError(t, err)
+	require.Len(t, inbox, 2)
 }

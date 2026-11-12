@@ -163,16 +163,17 @@ func TestSealedEnvelopeMeetsTheMessageLimit(t *testing.T) {
 	n := newTestNet()
 	a, b, c := n.addVisor(t), n.addVisor(t), n.addVisor(t)
 	b.mb.SetLimits(Limits{MaxMessageSize: 4096})
-	fits, err := Seal([]byte(strings.Repeat("x", 4000)), a.sk, b.pk)
+	wire := int(WireSize(4096))
+	fits, err := Seal([]byte(strings.Repeat("x", wire-100)), a.sk, b.pk)
 	require.NoError(t, err)
-	require.Greater(t, len(fits), 4096)
+	require.Greater(t, len(fits), wire)
 	require.NoError(t, relayAs(n, c.pk, b.pk, addr("a", a.pk), fits), "the limit is on the message, not its envelope")
 
-	big, err := Seal([]byte(strings.Repeat("x", 5000)), a.sk, b.pk)
+	big, err := Seal([]byte(strings.Repeat("x", wire+1000)), a.sk, b.pk)
 	require.NoError(t, err)
 	require.ErrorContains(t, relayAs(n, c.pk, b.pk, addr("a", a.pk), big), "552")
 
-	err = relayAs(n, a.pk, b.pk, addr("a", a.pk), []byte(strings.Repeat("y", 5000)))
+	err = relayAs(n, a.pk, b.pk, addr("a", a.pk), []byte(strings.Repeat("y", wire+1000)))
 	require.ErrorContains(t, err, "552", "plain mail still meets the plain limit")
 }
 

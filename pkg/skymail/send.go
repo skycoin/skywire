@@ -221,10 +221,6 @@ func (mb *Mailbox) deliverGroup(ctx context.Context, from string, g *peerGroup, 
 		_, err := mb.deliverLocal(mb.cfg.PK, cipher.PubKey{}, msg)
 		return "local", err
 	}
-	dialer := mb.cfg.Dialers[g.suffix]
-	if dialer == nil {
-		return "", fmt.Errorf("no route to %s addresses from this visor", g.suffix)
-	}
 	cfg := skymailbridge.Config{
 		Suffix:     g.suffix,
 		Mode:       "b",
@@ -232,6 +228,25 @@ func (mb *Mailbox) deliverGroup(ctx context.Context, from string, g *peerGroup, 
 		RemotePort: 25,
 		Require:    require,
 	}
+	// A peer on the local network takes the mail over a direct link whatever
+	// network its address names. Over dmsg it would go out to a server and back.
+	if mb.cfg.Local != nil {
+		via, err := mb.relay(ctx, mb.cfg.Local, cfg, from, g, msg)
+		if _, refused := errors.AsType[*textproto.Error](err); err == nil || refused {
+			return via, err
+		}
+		mb.log.WithError(err).WithField("peer", g.pk.Hex()).Debug("skymail: no local link")
+	}
+	dialer := mb.cfg.Dialers[g.suffix]
+	if dialer == nil {
+		return "", fmt.Errorf("no route to %s addresses from this visor", g.suffix)
+	}
+	return mb.relay(ctx, dialer, cfg, from, g, msg)
+}
+
+// relay runs one SMTP transaction over dialer and names the network that
+// carried it.
+func (mb *Mailbox) relay(ctx context.Context, dialer skymailbridge.Dialer, cfg skymailbridge.Config, from string, g *peerGroup, msg []byte) (string, error) {
 	rd := &recordingDialer{d: dialer, life: ctx}
 	err := skymailbridge.Relay(ctx, rd, cfg, from, g.rcpts, msg, mb.log)
 	if rd.stop != nil {

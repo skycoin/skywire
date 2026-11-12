@@ -1124,7 +1124,7 @@
     <string name="mail_attachment_failed">无法保存附件：%1$s</string>
     <string name="mail_compose_title">新邮件</string>
     <string name="mail_to_hint">SkyMail 地址，或节点的公钥</string>
-    <string name="mail_via_hint">收件人和抄送中的所有地址都经由此网络发送。dmsg 无需路由；有路由时 skynet 更快。</string>
+    <string name="mail_via_hint">收件人和抄送中的所有地址都经由此网络发送；与你在同一局域网的收件人则走直连。dmsg 无需路由；有路由时 skynet 更快。</string>
     <string name="mail_contacts">联系人</string>
     <string name="mail_no_contacts">还没有联系人。添加一个，或从邮件中保存发件人。</string>
     <string name="mail_contacts_shared">这是节点的通讯录，SkyChat 也用这里的名称。</string>
@@ -1142,7 +1142,7 @@
     <string name="mail_body">正文</string>
     <string name="mail_attach">添加附件</string>
     <string name="mail_remove">移除</string>
-    <string name="mail_send_note">邮件会立即发出，.dmsg 地址走 dmsg。收件人的节点离线时收不到，也不会重试。</string>
+    <string name="mail_send_note">邮件会立即发出。收件人的节点离线时收不到，也不会重试。</string>
     <string name="mail_send">发送</string>
     <string name="mail_sending">正在发送…</string>
     <string name="mail_sent">已发送</string>
@@ -1150,8 +1150,8 @@
     <string name="mail_send_unknown">仍在发送：节点还没有应答。请过几分钟查看已发送，再决定是否重发。</string>
     <string name="mail_bad_address">不是 SkyMail 地址：%1$s</string>
     <string name="mail_no_recipient">请添加收件人。</string>
-    <string name="mail_attachments_too_big">这些附件在传输时会膨胀到 %1$s，而一封邮件大约只能有 %2$s。</string>
-    <string name="mail_sent_size">发送时约 %1$s，上限 %2$s。邮件以文本形式携带文件，体积会增大约三分之一。</string>
+    <string name="mail_attachments_too_big">这些文件共 %1$s，而一封邮件最多可带 %2$s。</string>
+    <string name="mail_attachments_size">附件共 %1$s，上限 %2$s。</string>
     <string name="mail_result_title">没有全部送达</string>
     <string name="mail_result_delivered">已通过 %1$s 送达</string>
     <string name="mail_result_failed">未送达：%1$s</string>

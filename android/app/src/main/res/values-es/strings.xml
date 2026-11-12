@@ -1220,7 +1220,7 @@
     <string name="mail_attachment_failed">No se pudo guardar el adjunto: %1$s</string>
     <string name="mail_compose_title">Mensaje nuevo</string>
     <string name="mail_to_hint">Una dirección de SkyMail o la clave pública de un nodo</string>
-    <string name="mail_via_hint">Todas las direcciones de Para y Cc van por esta red. dmsg no necesita ruta; skynet es más rápido cuando hay una.</string>
+    <string name="mail_via_hint">Todas las direcciones de Para y Cc van por esta red. Un destinatario en tu red local recibe un enlace directo. dmsg no necesita ruta; skynet es más rápido cuando hay una.</string>
     <string name="mail_contacts">Contactos</string>
     <string name="mail_no_contacts">Aún no hay contactos. Añade uno o guarda un remitente desde un mensaje.</string>
     <string name="mail_contacts_shared">La libreta de contactos del nodo. SkyChat también toma de aquí los nombres.</string>
@@ -1238,7 +1238,7 @@
     <string name="mail_body">Mensaje</string>
     <string name="mail_attach">Adjuntar archivos</string>
     <string name="mail_remove">Quitar</string>
-    <string name="mail_send_note">El correo sale ahora, por dmsg para una dirección .dmsg. Si el nodo del destinatario está desconectado, no lo recibe y nada lo reintenta.</string>
+    <string name="mail_send_note">El correo sale ahora. Si el nodo del destinatario está desconectado, no lo recibe y nada lo reintenta.</string>
     <string name="mail_send">Enviar</string>
     <string name="mail_sending">Enviando…</string>
     <string name="mail_sent">Enviado</string>
@@ -1246,8 +1246,8 @@
     <string name="mail_send_unknown">Sigue en camino: el nodo aún no ha respondido. Revisa Enviados en unos minutos antes de reenviar.</string>
     <string name="mail_bad_address">No es una dirección de SkyMail: %1$s</string>
     <string name="mail_no_recipient">Añade un destinatario.</string>
-    <string name="mail_attachments_too_big">Estos adjuntos ocupan %1$s en tránsito; un mensaje puede ser de unos %2$s.</string>
-    <string name="mail_sent_size">Unos %1$s al enviarlo, de %2$s permitidos. El correo lleva los archivos como texto, lo que los hace un tercio más grandes.</string>
+    <string name="mail_attachments_too_big">Estos archivos suman %1$s, y un mensaje puede llevar %2$s.</string>
+    <string name="mail_attachments_size">Adjuntos: %1$s de %2$s.</string>
     <string name="mail_result_title">No llegó a todos</string>
     <string name="mail_result_delivered">Entregado por %1$s</string>
     <string name="mail_result_failed">No entregado: %1$s</string>
