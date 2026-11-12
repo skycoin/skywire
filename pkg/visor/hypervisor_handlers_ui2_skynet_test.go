@@ -46,7 +46,9 @@ func (a *ui2SkynetAPI) DeregisterTCPPort(port int) error {
 	return nil
 }
 
-func (a *ui2SkynetAPI) ListRawTCP() (map[uuid.UUID]*appnet.RawTCPForwardConn, error) { return a.fwds, nil }
+func (a *ui2SkynetAPI) ListRawTCP() (map[uuid.UUID]*appnet.RawTCPForwardConn, error) {
+	return a.fwds, nil
+}
 
 func TestUI2Skynet(t *testing.T) {
 	api := &ui2SkynetAPI{fwds: map[uuid.UUID]*appnet.RawTCPForwardConn{}}
