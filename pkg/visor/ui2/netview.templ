@@ -1,0 +1,153 @@
+package ui2
+
+import (
+	"strconv"
+	"strings"
+
+	"github.com/skycoin/skywire/pkg/visor/netview"
+)
+
+// NetView is the network view, as network-view.component.ts: every visor
+// the service discovery, transport discovery and uptime tracker know of.
+type NetView struct {
+	Rows    []netview.Entry
+	Pager   Pager
+	Country string
+	Version string
+	Min     int
+	All     bool
+	Online  int
+	Offline int
+	NotInUT int
+	Total   int
+	Fetched string
+	Err     string
+}
+
+// NetViewOf counts the totals and keeps the rows the filters match, 100 to
+// a page.
+func NetViewOf(es []netview.Entry, q ListQuery, country, version string, minT int, all bool) NetView {
+	v := NetView{Country: country, Version: version, Min: minT, All: all, Total: len(es)}
+	var rows []netview.Entry
+	for _, e := range es {
+		switch e.UTStatus {
+		case "online":
+			v.Online++
+		case "offline":
+			v.Offline++
+		default:
+			v.NotInUT++
+		}
+		if !all && e.UTStatus != "online" {
+			continue
+		}
+		if country != "" && !strings.EqualFold(e.Country, country) {
+			continue
+		}
+		if version != "" && e.Version != version {
+			continue
+		}
+		if minT > 0 && e.Total < minT {
+			continue
+		}
+		if !q.Match(e.PK, e.Country, e.Version, e.Services) {
+			continue
+		}
+		rows = append(rows, e)
+	}
+	v.Rows, v.Pager = Paginate(rows, q, 100)
+	return v
+}
+
+// netRowClass follows the Angular colouring: offline in the uptime
+// tracker, absent from it, or online with fewer than two real transports.
+func netRowClass(e netview.Entry) string {
+	switch {
+	case e.UTStatus == "offline":
+		return "offline"
+	case e.UTStatus == "":
+		return "dim"
+	case e.STCPR+e.SUDPH < 2:
+		return "warn-text"
+	}
+	return ""
+}
+
+func (v NetView) url() string {
+	return "ui2/network/body"
+}
+
+templ NetViewPage(v NetView) {
+	@Layout(T(ctx, "nodes.network-title"), "#/nodes/network") {
+		<section class="card">
+			<div class="head"><h1>{ T(ctx, "nodes.network-title") }</h1></div>
+			<form id="nv-q" class="bar" hx-get={ v.url() } hx-target="#nv" hx-swap="outerHTML" hx-trigger="input changed delay:300ms, change, submit">
+				<input class="filter" type="search" name="q" placeholder={ T(ctx, "network-view.search") } aria-label={ T(ctx, "network-view.search") } autocomplete="off"/>
+				<input name="country" size="4" maxlength="2" placeholder={ T(ctx, "network-view.country") } aria-label={ T(ctx, "network-view.country") }/>
+				<input name="version" size="10" placeholder={ T(ctx, "network-view.version") } aria-label={ T(ctx, "network-view.version") }/>
+				<input name="min" type="number" min="0" style="width:7em" placeholder={ T(ctx, "network-view.min-transports") } aria-label={ T(ctx, "network-view.min-transports") }/>
+				<label class="check"><input type="checkbox" name="online" value="1" checked/> { T(ctx, "network-view.online-only") }</label>
+				<input type="hidden" name="filtered" value="1"/>
+			</form>
+			@NetViewBody(v)
+		</section>
+	}
+}
+
+// NetViewBody polls every 5 minutes, as the visor caches the view that long.
+templ NetViewBody(v NetView) {
+	<div id="nv" hx-get={ v.url() + "?page=" + itoa(v.Pager.Page) } hx-trigger="every 300s [document.visibilityState === 'visible']" hx-swap="outerHTML" hx-include="#nv-q">
+		@ErrorBox(v.Err)
+		<div class="bar small">
+			<span>{ itoa(v.Total) } { T(ctx, "common.visors") }</span>
+			<span class="ok">{ itoa(v.Online) } online</span>
+			<span class="error">{ itoa(v.Offline) } { T(ctx, "network-view.legend.offline") }</span>
+			<span class="dim">{ itoa(v.NotInUT) } { T(ctx, "network-view.legend.not-in-ut") }</span>
+			<span class="warn-text">{ T(ctx, "network-view.legend.low-transports") }</span>
+			<span class="spacer"></span>
+			<span class="dim">{ T(ctx, "network-view.last-updated") }: { v.Fetched }</span>
+			<button class="btn sm" type="button" hx-get={ v.url() + "?refresh=1" } hx-target="#nv" hx-swap="outerHTML" hx-include="#nv-q"><span class="mi">refresh</span>{ T(ctx, "network-view.refresh") }</button>
+		</div>
+		if len(v.Rows) == 0 && v.Err == "" {
+			<p class="dim">{ T(ctx, "network-view.empty") }</p>
+		} else {
+			<div class="bar">
+				@PagerNav(v.Pager, v.url(), "#nv")
+			</div>
+			<div class="table-wrap">
+				<table class="list">
+					<thead>
+						<tr>
+							<th>{ T(ctx, "network-view.col.pk") }</th>
+							<th>{ T(ctx, "network-view.col.country") }</th>
+							<th>{ T(ctx, "network-view.col.version") }</th>
+							<th>{ T(ctx, "network-view.col.services") }</th>
+							<th class="num">stcpr</th>
+							<th class="num">sudph</th>
+							<th class="num">dmsg</th>
+							<th class="num">stcp</th>
+							<th class="num">{ T(ctx, "network-view.col.total") }</th>
+							<th>{ T(ctx, "network-view.col.status") }</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, e := range v.Rows {
+							<tr class={ netRowClass(e) }>
+								<td data-label={ T(ctx, "network-view.col.pk") }><span class="mono small pk-text" title={ e.PK }>{ e.PK }</span></td>
+								<td data-label={ T(ctx, "network-view.col.country") }>{ e.Country }</td>
+								<td class="small" data-label={ T(ctx, "network-view.col.version") }>{ e.Version }</td>
+								<td class="small" data-label={ T(ctx, "network-view.col.services") }>{ e.Services }</td>
+								<td class="num" data-label="stcpr">{ strconv.Itoa(e.STCPR) }</td>
+								<td class="num" data-label="sudph">{ strconv.Itoa(e.SUDPH) }</td>
+								<td class="num" data-label="dmsg">{ strconv.Itoa(e.DMSG) }</td>
+								<td class="num" data-label="stcp">{ strconv.Itoa(e.STCP) }</td>
+								<td class="num" data-label={ T(ctx, "network-view.col.total") }>{ strconv.Itoa(e.Total) }</td>
+								<td data-label={ T(ctx, "network-view.col.status") }>{ e.UTStatus }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	</div>
+}
