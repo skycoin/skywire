@@ -2,6 +2,7 @@
 package visor
 
 import (
+	"encoding/json"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -20,6 +21,7 @@ func (hv *Hypervisor) ui2AlertsRoutes(r *httputil.Router) {
 	r.Get("/ui2/visors/{pk}/settings/alerts", hv.ui2Alerts(""))
 	r.Put("/ui2/visors/{pk}/settings/alerts", hv.ui2Alerts("save"))
 	r.Post("/ui2/visors/{pk}/settings/alerts/test", hv.ui2Alerts("test"))
+	r.Post("/ui2/visors/{pk}/settings/alerts/push", hv.ui2Alerts("push-add"))
 	r.Delete("/ui2/visors/{pk}/settings/alerts/push/{id}", hv.ui2Alerts("push"))
 }
 
@@ -34,6 +36,7 @@ func ui2AlertsOf(pk string, st *alerts.Status) ui2.Alerts {
 	if st == nil {
 		return a
 	}
+	a.PushKey = st.PushPublicKey
 	s := st.Settings
 	a.Emails, a.Webhook, a.From = strings.Join(s.EmailTo, ", "), s.Webhook, s.From
 	if st.OfflineAfter != "" {
@@ -138,6 +141,19 @@ func (hv *Hypervisor) ui2Alerts(op string) http.HandlerFunc {
 				hv.render(w, r, ui2.AlertsPanel(a))
 				return
 			}
+		case "push-add":
+			var sub alerts.PushSubscription
+			err = json.Unmarshal([]byte(r.FormValue("sub")), &sub)
+			if err == nil {
+				_, err = ctx.API.AlertsPushAdd(sub)
+			}
+			if err != nil {
+				a := ui2AlertsOf(pk, st)
+				a.Err = err.Error()
+				hv.render(w, r, ui2.AlertsPanel(a))
+				return
+			}
+			toast = hv.ui2T(r, "ui2.alerts.push-added")
 		case "push":
 			if !ui2CallAPI(w, r, hv.deleteAlertsPush(), nil) {
 				return
