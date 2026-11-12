@@ -31,6 +31,7 @@ type BrowserWallet struct {
 	Label     string           `json:"label"`
 	Type      string           `json:"type"`
 	Encrypted bool             `json:"encrypted"`
+	Temporary bool             `json:"temporary,omitempty"`
 	XPub      string           `json:"xpub,omitempty"`
 	Addresses []BrowserAddress `json:"addresses"`
 }
@@ -110,6 +111,7 @@ func LoadBrowserWallets(n Node, ws []BrowserWallet) Wallets {
 			Label:     w.Label,
 			Type:      w.Type,
 			Encrypted: w.Encrypted,
+			Temp:      w.Temporary,
 			Addresses: len(w.Addresses),
 			Href:      bwWalletURL(w.ID),
 		}
@@ -166,5 +168,5 @@ func LoadBrowserHistory(n Node, ws []BrowserWallet, filter string, q ListQuery) 
 	for _, w := range ws {
 		hw = append(hw, w.hist())
 	}
-	return history(n, hw, filter, q, Txns{Filter: filter, URL: "bw/history/list", Post: true})
+	return history(n, hw, filter, q, Txns{Filter: filter, URL: "bw/history/list", Post: true, History: true})
 }
