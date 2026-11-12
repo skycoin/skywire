@@ -30,6 +30,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
@@ -213,7 +214,12 @@ class SkywireCoreService : Service() {
                     }
 
                     val pump = launch(Dispatchers.IO) {
-                        process.inputStream.bufferedReader().forEachLine { log.line(it) }
+                        // A forced stop closes the stream under the read. Thrown
+                        // from this child, that would crash the app.
+                        try {
+                            process.inputStream.bufferedReader().forEachLine { log.line(it) }
+                        } catch (_: IOException) {
+                        }
                     }
                     val exit = runInterruptible(Dispatchers.IO) { process.waitFor() }
                     pump.join()
