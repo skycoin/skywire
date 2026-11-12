@@ -1,3 +1,5 @@
+// Package ui2 src/ui2/ui2.go c3-ui-wallet
+//
 // Package ui2 is a server rendered wallet GUI built with templ and htmx. It
 // sits beside the Angular wallet and reads the node through its REST API
 // client, so any host holding an api.Client can serve it.
@@ -53,6 +55,7 @@ type Page struct {
 	Base    string
 	Lang    string
 	Classic string
+	Root    string
 	// Coin is the coin the pages are about, and Coins every coin the host
 	// offers, when it serves several.
 	Coin  *Coin
@@ -78,7 +81,7 @@ func From(ctx context.Context) *Page {
 	if p, ok := ctx.Value(pageKey{}).(*Page); ok {
 		return p
 	}
-	return &Page{Base: "./", Lang: "en", Classic: "../"}
+	return &Page{Base: "./", Lang: "en", Classic: "angular/"}
 }
 
 // T translates key into the page language. args are name, value pairs that
