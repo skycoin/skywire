@@ -98,6 +98,7 @@
     <string name="core_notification_title">Skywire running</string>
     <string name="core_notification_starting">Starting the visor…</string>
     <string name="core_notification_running">Connected to the Skywire network.</string>
+    <string name="core_notification_offline">Waiting for an internet connection.</string>
     <string name="core_notification_restarting">Visor crashed — restarting (attempt %1$d).</string>
 
     <!-- Voice calls -->
@@ -134,11 +135,13 @@
     <!-- Home / Connect -->
     <string name="state_disconnected">Disconnected</string>
     <string name="state_starting">Starting…</string>
+    <string name="state_no_internet">No internet connection</string>
     <string name="state_connected">Connected</string>
     <string name="state_stopping">Stopping…</string>
     <string name="state_restarting">Restarting (attempt %1$d)…</string>
     <string name="home_hint_disconnected">Connect starts the Skywire core on this phone.</string>
     <string name="home_hint_starting">Joining the Skywire network. The first connection can take a few minutes.</string>
+    <string name="home_hint_no_internet">This phone has no internet connection. Skywire joins the network by itself once the phone is back online.</string>
     <string name="home_error_start">The core did not come up. Check the process log.</string>
     <string name="visor_info_title">Visor</string>
     <string name="visor_public_key">Public key</string>

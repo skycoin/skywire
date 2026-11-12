@@ -196,6 +196,7 @@ private fun PermissionPrompt(
 private fun StatusLine(state: HomeUiState) {
     val core = state.coreState
     val (label, color) = when {
+        state.waitingForInternet -> stringResource(R.string.state_no_internet) to MaterialTheme.colorScheme.error
         state.connected -> stringResource(R.string.state_connected) to SkyAccents.success
         core is CoreState.Starting || core is CoreState.Running ->
             stringResource(R.string.state_starting) to SkyAccents.warning
@@ -233,8 +234,10 @@ private fun ConnectButton(
     val busy = core is CoreState.Starting || core is CoreState.Stopping
     val showDisconnect = core is CoreState.Running || core is CoreState.Restarting
 
-    val connecting = core is CoreState.Starting || core is CoreState.Restarting ||
-        (core is CoreState.Running && !state.connected)
+    val connecting = !state.waitingForInternet && (
+        core is CoreState.Starting || core is CoreState.Restarting ||
+            (core is CoreState.Running && !state.connected)
+        )
 
     // Idle: the brand gradient asking to be pressed. Running: a quiet tonal
     // disc — stopping should never look like the loud action — with the
@@ -276,7 +279,7 @@ private fun ConnectButton(
                         color = content,
                         strokeWidth = 4.dp,
                     )
-                    showDisconnect && !state.connected -> Column(
+                    showDisconnect && !state.connected && !state.waitingForInternet -> Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         CircularProgressIndicator(
@@ -328,6 +331,13 @@ private fun StatusCaption(state: HomeUiState, onOpenLogs: (String) -> Unit) {
                 textAlign = TextAlign.Center,
             )
         core is CoreState.Stopping -> Unit
+        state.waitingForInternet ->
+            Text(
+                stringResource(R.string.home_hint_no_internet),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+                textAlign = TextAlign.Center,
+            )
         // Startup can take minutes on a slow network (dmsg discovery retries),
         // so give the user something to watch instead of a bare spinner.
         !state.connected -> {

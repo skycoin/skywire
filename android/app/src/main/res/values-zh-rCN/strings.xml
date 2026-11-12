@@ -107,6 +107,7 @@
     <string name="core_notification_title">Skywire 正在运行</string>
     <string name="core_notification_starting">正在启动节点…</string>
     <string name="core_notification_running">已连接到 Skywire 网络。</string>
+    <string name="core_notification_offline">正在等待网络连接。</string>
     <string name="core_notification_restarting">节点已崩溃，正在重启（第 %1$d 次尝试）。</string>
 
     <!-- Voice calls -->
@@ -142,11 +143,13 @@
     <!-- Home / Connect -->
     <string name="state_disconnected">未连接</string>
     <string name="state_starting">正在启动…</string>
+    <string name="state_no_internet">无网络连接</string>
     <string name="state_connected">已连接</string>
     <string name="state_stopping">正在停止…</string>
     <string name="state_restarting">正在重启（第 %1$d 次尝试）…</string>
     <string name="home_hint_disconnected">点按“连接”即可在本机启动 Skywire 核心。</string>
     <string name="home_hint_starting">正在加入 Skywire 网络。首次连接可能需要几分钟。</string>
+    <string name="home_hint_no_internet">这部手机没有网络连接。手机恢复联网后，Skywire 会自动加入网络。</string>
     <string name="home_error_start">核心未能启动。请查看进程日志。</string>
     <string name="visor_info_title">节点</string>
     <string name="visor_public_key">公钥</string>

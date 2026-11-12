@@ -141,6 +141,7 @@
     <string name="core_notification_title">Skywire actif</string>
     <string name="core_notification_starting">Démarrage du visor…</string>
     <string name="core_notification_running">Connecté au réseau Skywire.</string>
+    <string name="core_notification_offline">En attente d’une connexion internet.</string>
     <string name="core_notification_restarting">Le visor a planté — redémarrage (tentative %1$d).</string>
 
     <!-- Voice calls -->
@@ -177,11 +178,13 @@
     <!-- Home / Connect -->
     <string name="state_disconnected">Déconnecté</string>
     <string name="state_starting">Démarrage…</string>
+    <string name="state_no_internet">Pas de connexion internet</string>
     <string name="state_connected">Connecté</string>
     <string name="state_stopping">Arrêt…</string>
     <string name="state_restarting">Redémarrage (tentative %1$d)…</string>
     <string name="home_hint_disconnected">Connecter démarre le cœur Skywire sur ce téléphone.</string>
     <string name="home_hint_starting">Connexion au réseau Skywire. La première connexion peut prendre quelques minutes.</string>
+    <string name="home_hint_no_internet">Ce téléphone n’a pas de connexion internet. Skywire rejoint le réseau tout seul dès que le téléphone est de nouveau en ligne.</string>
     <string name="home_error_start">Le cœur n’a pas démarré. Consultez le journal du processus.</string>
     <string name="visor_info_title">Visor</string>
     <string name="visor_public_key">Clé publique</string>
