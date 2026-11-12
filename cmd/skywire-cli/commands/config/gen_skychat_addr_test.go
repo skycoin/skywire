@@ -13,13 +13,13 @@ import (
 // A regen keeps skychat's old args, so SKYCHATADDR has to replace the kept
 // --addr or a changed address never reaches a visor that already has skychat.
 func TestSkychatAddrReachesKeptArgs(t *testing.T) {
-	restoreRegen, restoreOld, restoreConf, restoreAddr := isRegen, oldConfCache, conf, skychatAddr
+	restoreRegen, restoreOld, restoreConf, restoreAddr := regenerate, oldConfCache, conf, skychatAddr
 	t.Cleanup(func() {
-		isRegen, oldConfCache, conf, skychatAddr = restoreRegen, restoreOld, restoreConf, restoreAddr
+		regenerate, oldConfCache, conf, skychatAddr = restoreRegen, restoreOld, restoreConf, restoreAddr
 	})
 	kept := []string{"--addr", skyenv.SkychatAddr, "--pair-enable"}
 	regen := func() []string {
-		isRegen = true
+		regenerate = true
 		oldConfCache = &visorconfig.V1{Launcher: &visorconfig.Launcher{Apps: []appserver.AppConfig{
 			{Name: skyenv.SkychatName, AutoStart: true, Args: kept},
 		}}}

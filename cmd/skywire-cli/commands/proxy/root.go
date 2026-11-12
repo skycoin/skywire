@@ -83,7 +83,7 @@ var (
 	cacheDirSD        string
 	cacheDirUT        string
 	cacheFilesAge     int
-	isStats           bool
+	stats             bool
 	pubkey            cipher.PubKey
 	pk                string
 	allClients        bool

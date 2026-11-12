@@ -109,7 +109,7 @@ var pkFromSKCmd = &cobra.Command{
 }
 
 var (
-	isEnvs     bool
+	envs       bool
 	skyenvfile = resolveSkyenvFile()
 )
 var envfile string
@@ -122,29 +122,29 @@ func init() {
 	RootCmd.AddCommand(genConfigCmd, genKeysCmd, pkFromSKCmd, checkPKCmd)
 
 	// Output flags
-	genConfigCmd.Flags().BoolVarP(&isStdout, "stdout", "n", false, "write config to stdout")
+	genConfigCmd.Flags().BoolVarP(&stdout, "stdout", "n", false, "write config to stdout")
 	gHiddenFlags = append(gHiddenFlags, "stdout")
-	genConfigCmd.Flags().BoolVarP(&isSquash, "squash", "N", false, "output config without whitespace or newlines")
+	genConfigCmd.Flags().BoolVarP(&squash, "squash", "N", false, "output config without whitespace or newlines")
 	gHiddenFlags = append(gHiddenFlags, "squash")
 	msg = "output config"
 	if scriptExecString("${OUTPUT}") == "" {
 		msg += ": " + skyenv.ConfigName
 	}
 	skyenvStringVarP(genConfigCmd.Flags(), &output, "out", "o", "${OUTPUT}", msg+"")
-	genConfigCmd.Flags().BoolVarP(&isHide, "hide", "w", false, "suppress config output to terminal")
+	genConfigCmd.Flags().BoolVarP(&hide, "hide", "w", false, "suppress config output to terminal")
 	skyenvStringVar(genConfigCmd.Flags(), &walletCustody, "wallet-custody", "${WALLETCUSTODY}", "where the skycoin-web wallet keeps keys: browser|disk|remote")
 	skyenvStringVar(genConfigCmd.Flags(), &walletDir, "wallet-dir", "${WALLETDIR}", "wallet dir for --wallet-custody=disk (a seed-wallet store, not per-coin)")
 	skyenvStringVar(genConfigCmd.Flags(), &walletRemotePK, "wallet-remote", "${WALLETREMOTE}", "visor PK holding the wallets, for --wallet-custody=remote")
 	skyenvBoolVar(genConfigCmd.Flags(), &noWallet, "no-wallet", "${NOWALLET:-false}", "do not serve the skycoin-web wallet frontend")
 	gHiddenFlags = append(gHiddenFlags, "hide")
-	genConfigCmd.Flags().BoolVarP(&isEnvs, "envs", "q", false, "show the conf template (reflects flags passed)")
+	genConfigCmd.Flags().BoolVarP(&envs, "envs", "q", false, "show the conf template (reflects flags passed)")
 	genConfigCmd.Flags().StringVarP(&envfileOut, "envout", "Q", "", "write conf template to file (reflects flags passed)")
 
 	// Config generation flags
-	genConfigCmd.Flags().BoolVarP(&isForce, "force", "f", false, "remove pre-existing config")
+	genConfigCmd.Flags().BoolVarP(&force, "force", "f", false, "remove pre-existing config")
 	gHiddenFlags = append(gHiddenFlags, "force")
-	genConfigCmd.Flags().BoolVarP(&isRegen, "regen", "r", false, "regenerate existing config and retain keys")
-	genConfigCmd.Flags().BoolVarP(&isRetainHypervisors, "retainhv", "x", false, "retain existing hypervisors with regen")
+	genConfigCmd.Flags().BoolVarP(&regenerate, "regen", "r", false, "regenerate existing config and retain keys")
+	genConfigCmd.Flags().BoolVarP(&retainHypervisors, "retainhv", "x", false, "retain existing hypervisors with regen")
 	gHiddenFlags = append(gHiddenFlags, "retainhv")
 
 	// Network and deployment flags
@@ -153,7 +153,7 @@ func init() {
 	// Deployment services are dmsg-only. --dmsghttp is the (default) behavior and
 	// kept as a hidden no-op for back-compat; the former --http / --dual modes are
 	// gone — plain HTTP to deployment services is no longer supported.
-	skyenvBoolVarP(genConfigCmd.Flags(), &isDmsgHTTP, "dmsghttp", "d", "${DMSGHTTP:-false}", "use only dmsg for skywire services, no http (this is the default)")
+	skyenvBoolVarP(genConfigCmd.Flags(), &dmsgHTTP, "dmsghttp", "d", "${DMSGHTTP:-false}", "use only dmsg for skywire services, no http (this is the default)")
 	gHiddenFlags = append(gHiddenFlags, "dmsghttp")
 	skyenvStringVarP(genConfigCmd.Flags(), &dmsgHTTPPath, "dmsgconf", "D", "${DMSGCONF}", "dmsghttp config path")
 	gHiddenFlags = append(gHiddenFlags, "dmsgconf")
@@ -179,7 +179,7 @@ func init() {
 	// Transport flags
 	skyenvBoolVarP(genConfigCmd.Flags(), &disablePublicAutoConn, "autoconn", "y", "${DISABLEPUBLICAUTOCONN:-false}", "disable autoconnect to public visors")
 	gHiddenFlags = append(gHiddenFlags, "autoconn")
-	skyenvBoolVarP(genConfigCmd.Flags(), &isPublic, "public", "z", "${VISORISPUBLIC:-false}", "publicize visor in service discovery")
+	skyenvBoolVarP(genConfigCmd.Flags(), &public, "public", "z", "${VISORISPUBLIC:-false}", "publicize visor in service discovery")
 	gHiddenFlags = append(gHiddenFlags, "public")
 	skyenvIntVar(genConfigCmd.Flags(), &stcprPort, "stcpr", "${STCPRPORT:-0}", "tcp transport listening port (0 = random / shared master port)")
 	gHiddenFlags = append(gHiddenFlags, "stcpr")
@@ -260,7 +260,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "autoconn-max-per-type")
 
 	// Hypervisor and security flags
-	skyenvBoolVarP(genConfigCmd.Flags(), &isHypervisor, "ishv", "i", "${ISHYPERVISOR:-false}", "local hypervisor configuration")
+	skyenvBoolVarP(genConfigCmd.Flags(), &hypervisor, "ishv", "i", "${ISHYPERVISOR:-false}", "local hypervisor configuration")
 	skyenvStringVar(genConfigCmd.Flags(), &hvDeskAddr, "hvdeskaddr", "${HVDESKADDR}", "hypervisor desk address: where the wasm-visor hypervisor UI is served, beside the dashboard on hvaddr (default 127.0.0.1:8010)")
 	gHiddenFlags = append(gHiddenFlags, "hvdeskaddr")
 	msg = "list of public keys to add as hypervisor"
@@ -269,12 +269,12 @@ func init() {
 	}
 	skyenvArrayVarP(genConfigCmd.Flags(), &hypervisorPKs, "hvpks", "j", "${HYPERVISORPKS[@]}", msg)
 	skyenvArrayVar(genConfigCmd.Flags(), &wsPeers, "ws-peer", "${WSPEERS[@]}", "peers to hold a WebSocket transport to, <pk>@<ws(s)://host[:port]/path>, comma-separated — pins each in transport.ws_table and makes it a persistent transport (no address-resolver lookup; the address is the one given)")
-	genConfigCmd.Flags().BoolVarP(&isDisableAuth, "noauth", "c", false, "disable authentication for hypervisor UI")
+	genConfigCmd.Flags().BoolVarP(&disableAuth, "noauth", "c", false, "disable authentication for hypervisor UI")
 	gHiddenFlags = append(gHiddenFlags, "noauth")
-	genConfigCmd.Flags().BoolVarP(&isEnableAuth, "auth", "e", false, "enable auth on hypervisor UI")
+	genConfigCmd.Flags().BoolVarP(&enableAuth, "auth", "e", false, "enable auth on hypervisor UI")
 	gHiddenFlags = append(gHiddenFlags, "auth")
 	hvAuthEnv = scriptExecString("${HVAUTH}")
-	skyenvBoolVar(genConfigCmd.Flags(), &isEnablePKEndpoint, "pk-endpoint", "${ENABLEPKENDPOINT:-false}", "expose unauthenticated GET /api/pk on the hypervisor (skybian / Arch-ARM image builds set this)")
+	skyenvBoolVar(genConfigCmd.Flags(), &enablePKEndpoint, "pk-endpoint", "${ENABLEPKENDPOINT:-false}", "expose unauthenticated GET /api/pk on the hypervisor (skybian / Arch-ARM image builds set this)")
 	gHiddenFlags = append(gHiddenFlags, "pk-endpoint")
 
 	// Dmsgpty and survey whitelist flags
@@ -292,7 +292,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "survey")
 
 	// App flags
-	skyenvBoolVarP(genConfigCmd.Flags(), &isDisplayNodeIP, "publicip", "l", "${DISPLAYNODEIP:-false}", "display visor ip in service discovery")
+	skyenvBoolVarP(genConfigCmd.Flags(), &displayNodeIP, "publicip", "l", "${DISPLAYNODEIP:-false}", "display visor ip in service discovery")
 	gHiddenFlags = append(gHiddenFlags, "publicip")
 	genConfigCmd.Flags().BoolVarP(&addExampleApps, "example-apps", "m", false, "add example apps to the config")
 	gHiddenFlags = append(gHiddenFlags, "example-apps")
@@ -302,8 +302,8 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "disableapps")
 	skyenvStringVar(genConfigCmd.Flags(), &binPath, "binpath", "${BINPATH}", "set bin_path for visor native apps")
 	gHiddenFlags = append(gHiddenFlags, "binpath")
-	skyenvBoolVarP(genConfigCmd.Flags(), &isVpnServerEnable, "servevpn", "v", "${VPNSERVER:-true}", "autostart vpn server")
-	skyenvBoolVar(genConfigCmd.Flags(), &isVpnRouterEnable, "servevpnrouter", "${VPNROUTER:-false}", "autostart the vpn router (LAN/WiFi gateway that NATs into the vpn-client tunnel; needs --vpnrouter-lan-ifc)")
+	skyenvBoolVarP(genConfigCmd.Flags(), &vpnServerEnable, "servevpn", "v", "${VPNSERVER:-true}", "autostart vpn server")
+	skyenvBoolVar(genConfigCmd.Flags(), &vpnRouterEnable, "servevpnrouter", "${VPNROUTER:-false}", "autostart the vpn router (LAN/WiFi gateway that NATs into the vpn-client tunnel; needs --vpnrouter-lan-ifc)")
 	skyenvStringVar(genConfigCmd.Flags(), &vpnRouterLanIfc, "vpnrouter-lan-ifc", "${VPNROUTERLANIFC}", "downstream LAN/WiFi interface the vpn router serves (e.g. eth1 or wlan0)")
 	skyenvStringVar(genConfigCmd.Flags(), &vpnRouterSubnet, "vpnrouter-subnet", "${VPNROUTERSUBNET}", "vpn router gateway+subnet as <gateway-ip>/<prefix> (default 192.168.42.1/24)")
 	skyenvBoolVar(genConfigCmd.Flags(), &vpnRouterWifi, "vpnrouter-wifi", "${VPNROUTERWIFI:-false}", "vpn router WiFi-out: run hostapd (AP) on the downstream interface")
@@ -335,7 +335,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "proxyclientpk")
 	skyenvBoolVar(genConfigCmd.Flags(), &enableProxyClientAutostart, "startproxyclient", "${STARTPROXYCLIENT:-false}", "autostart proxy client")
 	gHiddenFlags = append(gHiddenFlags, "startproxyclient")
-	skyenvBoolVar(genConfigCmd.Flags(), &isProxyServerEnable, "serveproxy", "${PROXYSERVER:-true}", "autostart proxy server")
+	skyenvBoolVar(genConfigCmd.Flags(), &proxyServerEnable, "serveproxy", "${PROXYSERVER:-true}", "autostart proxy server")
 	skyenvArrayVar(genConfigCmd.Flags(), &proxyServerWhitelist, "proxywl", "${PROXYSERVERWL[@]}", "proxy server whitelist (comma separated; empty allows all)")
 
 	// Embedded resolving-proxy flags. Browsers point a single SOCKS5
@@ -355,7 +355,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "dmsgweb-addr")
 	skyenvStringVar(genConfigCmd.Flags(), &skynetWebProxyAddr, "skynetweb-addr", "${SKYNETWEBADDR}", "host the .skynet SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)")
 	skyenvStringVar(genConfigCmd.Flags(), &resolverCA, "resolver-ca", "${RESOLVERCA}", "directory with ca.crt and ca.key from \"skywire cli resolver ca gen\": both resolvers terminate HTTPS for .dmsg and .skynet with it (browsers must trust ca.crt)")
-	skyenvBoolVar(genConfigCmd.Flags(), &isSkyDNSEnable, "skydns", fmt.Sprintf("${SKYDNS:-%t}", skyDNSDefault()), "autostart skydns: .dmsg and .skynet names for every program on this host (on by default where systemd-resolved runs and the config is made as root; elsewhere it needs CAP_NET_ADMIN and edits /etc/resolv.conf)")
+	skyenvBoolVar(genConfigCmd.Flags(), &skyDNSEnable, "skydns", fmt.Sprintf("${SKYDNS:-%t}", skyDNSDefault()), "autostart skydns: .dmsg and .skynet names for every program on this host (on by default where systemd-resolved runs and the config is made as root; elsewhere it needs CAP_NET_ADMIN and edits /etc/resolv.conf)")
 	gHiddenFlags = append(gHiddenFlags, "skynetweb-addr")
 	// Additional resolving proxies beyond the two above — each its own port,
 	// bind address and (for a dmsg one) its own dmsg identity. The two
@@ -374,15 +374,15 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "browse-tls-key")
 
 	// Skychat flags
-	skyenvBoolVar(genConfigCmd.Flags(), &isSkychatEnable, "servechat", "${SKYCHAT:-true}", "autostart skychat")
+	skyenvBoolVar(genConfigCmd.Flags(), &skychatEnable, "servechat", "${SKYCHAT:-true}", "autostart skychat")
 	skyenvStringVar(genConfigCmd.Flags(), &skychatAddr, "chataddr", "${SKYCHATADDR:-"+skyenv.SkychatAddr+"}", "skychat local address")
 	gHiddenFlags = append(gHiddenFlags, "chataddr")
-	skyenvBoolVar(genConfigCmd.Flags(), &isSkychatPairEnable, "servechatpair", "${SKYCHATPAIR:-true}", "skychat pair RPC channel (required for group chat)")
+	skyenvBoolVar(genConfigCmd.Flags(), &skychatPairEnable, "servechatpair", "${SKYCHATPAIR:-true}", "skychat pair RPC channel (required for group chat)")
 	gHiddenFlags = append(gHiddenFlags, "servechatpair")
 	// Visible, unlike the other two: it is the one skychat knob that takes
 	// something away (the local UI on --chataddr), so an operator has to be
 	// able to find it without reading the source.
-	skyenvBoolVar(genConfigCmd.Flags(), &isSkychatPortless, "chatportless", "${SKYCHATPORTLESS:-false}", "run skychat with no TCP port; reach its UI only through the hypervisor")
+	skyenvBoolVar(genConfigCmd.Flags(), &skychatPortless, "chatportless", "${SKYCHATPORTLESS:-false}", "run skychat with no TCP port; reach its UI only through the hypervisor")
 
 	// Skycoin embedded apps. Default-off for both — operator opts in
 	// per-app via these flags or via SKYENV. The wallet's user-drop
@@ -390,7 +390,7 @@ func init() {
 	// touches the operator's ~/.skycoin/wallets dir, so when the
 	// visor itself runs as _skywire the wallet should be configured
 	// to drop to the operator's UID.
-	skyenvBoolVar(genConfigCmd.Flags(), &isSkycoinDaemonEnable, "skycoind", "${SKYCOIND:-false}", "autostart skycoin daemon (legacy single instance)")
+	skyenvBoolVar(genConfigCmd.Flags(), &skycoinDaemonEnable, "skycoind", "${SKYCOIND:-false}", "autostart skycoin daemon (legacy single instance)")
 	skyenvStringVar(genConfigCmd.Flags(), &skycoinDaemonFiber, "skycoindfiber", "${SKYCOIND_FIBER_TOML}", "legacy FIBER_TOML path (single instance)")
 	gHiddenFlags = append(gHiddenFlags, "skycoindfiber")
 	skyenvStringVar(genConfigCmd.Flags(), &skycoinDaemonAPISets, "skycoindapi", "${SKYCOIND_API_SETS}", "legacy api sets (single instance)")
@@ -415,7 +415,7 @@ func init() {
 	if skyenv.OS == "js" {
 		swOn, swAddr, swWallet = "true", skycoinWebNoPort, skyenv.SkywirePath+"/wallets"
 	}
-	skyenvBoolVar(genConfigCmd.Flags(), &isSkycoinWebEnable, "skycoinweb", "${SKYCOINWEB:-"+swOn+"}", "autostart skycoin web wallet (thin client)")
+	skyenvBoolVar(genConfigCmd.Flags(), &skycoinWebEnable, "skycoinweb", "${SKYCOINWEB:-"+swOn+"}", "autostart skycoin web wallet (thin client)")
 	// 8002 to avoid colliding with skychat's default at 127.0.0.1:8001.
 	// Both apps' upstream defaults happen to be 8001; skychat got there
 	// first in skywire so skycoin-web shifts up by one. Operator can
@@ -452,11 +452,11 @@ func init() {
 	if skyenv.OS == "mac" {
 		pText = "use mac installation path: "
 	}
-	skyenvBoolVarP(genConfigCmd.Flags(), &isPkgEnv, "pkg", "p", "${PKGENV:-false}", pText+skyenv.SkywirePath+"")
+	skyenvBoolVarP(genConfigCmd.Flags(), &pkgEnv, "pkg", "p", "${PKGENV:-false}", pText+skyenv.SkywirePath+"")
 	homepath := visorconfig.HomePath()
 	if homepath != "" {
 
-		skyenvBoolVarP(genConfigCmd.Flags(), &isUsrEnv, "user", "u", "${USRENV:-false}", "use paths for user space: "+homepath+"")
+		skyenvBoolVarP(genConfigCmd.Flags(), &usrEnv, "user", "u", "${USRENV:-false}", "use paths for user space: "+homepath+"")
 	}
 	skyenvStringVar(genConfigCmd.Flags(), &logLevel, "loglvl", "${LOGLVL:-info}", "level of logging in config")
 	gHiddenFlags = append(gHiddenFlags, "loglvl")
@@ -518,7 +518,7 @@ func init() {
 	skyenvBoolVar(genConfigCmd.Flags(), &noDmsgRelay, "no-dmsg-relay", "${NODMSGRELAY:-false}", "do not serve the local dmsg relay acceptor at all (it is served by default)")
 	gHiddenFlags = append(gHiddenFlags, "dmsg-server-public")
 
-	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
+	genConfigCmd.Flags().BoolVar(&all, "all", false, "show all flags")
 
 	//show all flags on help
 	if os.Getenv("UNHIDEFLAGS") != "1" {
@@ -571,7 +571,7 @@ var genConfigCmd = &cobra.Command{
 		// anything reads a flag — is where its path is final.
 		skyenvfile = resolveSkyenvFile()
 		refreshSkyenvDefaults(cmd.Flags())
-		if isEnvs || envfileOut != "" {
+		if envs || envfileOut != "" {
 			envfile = envfileTemplate
 			// Uncomment settings that match flags passed on the command line
 			envfile = applyFlagsToConf(envfile, cmd)
@@ -588,7 +588,7 @@ var genConfigCmd = &cobra.Command{
 		}
 
 		//--all unhides flags, prints help menu, and exits
-		if isAll {
+		if all {
 			for _, j := range gHiddenFlags {
 				f := cmd.Flags().Lookup(j)
 				f.Hidden = false
@@ -616,7 +616,7 @@ var genConfigCmd = &cobra.Command{
 
 		//set default output filename
 		if output == "" {
-			isOutUnset = true
+			outUnset = true
 			confPath = skyenv.ConfigName
 			output = confPath
 		} else {
@@ -624,23 +624,23 @@ var genConfigCmd = &cobra.Command{
 		}
 
 		if output == visorconfig.Stdout {
-			isStdout = true
-			isForce = false
+			stdout = true
+			force = false
 		}
-		if isStdout {
-			isRegen = false
+		if stdout {
+			regenerate = false
 		}
 		//--force will delete a config, which excludes --regen
-		if (isForce) && (isRegen) {
+		if (force) && (regenerate) {
 			log.Fatal("Use of mutually exclusive flags: -f --force cannot override -r --regen")
 		}
 		// these flags overwrite each other
-		if (isUsrEnv) && (isPkgEnv) {
+		if (usrEnv) && (pkgEnv) {
 			log.Fatal("Use of mutually exclusive flags: -u --user and -p --pkg")
 		}
 		//enable local hypervisor by default for user
-		if isUsrEnv {
-			isHypervisor = true
+		if usrEnv {
+			hypervisor = true
 		}
 		// Browser visor defaults: the resolving-proxy chain + the proxy
 		// client ARE the page's clearnet path (the nested browser chains
@@ -668,11 +668,11 @@ var genConfigCmd = &cobra.Command{
 			}
 		}
 		var err error
-		if !isStdout {
+		if !stdout {
 			if confPath, err = filepath.Abs(confPath); err != nil {
 				log.WithError(err).Fatal("Invalid output provided.")
 			}
-			if isForce {
+			if force {
 				if _, err := os.Stat(confPath); err == nil {
 					err := os.Remove(confPath)
 					if err != nil {
@@ -684,18 +684,18 @@ var genConfigCmd = &cobra.Command{
 			}
 		}
 		// skywire-cli config gen -p
-		if !isStdout && isOutUnset {
-			if isPkgEnv {
+		if !stdout && outUnset {
+			if pkgEnv {
 				configName = skyenv.ConfigJSON
 				confPath = visorconfig.SkywireConfig()
 				output = confPath
 			}
-			if isUsrEnv {
+			if usrEnv {
 				confPath = visorconfig.HomePath() + "/" + skyenv.ConfigName
 				output = confPath
 			}
 		}
-		if !isRegen && !isStdout {
+		if !regenerate && !stdout {
 			//check if the config exists
 			if _, err := os.Stat(confPath); err == nil {
 				//error config exists !regen
@@ -703,7 +703,7 @@ var genConfigCmd = &cobra.Command{
 			}
 		}
 		//don't write file with stdout
-		if !isStdout {
+		if !stdout {
 			if skyenv.OS == "linux" {
 				//warn when writing config as root to non root owned dir & fail on the reverse instance
 				if _, err = exec.LookPath("stat"); err == nil {
@@ -733,27 +733,27 @@ var genConfigCmd = &cobra.Command{
 					// the message for the cases where it really is a
 					// surprise (e.g. `sudo config gen` defaulting to
 					// /home/$user/skywire-config.json).
-					if (owner != rootOwner) && isRoot && !isPkgEnv {
+					if (owner != rootOwner) && root && !pkgEnv {
 						log.Warnf("writing config as root to %s (owned by %q, not root); pass -p for the package path or -o to choose explicitly", confPath, owner)
 					}
-					if !isRoot && (owner == rootOwner) {
+					if !root && (owner == rootOwner) {
 						log.Fatal("Insufficient permissions to write to the specified path")
 					}
 				}
 			}
 		}
-		if isPkgEnv && configServicePath == skyenv.SERVICESName {
+		if pkgEnv && configServicePath == skyenv.SERVICESName {
 			configServicePath = skyenv.SkywirePath + "/" + skyenv.SERVICESName
 		}
 	},
 	Run: func(_ *cobra.Command, _ []string) {
 
 		log := logger
-		wasStdout := isStdout
+		wasStdout := stdout
 		var err error
 		// enable errors from service conf fetch from the combination of these flags
-		if isStdout && isHide {
-			isStdout = false
+		if stdout && hide {
+			stdout = false
 		}
 
 		// A deployment visor serves its own services, so nothing is fetched.
@@ -761,8 +761,8 @@ var genConfigCmd = &cobra.Command{
 			fetchServiceConfig(log)
 		}
 
-		// reset the state of isStdout
-		isStdout = wasStdout
+		// reset the state of stdout
+		stdout = wasStdout
 
 		readExistingConfig(log)
 
@@ -835,7 +835,7 @@ var genConfigCmd = &cobra.Command{
 
 // logIfNotStdout logs an error with a message only when output is not stdout.
 func logIfNotStdout(log *logging.Logger, err error, msg string) {
-	if !isStdout {
+	if !stdout {
 		log.WithError(err).Error(msg)
 	}
 }
@@ -846,7 +846,7 @@ func logIfNotStdout(log *logging.Logger, err error, msg string) {
 //  3. Embedded — deployment.ServicesJSON (hardcoded defaults)
 func fetchServiceConfig(log *logging.Logger) {
 	var err error
-	if !noFetch && !isDmsgHTTP {
+	if !noFetch && !dmsgHTTP {
 		// Try DMSG-first fetch if we have a config service DMSG address
 		if fetchServiceConfigDmsg(log) {
 			return
@@ -856,7 +856,7 @@ func fetchServiceConfig(log *logging.Logger) {
 		// straight to the embedded config rather than logging a bogus fetch
 		// failure.
 		if strings.HasPrefix(serviceConfURL, "dmsg://") {
-			if !isStdout {
+			if !stdout {
 				log.Warnf("Could not reach %s over dmsg; falling back on embedded config", serviceConfURL)
 			}
 			loadServicesFromFile(log)
@@ -866,13 +866,13 @@ func fetchServiceConfig(log *logging.Logger) {
 		if serviceConfURL == "" {
 			serviceConfURL = "http://"
 		}
-		if !isStdout {
+		if !stdout {
 			log.Infof("Fetching service endpoints from %s", serviceConfURL)
 		}
 		res, err := client.Get(serviceConfURL) //nolint:gosec
 		if err != nil {
 			logIfNotStdout(log, err, "Failed to fetch servers via HTTP")
-			if !isStdout {
+			if !stdout {
 				log.Warn("Falling back on embedded config")
 			}
 			loadServicesFromFile(log)
@@ -887,13 +887,13 @@ func fetchServiceConfig(log *logging.Logger) {
 		}
 		if err := json.Unmarshal(body, &services); err != nil {
 			logIfNotStdout(log, err, "Failed to unmarshal JSON response to services struct")
-			if !isStdout {
+			if !stdout {
 				log.Warn("Falling back on embedded config")
 			}
 			loadServicesFromFile(log)
 			return
 		}
-		if !isStdout {
+		if !stdout {
 			log.Infof("Fetched service endpoints from '%s'", serviceConfURL)
 		}
 		// Supplement missing DMSG fields from embedded config if the
@@ -914,7 +914,7 @@ func fetchServiceConfig(log *logging.Logger) {
 			body, err = os.ReadFile(configServicePath) //nolint:gosec
 			if err != nil {
 				logIfNotStdout(log, err, "Failed to read config service from file")
-				if !isStdout {
+				if !stdout {
 					log.Warn("Falling back on embedded config")
 				}
 				return
@@ -922,7 +922,7 @@ func fetchServiceConfig(log *logging.Logger) {
 		}
 		if err := json.Unmarshal(body, &servicesConfig); err != nil {
 			logIfNotStdout(log, err, "Failed to unmarshal services-config.json file")
-			if !isStdout {
+			if !stdout {
 				log.Warn("Falling back on embedded config")
 			}
 			return
@@ -948,7 +948,7 @@ func fetchServiceConfigDmsg(log *logging.Logger) bool {
 		return false
 	}
 
-	if !isStdout {
+	if !stdout {
 		log.Infof("Fetching service endpoints via DMSG from %s", embeddedConf.ConfDmsg)
 	}
 
@@ -962,7 +962,7 @@ func fetchServiceConfigDmsg(log *logging.Logger) bool {
 	pk, sk := cipher.GenerateKeyPair()
 
 	dmsgLog := log
-	if isStdout {
+	if stdout {
 		silentLogger := logging.New()
 		silentLogger.SetOutput(io.Discard)
 		dmsgLog = &logging.Logger{FieldLogger: silentLogger}
@@ -1023,7 +1023,7 @@ func fetchServiceConfigDmsg(log *logging.Logger) bool {
 		logIfNotStdout(log, err, "Failed to unmarshal DMSG config response")
 		return false
 	}
-	if !isStdout {
+	if !stdout {
 		log.Info("Fetched service endpoints via DMSG")
 	}
 	return true
@@ -1037,7 +1037,7 @@ func loadServicesFromFile(log *logging.Logger) {
 		body, err = os.ReadFile(configServicePath)
 		if err != nil {
 			logIfNotStdout(log, err, "Failed to read config service from file")
-			if !isStdout {
+			if !stdout {
 				log.Warn("Falling back on hardcoded servers")
 			}
 			return
@@ -1045,7 +1045,7 @@ func loadServicesFromFile(log *logging.Logger) {
 	}
 	if err := json.Unmarshal(body, &servicesConfig); err != nil {
 		logIfNotStdout(log, err, "Failed to unmarshal services-config.json file")
-		if !isStdout {
+		if !stdout {
 			log.Warn("Falling back on hardcoded servers")
 		}
 		return
@@ -1068,18 +1068,18 @@ func resolveGenOutput(changed bool, current, skyenvOutput string) string {
 // the secret key and optionally hypervisor/dmsgpty whitelist keys.
 func readExistingConfig(log *logging.Logger) {
 	var oldConf visorconfig.V1
-	if isRegen {
+	if regenerate {
 		// Read the JSON configuration file
 		oldConfJSON, err := os.ReadFile(confPath)
 		if err != nil {
-			if !isStdout || isStdout && isHide {
+			if !stdout || stdout && hide {
 				log.Errorf("Failed to read config file: %v", err)
 			}
 		} else {
 			// Decode JSON data
 			err = json.Unmarshal(oldConfJSON, &oldConf)
 			if err != nil {
-				if !isStdout || isStdout && isHide {
+				if !stdout || stdout && hide {
 					log.WithError(err).Fatal("Failed to unmarshal old config json")
 				}
 				_, sk = cipher.GenerateKeyPair()
@@ -1094,7 +1094,7 @@ func readExistingConfig(log *logging.Logger) {
 				if sk.Null() {
 					sk = oldConf.SK
 				}
-				if isRetainHypervisors {
+				if retainHypervisors {
 					for _, j := range oldConf.Hypervisors {
 						hypervisorPKs = hypervisorPKs + "," + fmt.Sprintf("\t%s\n", j)
 					}
@@ -1128,7 +1128,7 @@ var oldConfCache *visorconfig.V1
 // Structural/versioned fields (Binary, Port) always come from the freshly-built
 // defaults. No-op when not regenerating or when the old config had no apps.
 func mergeExistingApps(log *logging.Logger) {
-	if !isRegen || oldConfCache == nil {
+	if !regenerate || oldConfCache == nil {
 		return
 	}
 	// app_settings is written by the VISOR, not by config gen: it is where
@@ -1202,7 +1202,7 @@ func mergeExistingApps(log *logging.Logger) {
 		}
 		// The same for skydns: its CA and autostart come from skywire.conf when set.
 		if name == skyenv.SkyDNSName {
-			if isSkyDNSEnable {
+			if skyDNSEnable {
 				conf.Launcher.Apps[i].AutoStart = true
 			}
 			if resolverCA != "" {
@@ -1500,16 +1500,16 @@ func configureRouting() {
 		// Explicitly regen-gated (unlike MinHops above, which is reached
 		// only on a regen anyway): these maps are visor-written state, so
 		// a fresh generate must never inherit them.
-		if isRegen && len(oldConfCache.Routing.RouterSettings) > 0 {
+		if regenerate && len(oldConfCache.Routing.RouterSettings) > 0 {
 			conf.Routing.RouterSettings = oldConfCache.Routing.RouterSettings
 		}
-		if isRegen && len(oldConfCache.Routing.RouterAppSettings) > 0 {
+		if regenerate && len(oldConfCache.Routing.RouterAppSettings) > 0 {
 			conf.Routing.RouterAppSettings = oldConfCache.Routing.RouterAppSettings
 		}
 		// routing.transport_preference is the third of the same kind: the
 		// visor writes it from `cli tp preference`, config gen has no flag
 		// for it, and a regen was silently reverting the order.
-		if isRegen && len(oldConfCache.Routing.TransportPreference) > 0 {
+		if regenerate && len(oldConfCache.Routing.TransportPreference) > 0 {
 			conf.Routing.TransportPreference = oldConfCache.Routing.TransportPreference
 		}
 		// Per-dial routing policy is deliberately NOT preserved from the old JSON
@@ -1534,7 +1534,7 @@ func configureLauncher(log *logging.Logger) {
 		Apps:          nil,
 		ServerAddr:    skyenv.AppSrvAddr,
 		BinPath:       skyenv.AppBinPath,
-		DisplayNodeIP: isDisplayNodeIP,
+		DisplayNodeIP: displayNodeIP,
 	}
 	if cliAddr != "" {
 		conf.CLIAddr = cliAddr
@@ -1590,13 +1590,13 @@ func configureLauncher(log *logging.Logger) {
 		conf.RewardSystemDmsg = deployment.Prod.RewardSystemDmsg
 	}
 	if rewardSkyAddr != "" {
-		canonical, isXpub, err := rewardconfig.ValidateRewardAddress(rewardSkyAddr)
+		canonical, xpub, err := rewardconfig.ValidateRewardAddress(rewardSkyAddr)
 		if err != nil {
 			log.WithError(err).Fatal("Invalid reward address")
 		}
 		// An existing REWARDSKYADDR still applies, so a regen never drops an
 		// operator's address, but a new one should be an xpub.
-		if !isXpub {
+		if !xpub {
 			log.Warn(rewardconfig.SingleAddressRisk)
 		}
 		conf.RewardAddress = canonical
@@ -1740,8 +1740,8 @@ func configureLauncher(log *logging.Logger) {
 	}
 
 	// Configure public visor
-	conf.IsPublic = isPublic
-	if isPublic {
+	conf.IsPublic = public
+	if public {
 		regTimeout := visorconfig.Duration(skyenv.PublicVisorRegistrationTimeout)
 		if publicVisorRegTimeout != "" {
 			d, err := time.ParseDuration(publicVisorRegTimeout)
@@ -1772,7 +1772,7 @@ var wsPeers string
 // keepPersistentTransports carries over on a regen the transports set from the
 // dashboard or "config set". WebSocket ones come from WSPEERS, so they are not kept.
 func keepPersistentTransports() {
-	if !isRegen || oldConfCache == nil {
+	if !regenerate || oldConfCache == nil {
 		return
 	}
 	for _, pt := range oldConfCache.PersistentTransports {
@@ -1785,7 +1785,7 @@ func keepPersistentTransports() {
 // keepAutoconnect carries the autoconnect limits over a regenerate: they are
 // set live with config set and have no skywire.conf variable.
 func keepAutoconnect() {
-	if isRegen && oldConfCache != nil && conf.Transport != nil && oldConfCache.Transport != nil {
+	if regenerate && oldConfCache != nil && conf.Transport != nil && oldConfCache.Transport != nil {
 		conf.Transport.Autoconnect = oldConfCache.Transport.Autoconnect
 	}
 }
@@ -1793,7 +1793,7 @@ func keepAutoconnect() {
 // keepTCPNotSentLowat carries transport.tcp_notsent_lowat over a regenerate:
 // it is set live with config set and has no skywire.conf variable.
 func keepTCPNotSentLowat() {
-	if isRegen && oldConfCache != nil && conf.Transport != nil && oldConfCache.Transport != nil {
+	if regenerate && oldConfCache != nil && conf.Transport != nil && oldConfCache.Transport != nil {
 		conf.Transport.TCPNotSentLowat = oldConfCache.Transport.TCPNotSentLowat
 	}
 }
@@ -1801,7 +1801,7 @@ func keepTCPNotSentLowat() {
 // keepNetworkWatch carries the network watcher periods and policy over a
 // regenerate: they are set live with config set and have no skywire.conf variable.
 func keepNetworkWatch() {
-	if isRegen && oldConfCache != nil && conf.Transport != nil && oldConfCache.Transport != nil {
+	if regenerate && oldConfCache != nil && conf.Transport != nil && oldConfCache.Transport != nil {
 		conf.Transport.NetworkWatchInterval = oldConfCache.Transport.NetworkWatchInterval
 		conf.Transport.PublicIPCheckInterval = oldConfCache.Transport.PublicIPCheckInterval
 		conf.Transport.Network = oldConfCache.Transport.Network
@@ -1862,7 +1862,7 @@ func configureHypervisor(log *logging.Logger) {
 				} else {
 					// setting the same public key as the current visor for a remote hypervisor is a weird misconfiguration
 					// the intention was likely to configure this visor as the hypervisor
-					isHypervisor = true
+					hypervisor = true
 				}
 			}
 		}
@@ -1872,11 +1872,11 @@ func configureHypervisor(log *logging.Logger) {
 	// The Enable field controls whether it auto-starts.
 	{
 		config := visorconfig.GenerateWorkDirConfig()
-		config.Enable = isHypervisor
+		config.Enable = hypervisor
 		if hvDeskAddr != "" {
 			config.DeskAddr = hvDeskAddr
 		}
-		config.EnablePKEndpoint = isEnablePKEndpoint
+		config.EnablePKEndpoint = enablePKEndpoint
 		if hvHTTPAddr != "" {
 			config.HTTPAddr = hvHTTPAddr
 		}
@@ -1889,7 +1889,7 @@ func configureHypervisor(log *logging.Logger) {
 		// /opt/skywire/skywire.json post-gen; that path is
 		// expected to be vanishingly rare so it's not exposed via
 		// a config-gen flag.
-		if isHypervisor {
+		if hypervisor {
 			// Generate the LAN DMSG server keypair eagerly. The struct's
 			// `pk`/`sk` json tags use `omitempty` but encoding/json does
 			// NOT treat a zero-valued fixed-size byte array as empty, so
@@ -1931,7 +1931,7 @@ func configureHypervisor(log *logging.Logger) {
 	// set survey collection whitelist - will include by default hypervisors & dmsgpty whitelisted keys
 	conf.SurveyWhitelist = services.SurveyWhitelist
 	// set package-specific config paths
-	if isPkgEnv {
+	if pkgEnv {
 		pkgConfig := visorconfig.PackageConfig()
 		conf.LocalPath = pkgConfig.LocalPath
 		conf.Launcher.BinPath = pkgConfig.LauncherBinPath
@@ -1942,7 +1942,7 @@ func configureHypervisor(log *logging.Logger) {
 		}
 	}
 	// set config paths for the user space
-	if isUsr {
+	if usr {
 		usrConfig := visorconfig.UserConfig()
 		conf.LocalPath = usrConfig.LocalPath
 		conf.Launcher.BinPath = usrConfig.LauncherBinPath
@@ -2047,7 +2047,7 @@ func buildSkycoinDaemonApps() ([]appserver.AppConfig, error) {
 		return []appserver.AppConfig{{
 			Name:      skyenv.SkycoinDaemonName,
 			Binary:    "skywire",
-			AutoStart: isSkycoinDaemonEnable,
+			AutoStart: skycoinDaemonEnable,
 			Port:      routing.Port(skyenv.SkycoinDaemonPort),
 			Args:      args,
 			User:      skycoinDaemonUser,
@@ -2112,7 +2112,7 @@ func buildSkycoinDaemonApps() ([]appserver.AppConfig, error) {
 		out = append(out, appserver.AppConfig{
 			Name:      appName,
 			Binary:    "skywire",
-			AutoStart: isSkycoinDaemonEnable,
+			AutoStart: skycoinDaemonEnable,
 			Port:      appPort,
 			Args:      args,
 			User:      skycoinDaemonUser,
@@ -2281,7 +2281,7 @@ func configureApps(log *logging.Logger) {
 			{
 				Name:      skyenv.SkychatName,
 				Binary:    "skywire",
-				AutoStart: isSkychatEnable,
+				AutoStart: skychatEnable,
 				Port:      routing.Port(skyenv.SkychatPort),
 				// --pair-enable opens the chat-app ↔ visor pair-RPC
 				// channel that group chat needs for the per-partner
@@ -2291,7 +2291,7 @@ func configureApps(log *logging.Logger) {
 				// `groups_error: pair-rpc-disabled` and group SSE events
 				// don't reach listeners. Default-on via SKYCHATPAIR
 				// (overridable in /etc/skywire.conf).
-				Args: skychatExternalArgs(chatAddr, isSkychatPairEnable),
+				Args: skychatExternalArgs(chatAddr, skychatPairEnable),
 			},
 			{
 				// RestartPolicy on-failure so a crashed skysocks server self-recovers
@@ -2303,7 +2303,7 @@ func configureApps(log *logging.Logger) {
 				// relaunches on a non-nil exit error.)
 				Name:          skyenv.SkysocksName,
 				Binary:        "skywire",
-				AutoStart:     isProxyServerEnable,
+				AutoStart:     proxyServerEnable,
 				Port:          routing.Port(skyenv.SkysocksPort),
 				Args:          []string{"app", "skysocks"},
 				RestartPolicy: string(appcommon.RestartOnFailure),
@@ -2321,7 +2321,7 @@ func configureApps(log *logging.Logger) {
 				// exit — recover it on failure.
 				Name:          skyenv.VPNServerName,
 				Binary:        "skywire",
-				AutoStart:     isVpnServerEnable,
+				AutoStart:     vpnServerEnable,
 				Port:          routing.Port(skyenv.VPNServerPort),
 				Args:          []string{"app", "vpn-server"},
 				RestartPolicy: string(appcommon.RestartOnFailure),
@@ -2332,7 +2332,7 @@ func configureApps(log *logging.Logger) {
 				// (VPNROUTER) and needs a downstream interface (--vpnrouter-lan-ifc).
 				Name:      skyenv.VPNRouterName,
 				Binary:    "skywire",
-				AutoStart: isVpnRouterEnable,
+				AutoStart: vpnRouterEnable,
 				Port:      routing.Port(skyenv.VPNRouterPort),
 				Args:      vpnRouterArgs([]string{"app", "vpn-router"}),
 			},
@@ -2341,7 +2341,7 @@ func configureApps(log *logging.Logger) {
 				// default, since it takes a tun and a share of the host DNS.
 				Name:      skyenv.SkyDNSName,
 				Binary:    "skywire",
-				AutoStart: isSkyDNSEnable,
+				AutoStart: skyDNSEnable,
 				Port:      routing.Port(skyenv.SkyDNSPort),
 				Args:      skydnsArgs([]string{"app", "skydns"}),
 			},
@@ -2388,7 +2388,7 @@ func configureApps(log *logging.Logger) {
 		apps = append(apps, appserver.AppConfig{
 			Name:      skyenv.SkycoinWebName,
 			Binary:    "skywire",
-			AutoStart: isSkycoinWebEnable,
+			AutoStart: skycoinWebEnable,
 			Port:      routing.Port(skyenv.SkycoinWebPort),
 			Args:      webArgs,
 			User:      skycoinWebUser,
@@ -2407,18 +2407,18 @@ func configureApps(log *logging.Logger) {
 			},
 			{
 				Name:      skyenv.SkychatName,
-				AutoStart: isSkychatEnable,
+				AutoStart: skychatEnable,
 				Port:      routing.Port(skyenv.SkychatPort),
 				// --pair-enable opens chat-app ↔ visor pair-RPC for
 				// group chat. See the external-apps branch above for
 				// the rationale; mirrored here so internal-apps
 				// generated configs behave the same — as is --addr,
 				// so skychat answers on the same place in both modes.
-				Args: skychatInternalArgs(chatAddr, isSkychatPairEnable, isSkychatPortless),
+				Args: skychatInternalArgs(chatAddr, skychatPairEnable, skychatPortless),
 			},
 			{
 				Name:      skyenv.SkysocksName,
-				AutoStart: isProxyServerEnable,
+				AutoStart: proxyServerEnable,
 				Port:      routing.Port(skyenv.SkysocksPort),
 				Args:      []string{},
 			},
@@ -2430,7 +2430,7 @@ func configureApps(log *logging.Logger) {
 			},
 			{
 				Name:      skyenv.VPNServerName,
-				AutoStart: isVpnServerEnable,
+				AutoStart: vpnServerEnable,
 				Args:      []string{},
 				Port:      routing.Port(skyenv.VPNServerPort),
 			},
@@ -2439,13 +2439,13 @@ func configureApps(log *logging.Logger) {
 				// vpn-client tunnel. Off by default; enabled via --servevpnrouter
 				// (VPNROUTER) with a downstream interface (--vpnrouter-lan-ifc).
 				Name:      skyenv.VPNRouterName,
-				AutoStart: isVpnRouterEnable,
+				AutoStart: vpnRouterEnable,
 				Args:      vpnRouterArgs(nil),
 				Port:      routing.Port(skyenv.VPNRouterPort),
 			},
 			{
 				Name:      skyenv.SkyDNSName,
-				AutoStart: isSkyDNSEnable,
+				AutoStart: skyDNSEnable,
 				Args:      skydnsArgs(nil),
 				Port:      routing.Port(skyenv.SkyDNSPort),
 			},
@@ -2482,7 +2482,7 @@ func configureApps(log *logging.Logger) {
 				// runs web-only, wallets live in browser storage — same as the
 				// wasm visor.
 				Name:      skyenv.SkycoinWebName,
-				AutoStart: isSkycoinWebEnable,
+				AutoStart: skycoinWebEnable,
 				Port:      routing.Port(skyenv.SkycoinWebPort),
 				Args:      swFlags,
 				User:      skycoinWebUser,
@@ -2595,20 +2595,20 @@ func configureApps(log *logging.Logger) {
 				// reconnect in-process (serving the status page during the gap)
 				// instead of exiting on total collapse and paying a full proc
 				// restart + re-dial per RestartOnFailure cycle.
-				hasReconnect := slices.Contains(conf.Launcher.Apps[i].Args, "--reconnect")
-				if !hasReconnect {
+				reconnect := slices.Contains(conf.Launcher.Apps[i].Args, "--reconnect")
+				if !reconnect {
 					conf.Launcher.Apps[i].Args = append(conf.Launcher.Apps[i].Args, "--reconnect")
 				}
 			}
 		}
 	}
-	if isHypervisor {
+	if hypervisor {
 		// Disable hypervisor UI authentication --disable-auth flag
-		if isDisableAuth {
+		if disableAuth {
 			conf.Hypervisor.EnableAuth = false
 		}
 		// Enable hypervisor UI authentication --enable-auth flag
-		if isEnableAuth {
+		if enableAuth {
 			conf.Hypervisor.EnableAuth = true
 		}
 		// First run: the UI password gate is on unless the operator said
@@ -2616,13 +2616,13 @@ func configureApps(log *logging.Logger) {
 		// reset stays `skywire cli visor hv passwd --force`, on the board). Not
 		// in a browser tab: its visor keeps no users.db across reloads, so a
 		// forced gate there would demand a new password every load.
-		if !isRegen && !isDisableAuth && skyenv.OS != "js" {
+		if !regenerate && !disableAuth && skyenv.OS != "js" {
 			conf.Hypervisor.EnableAuth = true
 		}
 		// A regen keeps the gate as the existing config has it — the default
 		// config is rebuilt from scratch and would otherwise reset an operator's
 		// --noauth to the platform default on every autoconfig run.
-		if isRegen && !isDisableAuth && !isEnableAuth && oldConfCache != nil && oldConfCache.Hypervisor != nil {
+		if regenerate && !disableAuth && !enableAuth && oldConfCache != nil && oldConfCache.Hypervisor != nil {
 			conf.Hypervisor.EnableAuth = oldConfCache.Hypervisor.EnableAuth
 		}
 		// HVAUTH in skywire.conf is the declarative answer, so it outranks
@@ -2630,7 +2630,7 @@ func configureApps(log *logging.Logger) {
 		// to survive a config rebuild, which is the whole point of the conf
 		// file. Explicit --auth/--noauth on the command line still wins, and
 		// an unset HVAUTH changes nothing.
-		if !isDisableAuth && !isEnableAuth {
+		if !disableAuth && !enableAuth {
 			if v, ok := hvAuthFromEnv(hvAuthEnv); ok {
 				conf.Hypervisor.EnableAuth = v
 			} else if strings.TrimSpace(hvAuthEnv) != "" {
@@ -2640,7 +2640,7 @@ func configureApps(log *logging.Logger) {
 	}
 	// Enable hypervisor UI authentication on windows & macos
 	if (selectedOS == "win") || (selectedOS == "mac") {
-		if isHypervisor {
+		if hypervisor {
 			conf.Hypervisor.EnableAuth = true
 		}
 	}
@@ -2681,7 +2681,7 @@ func configureResolvingProxies(log *logging.Logger) {
 	}
 	// Per-domain upstream rules are written by "skywire cli resolver route", not
 	// by config gen, so a regen keeps them.
-	if isRegen && oldConfCache != nil {
+	if regenerate && oldConfCache != nil {
 		if conf.DmsgWeb != nil && oldConfCache.DmsgWeb != nil && len(conf.DmsgWeb.UpstreamRules) == 0 {
 			conf.DmsgWeb.UpstreamRules = oldConfCache.DmsgWeb.UpstreamRules
 		}
@@ -2782,7 +2782,7 @@ func applyOverrides() {
 		conf.Transport.PublicAutoconnect = false
 	}
 	// Enable the display of the visor's ip address in service discovery services
-	if isDisplayNodeIP {
+	if displayNodeIP {
 		conf.Launcher.DisplayNodeIP = true
 	}
 }
@@ -2791,7 +2791,7 @@ func applyOverrides() {
 // or stdout depending on flags.
 func writeConfigOutput(log *logging.Logger) {
 	//don't write file with stdout
-	if !isStdout {
+	if !stdout {
 		// Marshal the modified config to JSON with indentation
 		jsonData, err := json.MarshalIndent(conf, "", "  ")
 		if err != nil {
@@ -2842,8 +2842,8 @@ func writeConfigOutput(log *logging.Logger) {
 		}
 	}
 	//print config to stdout, omit logging messages, exit
-	if isStdout {
-		if isSquash {
+	if stdout {
+		if squash {
 			script.Echo(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(string(j), " ", ""), "\n", ""), "\t", "")).Stdout() //nolint:errcheck,gosec
 			return
 		}
@@ -2851,7 +2851,7 @@ func writeConfigOutput(log *logging.Logger) {
 		return
 	}
 	//hide the printing of the config to the terminal
-	if isHide {
+	if hide {
 		log.Infof("Updated file '%s'\n", output)
 		return
 	}

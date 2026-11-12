@@ -34,25 +34,25 @@ the config. The new value takes effect on the next visor restart.
 		}
 
 		if len(args) == 0 {
-			isPublic := rpcClient.GetIsPublic()
-			internal.PrintOutput(cmd.Flags(), map[string]bool{"is_public": isPublic},
-				fmt.Sprintf("is_public: %t\n", isPublic))
+			public := rpcClient.GetIsPublic()
+			internal.PrintOutput(cmd.Flags(), map[string]bool{"is_public": public},
+				fmt.Sprintf("is_public: %t\n", public))
 			return
 		}
 
-		var isPublic bool
+		var public bool
 		switch args[0] {
 		case "true", "on", "yes", "1":
-			isPublic = true
+			public = true
 		case "false", "off", "no", "0":
-			isPublic = false
+			public = false
 		default:
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid argument: %s (use 'true' or 'false')", args[0]))
 		}
 
-		err = rpcClient.SetIsPublic(isPublic)
+		err = rpcClient.SetIsPublic(public)
 		internal.Catch(cmd.Flags(), err)
-		internal.PrintOutput(cmd.Flags(), map[string]bool{"is_public": isPublic},
-			fmt.Sprintf("is_public set to %t (effective on next restart)\n", isPublic))
+		internal.PrintOutput(cmd.Flags(), map[string]bool{"is_public": public},
+			fmt.Sprintf("is_public set to %t (effective on next restart)\n", public))
 	},
 }

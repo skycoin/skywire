@@ -54,7 +54,7 @@ func init() {
 	RootCmd.Flags().StringVar(&skynetType, "skynet-type", skynetType, "transport type for --skynet: stcpr, swsr, squicr or stcp")
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "debug", "[ debug | warn | error | fatal | panic | trace | info ]")
 	RootCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
-	RootCmd.Flags().BoolVarP(&isEnvs, "envs", "E", false, "show example .conf file")
+	RootCmd.Flags().BoolVarP(&envs, "envs", "E", false, "show example .conf file")
 	RootCmd.Flags().StringVar(&pprofMode, "pprofmode", "", "[ cpu | mem | mutex | block | trace | http ]")
 	RootCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port")
 
@@ -83,7 +83,7 @@ dmsgweb conf file detected: ` + dwcfg
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
 	PreRun: func(_ *cobra.Command, _ []string) {
-		if isEnvs {
+		if envs {
 			printEnvs(envfileLinux)
 		}
 		if logLvl != "" {

@@ -29,7 +29,7 @@ var (
 	cacheFileSDVPN   string
 	cacheFileSDVisor string
 	padSpaces        int
-	isStats          bool
+	stats            bool
 	rawData          bool
 	refinedData      bool
 	noFilterOnline   bool
@@ -106,7 +106,7 @@ var addTpCmd = &cobra.Command{
 		if userLabel {
 			label = "user"
 		}
-		isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
+		jsonOut, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
@@ -182,7 +182,7 @@ var addTpCmd = &cobra.Command{
 
 			// For each remote visor, request transports to all target PKs
 			for ti, targetPK := range targetPKs {
-				if len(targetPKs) > 1 && !isJSON {
+				if len(targetPKs) > 1 && !jsonOut {
 					cmdutil.Printf("\n=== Remote visor %d/%d: %s ===\n", ti+1, len(targetPKs), targetPK.String())
 				}
 
@@ -190,7 +190,7 @@ var addTpCmd = &cobra.Command{
 				failCount := 0
 
 				for i, pk := range pks {
-					if !isJSON {
+					if !jsonOut {
 						cmdutil.Printf("[%d/%d] Requesting transport on %s to %s via TPS...\n", i+1, len(pks), targetPK.String(), pk.String())
 					}
 
@@ -200,14 +200,14 @@ var addTpCmd = &cobra.Command{
 					if useEmbeddedTPS {
 						// Use embedded TPS only - if it fails, don't try external nodes
 						tpResp, tpErr = rpcClient.TPSAddTransport(targetPK, pk, tpType)
-						if tpErr == nil && !isJSON {
+						if tpErr == nil && !jsonOut {
 							logger.Infof("Established %v transport on %s to %s via embedded TPS", tpType, targetPK.String(), pk.String())
 						}
 					} else {
 						// Embedded TPS not running - use external TPS nodes
 						tpsNodes, err := rpcClient.GetTransportSetupNodesSorted()
 						if err != nil {
-							if !isJSON {
+							if !jsonOut {
 								logger.WithError(err).Error("Failed to get TPS nodes")
 							}
 							failCount++
@@ -215,7 +215,7 @@ var addTpCmd = &cobra.Command{
 						}
 
 						if len(tpsNodes) == 0 {
-							if !isJSON {
+							if !jsonOut {
 								logger.Error("No TPS nodes configured")
 							}
 							failCount++
@@ -224,13 +224,13 @@ var addTpCmd = &cobra.Command{
 
 						// Try each TPS node (already sorted by health, healthy first)
 						for _, tpsPK := range tpsNodes {
-							if !isJSON {
+							if !jsonOut {
 								logger.Debugf("Trying TPS node %s", tpsPK.String())
 							}
 
 							// Health check
 							if err := rpcClient.TPSExternalHealthCheck(tpsPK); err != nil {
-								if !isJSON {
+								if !jsonOut {
 									logger.WithError(err).Debugf("TPS %s health check failed", tpsPK.String())
 								}
 								continue
@@ -239,19 +239,19 @@ var addTpCmd = &cobra.Command{
 							// Try to add transport via this TPS
 							tpResp, tpErr = rpcClient.TPSExternalAddTransport(tpsPK, targetPK, pk, tpType)
 							if tpErr == nil {
-								if !isJSON {
+								if !jsonOut {
 									logger.Infof("Established %v transport on %s to %s via TPS %s", tpType, targetPK.String(), pk.String(), tpsPK.String())
 								}
 								break
 							}
-							if !isJSON {
+							if !jsonOut {
 								logger.WithError(tpErr).Debugf("TPS %s failed to add transport", tpsPK.String())
 							}
 						}
 					}
 
 					if tpErr != nil {
-						if !isJSON {
+						if !jsonOut {
 							logger.WithError(tpErr).Errorf("Failed to establish transport on %s to %s", targetPK.String(), pk.String())
 						}
 						failCount++
@@ -267,17 +267,17 @@ var addTpCmd = &cobra.Command{
 				totalSuccess += successCount
 				totalFail += failCount
 
-				if len(pks) > 1 && !isJSON {
+				if len(pks) > 1 && !jsonOut {
 					cmdutil.Printf("Visor %s: %d/%d transports established\n", targetPK.String(), successCount, len(pks))
 				}
 			}
 
 			// Print results
-			if !isJSON {
+			if !jsonOut {
 				cmdutil.Printf("\nTotal Summary: %d/%d transports established via TPS\n", totalSuccess, totalSuccess+totalFail)
 			}
 
-			if isJSON {
+			if jsonOut {
 				internal.PrintOutput(cmd.Flags(), tpsResults, "")
 			} else {
 				for _, tp := range tpsResults {
@@ -301,7 +301,7 @@ var addTpCmd = &cobra.Command{
 		failCount := 0
 
 		for i, pk := range pks {
-			if len(pks) > 1 && !isJSON {
+			if len(pks) > 1 && !jsonOut {
 				cmdutil.Printf("[%d/%d] Adding transport to %s...\n", i+1, len(pks), pk.String())
 			}
 
@@ -322,17 +322,17 @@ var addTpCmd = &cobra.Command{
 				for attempt := 1; attempt <= retries; attempt++ {
 					tp, tpErr = rpcClient.AddTransport(pk, transportType, timeout, label, noRegister, false)
 					if tpErr == nil {
-						if !isJSON {
+						if !jsonOut {
 							logger.Infof("Established %v transport to %v", transportType, pk)
 						}
 						break
 					}
-					if !isJSON && attempt < retries {
+					if !jsonOut && attempt < retries {
 						logger.WithError(tpErr).Warnf("Failed to establish %v transport (attempt %d/%d), retrying...", transportType, attempt, retries)
 					}
 				}
 				if tpErr != nil {
-					if !isJSON {
+					if !jsonOut {
 						logger.WithError(tpErr).Errorf("Failed to establish %v transport to %v after %d attempts", transportType, pk, retries)
 					}
 					lastErr = tpErr
@@ -355,12 +355,12 @@ var addTpCmd = &cobra.Command{
 					for attempt := 1; attempt <= retries; attempt++ {
 						tp, tpErr = rpcClient.AddTransport(pk, string(tpType), timeout, label, noRegister, false)
 						if tpErr == nil {
-							if !isJSON {
+							if !jsonOut {
 								logger.Infof("Established %v transport to %v", tpType, pk)
 							}
 							break typeLoop
 						}
-						if !isJSON {
+						if !jsonOut {
 							if attempt < retries {
 								logger.WithError(tpErr).Warnf("Failed to establish %v transport (attempt %d/%d), retrying...", tpType, attempt, retries)
 							} else {
@@ -384,11 +384,11 @@ var addTpCmd = &cobra.Command{
 		}
 
 		// Print results
-		if len(pks) > 1 && !isJSON {
+		if len(pks) > 1 && !jsonOut {
 			cmdutil.Printf("\nSummary: %d/%d transports established\n", successCount, len(pks))
 		}
 
-		if isJSON {
+		if jsonOut {
 			// If EVERY attempt failed, surface the error in the JSON output
 			// so callers (tests, scripts, the UI) can see why. Previously
 			// we'd return {"output": []} with exit 1, which left the caller

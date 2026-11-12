@@ -338,8 +338,8 @@ func TestAcceptInbound_AcceptsEstablishedPeer(t *testing.T) {
 	}
 	defer func() { _ = w.Close() }() //nolint:errcheck
 
-	nf, isNamed := w.(*namedFile)
-	if !isNamed {
+	nf, named := w.(*namedFile)
+	if !named {
 		t.Fatalf("handle is %T, want *namedFile (onDone reads the path off it)", w)
 	}
 	want := filepath.Join(dir, safeFileName(offer.Name, offer.ID))

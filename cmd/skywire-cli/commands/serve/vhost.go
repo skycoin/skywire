@@ -152,14 +152,14 @@ func updateVhosts(cmd *cobra.Command, change func([]visorapi.Vhost) ([]visorapi.
 			fp = &ports[i]
 		}
 	}
-	isNew := fp == nil
-	if isNew {
+	created := fp == nil
+	if created {
 		fp = &visorapi.ForwardedPort{Port: 80}
 	}
 	if fp.Vhosts, err = change(fp.Vhosts); err != nil {
 		internal.PrintFatalError(cmd.Flags(), err)
 	}
-	if isNew {
+	if created {
 		err = rpcClient.RegisterForwardedPort(*fp)
 	} else {
 		err = rpcClient.UpdateForwardedPort(*fp)

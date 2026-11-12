@@ -302,8 +302,8 @@ func addressSpent(addr string) (bool, error) {
 // ineligible is the reason it is not paid. failed means the node could not
 // say whether a single address has sent coins, so the calculation must stop.
 func checkRewardAddress(addr string, t time.Time) (ineligible, failed error) {
-	canonical, isXpub, err := rewardconfig.ValidateRewardAddress(addr)
-	if err != nil || isXpub || t.Before(deprewards.SingleAddressCutoff) {
+	canonical, xpub, err := rewardconfig.ValidateRewardAddress(addr)
+	if err != nil || xpub || t.Before(deprewards.SingleAddressCutoff) {
 		return err, nil
 	}
 	spent, err := addressSpent(canonical)
@@ -908,10 +908,10 @@ Architectures:
 		}
 		allowArchMapAll := make(map[string]struct{})
 		for _, arch := range append(append([]string{}, allowArchitectures1...), allowArchitectures2...) {
-			if _, isValid := supportedArchitecturesMap[arch]; !isValid {
+			if _, ok := supportedArchitecturesMap[arch]; !ok {
 				log.Fatal("Error: Architecture is not valid: ", arch)
 			}
-			if _, isDisallowed := disallowedMap[arch]; !isDisallowed {
+			if _, ok := disallowedMap[arch]; !ok {
 				allowArchMapAll[arch] = struct{}{}
 			}
 		}
@@ -1076,8 +1076,8 @@ Architectures:
 
 			addrErr := rewardAddressError(sky, wDate)
 
-			_, hasTransports := transportMap[pk]
-			meetsTransportReq := !requireTransports || hasTransports
+			_, inTransports := transportMap[pk]
+			meetsTransportReq := !requireTransports || inTransports
 			visorBW := bandwidthMap[pk]
 
 			_, archAllowed := allowArchMapAll[arch]

@@ -15,13 +15,13 @@ import (
 // A regen keeps the persistent transports set at runtime. A WebSocket one comes
 // from WSPEERS and is kept only while WSPEERS still names it.
 func TestRegenKeepsPersistentTransports(t *testing.T) {
-	restoreRegen, restoreOld, restoreConf, restoreWS := isRegen, oldConfCache, conf, wsPeers
-	t.Cleanup(func() { isRegen, oldConfCache, conf, wsPeers = restoreRegen, restoreOld, restoreConf, restoreWS })
+	restoreRegen, restoreOld, restoreConf, restoreWS := regenerate, oldConfCache, conf, wsPeers
+	t.Cleanup(func() { regenerate, oldConfCache, conf, wsPeers = restoreRegen, restoreOld, restoreConf, restoreWS })
 
 	stcpr, _ := cipher.GenerateKeyPair()
 	gone, _ := cipher.GenerateKeyPair()
 	kept, _ := cipher.GenerateKeyPair()
-	isRegen = true
+	regenerate = true
 	oldConfCache = &visorconfig.V1{PersistentTransports: []tspec.PersistentTransports{
 		{PK: stcpr, NetType: tptypes.STCPR},
 		{PK: gone, NetType: tptypes.WS},

@@ -81,8 +81,8 @@ var (
 	cacheFilesAge      int
 	noFilterOnline     bool
 	path               string
-	isPkg              bool
-	isStats            bool
+	pkg                bool
+	stats              bool
 	pubkey             cipher.PubKey
 	pk                 string
 	startingTimeout    int

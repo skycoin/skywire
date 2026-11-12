@@ -16,11 +16,11 @@ import (
 // helpers read and restores it when the test ends.
 func saveEndpointFetchState(t *testing.T) {
 	t.Helper()
-	oldServices, oldNoFetch, oldDmsgHTTP := services, noFetch, isDmsgHTTP
-	oldPath, oldURL, oldStdout := configServicePath, serviceConfURL, isStdout
+	oldServices, oldNoFetch, oldDmsgHTTP := services, noFetch, dmsgHTTP
+	oldPath, oldURL, oldStdout := configServicePath, serviceConfURL, stdout
 	t.Cleanup(func() {
-		services, noFetch, isDmsgHTTP = oldServices, oldNoFetch, oldDmsgHTTP
-		configServicePath, serviceConfURL, isStdout = oldPath, oldURL, oldStdout
+		services, noFetch, dmsgHTTP = oldServices, oldNoFetch, oldDmsgHTTP
+		configServicePath, serviceConfURL, stdout = oldPath, oldURL, oldStdout
 	})
 }
 
@@ -32,7 +32,7 @@ func TestFetchServiceConfigFallsBackToEmbedded(t *testing.T) {
 	saveEndpointFetchState(t)
 
 	services = visorconfig.Services{}
-	noFetch, isDmsgHTTP, isStdout = true, false, false
+	noFetch, dmsgHTTP, stdout = true, false, false
 	configServicePath = ""
 
 	fetchServiceConfig(logging.MustGetLogger("test"))

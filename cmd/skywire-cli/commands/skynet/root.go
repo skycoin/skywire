@@ -353,10 +353,10 @@ Examples:
 			// status listing claimed "No skynet clients configured"
 			// while `cli visor app ls` clearly showed a running
 			// skynet-client app under the operator's chosen name.
-			isSkynetClient := state.Binary == skynetClientBinaryName
+			skynetClient := state.Binary == skynetClientBinaryName
 			matchesFilter := filterName == "" || state.Name == filterName
 
-			if isSkynetClient && matchesFilter {
+			if skynetClient && matchesFilter {
 				found = true
 				status := "stopped"
 				switch state.Status {

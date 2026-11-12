@@ -21,9 +21,9 @@ func init() {
 		vpnUICmd,
 		vpnURLCmd,
 	)
-	vpnUICmd.Flags().BoolVarP(&isPkg, "pkg", "p", false, "use package config path: "+skyenv.SkywirePath)
+	vpnUICmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "use package config path: "+skyenv.SkywirePath)
 	vpnUICmd.Flags().StringVarP(&path, "config", "c", "", "config path")
-	vpnURLCmd.Flags().BoolVarP(&isPkg, "pkg", "p", false, "use package config path: "+skyenv.SkywirePath)
+	vpnURLCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "use package config path: "+skyenv.SkywirePath)
 	vpnURLCmd.Flags().StringVarP(&path, "config", "c", "", "config path")
 }
 
@@ -32,7 +32,7 @@ var vpnUICmd = &cobra.Command{
 	Short: "Open VPN UI in default browser",
 	Run: func(cmd *cobra.Command, _ []string) {
 		var url string
-		if isPkg {
+		if pkg {
 			path = visorconfig.SkywireConfig()
 		}
 		if path != "" {
@@ -63,7 +63,7 @@ var vpnURLCmd = &cobra.Command{
 	Short: "Show VPN UI URL",
 	Run: func(cmd *cobra.Command, _ []string) {
 		var url string
-		if isPkg {
+		if pkg {
 			path = visorconfig.SkywireConfig()
 		}
 		if path != "" {

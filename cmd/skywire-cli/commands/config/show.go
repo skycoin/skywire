@@ -103,7 +103,7 @@ Use --path to print just the config file path.`,
 				if !ok {
 					break
 				}
-				if err, isErr := result.(error); isErr {
+				if err, failed := result.(error); failed {
 					internal.PrintFatalError(cmd.Flags(), err)
 				}
 				out, _ := json.MarshalIndent(result, "", "  ") //nolint:errcheck

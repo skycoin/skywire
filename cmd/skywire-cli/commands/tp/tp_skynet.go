@@ -60,7 +60,7 @@ func fetchSkynetList(rpcClient visorapi.API, pk cipher.PubKey) (*transport.Signe
 // listSkynetTransports prints each visor's own signed transport list,
 // filtered by --types and --pks.
 func listSkynetTransports(cmd *cobra.Command, rpcClient visorapi.API, pkStrs []string) {
-	isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
+	jsonOut, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
 	var pks []cipher.PubKey
 	for _, s := range pkStrs {
 		var pk cipher.PubKey
@@ -88,7 +88,7 @@ func listSkynetTransports(cmd *cobra.Command, rpcClient visorapi.API, pkStrs []s
 			}
 		}
 		all = append(all, res)
-		if isJSON {
+		if jsonOut {
 			continue
 		}
 		if res.Error != "" {
@@ -108,7 +108,7 @@ func listSkynetTransports(cmd *cobra.Command, rpcClient visorapi.API, pkStrs []s
 		w.Flush() //nolint:errcheck,gosec
 		cmdutil.Print(b.String())
 	}
-	if isJSON {
+	if jsonOut {
 		internal.PrintOutput(cmd.Flags(), all, "")
 	}
 }

@@ -166,8 +166,8 @@ func extractPK(rawURL string) string {
 }
 
 func printHealthResults(cmd *cobra.Command, results []visorapi.ServiceHealthEntry) {
-	isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
-	if isJSON {
+	jsonOut, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
+	if jsonOut {
 		internal.PrintOutput(cmd.Flags(), results, "")
 		return
 	}
@@ -537,7 +537,7 @@ func probeServerCarriers(cmd *cobra.Command) {
 	for _, c := range splitCarriers(healthCarriers) {
 		results = append(results, probeOneCarrier(ctx, srvPK, entry, c, log))
 	}
-	if isJSON, _ := cmd.Flags().GetBool(internal.JSONString); isJSON { //nolint:errcheck
+	if jsonOut, _ := cmd.Flags().GetBool(internal.JSONString); jsonOut { //nolint:errcheck
 		internal.PrintOutput(cmd.Flags(), map[string]any{"server": srvPK.Hex(), "carriers": results}, "")
 		return
 	}

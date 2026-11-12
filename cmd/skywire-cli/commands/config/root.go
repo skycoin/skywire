@@ -36,24 +36,24 @@ var (
 	output                     string
 	confPath                   string
 	configName                 string //nolint Note: configName used, but golangci-lint marked it unused in wrong
-	isStdout                   bool
-	isSquash                   bool
-	isRegen                    bool
-	isRetainHypervisors        bool
+	stdout                     bool
+	squash                     bool
+	regenerate                 bool
+	retainHypervisors          bool
 	pText                      string
-	isPkgEnv                   bool
-	isUsrEnv                   bool
-	isHypervisor               bool
+	pkgEnv                     bool
+	usrEnv                     bool
+	hypervisor                 bool
 	hvDeskAddr                 string
 	hypervisorPKs              string
 	dmsgptyWlPKs               string
 	surveyWhitelistPKs         string
 	routeSetupNodes            string
 	transportSetupPKs          string
-	isDmsgHTTP                 bool
+	dmsgHTTP                   bool
 	minDmsgSess                int
-	isVpnServerEnable          bool
-	isVpnRouterEnable          bool
+	vpnServerEnable            bool
+	vpnRouterEnable            bool
 	vpnRouterLanIfc            string
 	vpnRouterSubnet            string
 	vpnRouterWifi              bool
@@ -66,58 +66,58 @@ var (
 	vpnRouterMeshGW            bool
 	vpnRouterMeshGWCIDR        string
 	vpnRouterMeshTLS           bool
-	isDisableAuth              bool
-	isEnableAuth               bool
+	disableAuth                bool
+	enableAuth                 bool
 	hvAuthEnv                  string
-	isEnablePKEndpoint         bool
+	enablePKEndpoint           bool
 	selectedOS                 string
 	disableApps                string
 	serviceConfURL             = deployment.ProdConf.Conf
 	dnsServer                  = "1.1.1.1"
 	services                   visorconfig.Services
 	servicesConfig             servicesConf
-	isForce                    bool
-	isHide                     bool
+	force                      bool
+	hide                       bool
 	walletCustody              string
 	walletDir                  string
 	walletRemotePK             string
 	noWallet                   bool
-	isAll                      bool
-	isOutUnset                 bool
+	all                        bool
+	outUnset                   bool
 	ver                        string
-	isRoot                     = visorconfig.IsRoot()
+	root                       = visorconfig.IsRoot()
 	gHiddenFlags               []string
 	uHiddenFlags               []string
 	binPath                    string
 	logLevel                   string
-	isPkg                      bool
+	pkg                        bool
 	input                      string
-	isUpdateEndpoints          bool
+	updateEndpoints            bool
 	addHypervisorPKs           string
-	isResetHypervisor          bool
+	resetHypervisor            bool
 	setVPNClientKillswitch     string
 	addVPNClientSrv            string
-	isResetVPNclient           bool
+	resetVPNclient             bool
 	addVPNServerWhitelist      string
 	setVPNServerSecure         string
 	setVPNServerAutostart      string
 	setVPNServerNetIfc         string
-	isResetVPNServer           bool
+	resetVPNServer             bool
 	addSkysocksClientSrv       string
-	isResetSkysocksClient      bool
+	resetSkysocksClient        bool
 	skysocksWhitelist          string
-	isResetSkysocks            bool
+	resetSkysocks              bool
 	setPublicAutoconnect       string
 	minHops                    int
 	cascadeRouteSetup          bool
 	policyPerDial              string
-	isUsr                      bool
-	isPublic                   bool
+	usr                        bool
+	public                     bool
 	disablePublicAutoConn      bool
-	isDisplayNodeIP            bool
+	displayNodeIP              bool
 	addExampleApps             bool
 	enableProxyClientAutostart bool
-	isProxyServerEnable        bool
+	proxyServerEnable          bool
 	proxyServerWhitelist       string
 	enableDmsgWeb              bool
 	enableSkynetWeb            bool
@@ -158,16 +158,16 @@ var (
 	enableFlightRecorder       bool
 	enableMuxFEC               bool
 	hvUIDisable                bool
-	isSkychatEnable            bool
+	skychatEnable              bool
 	skychatAddr                string
-	// isSkychatPairEnable adds --pair-enable to the skychat app args
+	// skychatPairEnable adds --pair-enable to the skychat app args
 	// in the generated config. Defaults to true; toggle via SKYCHATPAIR
 	// in /etc/skywire.conf or --servechatpair=false on the CLI. The
 	// pair-RPC channel is required for group chat (#2580 federated send
 	// and #2585 admin mirror) to actually propagate messages, so this
 	// should rarely be off in practice.
-	isSkychatPairEnable bool
-	// isSkychatPortless drops --chataddr from the generated internal-apps
+	skychatPairEnable bool
+	// skychatPortless drops --chataddr from the generated internal-apps
 	// config and emits --portless instead: skychat then binds no TCP port
 	// and its UI is reachable only through the hypervisor's control
 	// surface. Off by default — a chat app whose window you cannot open
@@ -175,16 +175,16 @@ var (
 	// Toggle via SKYCHATPORTLESS in /etc/skywire.conf or --chatportless.
 	// Ignored under --extapps, where skychat is a separate process and has
 	// nothing in-process to publish to.
-	isSkychatPortless bool
+	skychatPortless bool
 	// Skycoin embedded apps — daemon (full node) + web (thin-client
 	// wallet). Default-off for both. SkycoinWebUser drops the wallet
 	// process to a different UID via the launcher's per-app
 	// credential field; left empty means the wallet runs as the
 	// visor's own UID.
-	isSkycoinDaemonEnable bool
-	skycoinDaemonFiber    string // legacy single-instance FIBER_TOML — superseded by skycoinDaemonInstances when that's non-empty
-	skycoinDaemonAPISets  string // legacy single-instance API sets — superseded by skycoinDaemonFlags when that's non-empty
-	skycoinDaemonUser     string
+	skycoinDaemonEnable  bool
+	skycoinDaemonFiber   string // legacy single-instance FIBER_TOML — superseded by skycoinDaemonInstances when that's non-empty
+	skycoinDaemonAPISets string // legacy single-instance API sets — superseded by skycoinDaemonFlags when that's non-empty
+	skycoinDaemonUser    string
 	// skycoinDaemonInstances is the new multi-instance knob. Each
 	// entry is either the literal "skycoin" (built-in defaults, no
 	// FIBER_TOML override) or a path to a fiber.toml. Each entry
@@ -197,7 +197,7 @@ var (
 	// --port and --data-dir are auto-allocated per instance and
 	// must not appear here — gen errors out if they do.
 	skycoinDaemonFlags  string
-	isSkycoinWebEnable  bool
+	skycoinWebEnable    bool
 	skycoinWebAddr      string
 	skycoinWebNodeURLs  string // comma-separated; rendered as repeated --node-url flags
 	skycoinWebWalletDir string
@@ -234,7 +234,7 @@ var (
 	dmsgRelayKeys        string
 	dmsgWebSecretKey     string
 	resolverCA           string
-	isSkyDNSEnable       bool
+	skyDNSEnable         bool
 	noDmsgRelay          bool
 )
 

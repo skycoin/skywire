@@ -45,7 +45,7 @@ func init() {
 	srvCmd.Flags().StringSliceVarP(&wl, "wl", "w", wl, "whitelisted keys for DMSG authenticated routes")
 	srvCmd.Flags().StringVarP(&proxyAddr, "proxy", "x", proxyAddr, "connect to DMSG via proxy (e.g., '127.0.0.1:1080')")
 	srvCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "debug", "[ debug | warn | error | fatal | panic | trace | info ]")
-	srvCmd.Flags().BoolVarP(&isEnvs, "envs", "E", false, "show example .conf file")
+	srvCmd.Flags().BoolVarP(&envs, "envs", "E", false, "show example .conf file")
 	srvCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified")
 	srvCmd.Flags().StringVar(&pprofMode, "pprofmode", "", "[ cpu | mem | mutex | block | trace | http ]")
 	srvCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port")
@@ -64,7 +64,7 @@ the local service speaks all work unchanged.` + func() string {
 		return "\n\t.conf file may also be specified with " + dwsenv + `=/path/to/dmsgwebsrv.conf skywire dmsg web srv`
 	}(),
 	PreRun: func(_ *cobra.Command, _ []string) {
-		if isEnvs {
+		if envs {
 			printEnvs(srvenvfileLinux)
 		}
 		if logLvl != "" {

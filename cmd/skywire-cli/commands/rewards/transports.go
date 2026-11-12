@@ -486,9 +486,9 @@ func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logg
 
 		// Same-LAN: both edges report the same external IP from their
 		// surveys. Drop the whole transport — neither side gets credit.
-		ipA, hasA := pkIPMap[edgeA]
-		ipB, hasB := pkIPMap[edgeB]
-		if hasA && hasB && ipA == ipB {
+		ipA, okA := pkIPMap[edgeA]
+		ipB, okB := pkIPMap[edgeB]
+		if okA && okB && ipA == ipB {
 			sameLANCount++
 			bwLog.Debugf("Excluding same-LAN transport %s: %s and %s both on %s (sent_a=%d sent_b=%d)",
 				tp.ID[:8], edgeA[:12], edgeB[:12], ipA, sentA, sentB)

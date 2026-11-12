@@ -266,10 +266,10 @@ Examples:
 			// that string (including skynet-client clients started
 			// with default naming), surfacing CLIENT apps in the SRV
 			// status output.
-			isSkynetServer := state.Binary == skynetBinaryName
+			skynetServer := state.Binary == skynetBinaryName
 			matchesFilter := filterName == "" || state.Name == filterName
 
-			if isSkynetServer && matchesFilter {
+			if skynetServer && matchesFilter {
 				found = true
 				status := "stopped"
 				switch state.Status {

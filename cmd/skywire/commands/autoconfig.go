@@ -536,9 +536,9 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 		msg2(fmt.Sprintf("Visor Public Key:\n%s%s%s", colorGreen, pubkey, colorReset))
 	}
 
-	isHypervisor := conf != nil && conf.Hypervisor != nil && conf.Hypervisor.Enable
+	hypervisor := conf != nil && conf.Hypervisor != nil && conf.Hypervisor.Enable
 
-	if isHypervisor {
+	if hypervisor {
 		// Derive the UI port from the config rather than hardcoding :8000 —
 		// the platform default differs (js binds :8001) and the operator may
 		// have overridden hypervisor.http_addr.
@@ -592,7 +592,7 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 	}
 
 	if autoconfigVals.Verbose {
-		printWelcome(pubkey, isHypervisor)
+		printWelcome(pubkey, hypervisor)
 	}
 
 	// Platform-specific final step. Native: no-op (the service restart
@@ -857,7 +857,7 @@ func chownInstall(username string) error {
 	})
 }
 
-func printWelcome(pubkey string, isHypervisor bool) {
+func printWelcome(pubkey string, hypervisor bool) {
 	rewardOut, err := selfRewardAddress()
 	if err == nil && len(rewardOut) > 0 {
 		msg2(fmt.Sprintf("skycoin reward address:\n%s%s%s", colorGreen, strings.TrimSpace(string(rewardOut)), colorReset))
@@ -870,7 +870,7 @@ func printWelcome(pubkey string, isHypervisor bool) {
 
 	msg2(fmt.Sprintf("support:\n%shttps://t.me/skywire%s", colorBlue, colorReset))
 
-	if isHypervisor && pubkey != "" {
+	if hypervisor && pubkey != "" {
 		msg2("run the following command on OTHER NODES to set this one as the hypervisor:")
 		cmdutil.Printf("%sskywire autoconfig %s%s%s\n", colorCyan, colorYellow, pubkey, colorReset)
 		msg2(fmt.Sprintf("to see this text again run: %sskywire autoconfig%s", colorCyan, colorReset))
