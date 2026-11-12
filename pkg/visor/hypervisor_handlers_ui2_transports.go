@@ -18,6 +18,16 @@ import (
 func (hv *Hypervisor) ui2TransportsRoutes(r *httputil.Router) {
 	r.Get("/ui2/visors/{pk}/transports", hv.ui2Transports(false))
 	r.Get("/ui2/visors/{pk}/transports/body", hv.ui2Transports(true))
+	r.Get("/ui2/visors/{pk}/transports/{tid}/details", hv.withCtx(hv.ui2VisorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		t := ui2LoadTransports(ctx, r)
+		for _, x := range t.List {
+			if x.ID == r.PathValue("tid") {
+				hv.render(w, r, ui2.TransportDetails(t, x))
+				return
+			}
+		}
+		http.NotFound(w, r)
+	}))
 	r.Post("/ui2/visors/{pk}/transports", hv.ui2TransportAdd())
 	r.Delete("/ui2/visors/{pk}/transports/{tid}", hv.ui2TransportWrite(func(hv *Hypervisor, w http.ResponseWriter, r *http.Request, _ *httpCtx) bool {
 		return ui2CallAPI(w, r, hv.deleteTransport(), nil)
