@@ -186,7 +186,9 @@ ADOPT — ports cleanly, mostly already enforced by our toolchain (≈15 rules):
   CircularDependencyDetection / LayerDependency → **`go build` enforces acyclic
                            imports as a hard error** (free). Direction = lint.
   BanDebugLogs           → no stray debug logging committed (revive/manual).
-  BooleanNamingPrefix    → Is/Has/Can/Should for bools — good Go too (ADOPT).
+  BooleanNamingPrefix    → INVERTED for Go. Bool variables, parameters and
+                           fields take plain names (enabled, closed), no Is/Has.
+                           Predicate funcs may keep Is/Has like the stdlib.
   BooleanEnumFirstValue-analogue → make the zero value the invalid/unset state
                            (iota starts at 0 → reserve 0 = Unknown/Invalid). ADOPT.
   DescriptiveLoopVariables → allow idiomatic short `i`,`k`,`v` (Go norm) but no
@@ -252,8 +254,11 @@ gofmt + go build + golangci-lint. That is the honest "compliance engine."
       coherent. Keep untagged files pure; push hostile deps behind tags. [SSS R1 goal]
   K7  Interfaces defined at the consumer, named -er, kept small. Accept
       interfaces, return concrete types. [inverts SSS R3, follows Go]
-  K8  Bools prefixed Is/Has/Can/Should; mutators are verbs; no Get- prefix on
-      getters. [SSS BooleanNamingPrefix + Go idiom]
+  K8  No is/has prefix on boolean variables, parameters or struct fields.
+      Use plain idiomatic Go names (enabled, closed, verbose). Predicate
+      functions and methods may keep Is/Has as Go's stdlib does (errors.Is,
+      strings.HasPrefix, os.IsNotExist). Mutators are verbs. No Get prefix
+      on getters. [SSS BooleanNamingPrefix inverted to Go idiom]
   K9  Shallow, one-package-per-dir tree; snake_case filenames named for their
       primary concept. [SSS Flat/FileNaming]
   K10 No committed debug logs / dead code (unused linter + review). [SSS BanDebugLogs]
