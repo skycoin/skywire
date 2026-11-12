@@ -1,0 +1,235 @@
+package ui2
+
+import (
+	"sort"
+	"strconv"
+)
+
+// The transports of the whole network, as network-transports.component.ts,
+// from the transport discovery's metrics the hypervisor folds and caps.
+
+// FleetTp is one transport.
+type FleetTp struct {
+	ID     string
+	Type   string
+	Live   bool
+	A, B   string
+	Sent   uint64
+	Recv   uint64
+	LatAvg int64 // µs
+}
+
+// FleetVisor is one visor of the tree view with its transports.
+type FleetVisor struct {
+	PK      string
+	Sent    uint64
+	Recv    uint64
+	Tps     []FleetTp
+	Offline int
+}
+
+// FleetTps is the page.
+type FleetTps struct {
+	Days      int
+	Tree      bool
+	HideEdges bool
+	LiveOnly  bool
+	Total     int
+	Returned  int
+	LiveTotal int
+	Bandwidth uint64
+	Partial   bool
+	Rows      []FleetTp
+	Visors    []FleetVisor
+	Pager     Pager
+	Fetched   string
+	Err       string
+}
+
+// FleetTpsOf pages the transports, or in the tree view the visors, the
+// filter text matches.
+func FleetTpsOf(f FleetTps, tps []FleetTp, q ListQuery) FleetTps {
+	var rows []FleetTp
+	for _, t := range tps {
+		if q.Match(t.ID, t.Type, t.A, t.B) {
+			rows = append(rows, t)
+		}
+	}
+	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Sent+rows[i].Recv > rows[j].Sent+rows[j].Recv })
+	if !f.Tree {
+		f.Rows, f.Pager = Paginate(rows, q, 100)
+		return f
+	}
+	by := map[string]*FleetVisor{}
+	var order []*FleetVisor
+	add := func(pk, remote string, t FleetTp) {
+		v := by[pk]
+		if v == nil {
+			v = &FleetVisor{PK: pk}
+			by[pk] = v
+			order = append(order, v)
+		}
+		c := t
+		c.B = remote
+		v.Tps = append(v.Tps, c)
+		v.Sent += t.Sent
+		v.Recv += t.Recv
+		if !t.Live {
+			v.Offline++
+		}
+	}
+	for _, t := range rows {
+		add(t.A, t.B, t)
+		add(t.B, t.A, t)
+	}
+	vs := make([]FleetVisor, len(order))
+	for i, v := range order {
+		vs[i] = *v
+	}
+	sort.SliceStable(vs, func(i, j int) bool { return vs[i].Sent+vs[i].Recv > vs[j].Sent+vs[j].Recv })
+	f.Visors, f.Pager = Paginate(vs, q, 50)
+	return f
+}
+
+func latMS(us int64) string {
+	if us <= 0 {
+		return "-"
+	}
+	return strconv.FormatFloat(float64(us)/1000, 'f', 1, 64) + " ms"
+}
+
+func (f FleetTps) url(days int, tree, hide, live bool) string {
+	u := "ui2/transports/body?days=" + itoa(days)
+	if tree {
+		u += "&tree=1"
+	}
+	if hide {
+		u += "&hide_edges=1"
+	}
+	if live {
+		u += "&live=1"
+	}
+	return u
+}
+
+func (f FleetTps) self() string { return f.url(f.Days, f.Tree, f.HideEdges, f.LiveOnly) }
+
+templ FleetTpsPage(f FleetTps) {
+	@Layout(T(ctx, "nodes.transports-title"), "#/nodes/transports") {
+		<section class="card">
+			<div class="head"><h1>{ T(ctx, "nodes.transports-title") }</h1></div>
+			<div class="bar" id="ft-q">
+				@ListSearch(f.self(), "#ft", "#ft-q", T(ctx, "ui2.list.search-transports"), f.Pager.ListQuery)
+			</div>
+			@FleetTpsBody(f)
+		</section>
+	}
+}
+
+templ ftBtn(f FleetTps, label string, on bool, url string) {
+	<button class={ "btn sm", templ.KV("primary", on) } type="button" hx-get={ url } hx-target="#ft" hx-swap="outerHTML" hx-include="#ft-q">{ label }</button>
+}
+
+// FleetTpsBody polls every 5 minutes as the Angular page does.
+templ FleetTpsBody(f FleetTps) {
+	<div id="ft" hx-get={ f.self() + "&page=" + itoa(f.Pager.Page) } hx-trigger="every 300s [document.visibilityState === 'visible']" hx-swap="outerHTML" hx-include="#ft-q">
+		<div class="bar">
+			<span class="dim">{ T(ctx, "network-transports.days") }:</span>
+			for _, d := range []int{1, 7, 30} {
+				@ftBtn(f, itoa(d)+"d", d == f.Days, f.url(d, f.Tree, f.HideEdges, f.LiveOnly))
+			}
+			<span class="dim">{ T(ctx, "network-transports.view") }:</span>
+			@ftBtn(f, T(ctx, "network-transports.view-compact"), !f.Tree, f.url(f.Days, false, f.HideEdges, f.LiveOnly))
+			@ftBtn(f, T(ctx, "network-transports.view-tree"), f.Tree, f.url(f.Days, true, f.HideEdges, f.LiveOnly))
+			if !f.Tree {
+				<span class="dim">{ T(ctx, "network-transports.edges") }:</span>
+				@ftBtn(f, T(ctx, "network-transports.edges-show"), !f.HideEdges, f.url(f.Days, f.Tree, false, f.LiveOnly))
+				@ftBtn(f, T(ctx, "network-transports.edges-hide"), f.HideEdges, f.url(f.Days, f.Tree, true, f.LiveOnly))
+			}
+			<span class="dim">{ T(ctx, "network-transports.offline") }:</span>
+			@ftBtn(f, T(ctx, "network-transports.offline-show"), !f.LiveOnly, f.url(f.Days, f.Tree, f.HideEdges, false))
+			@ftBtn(f, T(ctx, "network-transports.offline-hide"), f.LiveOnly, f.url(f.Days, f.Tree, f.HideEdges, true))
+		</div>
+		@ErrorBox(f.Err)
+		if f.Total > 0 {
+			<p class="small dim">
+				{ T(ctx, "network-transports.summary", "transports", itoa(f.Total), "bandwidth", Bytes(f.Bandwidth), "days", itoa(f.Days)) }
+				· { T(ctx, "network-transports.last-updated") }: { f.Fetched }
+				if f.Returned < f.Total {
+					· { itoa(f.Returned) } / { itoa(f.Total) }
+					if f.Partial {
+						+
+					}
+				}
+			</p>
+			<div class="bar">
+				@PagerNav(f.Pager, f.self(), "#ft")
+			</div>
+		}
+		if !f.Tree && len(f.Rows) > 0 {
+			<div class="table-wrap">
+				<table class="list">
+					<thead>
+						<tr>
+							<th>{ T(ctx, "network-transports.tp-id") }</th>
+							<th>{ T(ctx, "network-transports.type") }</th>
+							if !f.HideEdges {
+								<th>{ T(ctx, "network-transports.edge-a") }</th>
+								<th>{ T(ctx, "network-transports.edge-b") }</th>
+							}
+							<th class="num">{ T(ctx, "network-transports.sent") }</th>
+							<th class="num">{ T(ctx, "network-transports.recv") }</th>
+							<th class="num">{ T(ctx, "network-transports.total") }</th>
+							<th class="num">{ T(ctx, "network-transports.latency") }</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, t := range f.Rows {
+							<tr class={ templ.KV("offline", !t.Live) }>
+								<td data-label={ T(ctx, "network-transports.tp-id") }><span class="mono small pk-text" title={ t.ID }>{ t.ID }</span></td>
+								<td data-label={ T(ctx, "network-transports.type") }><span class="badge">{ t.Type }</span></td>
+								if !f.HideEdges {
+									<td data-label={ T(ctx, "network-transports.edge-a") }><span class="mono small pk-text" title={ t.A }>{ t.A }</span></td>
+									<td data-label={ T(ctx, "network-transports.edge-b") }><span class="mono small pk-text" title={ t.B }>{ t.B }</span></td>
+								}
+								<td class="num" data-label={ T(ctx, "network-transports.sent") }>{ Bytes(t.Sent) }</td>
+								<td class="num" data-label={ T(ctx, "network-transports.recv") }>{ Bytes(t.Recv) }</td>
+								<td class="num" data-label={ T(ctx, "network-transports.total") }><strong>{ Bytes(t.Sent + t.Recv) }</strong></td>
+								<td class="num" data-label={ T(ctx, "network-transports.latency") }>{ latMS(t.LatAvg) }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+		if f.Tree {
+			for _, v := range f.Visors {
+				<details class="bw-row" data-open-key={ v.PK }>
+					<summary class="bw-head">
+						<span class="mono small pk-text" title={ v.PK }>{ v.PK }</span>
+						<strong>{ Bytes(v.Sent + v.Recv) }</strong>
+						<span class="small dim">↑ { Bytes(v.Sent) } ↓ { Bytes(v.Recv) } · { itoa(len(v.Tps)) } tp</span>
+						if !f.LiveOnly && v.Offline > 0 {
+							<span class="small warn-text" title={ T(ctx, "network-transports.offline-count-tooltip") }>{ itoa(v.Offline) } offline</span>
+						}
+					</summary>
+					<div class="table-wrap">
+						<table class="list">
+							<tbody>
+								for _, t := range v.Tps {
+									<tr class={ templ.KV("offline", !t.Live) }>
+										<td data-label={ T(ctx, "network-transports.tp-id") }><span class="mono small pk-text" title={ t.ID }>{ t.ID }</span></td>
+										<td data-label={ T(ctx, "network-transports.type") }><span class="badge">{ t.Type }</span></td>
+										<td data-label="→"><span class="mono small pk-text" title={ t.B }>{ t.B }</span></td>
+										<td class="num" data-label={ T(ctx, "network-transports.total") }>{ Bytes(t.Sent + t.Recv) }</td>
+										<td class="num" data-label={ T(ctx, "network-transports.latency") }>{ latMS(t.LatAvg) }</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+				</details>
+			}
+		}
+	</div>
+}

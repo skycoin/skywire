@@ -29,7 +29,7 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 | `/nodes/resources` | CPU, memory, disk and traffic of every visor | yes | `ui2/resources` |
 | `/nodes/uptime` | uptime of every visor | yes | `ui2/uptime` |
 | | version history chart | no | |
-| `/nodes/transports` | transports across the fleet | no | |
+| `/nodes/transports` | transports across the network: compact and tree views, window, edges, offline | yes | `ui2/transports`, paged; seen live only in the "feed still syncing" state |
 | `/settings` | change password | yes | `ui2/settings` |
 | | refresh rate, theme, language | yes | the refresh rate sets the visor list poll |
 | | updater config | n/a | only feeds the update action, which has no backend |
