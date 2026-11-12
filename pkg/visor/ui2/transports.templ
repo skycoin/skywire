@@ -30,7 +30,8 @@ templ TransportsPage(t Transports) {
 			</form>
 		</details>
 		@TransportsSummary(t, false)
-		<div id="tp-view">
+		<div id="tp-panel"></div>
+		<div id="tp-view" data-labels>
 			<div class="bar">
 				<h2>{ T(ctx, "transports.list-title") }</h2>
 				@ListSearch(t.url("/body"), "#tp-body", "#tp-view", T(ctx, "ui2.list.search-transports"), t.Pager.ListQuery)
@@ -142,6 +143,7 @@ templ transportRow(t Transports, x Transport) {
 				<span class="badge off">{ T(ctx, "transports.offline") }</span>
 			} else {
 				<span class="key" data-copy={ x.ID }>{ x.ID }</span>
+				<span class="badge" data-label-for={ x.ID } data-label-only hidden></span>
 			}
 		</td>
 		<td class="mono small" data-label={ T(ctx, "transports.remote-node") }><span class="key" data-copy={ x.Remote }>{ x.Remote }</span></td>
@@ -156,6 +158,10 @@ templ transportRow(t Transports, x Transport) {
 		<td class="num small" data-label={ T(ctx, "transports.latency") }>{ x.Latency }</td>
 		<td class="num small" data-label={ T(ctx, "ui2.transports.throughput") }>{ x.Throughput }</td>
 		<td class="actions">
+			<button class="icon-btn" type="button" hx-get={ t.url("/" + x.ID + "/details") } hx-target="#tp-panel" hx-swap="innerHTML" title={ T(ctx, "transports.details.title") } aria-label={ T(ctx, "transports.details.title") }><span class="mi">info</span></button>
+			if !x.Offline {
+				<button class="icon-btn" type="button" data-edit-label={ x.ID } data-label-type="tp" data-prompt={ T(ctx, "edit-label.label") } title={ T(ctx, "labeled-element.edit-label") } aria-label={ T(ctx, "labeled-element.edit-label") }><span class="mi">edit</span></button>
+			}
 			if !x.Offline {
 				<button class="icon-btn" type="button" hx-delete={ t.url("/" + x.ID) } hx-confirm={ deleteConfirm(ctx, x.Persistent) } hx-target="#tp-body" hx-swap="outerHTML" title={ T(ctx, "transports.delete") }><span class="mi">close</span></button>
 			}
@@ -217,4 +223,44 @@ func jsonSafe(s string) string {
 		}
 		return r
 	}, s)
+}
+
+// TransportDetails is one transport's details, as the Angular details
+// dialog shows them.
+templ TransportDetails(t Transports, x Transport) {
+	<section class="card sub">
+		<div class="head">
+			<h2>{ T(ctx, "transports.details.title") }</h2>
+			<span class="spacer"></span>
+			<button class="icon-btn" type="button" data-clear="#tp-panel" aria-label={ T(ctx, "common.close") }><span class="mi">close</span></button>
+		</div>
+		<h3 class="small">{ T(ctx, "transports.details.basic.title") }</h3>
+		<dl class="kv small" data-labels>
+			<dt>{ T(ctx, "transports.details.basic.id") }</dt>
+			<dd class="mono"><span class="key" data-copy={ x.ID }>{ x.ID }</span> <span class="badge" data-label-for={ x.ID } data-label-only hidden></span></dd>
+			<dt>{ T(ctx, "transports.details.basic.type") }</dt>
+			<dd>{ x.Type }</dd>
+			<dt>{ T(ctx, "transports.details.basic.local-pk") }</dt>
+			<dd class="mono"><span class="key" data-copy={ t.PK }>{ t.PK }</span></dd>
+			<dt>{ T(ctx, "transports.details.basic.remote-pk") }</dt>
+			<dd class="mono"><span class="key" data-copy={ x.Remote }>{ x.Remote }</span></dd>
+			<dt>{ T(ctx, "transports.details.basic.persistent") }</dt>
+			<dd>
+				if x.Persistent {
+					{ T(ctx, "common.yes") }
+				} else {
+					{ T(ctx, "common.no") }
+				}
+			</dd>
+			<dt>{ T(ctx, "transports.latency") }</dt>
+			<dd>{ x.Latency }</dd>
+		</dl>
+		<h3 class="small">{ T(ctx, "transports.details.data.title") }</h3>
+		<dl class="kv small">
+			<dt>{ T(ctx, "transports.details.data.uploaded") }</dt>
+			<dd>{ x.Sent }</dd>
+			<dt>{ T(ctx, "transports.details.data.downloaded") }</dt>
+			<dd>{ x.Recv }</dd>
+		</dl>
+	</section>
 }

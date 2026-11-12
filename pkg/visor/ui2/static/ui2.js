@@ -225,9 +225,9 @@ document.addEventListener('DOMContentLoaded', function () {
 		return m;
 	}
 	// saveLabel follows storage.service.ts saveLabel: an empty label removes it.
-	function saveLabel(pk, label) {
+	function saveLabel(pk, label, type) {
 		var ls = readJSON('labelsData').filter(function (l) { return l && l.id !== pk; });
-		if (label) ls.push({ id: pk, label: label, identifiedElementType: 'nd' });
+		if (label) ls.push({ id: pk, label: label, identifiedElementType: type || 'nd' });
 		writeJSON('labelsData', ls);
 	}
 	// hide marks forgotten visors hidden for the Angular list too
@@ -349,7 +349,7 @@ document.addEventListener('DOMContentLoaded', function () {
 		if (el) {
 			var pk = el.getAttribute('data-edit-label');
 			var l = window.prompt(el.getAttribute('data-prompt'), labels()[pk] || '');
-			if (l !== null) { saveLabel(pk, l.trim()); apply(); }
+			if (l !== null) { saveLabel(pk, l.trim(), el.getAttribute('data-label-type')); apply(); document.dispatchEvent(new Event('ui2:labels')); }
 			return;
 		}
 		var t = e.target.closest('[data-node-toggle]');
@@ -518,10 +518,12 @@ document.addEventListener('DOMContentLoaded', function () {
 		} catch (_) { return; }
 		document.querySelectorAll('[data-labels] [data-label-for]').forEach(function (a) {
 			var pk = a.getAttribute('data-label-for'), lab = m[pk], h = a.closest('td, div').parentNode.querySelector('[data-host-for="' + pk + '"]');
+			if (a.hasAttribute('data-label-only')) { a.textContent = lab || ''; a.hidden = !lab; return; }
 			if (lab) a.textContent = lab;
 			if (h) h.hidden = !lab || h.textContent === lab;
 		});
 	}
+	document.addEventListener('ui2:labels', apply);
 	document.addEventListener('htmx:afterSettle', apply);
 	document.addEventListener('DOMContentLoaded', apply);
 })();
