@@ -11,6 +11,7 @@ import com.skycoin.skywire.core.AppPreferences
 import com.skycoin.skywire.core.AppVisibility
 import com.skycoin.skywire.core.BatteryOptimization
 import com.skycoin.skywire.core.FullScreenCalls
+import com.skycoin.skywire.core.Internet
 import com.skycoin.skywire.core.ConfigManager
 import com.skycoin.skywire.core.CoreServiceState
 import com.skycoin.skywire.core.CoreState
@@ -39,8 +40,13 @@ data class HomeUiState(
     val offerBatteryExemption: Boolean = false,
     /** A call cannot take the screen; the user has not been asked yet. */
     val offerFullScreenCalls: Boolean = false,
+    /** The phone has a network with internet access. */
+    val online: Boolean = true,
 ) {
     val connected: Boolean get() = coreState is CoreState.Running && apiUp
+    /** On, but the phone has no way to reach the Skywire network. */
+    val waitingForInternet: Boolean get() = !online &&
+        (coreState is CoreState.Starting || coreState is CoreState.Running || coreState is CoreState.Restarting)
 }
 
 /**
@@ -76,7 +82,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             live.asStateFlow(),
             batteryOffer.asStateFlow(),
             fullScreenOffer.asStateFlow(),
-        ) { core, data, offerBattery, offerCalls ->
+            Internet.online(app),
+        ) { core, data, offerBattery, offerCalls, online ->
             HomeUiState(
                 coreState = core,
                 apiUp = data.apiUp,
@@ -89,6 +96,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 // One question at a time: the call one waits its turn behind
                 // the battery one, so Home never stacks two permission cards.
                 offerFullScreenCalls = offerCalls && !offerBattery && core is CoreState.Running,
+                online = online,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 

@@ -69,6 +69,7 @@ class SkywireCoreService : Service() {
     private var notifyBridge: Job? = null
     private var networkWatcher: Job? = null
     private var contactsCopy: Job? = null
+    private var internetWatch: Job? = null
 
     @Volatile private var child: Process? = null
 
@@ -176,7 +177,13 @@ class SkywireCoreService : Service() {
                     child = process
                     CoreServiceState.mutableState.value =
                         CoreState.Running(System.currentTimeMillis(), attempt)
-                    notify { it.getString(R.string.core_notification_running) }
+                    internetWatch?.cancel()
+                    internetWatch = launch {
+                        Internet.online(this@SkywireCoreService).collect { online ->
+                            val text = if (online) R.string.core_notification_running else R.string.core_notification_offline
+                            notify { it.getString(text) }
+                        }
+                    }
                     // The skydns app autostarts with the visor and dials the
                     // VPN service for its tunnel, so the service must listen.
                     if (prefs.boolean(SkyDns.PREF_STANDALONE, SkyDns.DEFAULT_STANDALONE).first()) {
@@ -219,6 +226,8 @@ class SkywireCoreService : Service() {
                     networkWatcher = null
                     contactsCopy?.cancel()
                     contactsCopy = null
+                    internetWatch?.cancel()
+                    internetWatch = null
 
                     val ranMs = SystemClock.elapsedRealtime() - startedAt
                     log.line("=== visor exited with code $exit after ${ranMs / 1000}s ===")
