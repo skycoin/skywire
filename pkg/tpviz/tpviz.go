@@ -1653,10 +1653,10 @@ func (s *Server) handleLocalVisor(w http.ResponseWriter, r *http.Request) {
 
 	// Refresh data on each request (only when visor API is set via SetVisorAPI - embedded mode)
 	s.visorMu.RLock()
-	hasAPI := s.visorAPI != nil
+	withAPI := s.visorAPI != nil
 	s.visorMu.RUnlock()
 
-	if hasAPI {
+	if withAPI {
 		s.refreshVisorData()
 	}
 
@@ -1696,10 +1696,10 @@ func (s *Server) handleLocalVisorWS(w http.ResponseWriter, r *http.Request) {
 
 	// Send initial data immediately
 	s.visorMu.RLock()
-	hasAPI := s.visorAPI != nil
+	withAPI := s.visorAPI != nil
 	s.visorMu.RUnlock()
 
-	if hasAPI {
+	if withAPI {
 		s.refreshVisorData()
 	}
 
@@ -2048,18 +2048,18 @@ func (s *Server) startLocalVisorBroadcast() {
 		case <-ticker.C:
 			// Only broadcast if there are connected clients and visor API is available
 			s.wsClientsMu.RLock()
-			hasClients := len(s.wsClients) > 0
+			connected := len(s.wsClients) > 0
 			s.wsClientsMu.RUnlock()
 
-			if !hasClients {
+			if !connected {
 				continue
 			}
 
 			s.visorMu.RLock()
-			hasAPI := s.visorAPI != nil
+			withAPI := s.visorAPI != nil
 			s.visorMu.RUnlock()
 
-			if hasAPI {
+			if withAPI {
 				s.refreshVisorData()
 				s.broadcastLocalVisorData()
 			}

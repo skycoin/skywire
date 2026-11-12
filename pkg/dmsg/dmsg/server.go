@@ -595,7 +595,7 @@ func (s *Server) maintainPeerConnection(ctx context.Context, peer PeerEntry) {
 			continue
 		}
 		ses.sm.addr = ses.sm.yamux.RemoteAddr()
-		ses.isPeer = true
+		ses.peer = true
 		ses.sm.mutx.Unlock()
 
 		s.peerSessionsMx.Lock()
@@ -704,7 +704,7 @@ const sessionFilingWait = 5 * time.Second
 // own key is a client and stops being treated as a peer. Anything else, or no
 // stream within sessionFilingWait, is filed as it always was.
 func (s *Server) fileSession(ctx context.Context, dSes *SessionCommon) {
-	if !dSes.isPeer || s.isStaticPeer(dSes.RemotePK()) {
+	if !dSes.peer || s.isStaticPeer(dSes.RemotePK()) {
 		s.setSession(ctx, dSes)
 		return
 	}
@@ -713,7 +713,7 @@ func (s *Server) fileSession(ctx context.Context, dSes *SessionCommon) {
 		case notFiled:
 			return
 		case filedClient:
-			dSes.isPeer = false
+			dSes.peer = false
 		}
 		s.setSession(ctx, dSes)
 	}}
@@ -766,14 +766,14 @@ func (s *Server) sendPeerAnnounce(ses *SessionCommon) error {
 }
 
 // addAcceptedPeerSession files an announced inbound session as a
-// forwardable peer: marks it isPeer, records the PK in peerPKs (so a
+// forwardable peer: marks it peer, records the PK in peerPKs (so a
 // reconnect classifies consistently), and inserts it into peerSessions
 // so forwardViaPeer routes client streams down it. The reverse-path
 // enabler for non-public servers; called via the promoteToPeerFunc hook
 // from serveStream when an inbound announcement is accepted.
 func (s *Server) addAcceptedPeerSession(remotePK cipher.PubKey, ses *SessionCommon) {
 	s.peerSessionsMx.Lock()
-	ses.isPeer = true
+	ses.peer = true
 	s.peerPKs[remotePK] = struct{}{}
 	s.peerSessions[remotePK] = ses
 	s.peerSessionsMx.Unlock()
@@ -820,7 +820,7 @@ func (s *Server) handleSession(conn net.Conn) {
 
 	// Mark session as peer if remote PK is a known peer server.
 	if s.isPeerPK(dSes.RemotePK()) {
-		dSes.isPeer = true
+		dSes.peer = true
 		log.Info("Started peer server session.")
 	} else {
 		log.Debug("Started session.")
@@ -876,9 +876,9 @@ func (s *Server) handleSession(conn net.Conn) {
 	// accepted PeerAnnounce from a non-public server), drop it from the
 	// peer set on close — identity-checked so a fresh reconnect that
 	// already replaced us is not evicted. A statically-configured peer's
-	// inbound session is isPeer too but is NOT in peerSessions (only the
+	// inbound session is peer too but is NOT in peerSessions (only the
 	// outbound dial is), so the identity check makes this a no-op there.
-	if dSes.isPeer {
+	if dSes.peer {
 		s.peerSessionsMx.Lock()
 		if s.peerSessions[dSes.RemotePK()] == dSes.SessionCommon {
 			delete(s.peerSessions, dSes.RemotePK())

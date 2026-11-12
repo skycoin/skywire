@@ -83,7 +83,7 @@ func TestServer_FoldedKeyKeepsClientAndPeerLink(t *testing.T) {
 		15*time.Second, 50*time.Millisecond, "S must hold the folded key's peer link and its client session")
 	link, cs := peerLink(), client()
 	require.NotSame(t, link, cs, "the client slot must hold the client, not the peer link")
-	require.False(t, cs.isPeer, "the client session must not be treated as a peer")
+	require.False(t, cs.peer, "the client session must not be treated as a peer")
 
 	xPK, xSK := GenKeyPair(t, "fold-x")
 	cliX := NewClient(xPK, xSK, dc, &Config{MinSessions: 1})

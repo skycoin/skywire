@@ -22,8 +22,8 @@ func TestManagerPin_HoldsFeedThroughTransientRelease(t *testing.T) {
 
 	m.Pin(FeedTPDAllTransports)
 
-	rc, hasFeed := feedRefcount(m, FeedTPDAllTransports)
-	require.True(t, hasFeed, "Pin must create + hold the feed")
+	rc, feedFound := feedRefcount(m, FeedTPDAllTransports)
+	require.True(t, feedFound, "Pin must create + hold the feed")
 	assert.Equal(t, 1, rc, "pinned feed sits at refcount 1")
 
 	// A transient consumer acquires then releases; the pin must keep the

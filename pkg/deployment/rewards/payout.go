@@ -63,7 +63,7 @@ func SingleAddressPKs(sharesCSV []byte) map[string][]string {
 		if xpub != "" {
 			continue
 		}
-		if _, isXpub, err := rewardconfig.ValidateRewardAddress(addr); err != nil || isXpub {
+		if _, xpub, err := rewardconfig.ValidateRewardAddress(addr); err != nil || xpub {
 			continue
 		}
 		m[addr] = append(m[addr], pk)

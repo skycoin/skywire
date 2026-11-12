@@ -250,7 +250,7 @@ func TestDesiredPeerSubsForRole_NonAdminAlsoFollowsPeers(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("fanout 1: desired = %v, want the owner + 1 peer", sortedPKHexes(got))
 	}
-	if _, hasOwner := got[owner]; !hasOwner {
+	if _, ownerFound := got[owner]; !ownerFound {
 		t.Error("fanout 1: the admin must always be followed")
 	}
 	if _, self := got[m1]; self {

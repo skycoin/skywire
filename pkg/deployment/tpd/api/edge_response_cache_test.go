@@ -78,8 +78,8 @@ func TestEdgeRespCache(t *testing.T) {
 		_, _, err = short.body(pkA, func() ([]byte, error) { return []byte(`["a2"]`), nil })
 		require.NoError(t, err)
 		assert.Len(t, short.slots, 1)
-		_, hasB := short.slots[pkB]
-		assert.False(t, hasB, "expired pkB slot should have been swept")
+		_, okB := short.slots[pkB]
+		assert.False(t, okB, "expired pkB slot should have been swept")
 	})
 }
 

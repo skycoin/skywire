@@ -537,9 +537,9 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 
 				dstAddr := dmsg.Addr{PK: dest, Port: dialPort}
 				var stream net.Conn
-				_, isDirectServer := cfg.DirectServerPKs[dest]
+				_, ok := cfg.DirectServerPKs[dest]
 				switch {
-				case isDirectServer && cfg.DirectClient != nil && len(route) == 0:
+				case ok && cfg.DirectClient != nil && len(route) == 0:
 					// Non-discovery dmsg SERVER: dial it through the direct
 					// client by self-rendezvous — connect to the server (the
 					// direct client knows its address) and dial the server's

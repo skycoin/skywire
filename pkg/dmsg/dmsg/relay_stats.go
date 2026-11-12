@@ -36,7 +36,7 @@ func (s *Server) Stats() ServerStats {
 	}
 	s.sessionsMx.Lock()
 	for _, ses := range s.sessions {
-		if !ses.isPeer {
+		if !ses.peer {
 			st.ClientSessions++
 		}
 	}

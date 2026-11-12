@@ -18,7 +18,7 @@ import (
 
 // TestAddrConnMap_ReservePending_Idempotent: two callers reserving
 // the same addr concurrently both observe a single insert.
-// Mirrors onNewConn's contract — one wins isNew, the other gets
+// Mirrors onNewConn's contract — one wins created, the other gets
 // the existing entry back.
 func TestAddrConnMap_ReservePending_Idempotent(t *testing.T) {
 	m := newAddrConnMap()
@@ -26,23 +26,23 @@ func TestAddrConnMap_ReservePending_Idempotent(t *testing.T) {
 	c1 := &Conn{}
 	c2 := &Conn{}
 
-	_, _, isNew1, err := m.reservePending(addr, c1, nil)
+	_, _, created1, err := m.reservePending(addr, c1, nil)
 	if err != nil {
 		t.Fatalf("first reserve errored: %v", err)
 	}
-	existing, isPending, isNew2, err := m.reservePending(addr, c2, nil)
+	existing, pending, created2, err := m.reservePending(addr, c2, nil)
 	if err != nil {
 		t.Fatalf("second reserve errored: %v", err)
 	}
 
-	if !isNew1 {
+	if !created1 {
 		t.Fatalf("first reserve should be new")
 	}
-	if isNew2 {
+	if created2 {
 		t.Fatalf("second reserve must not be new — c2 shouldn't have replaced c1")
 	}
-	if !isPending {
-		t.Errorf("second reserve should report isPending=true (entry is still pending)")
+	if !pending {
+		t.Errorf("second reserve should report pending=true (entry is still pending)")
 	}
 	if existing != c1 {
 		t.Errorf("second reserve returned wrong existing entry: got %p, want %p", existing, c1)
@@ -94,15 +94,15 @@ func TestAddrConnMap_CapCheckVeto(t *testing.T) {
 	c := &Conn{}
 
 	vetoErr := fmt.Errorf("cap exceeded")
-	existing, isPending, isNew, err := m.reservePending(addr, c, func() error {
+	existing, pending, created, err := m.reservePending(addr, c, func() error {
 		return vetoErr
 	})
 
 	if err != vetoErr {
 		t.Errorf("expected vetoErr, got %v", err)
 	}
-	if isNew || isPending || existing != nil {
-		t.Errorf("vetoed reserve returned non-nil state: existing=%v isPending=%v isNew=%v", existing, isPending, isNew)
+	if created || pending || existing != nil {
+		t.Errorf("vetoed reserve returned non-nil state: existing=%v pending=%v created=%v", existing, pending, created)
 	}
 	if got := m.pendingLen(); got != 0 {
 		t.Errorf("pendingLen after veto: got %d, want 0 (insert leaked past cap check)", got)
@@ -128,11 +128,11 @@ func TestAddrConnMap_ConcurrentInsertsDifferentShards(t *testing.T) {
 		c := &Conn{}
 		go func() {
 			defer wg.Done()
-			_, _, isNew, err := m.reservePending(addr, c, nil)
+			_, _, created, err := m.reservePending(addr, c, nil)
 			if err != nil {
 				t.Errorf("reserve for unique addr %q errored: %v", addr, err)
 			}
-			if !isNew {
+			if !created {
 				t.Errorf("reserve for unique addr %q reported not new", addr)
 			}
 		}()
