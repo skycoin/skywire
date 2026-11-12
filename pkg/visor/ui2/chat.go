@@ -50,6 +50,10 @@ type Chat struct {
 	ReplyTo string
 
 	// Groups.
+	// PwSet is whether the skychat password gates the standalone page.
+	PwSet bool
+	PwErr string
+
 	Groups []visorapi.GroupInfo
 	Group  *visorapi.GroupInfo
 	GMsgs  []visorapi.GroupMessage
