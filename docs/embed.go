@@ -40,7 +40,7 @@ package docs
 
 import "embed"
 
-//go:embed *.md deploy deployment design guides packaging pty skychat skynet skysocks vpn
+//go:embed *.md deploy deployment design guides packaging pty skychat skynet skysocks sss3 vpn
 //go:embed android/*.md examples/*/*.md examples/*/*.star
 var proseFS embed.FS
 
