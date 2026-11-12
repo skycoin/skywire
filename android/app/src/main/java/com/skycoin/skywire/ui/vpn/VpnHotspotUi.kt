@@ -170,13 +170,13 @@ private fun InfoLine(label: String, value: String, onCopy: () -> Unit) {
 }
 
 /**
- * The system's hotspot & tethering screen. It has no public action, so the
- * Settings app's own entry is tried first and the wireless settings — one tap
- * away from it everywhere — after that.
+ * The system's hotspot & tethering screen has no public action. Try the Settings
+ * app's entries, then the wireless settings one tap away from it.
  */
 private fun openHotspotSettings(context: Context): Boolean {
     val tries = listOf(
         Intent(Intent.ACTION_MAIN).setClassName("com.android.settings", "com.android.settings.TetherSettings"),
+        Intent(Intent.ACTION_MAIN).setClassName("com.android.settings", "com.android.settings.Settings\$TetherSettingsActivity"),
         Intent(Settings.ACTION_WIRELESS_SETTINGS),
     )
     return tries.any { intent ->
