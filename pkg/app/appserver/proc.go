@@ -7,9 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"runtime"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -238,12 +236,7 @@ func (p *Proc) startInProcess() error {
 	configReadDone := appcommon.AcquireInternalAppStart(p.conf.ProcKey)
 
 	envs := p.conf.Envs()
-	for _, env := range envs {
-		parts := strings.SplitN(env, "=", 2)
-		if len(parts) == 2 {
-			_ = os.Setenv(parts[0], parts[1]) //nolint:errcheck
-		}
-	}
+	appcommon.SetInternalAppEnv(p.conf.ProcKey, envs)
 
 	go func() {
 		// Internal apps use their isolated logger directly via p.log
@@ -258,7 +251,7 @@ func (p *Proc) startInProcess() error {
 				p.log.Errorf("App %s panicked: %v", p.conf.AppName, r)
 			}
 
-			appcommon.UnsetInternalAppEnv(envs)
+			appcommon.UnsetInternalAppEnv(p.conf.ProcKey, envs)
 
 			// An in-process app exiting on its own (RunFunc returned or
 			// panicked) is the equivalent of an external app's process
