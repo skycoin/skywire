@@ -11,13 +11,7 @@ import (
 // CloseForTest closes the ManagedTransport's done channel, marking it as closed.
 // This is for tests that need to simulate a closed transport without going
 // through the full close() path which requires a discovery client.
-func (mt *ManagedTransport) CloseForTest() {
-	select {
-	case <-mt.done:
-	default:
-		close(mt.done)
-	}
-}
+func (mt *ManagedTransport) CloseForTest() { mt.markDone() }
 
 // InjectTransportForTest inserts mt into the manager's transport map keyed by
 // its Entry.ID. Test-only: it bypasses dialing/discovery so cross-package tests
