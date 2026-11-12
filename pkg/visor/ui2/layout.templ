@@ -8,7 +8,11 @@ templ Layout(title, classic string) {
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<meta name="ui2-base" content={ From(ctx).Base }/>
 			<base href={ From(ctx).Base }/>
+			// The in-tab visor's vnet service worker rewrites <base> to the page's
+			// own directory (bottle vnet-sw.js rewriteBase), so it is set back here.
+			<script>(function(){var b=document.querySelector('base'),m=document.querySelector('meta[name=ui2-base]');if(b&&m)b.href=new URL(m.content,location.href).href})()</script>
 			<title>{ title } · Skywire</title>
 			<link rel="icon" type="image/png" href="assets/img/skywire-icon.png"/>
 			<script>try{var t=localStorage.getItem('hvui-theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
