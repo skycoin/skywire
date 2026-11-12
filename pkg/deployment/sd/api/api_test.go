@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	sdmetrics "github.com/skycoin/skywire/pkg/deployment/sd/metrics"
 	"github.com/skycoin/skywire/pkg/deployment/sd/store"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 )
 
