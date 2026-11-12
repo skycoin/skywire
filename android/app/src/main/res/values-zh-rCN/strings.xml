@@ -1124,7 +1124,7 @@
     <string name="mail_attachment_failed">无法保存附件：%1$s</string>
     <string name="mail_compose_title">新邮件</string>
     <string name="mail_to_hint">SkyMail 地址，或节点的公钥</string>
-    <string name="mail_via_hint">收件人和抄送中的所有地址都经由此网络发送。dmsg 无需路由；有路由时 skynet 更快。</string>
+    <string name="mail_via_hint">收件人和抄送中的所有地址都经由此网络发送；与你在同一局域网的收件人则走直连。dmsg 无需路由；有路由时 skynet 更快。</string>
     <string name="mail_contacts">联系人</string>
     <string name="mail_no_contacts">还没有联系人。添加一个，或从邮件中保存发件人。</string>
     <string name="mail_contacts_shared">这是节点的通讯录，SkyChat 也用这里的名称。</string>
@@ -1142,7 +1142,7 @@
     <string name="mail_body">正文</string>
     <string name="mail_attach">添加附件</string>
     <string name="mail_remove">移除</string>
-    <string name="mail_send_note">邮件会立即发出，.dmsg 地址走 dmsg。收件人的节点离线时收不到，也不会重试。</string>
+    <string name="mail_send_note">邮件会立即发出。收件人的节点离线时收不到，也不会重试。</string>
     <string name="mail_send">发送</string>
     <string name="mail_sending">正在发送…</string>
     <string name="mail_sent">已发送</string>

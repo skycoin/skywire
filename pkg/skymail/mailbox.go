@@ -47,6 +47,9 @@ type Config struct {
 	// Dialers reach a peer's port 25, keyed by address suffix. A
 	// suffix with no dialer cannot be sent to.
 	Dialers map[string]skymailbridge.Dialer
+	// Local, when set, reaches a peer on this visor's local network over a
+	// direct link and fails at once for any other. Delivery tries it first.
+	Local skymailbridge.Dialer
 	// Limits bound what the mailbox keeps; zero fields take defaults.
 	Limits Limits
 	// Outbox queues mail for a recipient that cannot take it yet and

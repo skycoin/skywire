@@ -38,6 +38,10 @@ The suffix picks the network, strictly: `.dmsg` goes over dmsg (whose
 sessions may themselves ride skynet) and `.skynet` over a skywire
 route. A `.skynet` delivery that cannot get a route fails rather than
 taking dmsg instead; each delivery reports the network that carried it.
+The one exception is a recipient on the same local network, which the
+address resolver sees behind the same public IP: its mail goes over a
+direct link on the LAN whatever the suffix, and takes the suffix's network
+when that link cannot be made.
 
 In the browser desk the same actions are the ☰ **mail** app. The mailbox
 also delivers to a Postfix host set up as below:

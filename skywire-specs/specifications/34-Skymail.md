@@ -52,8 +52,10 @@ An address is `<local>@[<host>.]<label><suffix>`.
   63 octet DNS label limit (RFC 1035 section 2.3.4) that SMTP domains follow.
 - `<suffix>` is `.skynet` or `.dmsg` (`skymail.Suffixes`). It selects the
   network the sender MUST use. A sender MUST NOT deliver a `.skynet` address
-  over dmsg or a `.dmsg` address over skynet. A dmsg session may itself run
-  over a skynet route, which is a choice of the dmsg client.
+  over dmsg or a `.dmsg` address over skynet, except to a recipient on its
+  local network, which MAY get the message over a direct skynet transport
+  whatever the suffix (see Sending). A dmsg session may itself run over a
+  skynet route, which is a choice of the dmsg client.
 - `<local>` is any local part. Every local part at the same label reaches
   the same mailbox.
 - `<host>` is optional and only meaningful to the SMTP bridge, which strips
@@ -262,6 +264,15 @@ directory is `mail` beside the visor's local path. On start the app asks
 `Send` groups recipients by key and delivers to each key's port 25 over the
 network its suffix names. Recipients at the mailbox's own key are filed
 directly. A copy goes to `Sent` when any delivery succeeds.
+
+Before that network, `Send` tries a direct link to a key on the local network
+(`Host.Local`, the `Local` dial option). The visor makes a transport for it
+only when the address resolver sees the key behind the visor's own public IP
+(`transport.Manager.EnsureLocalTransport`), and dials it with no route. A key
+that is not local is asked again after a minute, and one that is local but
+does not answer after 10 minutes. A local link that cannot be made falls back
+to the network the suffix names. An SMTP answer over the local link is final.
+Such a delivery reports `skynet`.
 
 A recipient that cannot take the message now, because it cannot be reached
 or answers 4xx, is queued in the Outbox. A 5xx answer fails that recipient

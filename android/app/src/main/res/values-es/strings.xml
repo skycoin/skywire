@@ -1220,7 +1220,7 @@
     <string name="mail_attachment_failed">No se pudo guardar el adjunto: %1$s</string>
     <string name="mail_compose_title">Mensaje nuevo</string>
     <string name="mail_to_hint">Una dirección de SkyMail o la clave pública de un nodo</string>
-    <string name="mail_via_hint">Todas las direcciones de Para y Cc van por esta red. dmsg no necesita ruta; skynet es más rápido cuando hay una.</string>
+    <string name="mail_via_hint">Todas las direcciones de Para y Cc van por esta red. Un destinatario en tu red local recibe un enlace directo. dmsg no necesita ruta; skynet es más rápido cuando hay una.</string>
     <string name="mail_contacts">Contactos</string>
     <string name="mail_no_contacts">Aún no hay contactos. Añade uno o guarda un remitente desde un mensaje.</string>
     <string name="mail_contacts_shared">La libreta de contactos del nodo. SkyChat también toma de aquí los nombres.</string>
@@ -1238,7 +1238,7 @@
     <string name="mail_body">Mensaje</string>
     <string name="mail_attach">Adjuntar archivos</string>
     <string name="mail_remove">Quitar</string>
-    <string name="mail_send_note">El correo sale ahora, por dmsg para una dirección .dmsg. Si el nodo del destinatario está desconectado, no lo recibe y nada lo reintenta.</string>
+    <string name="mail_send_note">El correo sale ahora. Si el nodo del destinatario está desconectado, no lo recibe y nada lo reintenta.</string>
     <string name="mail_send">Enviar</string>
     <string name="mail_sending">Enviando…</string>
     <string name="mail_sent">Enviado</string>

@@ -146,6 +146,7 @@ func run(ctx context.Context, o options) error {
 			".skynet": appDialer{cl: appCl, net: appnet.TypeSkynet},
 			".dmsg":   appDialer{cl: appCl, net: appnet.TypeDmsg},
 		},
+		Local: appDialer{cl: appCl, net: appnet.TypeSkynet, local: true},
 		PeerPK: func(c net.Conn) (cipher.PubKey, bool) {
 			a, ok := c.RemoteAddr().(appnet.Addr)
 			return a.PubKey, ok
@@ -220,10 +221,12 @@ func serveTCP(o options, svc *skymail.Service) (*http.Server, error) {
 
 // appDialer reaches a peer's port 25 over one network and no other: the
 // address suffix is the sender's choice, so a failed route is reported,
-// not quietly replaced with dmsg.
+// not quietly replaced with dmsg. With local set it takes only a direct
+// link to a peer on the local network.
 type appDialer struct {
-	cl  *app.Client
-	net appnet.Type
+	cl    *app.Client
+	net   appnet.Type
+	local bool
 }
 
 func (d appDialer) Dial(ctx context.Context, peer cipher.PubKey, port uint16) (net.Conn, error) {
@@ -233,7 +236,16 @@ func (d appDialer) Dial(ctx context.Context, peer cipher.PubKey, port uint16) (n
 	}
 	ch := make(chan result, 1)
 	go func() {
-		c, err := d.cl.Dial(appnet.Addr{Net: d.net, PubKey: peer, Port: routing.Port(port)})
+		addr := appnet.Addr{Net: d.net, PubKey: peer, Port: routing.Port(port)}
+		var (
+			c   net.Conn
+			err error
+		)
+		if d.local {
+			c, err = d.cl.DialWithOptions(addr, appserver.DialOptionsReq{Local: true})
+		} else {
+			c, err = d.cl.Dial(addr)
+		}
 		ch <- result{c, err}
 	}()
 	select {
