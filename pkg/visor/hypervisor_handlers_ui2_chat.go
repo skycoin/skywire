@@ -33,6 +33,7 @@ func (hv *Hypervisor) ui2ChatRoutes(r *httputil.Router) {
 	r.Post("/ui2/visors/{pk}/chat/groups/add-member", hv.ui2Chat("gadd"))
 	r.Post("/ui2/visors/{pk}/chat/groups/ask-again", hv.ui2Chat("gask"))
 	r.Post("/ui2/visors/{pk}/chat/password", hv.ui2Chat("password"))
+	hv.ui2VoiceRoutes(r)
 }
 
 // ui2SkychatCall runs one request against the local skychat app.
@@ -118,12 +119,13 @@ func (hv *Hypervisor) ui2Chat(op string) http.HandlerFunc {
 		group := r.FormValue("group")
 		switch op {
 		case "":
+			if c.Peer != "" && pk.Set(c.Peer) != nil {
+				c.Peer = ""
+			}
+			c.Voice = ui2VoiceState(ctx.API, ui2.Voice{PK: c.PK, Peer: c.Peer, CanCall: c.Mode != "groups"})
 			if c.Mode == "groups" {
 				hv.render(w, r, ui2.ChatPage(ui2ChatRooms(ctx.API, c, group)))
 				return
-			}
-			if c.Peer != "" && pk.Set(c.Peer) != nil {
-				c.Peer = ""
 			}
 			c.PwSet, _ = ctx.API.SkychatPasswordIsSet() //nolint:errcheck
 			hv.render(w, r, ui2.ChatPage(hv.ui2ChatDM(c)))

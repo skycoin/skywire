@@ -54,6 +54,8 @@ type Chat struct {
 	PwSet bool
 	PwErr string
 
+	Voice Voice
+
 	Groups []visorapi.GroupInfo
 	Group  *visorapi.GroupInfo
 	GMsgs  []visorapi.GroupMessage

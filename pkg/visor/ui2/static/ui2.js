@@ -654,3 +654,53 @@ document.addEventListener('DOMContentLoaded', function () {
 	document.addEventListener('htmx:afterSettle', draw);
 	document.addEventListener('DOMContentLoaded', draw);
 })();
+
+// Voice call: the timer ticks between polls, and the level meter draws the
+// call's send and receive levels (you violet, peer green) as the Angular tab.
+(function () {
+	'use strict';
+	var sent = [], recv = [], max = 90, busy = false, clock = null, base = 0, secs = 0;
+	function draw(c) {
+		var ctx = c.getContext('2d'), w = c.width, h = c.height, bw = w / max;
+		ctx.clearRect(0, 0, w, h);
+		function bars(hist, color, wf) {
+			ctx.fillStyle = color;
+			hist.forEach(function (v, i) {
+				var bh = Math.max(1, Math.pow(v, 0.6) * h);
+				ctx.fillRect(i * bw + bw * (1 - wf) / 2, (h - bh) / 2, Math.max(1, bw * wf - 1), bh);
+			});
+		}
+		bars(sent, 'rgba(157,124,255,0.55)', 1);
+		bars(recv, 'rgba(158,206,106,0.95)', 0.6);
+	}
+	function tick() {
+		var t = document.querySelector('[data-voice-secs]');
+		if (t !== clock) { clock = t; base = Date.now(); secs = t ? parseInt(t.getAttribute('data-voice-secs'), 10) || 0 : 0; }
+		if (t) {
+			var s = secs + Math.floor((Date.now() - base) / 1000);
+			t.textContent = Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2);
+		}
+		var c = document.querySelector('canvas[data-voice-levels]');
+		if (!c) { sent = []; recv = []; return; }
+		if (busy || document.visibilityState !== 'visible') return;
+		busy = true;
+		fetch(c.getAttribute('data-voice-levels'), { credentials: 'same-origin' })
+			.then(function (r) { return r.ok ? r.json() : null; })
+			.then(function (l) {
+				busy = false;
+				if (!l) return;
+				sent.push(Math.min(1, l.sent || 0));
+				recv.push(Math.min(1, l.recv || 0));
+				if (sent.length > max) sent.shift();
+				if (recv.length > max) recv.shift();
+				var cur = document.querySelector('canvas[data-voice-levels]');
+				if (cur) draw(cur);
+			})
+			.catch(function () { busy = false; });
+	}
+	setInterval(tick, 150);
+	document.addEventListener('htmx:afterSettle', function () {
+		var c = document.querySelector('canvas[data-voice-levels]');
+		if (c) draw(c);
+	});
+})();

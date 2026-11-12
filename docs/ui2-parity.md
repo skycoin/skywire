@@ -65,7 +65,7 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 | chat | direct messages: peers, history, send, reply, delete | yes | polls every 3 s instead of SSE; read receipts not shown |
 | | rooms: list, messages, send, create, join, invite, add member, pending and declined state, ask again | yes | moderation is CLI only, Angular has none either |
 | | skychat password | yes | |
-| | voice calls | no | needs browser audio capture and playback |
+| | voice calls: call, ring, answer, decline, hang up, mute, level meter, timer | yes | the visor plays the audio, as for Angular; the spectrogram is not ported |
 | mail | mailbox, compose, settings | yes | |
 | contacts | list, add, edit, delete, import | yes | |
 | rewards | address, history, rules | yes | |

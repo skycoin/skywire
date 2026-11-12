@@ -480,6 +480,12 @@ fieldset.choice legend { padding: 0; margin-bottom: 4px; }
 .chat-compose textarea { flex: 1 1 240px; }
 .chat-compose input[name="to"] { flex: 1 1 100%; }
 .chat-compose .chat-quote { flex-basis: 100%; }
+.chat-voice { display: flex; flex-direction: column; gap: 6px; }
+.voice-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.voice-row .pk-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; max-width: 40ch; }
+.voice-row.ring, .voice-row.incall { padding: 6px 10px; border-radius: 8px; border: 1px solid rgb(var(--green)); }
+.voice-row.incall .mi:first-child { color: rgb(var(--green)); }
+.voice-meter { width: 180px; max-width: 100%; height: 22px; }
 @media (max-width: 600px) {
   .chat { grid-template-columns: 1fr; }
   .chat-side { max-height: 30vh; overflow-y: auto; }
