@@ -17,7 +17,7 @@ func TestTransportEventsRecordOpenAndCloseReason(t *testing.T) {
 
 	mt := NewManagedTransportForTest(nil)
 	mt.rPK = remote
-	mt.isInitiator = true
+	mt.initiator = true
 	mt.Entry = Entry{ID: uuid.New(), Type: types.STCPR, Edges: [2]cipher.PubKey{tm.Local(), remote}}
 	tm.InjectTransportForTest(mt)
 
@@ -60,7 +60,7 @@ func TestLastCloseSurvivesOpenFlood(t *testing.T) {
 
 	mt := NewManagedTransportForTest(nil)
 	mt.rPK = remote
-	mt.isInitiator = true
+	mt.initiator = true
 	mt.Entry = Entry{ID: uuid.New(), Type: types.STCPR, Edges: [2]cipher.PubKey{tm.Local(), remote}}
 	tm.InjectTransportForTest(mt)
 	mt.closeWith("read: connection reset by peer")

@@ -316,7 +316,7 @@ func (rg *RouteGroup) legLivenessServiceFn(_ time.Duration) {
 	}
 	baseMs := time.Now().UTC().UnixNano() / int64(time.Millisecond)
 	for offset, p := range probes {
-		if _, isDead := deadSet[p.id]; isDead {
+		if _, ok := deadSet[p.id]; ok {
 			continue
 		}
 		ts := baseMs + int64(offset)

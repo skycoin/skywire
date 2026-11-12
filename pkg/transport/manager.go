@@ -1236,7 +1236,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 
 	tm.Logger.Debugf("recv transport request: type(%s) remote(%s)", lis.Network(), transport.RemotePK())
 
-	mTp, isNew, err := tm.prepareAccept(transport)
+	mTp, created, err := tm.prepareAccept(transport)
 	if err != nil {
 		return err
 	}
@@ -1250,7 +1250,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 	// prod01 (2026-09-28): three such dialers back to back held the lock 59s,
 	// and every transport on the relay stopped reading for that long.
 	var gate InboundGate
-	if g := tm.inboundGate.Load(); isNew && g != nil {
+	if g := tm.inboundGate.Load(); created && g != nil {
 		gate = *g
 	}
 	if err := mTp.accept(ctx, transport, gate); err != nil {
@@ -1269,7 +1269,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 		return err
 	}
 
-	tm.Logger.Debugf("accepted tp: type(%s) remote(%s) tpID(%s) new(%v)", lis.Network(), transport.RemotePK(), mTp.Entry.ID, isNew)
+	tm.Logger.Debugf("accepted tp: type(%s) remote(%s) tpID(%s) new(%v)", lis.Network(), transport.RemotePK(), mTp.Entry.ID, created)
 	tm.lastInbound.note(lis.Network(), time.Now())
 
 	// Nudge the re-registration loop to batch-register this transport with TPD soon.
@@ -1968,7 +1968,7 @@ func (tm *Manager) Close() {
 	var tpIDs []uuid.UUID
 	for _, tr := range tm.tps {
 		// Skip transports with noop discovery client (self-transports)
-		if _, isNoop := tr.dc.(*noopDiscoveryClient); !isNoop {
+		if _, ok := tr.dc.(*noopDiscoveryClient); !ok {
 			tpIDs = append(tpIDs, tr.Entry.ID)
 		}
 	}

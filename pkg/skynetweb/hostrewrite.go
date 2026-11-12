@@ -235,9 +235,9 @@ func (h *hostRewriteConn) SetWriteDeadline(t time.Time) error {
 // the caller can fall back or surface a useful message.
 func splitHostSubdomain(host, suffix string) (pkLabel, subdomain string, port uint16, err error) {
 	// Split off optional port first.
-	hostPart, portStr, hasPort := splitHostPort(host)
+	hostPart, portStr, withPort := splitHostPort(host)
 	port = 80
-	if hasPort {
+	if withPort {
 		p, perr := parseUint16(portStr)
 		if perr != nil {
 			return "", "", 0, fmt.Errorf("invalid port %q: %w", portStr, perr)
@@ -268,7 +268,7 @@ func splitHostSubdomain(host, suffix string) (pkLabel, subdomain string, port ui
 // already imports; using the std lib's equivalents from here would
 // be the same code with import bloat.
 
-func splitHostPort(host string) (h, p string, hasPort bool) {
+func splitHostPort(host string) (h, p string, withPort bool) {
 	// Walk from the right; first ':' that isn't inside brackets
 	// (IPv6) is the port separator. For our hostnames there are
 	// no brackets.

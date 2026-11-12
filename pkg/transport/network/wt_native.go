@@ -64,14 +64,14 @@ func (c *wtClient) dialResolvedWT(ctx context.Context, rPK cipher.PubKey) (net.C
 	if host, _, e := net.SplitHostPort(remotePublicIP); e == nil {
 		remotePublicIP = host
 	}
-	isSelf := rPK == c.lPK
+	self := rPK == c.lPK
 	samePublicIP := false
 	if lip := ar.LocalPublicIP(); lip != "" && remotePublicIP != "" {
 		samePublicIP = lip == remotePublicIP
 	}
-	if vd.IsLocal || isSelf || samePublicIP {
+	if vd.IsLocal || self || samePublicIP {
 		for _, host := range vd.Addresses {
-			if !isSelf && (host == "127.0.0.1" || host == "::1") {
+			if !self && (host == "127.0.0.1" || host == "::1") {
 				continue
 			}
 			if host == remotePublicIP {

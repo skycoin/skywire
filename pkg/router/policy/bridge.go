@@ -361,7 +361,7 @@ func parseRouteSpec(v starlark.Value) (RouteSpec, error) {
 	out := RouteSpec{}
 
 	if chosen, err := s.Attr("chosen"); err == nil && chosen != nil {
-		if _, isNone := chosen.(starlark.NoneType); !isNone {
+		if _, ok := chosen.(starlark.NoneType); !ok {
 			cand, err := parseCandidate(chosen)
 			if err != nil {
 				return RouteSpec{}, fmt.Errorf("chosen: %w", err)
@@ -370,7 +370,7 @@ func parseRouteSpec(v starlark.Value) (RouteSpec, error) {
 		}
 	}
 	if rev, err := s.Attr("reverse_chosen"); err == nil && rev != nil {
-		if _, isNone := rev.(starlark.NoneType); !isNone {
+		if _, ok := rev.(starlark.NoneType); !ok {
 			cand, err := parseCandidate(rev)
 			if err != nil {
 				return RouteSpec{}, fmt.Errorf("reverse_chosen: %w", err)
@@ -408,7 +408,7 @@ func parseRotationAction(v starlark.Value) (RotationAction, error) {
 		ExcludeHops:   readStrListField(s, "exclude_hops"),
 	}
 	if drops, err := s.Attr("drop_legs"); err == nil && drops != nil {
-		if _, isNone := drops.(starlark.NoneType); !isNone {
+		if _, ok := drops.(starlark.NoneType); !ok {
 			if lst, ok := drops.(*starlark.List); ok {
 				it := lst.Iterate()
 				defer it.Done()

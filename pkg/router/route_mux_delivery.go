@@ -120,13 +120,13 @@ func (m *routeMux) deliverData(leg *muxLeg, seq uint32, data []byte) (delivered 
 	// already-buffered-out-of-order is the received set. Checked BEFORE
 	// RecordReceived/Insert record this seq.
 	if leg != nil {
-		isNew := true
+		created := true
 		if m.reorderBuf != nil && seq < m.reorderBuf.NextSeq() {
-			isNew = false // already delivered
+			created = false // already delivered
 		} else if m.sackTracker != nil && m.sackTracker.alreadyBuffered(seq) {
-			isNew = false // already buffered out of order
+			created = false // already buffered out of order
 		}
-		if isNew {
+		if created {
 			leg.recordPayload(uint64(len(data)))
 		} else {
 			leg.recordDup(uint64(len(data)))

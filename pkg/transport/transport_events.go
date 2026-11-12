@@ -148,12 +148,12 @@ func (tm *Manager) track(mt *ManagedTransport) {
 	}
 	tm.events.add(TransportEvent{
 		At: mt.openedAt, Event: "open", ID: mt.Entry.ID, Type: string(mt.Entry.Type),
-		Remote: mt.rPK, Label: mt.Entry.Label, Initiator: mt.isInitiator,
+		Remote: mt.rPK, Label: mt.Entry.Label, Initiator: mt.initiator,
 	})
 	mt.onClose = func(reason string) {
 		ev := TransportEvent{
 			At: time.Now(), Event: "close", ID: mt.Entry.ID, Type: string(mt.Entry.Type),
-			Remote: mt.rPK, Label: mt.Entry.Label, Initiator: mt.isInitiator,
+			Remote: mt.rPK, Label: mt.Entry.Label, Initiator: mt.initiator,
 			Reason: reason, AgeS: time.Since(mt.openedAt).Seconds(),
 		}
 		tm.events.add(ev)

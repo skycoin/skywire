@@ -525,7 +525,7 @@ func (c *shapeConverge) blocked(from Shape, why string) {
 	// the same reason are two facts, and each deserves its line.
 	key := fmt.Sprintf(":%d|%v->%v|%s", g.desc.SrcPort(), from, c.target, why)
 	if last, ok := shapeBlockedSaid.Load(key); ok {
-		if at, isTime := last.(time.Time); isTime && c.now.Sub(at) < shapeBlockedEvery {
+		if at, ok := last.(time.Time); ok && c.now.Sub(at) < shapeBlockedEvery {
 			return
 		}
 	}

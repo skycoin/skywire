@@ -88,7 +88,7 @@ func (c *resolvedClient) dialVisor(ctx context.Context, rPK cipher.PubKey, dial 
 
 	// For self-connections (rPK == local PK), always try local addresses first
 	// to avoid NAT hairpinning issues when connecting via public IP
-	isSelfConnection := rPK == c.lPK
+	selfConnection := rPK == c.lPK
 
 	// Check if the remote visor shares our public IP (same NAT)
 	// In this case, we should try LAN addresses first to avoid NAT hairpinning issues
@@ -106,8 +106,8 @@ func (c *resolvedClient) dialVisor(ctx context.Context, rPK cipher.PubKey, dial 
 		}
 	}
 
-	if visorData.IsLocal || isSelfConnection || samePublicIP {
-		if isSelfConnection {
+	if visorData.IsLocal || selfConnection || samePublicIP {
+		if selfConnection {
 			c.log.Debug("Detected self-connection, trying local addresses to avoid NAT issues")
 		}
 		// Get the public IP to filter it out from LAN addresses
@@ -117,7 +117,7 @@ func (c *resolvedClient) dialVisor(ctx context.Context, rPK cipher.PubKey, dial 
 		}
 		for _, host := range visorData.Addresses {
 			// Skip loopback addresses unless it's a self-connection
-			if !isSelfConnection && (host == "127.0.0.1" || host == "::1") {
+			if !selfConnection && (host == "127.0.0.1" || host == "::1") {
 				continue
 			}
 			// Skip the public IP - we'll fall back to it anyway

@@ -324,11 +324,11 @@ func TestDeriveTransportLookups(t *testing.T) {
 
 	// Metric maps: only non-zero values retained; type map covers all.
 	assert.Equal(t, 50.0, lat[dmsgID])
-	_, hasStcprLat := lat[stcprID]
-	assert.True(t, hasStcprLat, "5ms latency is non-zero → present")
+	_, stcprLatOK := lat[stcprID]
+	assert.True(t, stcprLatOK, "5ms latency is non-zero → present")
 	assert.Equal(t, 100.0, thr[dmsgID])
-	_, hasStcprThr := thr[stcprID]
-	assert.False(t, hasStcprThr, "zero throughput → absent")
+	_, stcprThrOK := thr[stcprID]
+	assert.False(t, stcprThrOK, "zero throughput → absent")
 	assert.Equal(t, string(tptypes.STCPR), typ[stcprID])
 	// Setup transport still gets a type/metric entry (only byEdge excludes it).
 	assert.Equal(t, string(tptypes.STCPR), typ[setupID])

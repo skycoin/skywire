@@ -155,8 +155,8 @@ type nodeAcc struct {
 	lines     []string
 	level     int // shallowest intermediate hop depth (1-based); 0 for root/exit
 	streamOrd int // ordinal of the first stream that visited this hop; -1 = root/exit (centered)
-	isRoot    bool
-	isExit    bool
+	root      bool
+	exit      bool
 }
 
 // RouteGraphJSON builds the route subgraph as the JSON the status page embeds in
@@ -199,7 +199,7 @@ func buildRouteGraph(snap Snapshot) rgGraph {
 	}
 
 	root := get(src)
-	root.isRoot = true
+	root.root = true
 
 	var links []rgLink
 	maxRate := 0.0
@@ -248,7 +248,7 @@ func buildRouteGraph(snap Snapshot) rgGraph {
 				line := legLine(streamIdx, tRole, l, "", "", l.TpType, l.LatencyMS)
 				if l.Direct || realExit == "" || remote == realExit {
 					ex := get(remote)
-					ex.isExit = true
+					ex.exit = true
 					root.lines = append(root.lines, line)
 					ex.lines = append(ex.lines, line)
 					links = append(links, rgLink{
@@ -265,7 +265,7 @@ func buildRouteGraph(snap Snapshot) rgGraph {
 					mid.streamOrd = ord
 				}
 				ex := get(realExit)
-				ex.isExit = true
+				ex.exit = true
 				root.lines = append(root.lines, line)
 				mid.lines = append(mid.lines, line)
 				ex.lines = append(ex.lines, line)
@@ -277,10 +277,10 @@ func buildRouteGraph(snap Snapshot) rgGraph {
 			}
 			n := len(hops)
 			for i, h := range hops {
-				isExit := i == n-1
+				exit := i == n-1
 				to := get(h.To)
-				if isExit {
-					to.isExit = true
+				if exit {
+					to.exit = true
 				} else {
 					if lvl := i + 1; to.level == 0 || lvl < to.level {
 						to.level = lvl
@@ -308,9 +308,9 @@ func buildRouteGraph(snap Snapshot) rgGraph {
 	// layout below, which reads Role).
 	for _, a := range order {
 		switch {
-		case a.isRoot:
+		case a.root:
 			a.node.Role, a.node.Color, a.node.Size, a.node.Label = "root", rgRootColor, rgRootSize, "source"
-		case a.isExit:
+		case a.exit:
 			a.node.Role, a.node.Color, a.node.Size = "exit", rgExitColor, rgExitSize
 		default:
 			a.node.Role, a.node.Color, a.node.Size = "hop", hopColorFor(a.level), rgHopSize

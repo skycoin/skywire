@@ -1318,11 +1318,11 @@ func (c *httpClient) Close() error {
 		}
 	}
 
-	hasPublic, err := netutil.HasPublicIP()
+	publicIP, err := netutil.HasPublicIP()
 	if err != nil {
 		c.log.Errorf("Failed to check for public IP: %v", err)
 	}
-	if hasPublic {
+	if publicIP {
 		if err := c.delBindSTCPR(context.Background()); err != nil {
 			c.log.WithError(err).Errorf("Failed to delete STCPR binding")
 		}

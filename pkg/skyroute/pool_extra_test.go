@@ -97,14 +97,14 @@ func TestPool_ReapClosedAndNegativeExpiry(t *testing.T) {
 	p.reap()
 
 	p.mu.Lock()
-	_, hasClosed := p.sessions["closed"]
-	_, hasStale := p.negative["stale"]
-	_, hasFresh := p.negative["fresh"]
+	_, closedFound := p.sessions["closed"]
+	_, staleFound := p.negative["stale"]
+	_, freshFound := p.negative["fresh"]
 	p.mu.Unlock()
 
-	require.False(t, hasClosed, "reap must drop a closed session")
-	require.False(t, hasStale, "reap must expire a stale negative-cache entry")
-	require.True(t, hasFresh, "reap must keep a still-valid negative-cache entry")
+	require.False(t, closedFound, "reap must drop a closed session")
+	require.False(t, staleFound, "reap must expire a stale negative-cache entry")
+	require.True(t, freshFound, "reap must keep a still-valid negative-cache entry")
 }
 
 // reap keeps a session that still has an open stream (lastActive refreshed), so a
