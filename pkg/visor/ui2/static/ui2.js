@@ -49,7 +49,7 @@
 	// The JSON handlers answer errors as {"error": "..."}.
 	document.addEventListener('htmx:responseError', function (e) {
 		var x = e.detail.xhr, msg = x.status + ' ' + x.statusText;
-		if (x.status === 401) { window.location.href = 'ui2/login'; return; }
+		if (x.status === 401) { window.location.href = 'login'; return; }
 		try { msg = JSON.parse(x.responseText).error || msg; } catch (_) { /* not JSON */ }
 		toast(msg, true);
 	});

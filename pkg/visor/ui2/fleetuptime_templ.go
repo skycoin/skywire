@@ -77,7 +77,7 @@ func FleetUptimePage(f FleetUptime) templ.Component {
 }
 
 func fleetURL(days int, all bool) string {
-	u := "ui2/uptime/body?days=" + strconv.Itoa(days)
+	u := "uptime/body?days=" + strconv.Itoa(days)
 	if all {
 		u += "&all=1"
 	}

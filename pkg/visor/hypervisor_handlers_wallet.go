@@ -387,7 +387,7 @@ func (hv *Hypervisor) walletCipherHandler() http.HandlerFunc {
 // Location stays relative: http.Redirect would make it absolute from the path
 // this handler sees, which in the desk lacks the page's /vnet/<port>/ prefix.
 func toDashboardWallet(w http.ResponseWriter) {
-	w.Header().Set("Location", "../#/wallet")
+	w.Header().Set("Location", "../angular/#/wallet")
 	w.WriteHeader(http.StatusSeeOther)
 }
 

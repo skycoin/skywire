@@ -13,10 +13,10 @@ import (
 // Writes go through the JSON proxy handlers the Angular tab calls.
 
 func (hv *Hypervisor) ui2WebProxyRoutes(r *httputil.Router) {
-	r.Get("/ui2/visors/{pk}/web-proxy", hv.ui2WebProxy(""))
-	r.Get("/ui2/visors/{pk}/web-proxy/body", hv.ui2WebProxy("body"))
-	r.Put("/ui2/visors/{pk}/web-proxy/enabled", hv.ui2WebProxy("enabled"))
-	r.Put("/ui2/visors/{pk}/web-proxy/upstream", hv.ui2WebProxy("upstream"))
+	r.Get("/visors/{pk}/web-proxy", hv.ui2WebProxy(""))
+	r.Get("/visors/{pk}/web-proxy/body", hv.ui2WebProxy("body"))
+	r.Put("/visors/{pk}/web-proxy/enabled", hv.ui2WebProxy("enabled"))
+	r.Put("/visors/{pk}/web-proxy/upstream", hv.ui2WebProxy("upstream"))
 }
 
 func (hv *Hypervisor) ui2WebProxy(op string) http.HandlerFunc {

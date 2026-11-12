@@ -19,8 +19,8 @@ import (
 // the same JSON handler the Angular dialogs call.
 
 func (hv *Hypervisor) ui2BulkRoutes(r *httputil.Router) {
-	r.Get("/ui2/nodes/bulk", hv.ui2Bulk(false))
-	r.Post("/ui2/nodes/bulk", hv.ui2Bulk(true))
+	r.Get("/nodes/bulk", hv.ui2Bulk(false))
+	r.Post("/nodes/bulk", hv.ui2Bulk(true))
 }
 
 // ui2BulkForm reads the panel's form into a plan for the selected visors.

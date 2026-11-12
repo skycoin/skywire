@@ -20,17 +20,17 @@ func TestUI2TabsRelative(t *testing.T) {
 	srv, _, pk := newUI2Server(t, true)
 	abs := regexp.MustCompile(`(?:href|src|hx-get|hx-post|hx-put|hx-delete)="/`)
 	for _, tab := range []string{"uptime", "rewards", "settings"} {
-		code, body := ui2Do(t, ui2Req(t, http.MethodGet, srv.URL+"/ui2/visors/"+pk.Hex()+"/"+tab, "", ""))
+		code, body := ui2Do(t, ui2Req(t, http.MethodGet, srv.URL+"/visors/"+pk.Hex()+"/"+tab, "", ""))
 		require.Equal(t, http.StatusOK, code, tab)
 		require.Empty(t, abs.FindAllString(body, -1), tab)
-		require.Contains(t, body, `class="tab active" href="ui2/visors/`+pk.Hex()+`/`+tab+`"`, tab)
+		require.Contains(t, body, `class="tab active" href="visors/`+pk.Hex()+`/`+tab+`"`, tab)
 	}
 }
 
 // TestUI2Rewards sets, refuses and removes a reward address.
 func TestUI2Rewards(t *testing.T) {
 	srv, _, pk := newUI2Server(t, true)
-	base := srv.URL + "/ui2/visors/" + pk.Hex() + "/rewards"
+	base := srv.URL + "/visors/" + pk.Hex() + "/rewards"
 
 	code, body := ui2Do(t, ui2Req(t, http.MethodGet, base, "", ""))
 	require.Equal(t, http.StatusOK, code, body)
@@ -38,7 +38,7 @@ func TestUI2Rewards(t *testing.T) {
 
 	code, body = ui2Do(t, ui2Req(t, http.MethodGet, base+"/address?edit=1", "", ""))
 	require.Equal(t, http.StatusOK, code)
-	require.Contains(t, body, `hx-put="ui2/visors/`+pk.Hex()+`/rewards/address"`)
+	require.Contains(t, body, `hx-put="visors/`+pk.Hex()+`/rewards/address"`)
 
 	code, body = ui2Do(t, ui2Req(t, http.MethodPut, base+"/address", ui2Form, url.Values{"address": {"2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6"}}.Encode()))
 	require.Equal(t, http.StatusOK, code)
@@ -62,7 +62,7 @@ func TestUI2Settings(t *testing.T) {
 	srv, v, pk := newUI2Server(t, true)
 	v.conf.Skyenv = filepath.Join(t.TempDir(), "skywire.conf")
 	require.NoError(t, os.WriteFile(v.conf.Skyenv, []byte("#!/usr/bin/env bash\n"), 0o600))
-	base := srv.URL + "/ui2/visors/" + pk.Hex() + "/settings"
+	base := srv.URL + "/visors/" + pk.Hex() + "/settings"
 
 	code, body := ui2Do(t, ui2Req(t, http.MethodGet, base, "", ""))
 	require.Equal(t, http.StatusOK, code, body)
@@ -78,7 +78,7 @@ func TestUI2Settings(t *testing.T) {
 	code, body = ui2Do(t, ui2Req(t, http.MethodPost, base+"/review", ui2Form, change))
 	require.Equal(t, http.StatusOK, code)
 	require.Contains(t, body, "MINDMSGSESS")
-	require.Contains(t, body, `hx-put="ui2/visors/`+pk.Hex()+`/settings"`)
+	require.Contains(t, body, `hx-put="visors/`+pk.Hex()+`/settings"`)
 
 	code, body = ui2Do(t, ui2Req(t, http.MethodPut, base, ui2Form, change))
 	require.Equal(t, http.StatusOK, code, body)
@@ -95,8 +95,8 @@ func TestUI2Settings(t *testing.T) {
 // TestUI2Uptime serves the tab and its window choices.
 func TestUI2Uptime(t *testing.T) {
 	srv, _, pk := newUI2Server(t, true)
-	code, body := ui2Do(t, ui2Req(t, http.MethodGet, srv.URL+"/ui2/visors/"+pk.Hex()+"/uptime/bars?days=30", "", ""))
+	code, body := ui2Do(t, ui2Req(t, http.MethodGet, srv.URL+"/visors/"+pk.Hex()+"/uptime/bars?days=30", "", ""))
 	require.Equal(t, http.StatusOK, code, body)
-	require.Contains(t, body, `hx-get="ui2/visors/`+pk.Hex()+`/uptime/bars?days=30"`)
+	require.Contains(t, body, `hx-get="visors/`+pk.Hex()+`/uptime/bars?days=30"`)
 	require.Contains(t, body, `hx-trigger="every 60s`)
 }

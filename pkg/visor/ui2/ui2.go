@@ -61,7 +61,7 @@ func AssetVersion(name string) string { return assetVer[name] }
 // Asset is the URL of a static file, relative to the page's <base>, carrying
 // its content hash so it can be cached for good.
 func Asset(name string) string {
-	return "ui2/static/" + name + "?v=" + assetVer[name]
+	return "static/" + name + "?v=" + assetVer[name]
 }
 
 // BaseFor is the relative path from the request path back to the root. Every

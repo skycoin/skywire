@@ -19,7 +19,7 @@ templ ResourcesPage(rows []ResRow, sampled string) {
 
 // ResourceRows polls itself every 5 seconds as the Angular page does.
 templ ResourceRows(rows []ResRow, sampled string) {
-	<div id="res-rows" hx-get="ui2/resources/rows" hx-trigger="every 5s [document.visibilityState === 'visible']" hx-swap="outerHTML">
+	<div id="res-rows" hx-get="resources/rows" hx-trigger="every 5s [document.visibilityState === 'visible']" hx-swap="outerHTML">
 		<p class="small dim">{ T(ctx, "multi-resources.summary", "count", itoa(len(rows))) } · { T(ctx, "multi-resources.last-updated") }: { sampled }</p>
 		<div class="table-wrap">
 			<table class="list nodes">

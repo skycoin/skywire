@@ -73,7 +73,7 @@ export async function pushRegistration(): Promise<ServiceWorkerRegistration> {
   if (existing) {
     return existing;
   }
-  await sw.register('push-sw.js');
+  await sw.register('../push-sw.js');
 
   return sw.ready;
 }

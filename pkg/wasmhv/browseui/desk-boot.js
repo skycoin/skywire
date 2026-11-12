@@ -521,11 +521,11 @@
 			if (!deepWin || !deepWin.openTab) { pendingDL = dl; return; }
 			try {
 				if (dl.t === 'dm') {
-					var u = new URL(opts.dashboardURL || ('http://vnet:' + hvPort + '/?embed=1'), location.href);
+					var u = new URL(opts.dashboardURL || ('http://vnet:' + hvPort + '/angular/?embed=1'), location.href);
 					u.hash = '#/nodes/local/chat?embed=1&peer=' + dl.pk;
 					deepWin.openTab(u.host, u.pathname + u.search + u.hash, u.protocol.replace(':', ''), false);
 				} else if (dl.t === 'group') {
-					var g = new URL(opts.dashboardURL || ('http://vnet:' + hvPort + '/?embed=1'), location.href);
+					var g = new URL(opts.dashboardURL || ('http://vnet:' + hvPort + '/angular/?embed=1'), location.href);
 					g.hash = '#/nodes/local/chat?embed=1&join=' + encodeURIComponent(dl.invite);
 					deepWin.openTab(g.host, g.pathname + g.search + g.hash, g.protocol.replace(':', ''), false);
 				} else if (dl.t === 'site') {
@@ -636,7 +636,7 @@
 			// DirectLoader with no service worker in the path — which matters on a
 			// LAN address over plain http, where no service worker can register.
 			// The default is the in-tab visor's UI on the virtual loopback.
-			var dashURL = 'http://vnet:' + hvPort + '/?embed=1#/?embed=1';
+			var dashURL = 'http://vnet:' + hvPort + '/angular/?embed=1#/?embed=1';
 			if (opts.dashboardURL) {
 				try { dashURL = new URL(opts.dashboardURL, location.href).href; } catch (e) { /* keep vnet */ }
 			}

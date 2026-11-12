@@ -16,14 +16,14 @@ import (
 // The rewards tab of the server rendered UI.
 
 func (hv *Hypervisor) ui2RewardsRoutes(r *httputil.Router) {
-	r.Get("/ui2/visors/{pk}/rewards", hv.ui2Rewards(false))
-	r.Get("/ui2/visors/{pk}/rewards/address", hv.ui2Rewards(true))
-	r.Put("/ui2/visors/{pk}/rewards/address", hv.ui2RewardSave())
-	r.Delete("/ui2/visors/{pk}/rewards/address", hv.ui2RewardDelete())
-	r.Get("/ui2/visors/{pk}/rewards/rules", func(w http.ResponseWriter, r *http.Request) {
+	r.Get("/visors/{pk}/rewards", hv.ui2Rewards(false))
+	r.Get("/visors/{pk}/rewards/address", hv.ui2Rewards(true))
+	r.Put("/visors/{pk}/rewards/address", hv.ui2RewardSave())
+	r.Delete("/visors/{pk}/rewards/address", hv.ui2RewardDelete())
+	r.Get("/visors/{pk}/rewards/rules", func(w http.ResponseWriter, r *http.Request) {
 		hv.render(w, r, ui2.RewardRules(rewards.MainnetRules))
 	})
-	r.Get("/ui2/visors/{pk}/rewards/history", hv.ui2RewardHistory())
+	r.Get("/visors/{pk}/rewards/history", hv.ui2RewardHistory())
 }
 
 // ui2RewardView fills the address view for addr: the addresses an xpub

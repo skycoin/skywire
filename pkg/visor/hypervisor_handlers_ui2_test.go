@@ -63,7 +63,7 @@ func ui2Req(t *testing.T, method, u, contentType, body string) *http.Request {
 // edit, import, delete.
 func TestUI2Contacts(t *testing.T) {
 	srv, v, pk := newUI2Server(t, true)
-	base := srv.URL + "/ui2/visors/" + pk.Hex() + "/contacts"
+	base := srv.URL + "/visors/" + pk.Hex() + "/contacts"
 	form := "application/x-www-form-urlencoded"
 
 	code, body := ui2Do(t, ui2Req(t, http.MethodGet, base, "", ""))
@@ -133,7 +133,7 @@ func TestUI2Contacts(t *testing.T) {
 	require.Contains(t, body, "Imported 1 contact(s).")
 	require.Contains(t, body, "Alice B")
 
-	code, body = ui2Do(t, ui2Req(t, http.MethodGet, srv.URL+"/ui2/static/htmx.min.js", "", ""))
+	code, body = ui2Do(t, ui2Req(t, http.MethodGet, srv.URL+"/static/htmx.min.js", "", ""))
 	require.Equal(t, http.StatusOK, code)
 	require.True(t, strings.HasPrefix(body, "var htmx="))
 }
@@ -142,7 +142,7 @@ func TestUI2Contacts(t *testing.T) {
 // JSON routes do.
 func TestUI2ContactsCSRF(t *testing.T) {
 	srv, _, pk := newUI2Server(t, false)
-	base := srv.URL + "/ui2/visors/" + pk.Hex() + "/contacts"
+	base := srv.URL + "/visors/" + pk.Hex() + "/contacts"
 	body := url.Values{"name": {"Carol"}}.Encode()
 
 	code, _ := ui2Do(t, ui2Req(t, http.MethodPost, base, "application/x-www-form-urlencoded", body))
@@ -162,10 +162,10 @@ func TestUI2ContactsCSRF(t *testing.T) {
 // service worker serves it under a /vnet/<port>/ prefix the server never sees.
 func TestUI2RelativeURLs(t *testing.T) {
 	srv, _, pk := newUI2Server(t, true)
-	_, body := ui2Do(t, ui2Req(t, http.MethodGet, srv.URL+"/ui2/visors/"+pk.Hex()+"/contacts", "", ""))
+	_, body := ui2Do(t, ui2Req(t, http.MethodGet, srv.URL+"/visors/"+pk.Hex()+"/contacts", "", ""))
 	abs := regexp.MustCompile(`(?:href|src|hx-get|hx-post|hx-delete)="/`).FindAllString(body, -1)
 	require.Empty(t, abs, "absolute URLs escape the /vnet/<port>/ prefix")
-	require.Contains(t, body, `<base href="../../../">`)
+	require.Contains(t, body, `<base href="../../">`)
 }
 
 // TestUI2RemoteVisor renders and writes the book of a visor connected to the
@@ -190,7 +190,7 @@ func TestUI2RemoteVisor(t *testing.T) {
 	hv.ui2Routes(r)
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
-	base := srv.URL + "/ui2/visors/" + remotePK.Hex() + "/contacts"
+	base := srv.URL + "/visors/" + remotePK.Hex() + "/contacts"
 
 	code, body := ui2Do(t, ui2Req(t, http.MethodGet, base, "", ""))
 	require.Equal(t, http.StatusOK, code, body)

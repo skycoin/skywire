@@ -53,7 +53,7 @@ func Folder(s string) string {
 
 // MailURL is a mail tab URL with query pairs.
 func MailURL(pk, rest string, kv ...string) string {
-	u := "ui2/visors/" + pk + "/mail" + rest
+	u := "visors/" + pk + "/mail" + rest
 	q := url.Values{}
 	for i := 0; i+1 < len(kv); i += 2 {
 		if kv[i+1] != "" {

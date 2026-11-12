@@ -13,10 +13,10 @@ import (
 // the server.
 
 func (hv *Hypervisor) ui2HVSettingsRoutes(r *httputil.Router) {
-	r.Get("/ui2/settings", func(w http.ResponseWriter, r *http.Request) {
+	r.Get("/settings", func(w http.ResponseWriter, r *http.Request) {
 		hv.render(w, r, ui2.HVSettingsPage(hv.c.EnableAuth && hv.users != nil))
 	})
-	r.Post("/ui2/settings/password", hv.ui2ChangePassword())
+	r.Post("/settings/password", hv.ui2ChangePassword())
 }
 
 // ui2ChangePassword checks the form as the Angular password page does and
@@ -64,7 +64,7 @@ func (hv *Hypervisor) ui2ChangePassword() http.HandlerFunc {
 			return
 		}
 		// The change ends every session, so log in again.
-		w.Header().Set("HX-Redirect", "ui2/login")
+		w.Header().Set("HX-Redirect", "login")
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

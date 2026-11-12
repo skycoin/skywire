@@ -12,7 +12,7 @@ templ ServicesPage(s Services) {
 		</section>
 		<section class="card">
 			<div class="head"><h2>{ T(ctx, "services-health.rsn-section") }</h2></div>
-			<div id="rsn" hx-get="ui2/services/rsn" hx-trigger="load, every 30s [document.visibilityState === 'visible']" hx-swap="innerHTML">
+			<div id="rsn" hx-get="services/rsn" hx-trigger="load, every 30s [document.visibilityState === 'visible']" hx-swap="innerHTML">
 				<p class="dim">{ T(ctx, "services-health.loading") }</p>
 			</div>
 		</section>
@@ -22,7 +22,7 @@ templ ServicesPage(s Services) {
 // ServicesBody is the summary and the table, polled every 15 seconds as
 // the Angular page does.
 templ ServicesBody(s Services) {
-	<div id="services" hx-get="ui2/services/body" hx-trigger="every 15s [document.visibilityState === 'visible']" hx-swap="outerHTML">
+	<div id="services" hx-get="services/body" hx-trigger="every 15s [document.visibilityState === 'visible']" hx-swap="outerHTML">
 		@ErrorBox(s.Err)
 		if len(s.Entries) > 0 {
 			<p>
@@ -65,7 +65,7 @@ templ serviceRow(e visorapi.ServiceHealthEntry) {
 		<td data-label={ T(ctx, "services-health.service") }>
 			<strong>{ e.Name }</strong>
 			if k := SvcKey(e.Name); k != "" {
-				<button class="icon-btn sm" type="button" hx-get={ "ui2/services/drill?service=" + k } hx-target="#svc-drill" hx-swap="innerHTML" title={ T(ctx, "services-health.drill") } aria-label={ T(ctx, "services-health.drill") }><span class="mi">unfold_more</span></button>
+				<button class="icon-btn sm" type="button" hx-get={ "services/drill?service=" + k } hx-target="#svc-drill" hx-swap="innerHTML" title={ T(ctx, "services-health.drill") } aria-label={ T(ctx, "services-health.drill") }><span class="mi">unfold_more</span></button>
 			}
 			if e.Error != "" {
 				<div class="small error">{ e.Error }</div>

@@ -16,7 +16,7 @@ templ NodesPage(ns []Node, errMsg string) {
 				<button class="btn sm" type="button" aria-pressed="false" data-node-state="noreward">{ T(ctx, "nodes.quick.no-reward") }</button>
 				<span class="small dim" data-node-shown data-fmt={ T(ctx, "ui2.nodes.shown") }></span>
 				<span class="spacer"></span>
-				<button class="btn sm" type="button" hx-delete="ui2/nodes" hx-target="#nodes" hx-swap="outerHTML" hx-confirm={ T(ctx, "nodes.delete-all-offline-confirmation") } data-hide-offline><span class="mi">delete_sweep</span>{ T(ctx, "nodes.delete-all-offline") }</button>
+				<button class="btn sm" type="button" hx-delete="nodes" hx-target="#nodes" hx-swap="outerHTML" hx-confirm={ T(ctx, "nodes.delete-all-offline-confirmation") } data-hide-offline><span class="mi">delete_sweep</span>{ T(ctx, "nodes.delete-all-offline") }</button>
 			</div>
 			@BulkBar()
 			@NodeRows(ns, errMsg, false)
@@ -28,7 +28,7 @@ templ NodesPage(ns []Node, errMsg string) {
 // list does by default. ui2.js applies the Angular UI's labels and the
 // filter after every swap.
 templ NodeRows(ns []Node, errMsg string, oob bool) {
-	<div id="nodes" hx-get="ui2/nodes" hx-trigger={ pollEvery(From(ctx).Refresh) } hx-swap="outerHTML">
+	<div id="nodes" hx-get="nodes" hx-trigger={ pollEvery(From(ctx).Refresh) } hx-swap="outerHTML">
 		@ErrorBox(errMsg)
 		if len(ns) == 0 {
 			<p class="dim">{ T(ctx, "nodes.empty") }</p>
@@ -173,7 +173,7 @@ templ nodeRow(n Node, parent string) {
 				<button class="icon-btn sm" type="button" data-edit-label={ n.PK } data-prompt={ T(ctx, "edit-label.label") } title={ T(ctx, "labeled-element.edit-label") } aria-label={ T(ctx, "labeled-element.edit-label") }><span class="mi">edit</span></button>
 			}
 			if !n.Online && !n.ViaSub {
-				<button class="icon-btn sm" type="button" hx-delete={ "ui2/nodes/" + n.PK } hx-target="#nodes" hx-swap="outerHTML" hx-confirm={ T(ctx, "nodes.delete-node-confirmation") } data-hide-pk={ n.PK } title={ T(ctx, "nodes.delete-node") } aria-label={ T(ctx, "nodes.delete-node") }><span class="mi">close</span></button>
+				<button class="icon-btn sm" type="button" hx-delete={ "nodes/" + n.PK } hx-target="#nodes" hx-swap="outerHTML" hx-confirm={ T(ctx, "nodes.delete-node-confirmation") } data-hide-pk={ n.PK } title={ T(ctx, "nodes.delete-node") } aria-label={ T(ctx, "nodes.delete-node") }><span class="mi">close</span></button>
 			}
 		</td>
 	</tr>

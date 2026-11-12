@@ -5,7 +5,7 @@ import "strconv"
 // LogsPage is the runtime log viewer.
 templ LogsPage(l Logs) {
 	@VisorLayout(l.PK, "logs") {
-		<form class="logs-controls" hx-get={ "ui2/visors/" + l.PK + "/logs/list" } hx-target="#logbody" hx-swap="outerHTML" hx-trigger="change, input changed delay:300ms from:input">
+		<form class="logs-controls" hx-get={ "visors/" + l.PK + "/logs/list" } hx-target="#logbody" hx-swap="outerHTML" hx-trigger="change, input changed delay:300ms from:input">
 			<label class="logs-row">
 				<span class="dim">{ T(ctx, "logs.filter") }</span>
 				<select name="level">
@@ -34,9 +34,9 @@ templ LogBody(l Logs) {
 		@ErrorBox(l.Err)
 		<div class="bar">
 			if l.Filter.Paused {
-				<button class="btn sm" type="button" hx-get={ "ui2/visors/" + l.PK + "/logs/list" } hx-include=".logs-controls" hx-target="#logbody" hx-swap="outerHTML"><span class="mi">play_arrow</span>{ T(ctx, "logs.resume") }</button>
+				<button class="btn sm" type="button" hx-get={ "visors/" + l.PK + "/logs/list" } hx-include=".logs-controls" hx-target="#logbody" hx-swap="outerHTML"><span class="mi">play_arrow</span>{ T(ctx, "logs.resume") }</button>
 			} else {
-				<button class="btn sm primary" type="button" hx-get={ "ui2/visors/" + l.PK + "/logs/list?paused=1" } hx-include=".logs-controls" hx-target="#logbody" hx-swap="outerHTML"><span class="mi">pause</span>{ T(ctx, "logs.pause") }</button>
+				<button class="btn sm primary" type="button" hx-get={ "visors/" + l.PK + "/logs/list?paused=1" } hx-include=".logs-controls" hx-target="#logbody" hx-swap="outerHTML"><span class="mi">pause</span>{ T(ctx, "logs.pause") }</button>
 			}
 			@logDropped(l.Dropped, false)
 		</div>

@@ -16,9 +16,9 @@ import (
 // transport handlers.
 
 func (hv *Hypervisor) ui2TransportsRoutes(r *httputil.Router) {
-	r.Get("/ui2/visors/{pk}/transports", hv.ui2Transports(false))
-	r.Get("/ui2/visors/{pk}/transports/body", hv.ui2Transports(true))
-	r.Get("/ui2/visors/{pk}/transports/{tid}/details", hv.withCtx(hv.ui2VisorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+	r.Get("/visors/{pk}/transports", hv.ui2Transports(false))
+	r.Get("/visors/{pk}/transports/body", hv.ui2Transports(true))
+	r.Get("/visors/{pk}/transports/{tid}/details", hv.withCtx(hv.ui2VisorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		t := ui2LoadTransports(ctx, r)
 		for _, x := range t.List {
 			if x.ID == r.PathValue("tid") {
@@ -28,18 +28,18 @@ func (hv *Hypervisor) ui2TransportsRoutes(r *httputil.Router) {
 		}
 		http.NotFound(w, r)
 	}))
-	r.Post("/ui2/visors/{pk}/transports", hv.ui2TransportAdd())
-	r.Delete("/ui2/visors/{pk}/transports/{tid}", hv.ui2TransportWrite(func(hv *Hypervisor, w http.ResponseWriter, r *http.Request, _ *httpCtx) bool {
+	r.Post("/visors/{pk}/transports", hv.ui2TransportAdd())
+	r.Delete("/visors/{pk}/transports/{tid}", hv.ui2TransportWrite(func(hv *Hypervisor, w http.ResponseWriter, r *http.Request, _ *httpCtx) bool {
 		return ui2CallAPI(w, r, hv.deleteTransport(), nil)
 	}, "transports.deleted"))
-	r.Delete("/ui2/visors/{pk}/transports", hv.ui2TransportWrite(ui2RemoveAllTransports, "transports.deleted"))
-	r.Put("/ui2/visors/{pk}/transports/autoconnect", hv.ui2TransportWrite(func(hv *Hypervisor, w http.ResponseWriter, r *http.Request, _ *httpCtx) bool {
+	r.Delete("/visors/{pk}/transports", hv.ui2TransportWrite(ui2RemoveAllTransports, "transports.deleted"))
+	r.Put("/visors/{pk}/transports/autoconnect", hv.ui2TransportWrite(func(hv *Hypervisor, w http.ResponseWriter, r *http.Request, _ *httpCtx) bool {
 		return ui2CallAPI(w, r, hv.putPublicAutoconnect(), publicAutoconnectReq{PublicAutoconnect: r.FormValue("on") != ""})
 	}, "transports.changes-made"))
-	r.Put("/ui2/visors/{pk}/transports/public", hv.ui2TransportWrite(func(hv *Hypervisor, w http.ResponseWriter, r *http.Request, _ *httpCtx) bool {
+	r.Put("/visors/{pk}/transports/public", hv.ui2TransportWrite(func(hv *Hypervisor, w http.ResponseWriter, r *http.Request, _ *httpCtx) bool {
 		return ui2CallAPI(w, r, hv.putIsPublic(), isPublicResp{IsPublic: r.FormValue("on") != ""})
 	}, "transports.changes-made"))
-	r.Put("/ui2/visors/{pk}/transports/persistent", hv.ui2TransportWrite(ui2SetPersistent, "transports.changes-made"))
+	r.Put("/visors/{pk}/transports/persistent", hv.ui2TransportWrite(ui2SetPersistent, "transports.changes-made"))
 }
 
 func ui2LoadTransports(ctx *httpCtx, r *http.Request) ui2.Transports {

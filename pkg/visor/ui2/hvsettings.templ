@@ -53,7 +53,7 @@ templ HVSettingsPage(canChangePassword bool) {
 
 // PasswordForm changes the admin password through /api/change-password.
 templ PasswordForm(errMsg string) {
-	<form id="pw-form" class="form narrow-form" hx-post="ui2/settings/password" hx-swap="outerHTML">
+	<form id="pw-form" class="form narrow-form" hx-post="settings/password" hx-swap="outerHTML">
 		<p class="small dim">{ T(ctx, "settings.password.help") }</p>
 		@ErrorBox(errMsg)
 		<label>

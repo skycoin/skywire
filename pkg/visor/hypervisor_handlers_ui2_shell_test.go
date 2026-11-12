@@ -56,31 +56,31 @@ func TestUI2Login(t *testing.T) {
 	srv, pk := newUI2AuthServer(t)
 	form := "application/x-www-form-urlencoded"
 
-	resp, err := ui2Client.Get(srv.URL + "/ui2/visors/" + pk.Hex() + "/contacts")
+	resp, err := ui2Client.Get(srv.URL + "/visors/" + pk.Hex() + "/contacts")
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	require.Equal(t, http.StatusSeeOther, resp.StatusCode)
-	require.Equal(t, "../../../ui2/login", resp.Header.Get("Location"))
+	require.Equal(t, "../../login", resp.Header.Get("Location"))
 
-	req := ui2Req(t, http.MethodGet, srv.URL+"/ui2/nodes", "", "")
+	req := ui2Req(t, http.MethodGet, srv.URL+"/nodes", "", "")
 	req.Header.Set("HX-Request", "true")
 	resp, err = ui2Client.Do(req)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
-	require.Equal(t, "ui2/login", resp.Header.Get("HX-Redirect"))
+	require.Equal(t, "login", resp.Header.Get("HX-Redirect"))
 
-	code, body := ui2Do(t, ui2Req(t, http.MethodGet, srv.URL+"/ui2/login", "", ""))
+	code, body := ui2Do(t, ui2Req(t, http.MethodGet, srv.URL+"/login", "", ""))
 	require.Equal(t, http.StatusOK, code)
 	require.Contains(t, body, "Create account")
 
 	mismatch := url.Values{"create": {"1"}, "username": {"admin"}, "password": {"Secret123!"}, "confirm": {"nope"}}
-	code, body = ui2Do(t, ui2Req(t, http.MethodPost, srv.URL+"/ui2/login", form, mismatch.Encode()))
+	code, body = ui2Do(t, ui2Req(t, http.MethodPost, srv.URL+"/login", form, mismatch.Encode()))
 	require.Equal(t, http.StatusUnauthorized, code)
 	require.Contains(t, body, "do not match")
 
 	create := url.Values{"create": {"1"}, "username": {"admin"}, "password": {"Secret123!"}, "confirm": {"Secret123!"}}
-	resp, err = ui2Client.Do(ui2Req(t, http.MethodPost, srv.URL+"/ui2/login", form, create.Encode()))
+	resp, err = ui2Client.Do(ui2Req(t, http.MethodPost, srv.URL+"/login", form, create.Encode()))
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	require.Equal(t, http.StatusSeeOther, resp.StatusCode)
@@ -88,16 +88,16 @@ func TestUI2Login(t *testing.T) {
 	cookies := resp.Cookies()
 	require.NotEmpty(t, cookies, "logging in sets the session cookie")
 
-	req = ui2Req(t, http.MethodGet, srv.URL+"/ui2/visors/"+pk.Hex()+"/contacts", "", "")
+	req = ui2Req(t, http.MethodGet, srv.URL+"/visors/"+pk.Hex()+"/contacts", "", "")
 	for _, c := range cookies {
 		req.AddCookie(c)
 	}
 	code, body = ui2Do(t, req)
 	require.Equal(t, http.StatusOK, code, body)
-	require.Contains(t, body, `hx-post="ui2/logout"`)
+	require.Contains(t, body, `hx-post="logout"`)
 
 	bad := url.Values{"username": {"admin"}, "password": {"wrong"}}
-	code, body = ui2Do(t, ui2Req(t, http.MethodPost, srv.URL+"/ui2/login", form, bad.Encode()))
+	code, body = ui2Do(t, ui2Req(t, http.MethodPost, srv.URL+"/login", form, bad.Encode()))
 	require.Equal(t, http.StatusUnauthorized, code)
 	require.Contains(t, body, "Incorrect password.")
 	require.NotContains(t, body, "Create account", "the account exists now")
@@ -107,7 +107,7 @@ func TestUI2Login(t *testing.T) {
 // then Accept-Language, and English for a key a language lacks.
 func TestUI2Lang(t *testing.T) {
 	srv, _, pk := newUI2Server(t, true)
-	u := srv.URL + "/ui2/visors/" + pk.Hex() + "/contacts"
+	u := srv.URL + "/visors/" + pk.Hex() + "/contacts"
 
 	req := ui2Req(t, http.MethodGet, u, "", "")
 	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
@@ -130,7 +130,7 @@ func TestUI2Static(t *testing.T) {
 	v := ui2.AssetVersion("htmx.min.js")
 	require.NotEmpty(t, v)
 
-	req := ui2Req(t, http.MethodGet, srv.URL+"/ui2/static/htmx.min.js?v="+v, "", "")
+	req := ui2Req(t, http.MethodGet, srv.URL+"/static/htmx.min.js?v="+v, "", "")
 	req.Header.Set("Accept-Encoding", "gzip")
 	resp, err := (&http.Transport{DisableCompression: true}).RoundTrip(req)
 	require.NoError(t, err)
@@ -144,7 +144,7 @@ func TestUI2Static(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, strings.HasPrefix(string(b), "var htmx="))
 
-	req = ui2Req(t, http.MethodGet, srv.URL+"/ui2/static/ui2.css", "", "")
+	req = ui2Req(t, http.MethodGet, srv.URL+"/static/ui2.css", "", "")
 	req.Header.Set("If-None-Match", `W/"`+ui2.AssetVersion("ui2.css")+`"`)
 	resp, err = ui2Client.Do(req)
 	require.NoError(t, err)
@@ -155,19 +155,35 @@ func TestUI2Static(t *testing.T) {
 
 // TestUI2NotPorted links a tab the new UI lacks to the classic one, and keeps
 // unknown /ui2 paths from reaching the Angular catch-all.
+// TestUI2Legacy moves a /ui2/ URL to the same page at the root.
+func TestUI2Legacy(t *testing.T) {
+	srv, _, _ := newUI2Server(t, true)
+	for path, want := range map[string]string{
+		"/ui2":                    "./",
+		"/ui2/":                   "../",
+		"/ui2/visors/pk/info?x=1": "../../../visors/pk/info?x=1",
+	} {
+		resp, err := ui2Client.Get(srv.URL + path)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		require.Equal(t, http.StatusMovedPermanently, resp.StatusCode, path)
+		require.Equal(t, want, resp.Header.Get("Location"), path)
+	}
+}
+
 func TestUI2NotPorted(t *testing.T) {
 	srv, _, pk := newUI2Server(t, true)
-	code, body := ui2Do(t, ui2Req(t, http.MethodGet, srv.URL+"/ui2/visors/"+pk.Hex()+"/vpn", "", ""))
+	code, body := ui2Do(t, ui2Req(t, http.MethodGet, srv.URL+"/visors/"+pk.Hex()+"/vpn", "", ""))
 	require.Equal(t, http.StatusOK, code, body)
-	require.Contains(t, body, `href="#/nodes/`+pk.Hex()+`/vpn"`)
+	require.Contains(t, body, `href="angular/#/nodes/`+pk.Hex()+`/vpn"`)
 	require.Contains(t, body, `class="tab active"`)
 
-	code, _ = ui2Do(t, ui2Req(t, http.MethodGet, srv.URL+"/ui2/visors/"+pk.Hex()+"/nope", "", ""))
+	code, _ = ui2Do(t, ui2Req(t, http.MethodGet, srv.URL+"/visors/"+pk.Hex()+"/nope", "", ""))
 	require.Equal(t, http.StatusNotFound, code)
-	code, _ = ui2Do(t, ui2Req(t, http.MethodGet, srv.URL+"/ui2/nope", "", ""))
+	code, _ = ui2Do(t, ui2Req(t, http.MethodGet, srv.URL+"/nope", "", ""))
 	require.Equal(t, http.StatusNotFound, code)
 
-	resp, err := ui2Client.Get(srv.URL + "/ui2/visors/" + pk.Hex())
+	resp, err := ui2Client.Get(srv.URL + "/visors/" + pk.Hex())
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	require.Equal(t, pk.Hex()+"/info", resp.Header.Get("Location"))

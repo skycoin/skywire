@@ -24,17 +24,17 @@ import (
 const ui2MailMaxUpload = 64 << 20
 
 func (hv *Hypervisor) ui2MailRoutes(r *httputil.Router) {
-	r.Get("/ui2/visors/{pk}/mail", hv.ui2MailView("list"))
-	r.Get("/ui2/visors/{pk}/mail/list", hv.ui2MailView("list"))
-	r.Get("/ui2/visors/{pk}/mail/message", hv.ui2MailView("message"))
-	r.Get("/ui2/visors/{pk}/mail/compose", hv.ui2MailView("compose"))
-	r.Get("/ui2/visors/{pk}/mail/settings", hv.ui2MailView("settings"))
-	r.Delete("/ui2/visors/{pk}/mail/message", hv.ui2MailDelete())
-	r.Post("/ui2/visors/{pk}/mail/retry", hv.ui2MailRetry())
-	r.Post("/ui2/visors/{pk}/mail/send", hv.ui2MailSend())
-	r.Post("/ui2/visors/{pk}/mail/enable", hv.ui2MailEnable())
-	r.Post("/ui2/visors/{pk}/mail/whitelist", hv.ui2MailWhitelist())
-	r.Post("/ui2/visors/{pk}/mail/helpers", hv.ui2MailHelpers())
+	r.Get("/visors/{pk}/mail", hv.ui2MailView("list"))
+	r.Get("/visors/{pk}/mail/list", hv.ui2MailView("list"))
+	r.Get("/visors/{pk}/mail/message", hv.ui2MailView("message"))
+	r.Get("/visors/{pk}/mail/compose", hv.ui2MailView("compose"))
+	r.Get("/visors/{pk}/mail/settings", hv.ui2MailView("settings"))
+	r.Delete("/visors/{pk}/mail/message", hv.ui2MailDelete())
+	r.Post("/visors/{pk}/mail/retry", hv.ui2MailRetry())
+	r.Post("/visors/{pk}/mail/send", hv.ui2MailSend())
+	r.Post("/visors/{pk}/mail/enable", hv.ui2MailEnable())
+	r.Post("/visors/{pk}/mail/whitelist", hv.ui2MailWhitelist())
+	r.Post("/visors/{pk}/mail/helpers", hv.ui2MailHelpers())
 }
 
 // ui2MailLoad fills the status and, for the list view, the folder.

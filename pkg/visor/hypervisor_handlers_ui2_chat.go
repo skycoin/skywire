@@ -21,18 +21,18 @@ import (
 // Like the Angular tab it serves only the hypervisor's own visor.
 
 func (hv *Hypervisor) ui2ChatRoutes(r *httputil.Router) {
-	r.Get("/ui2/visors/{pk}/chat", hv.ui2Chat(""))
-	r.Get("/ui2/visors/{pk}/chat/log", hv.ui2Chat("log"))
-	r.Post("/ui2/visors/{pk}/chat/send", hv.ui2Chat("send"))
-	r.Post("/ui2/visors/{pk}/chat/delete", hv.ui2Chat("delete"))
-	r.Get("/ui2/visors/{pk}/chat/groups/log", hv.ui2Chat("glog"))
-	r.Post("/ui2/visors/{pk}/chat/groups/send", hv.ui2Chat("gsend"))
-	r.Post("/ui2/visors/{pk}/chat/groups/create", hv.ui2Chat("gcreate"))
-	r.Post("/ui2/visors/{pk}/chat/groups/join", hv.ui2Chat("gjoin"))
-	r.Get("/ui2/visors/{pk}/chat/groups/invite", hv.ui2Chat("ginvite"))
-	r.Post("/ui2/visors/{pk}/chat/groups/add-member", hv.ui2Chat("gadd"))
-	r.Post("/ui2/visors/{pk}/chat/groups/ask-again", hv.ui2Chat("gask"))
-	r.Post("/ui2/visors/{pk}/chat/password", hv.ui2Chat("password"))
+	r.Get("/visors/{pk}/chat", hv.ui2Chat(""))
+	r.Get("/visors/{pk}/chat/log", hv.ui2Chat("log"))
+	r.Post("/visors/{pk}/chat/send", hv.ui2Chat("send"))
+	r.Post("/visors/{pk}/chat/delete", hv.ui2Chat("delete"))
+	r.Get("/visors/{pk}/chat/groups/log", hv.ui2Chat("glog"))
+	r.Post("/visors/{pk}/chat/groups/send", hv.ui2Chat("gsend"))
+	r.Post("/visors/{pk}/chat/groups/create", hv.ui2Chat("gcreate"))
+	r.Post("/visors/{pk}/chat/groups/join", hv.ui2Chat("gjoin"))
+	r.Get("/visors/{pk}/chat/groups/invite", hv.ui2Chat("ginvite"))
+	r.Post("/visors/{pk}/chat/groups/add-member", hv.ui2Chat("gadd"))
+	r.Post("/visors/{pk}/chat/groups/ask-again", hv.ui2Chat("gask"))
+	r.Post("/visors/{pk}/chat/password", hv.ui2Chat("password"))
 	hv.ui2VoiceRoutes(r)
 }
 

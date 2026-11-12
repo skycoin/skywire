@@ -18,10 +18,10 @@ import (
 // previous sample this hypervisor took for the visor.
 
 func (hv *Hypervisor) ui2ResourcesRoutes(r *httputil.Router) {
-	r.Get("/ui2/resources", hv.ui2Resources(false))
-	r.Get("/ui2/resources/rows", hv.ui2Resources(true))
-	r.Get("/ui2/visors/{pk}/resources", hv.ui2VisorResources(false))
-	r.Get("/ui2/visors/{pk}/resources/live", hv.ui2VisorResources(true))
+	r.Get("/resources", hv.ui2Resources(false))
+	r.Get("/resources/rows", hv.ui2Resources(true))
+	r.Get("/visors/{pk}/resources", hv.ui2VisorResources(false))
+	r.Get("/visors/{pk}/resources/live", hv.ui2VisorResources(true))
 }
 
 type ui2NetSample struct {
