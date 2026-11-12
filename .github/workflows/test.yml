@@ -39,7 +39,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: 'stable'
+          go-version-file: go.mod
           cache: false
 
       # Persist the Go build/test cache ($GOCACHE) across runs so unchanged
@@ -106,7 +106,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: 'stable'
+          go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
 
@@ -131,7 +131,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: 'stable'
+          go-version-file: go.mod
           cache: false
 
       - name: Locate Go build cache
@@ -201,7 +201,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: 'stable'
+          go-version-file: go.mod
           cache: false
 
       # Persist the Go build/test cache ($GOCACHE) across runs so unchanged
@@ -258,7 +258,7 @@ jobs:
       # never reads the module cache.
       - uses: actions/setup-go@v7
         with:
-          go-version: 'stable'
+          go-version-file: go.mod
           cache: false
 
       # Persist the Go build/test cache ($GOCACHE) across runs so unchanged
@@ -326,7 +326,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: 'stable'
+          go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
 
@@ -355,7 +355,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: 'stable'
+          go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
 
@@ -402,7 +402,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: 'stable'
+          go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
 
@@ -427,7 +427,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: 'stable'
+          go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
 
@@ -460,7 +460,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: 'stable'
+          go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
 
@@ -483,7 +483,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: 'stable'
+          go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
 
@@ -531,7 +531,7 @@ jobs:
       # requires (scripts/sync-skycoin-wallet.sh), so building it needs Go.
       - uses: actions/setup-go@v7
         with:
-          go-version: 'stable'
+          go-version-file: go.mod
           cache: false
 
       - uses: browser-actions/setup-chrome@v2
@@ -589,7 +589,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: 'stable'
+          go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
 
