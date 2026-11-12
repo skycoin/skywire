@@ -492,3 +492,8 @@ fieldset.choice legend { padding: 0; margin-bottom: 4px; }
 .bw-head::-webkit-details-marker { display: none; }
 .bw-head .pk-text { max-width: 22ch; }
 .bw-row h3 { margin: 10px 0 4px; }
+
+/* network view */
+#nv-q input[name="country"] { flex: 0 0 6em; width: 6em; }
+#nv-q input[name="version"] { flex: 0 1 14em; width: 14em; }
+#nv-q input[name="min"] { flex: 0 0 7em; }

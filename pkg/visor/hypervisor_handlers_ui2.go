@@ -59,6 +59,7 @@ func (hv *Hypervisor) ui2Routes(r *httputil.Router) {
 		hv.ui2ServicesRoutes(r)
 		hv.ui2ResourcesRoutes(r)
 		hv.ui2FleetUptimeRoutes(r)
+		hv.ui2NetViewRoutes(r)
 		hv.ui2ContactsRoutes(r)
 		hv.ui2AppsRoutes(r)
 		hv.ui2TransportsRoutes(r)
