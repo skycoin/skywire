@@ -1204,8 +1204,8 @@
     <string name="mail_send_unknown">Still delivering: the visor has not answered yet. Check Sent in a few minutes before sending it again.</string>
     <string name="mail_bad_address">Not a SkyMail address: %1$s</string>
     <string name="mail_no_recipient">Add a recipient.</string>
-    <string name="mail_attachments_too_big">These attachments become %1$s in transit — a message can be about %2$s.</string>
-    <string name="mail_sent_size">About %1$s when sent, of %2$s allowed. Mail carries files as text, which makes them about a third bigger.</string>
+    <string name="mail_attachments_too_big">These files add up to %1$s, and a message can carry %2$s.</string>
+    <string name="mail_attachments_size">Attachments: %1$s of %2$s.</string>
     <string name="mail_result_title">Not everyone got it</string>
     <string name="mail_result_delivered">Delivered over %1$s</string>
     <string name="mail_result_failed">Not delivered: %1$s</string>

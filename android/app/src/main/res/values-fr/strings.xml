@@ -1244,8 +1244,8 @@
     <string name="mail_send_unknown">Livraison en cours : le visor n’a pas encore répondu. Vérifiez Envoyés dans quelques minutes avant de renvoyer.</string>
     <string name="mail_bad_address">Ce n’est pas une adresse SkyMail : %1$s</string>
     <string name="mail_no_recipient">Ajoutez un destinataire.</string>
-    <string name="mail_attachments_too_big">Ces pièces jointes deviennent %1$s en transit — un message peut faire environ %2$s.</string>
-    <string name="mail_sent_size">Environ %1$s à l’envoi, sur %2$s autorisés. Le courrier transporte les fichiers sous forme de texte, ce qui les grossit d’environ un tiers.</string>
+    <string name="mail_attachments_too_big">Ces fichiers font %1$s au total, et un message peut en porter %2$s.</string>
+    <string name="mail_attachments_size">Pièces jointes : %1$s sur %2$s.</string>
     <string name="mail_result_title">Tout le monde ne l’a pas reçu</string>
     <string name="mail_result_delivered">Livré via %1$s</string>
     <string name="mail_result_failed">Non livré : %1$s</string>

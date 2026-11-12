@@ -70,6 +70,7 @@ The mailbox speaks the subset of SMTP (RFC 5321) implemented in
 
 - Greeting `220 <label>.skynet ESMTP skymail`.
 - `EHLO` answers with the host name, `SIZE <limit>` (RFC 1870),
+  where the limit is `skymail.WireSize(MaxMessageSize)`,
   `SKYMAIL-SEALED` when the mailbox opens sealed envelopes, and `8BITMIME`.
 - `HELO`, `MAIL FROM`, `RCPT TO`, `DATA`, `RSET`, `NOOP` and `QUIT` are
   served. The null reverse path `<>` is accepted.
@@ -105,7 +106,10 @@ After `DATA` the mailbox applies these in order.
    sender, and the connection's key becomes the relay when it differs. An
    envelope that does not open gets `554 5.7.5`.
 3. The sender MUST be allowed by the whitelist.
-4. A message larger than `MaxMessageSize` gets `552 5.3.4`.
+4. A message larger than `WireSize(MaxMessageSize)` gets `552 5.3.4`.
+   `MaxMessageSize` counts attachments at their file size. `WireSize`
+   adds their base64 in 76 column lines and 64 KiB for the headers and
+   text.
 5. A message whose sender and `Message-ID` were filed in the last
    30 days (`seenTTL`) is accepted and dropped. A message without a
    `Message-ID` is never treated as a repeat.

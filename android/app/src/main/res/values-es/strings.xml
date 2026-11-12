@@ -1246,8 +1246,8 @@
     <string name="mail_send_unknown">Sigue en camino: el nodo aún no ha respondido. Revisa Enviados en unos minutos antes de reenviar.</string>
     <string name="mail_bad_address">No es una dirección de SkyMail: %1$s</string>
     <string name="mail_no_recipient">Añade un destinatario.</string>
-    <string name="mail_attachments_too_big">Estos adjuntos ocupan %1$s en tránsito; un mensaje puede ser de unos %2$s.</string>
-    <string name="mail_sent_size">Unos %1$s al enviarlo, de %2$s permitidos. El correo lleva los archivos como texto, lo que los hace un tercio más grandes.</string>
+    <string name="mail_attachments_too_big">Estos archivos suman %1$s, y un mensaje puede llevar %2$s.</string>
+    <string name="mail_attachments_size">Adjuntos: %1$s de %2$s.</string>
     <string name="mail_result_title">No llegó a todos</string>
     <string name="mail_result_delivered">Entregado por %1$s</string>
     <string name="mail_result_failed">No entregado: %1$s</string>

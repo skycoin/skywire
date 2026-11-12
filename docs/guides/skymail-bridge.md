@@ -26,7 +26,8 @@ skywire cli mail retry                  # try the Outbox now
 ```
 
 Because it is open to every PK by default, the mailbox keeps little: a
-message over 10 MiB is refused, a mailbox holding 64 MiB (every folder
+message with over 10 MiB of files is refused (the limit counts the files,
+not their base64 as sent), a mailbox holding 64 MiB (every folder
 together) refuses mail until some is deleted or expires, and mail older
 than 7 days is deleted. `mail settings` changes any of these live and
 keeps the change in `settings.json` beside the mail (`none` removes a
