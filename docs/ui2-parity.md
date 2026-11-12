@@ -78,4 +78,4 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 | wallet | wallet | yes | frames skycoin-web's ui2 when the app runs, else says how to start it |
 | logs | runtime logs with filter and search | yes | |
 | settings | skyenv editor | yes | |
-| | offline alerts: emails, delay, webhook, sender, SMTP relay, test, push device list and removal | partial | a push device cannot be added from ui2; new ui2 keys are English only |
+| | offline alerts: emails, delay, webhook, sender, SMTP relay, test, push devices (add this device, list, remove) | yes | new ui2 keys are English only |

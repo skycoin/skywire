@@ -34,6 +34,31 @@ func (a *ui2AlertsAPI) AlertsTest() ([]alerts.Result, error) {
 	return []alerts.Result{{Channel: "webhook", Target: "http://x/hook"}}, nil
 }
 
+func (a *ui2AlertsAPI) AlertsPushAdd(sub alerts.PushSubscription) (alerts.PushSubscription, error) {
+	sub.ID = alerts.PushID(sub.Endpoint)
+	a.st.Settings.Push = append(a.st.Settings.Push, sub)
+	return sub, nil
+}
+
+func TestUI2AlertsPushAdd(t *testing.T) {
+	api := &ui2AlertsAPI{st: alerts.Status{OfflineAfter: "5m0s", PushPublicKey: "BKey"}}
+	base := newUI2FakeServer(t, api)
+	form := "application/x-www-form-urlencoded"
+
+	_, body := ui2HX(t, http.MethodGet, base+"/settings/alerts", "", "")
+	require.Contains(t, body, `data-push-key="BKey"`)
+
+	sub := `{"endpoint":"https://push.example/abc","keys":{"p256dh":"p","auth":"a"},"label":"Linux Chrome"}`
+	_, body = ui2HX(t, http.MethodPost, base+"/settings/alerts/push", form, url.Values{"sub": {sub}}.Encode())
+	require.Len(t, api.st.Settings.Push, 1)
+	require.Equal(t, "a", api.st.Settings.Push[0].Keys.Auth)
+	require.Contains(t, body, `data-push-endpoint="https://push.example/abc"`)
+	require.Contains(t, body, "This device gets push alerts now")
+
+	_, body = ui2HX(t, http.MethodPost, base+"/settings/alerts/push", form, url.Values{"sub": {"{"}}.Encode())
+	require.Contains(t, body, `class="error"`)
+}
+
 func TestUI2Alerts(t *testing.T) {
 	api := &ui2AlertsAPI{st: alerts.Status{OfflineAfter: "5m0s"}}
 	base := newUI2FakeServer(t, api)
