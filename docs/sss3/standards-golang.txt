@@ -166,13 +166,17 @@ KG15 LOCALITY / COLOCATION. A feature is one cohesive package; a type lives
      folder-no-subfolders, standards-architecture]
      Enforced: go build (dir==package); review for cohesion.
 
-KG16 BOOLEAN & CQS NAMING (Go spelling). Bools read as questions:
-     Is/Has/Can/Should. Mutators are verbs (Close, Dial, Serve); no Get- prefix
-     on getters (Name() not GetName()). Acronyms stay all-caps in Go spelling
-     (ID not Id, PK, URL). A command mutates; a query returns — no artificial
-     prefix. [boolean-naming, banned-verbs, language-usage; INVERTS Fof/Fon,
-     Interface-suffix, Init1/Init2]  Enforced: revive/stylecheck (rejects
-     Get-prefix, underscores, I-prefix, Id spelling); review for bool prefixes.
+KG16 BOOLEAN & CQS NAMING (Go spelling). No is/has prefix on boolean
+     variables, parameters or struct fields: plain idiomatic Go names
+     (enabled, closed, verbose). Predicate functions and methods may keep
+     Is/Has as Go's stdlib does (errors.Is, strings.HasPrefix). Mutators are
+     verbs (Close, Dial, Serve); no Get prefix on getters (Name() not
+     GetName()). Acronyms stay all-caps in Go spelling (ID not Id, PK, URL).
+     A command mutates; a query returns, with no artificial prefix.
+     [boolean-naming, banned-verbs, language-usage; INVERTS Fof/Fon,
+     Interface-suffix, Init1/Init2, and the SSS Is/Has bool prefix]
+     Enforced: revive/stylecheck (rejects Get-prefix, underscores, I-prefix,
+     Id spelling); review for is/has bool names.
 
 --------------------------------------------------------------------------------
 2. FULL VERDICT TABLE (by cluster)
@@ -224,7 +228,7 @@ Go toolchain with no action.
 [~] pattern-deferred-loading ....... lazy init on first use (sync.Once) where it earns it; not a mandate. review.
 
 --- 2.D  NAMING & CODING -------------------------------------------------------
-[A] standard-boolean-naming ........ Is/Has/Can/Should. (Drop C# _underscore private rule.) revive-friendly. -> KG16
+[~] standard-boolean-naming ........ INVERTED: plain bool names, no Is/Has on variables, params or fields; Is/Has only on predicate funcs. -> KG16
 [A] standards-avoid-raw-int-casts .. defined types over raw int; maps keyed by them; zero=unset. THE most Go-aligned rule. compiler-enforced. -> KG4,KG5
 [~] standards-naming-guidelines .... only germ = layered dep direction; [Name]Interface + PascalCase-namespace + hyphen-assembly are [X]. -> KG1
 [~] standards-naming-banned-verbs .. ban naming after unused framework patterns (Inject*); Manager/Handle/Process blanket-ban too strong for Go (http.Handler is idiomatic). review. -> KG16
