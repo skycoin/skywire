@@ -121,8 +121,9 @@ type ManagedTransport struct {
 	writerRunning atomic.Bool
 	writePending  atomic.Int32
 
-	done chan struct{}
-	wg   sync.WaitGroup
+	done     chan struct{}
+	doneOnce sync.Once
+	wg       sync.WaitGroup
 
 	timeout       time.Duration
 	queueDeletion func(id uuid.UUID)
@@ -982,11 +983,8 @@ func (mt *ManagedTransport) close() { mt.closeWith("closed") }
 // closeWith is close with the reason recorded in the manager's transport event
 // ring (visor state --select diag). The first caller's reason wins.
 func (mt *ManagedTransport) closeWith(reason string) {
-	select {
-	case <-mt.done:
+	if !mt.markDone() {
 		return
-	default:
-		close(mt.done)
 	}
 	if mt.onClose != nil {
 		mt.onClose(reason)
@@ -1015,11 +1013,8 @@ func (mt *ManagedTransport) closeWith(reason string) {
 // closeWithoutDeregister closes the transport without deregistering from TPD.
 // Used when batch deregistration is done at the manager level.
 func (mt *ManagedTransport) closeWithoutDeregister() {
-	select {
-	case <-mt.done:
+	if !mt.markDone() {
 		return
-	default:
-		close(mt.done)
 	}
 	if mt.onClose != nil {
 		mt.onClose("manager closing")
@@ -1766,4 +1761,15 @@ func (mt *ManagedTransport) dispatchPacket(p routing.Packet) bool {
 		}
 	}
 	return true
+}
+
+// markDone closes done and reports whether this call did it. A bare select
+// on done raced two concurrent closers into a double close.
+func (mt *ManagedTransport) markDone() bool {
+	closed := false
+	mt.doneOnce.Do(func() {
+		close(mt.done)
+		closed = true
+	})
+	return closed
 }
