@@ -19,7 +19,7 @@ on:
 
 env:
   RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-  # The same TinyGo as test.yml, skycoin and skycoin.com.
+  # TinyGo 0.44 supports Go up to 1.27.
   TINYGO_RELEASE: v0.45.0-dev-skywire.2
   TINYGO_SHA256: 28c5d87e92f00869b667827107faf1c0a96055d179839d1832d7ef14214b2dd6
   MODULE: github.com/skycoin/skywire
