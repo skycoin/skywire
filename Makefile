@@ -640,6 +640,7 @@ format: tidy ## Formats the code. Must have goimports installed (use make instal
 		grep -E '^(replace|exclude)' go.mod; \
 		exit 1; \
 	fi
+	gofmt -s -w $$(git ls-files 'pkg/*.go' 'cmd/*.go' 'internal/*.go')
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./pkg ./cmd ./internal
 
 format-windows: tidy ## Formats the code. Must have goimports installed (use make install-linters).
