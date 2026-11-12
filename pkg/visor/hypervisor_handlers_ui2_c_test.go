@@ -260,13 +260,13 @@ func TestUI2WalletHostsSkycoinWeb(t *testing.T) {
 	base := newUI2FakeServer(t, &ui2FakeAPI{})
 	_, body := ui2Do(t, ui2Req(t, http.MethodGet, base+"/wallet", "", ""))
 	require.Contains(t, body, "Skycoin wallet app not configured")
-	require.NotContains(t, body, `src="wallet/ui2/"`)
+	require.NotContains(t, body, `src="wallet/web/"`)
 	require.NotContains(t, body, `#/wallet`, "no link to the Angular wallet")
 
 	launcher.RegisterHTTPHandler(skyenv.SkycoinWebName, http.NotFoundHandler())
 	t.Cleanup(func() { launcher.RegisterHTTPHandler(skyenv.SkycoinWebName, nil) })
 	_, body = ui2Do(t, ui2Req(t, http.MethodGet, base+"/wallet", "", ""))
-	require.Contains(t, body, `src="wallet/ui2/"`)
+	require.Contains(t, body, `src="wallet/web/"`)
 }
 
 // TestUI2ChatIsNative renders the chat tab without the Angular UI.
