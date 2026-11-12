@@ -589,3 +589,34 @@ document.addEventListener('DOMContentLoaded', function () {
 		});
 	});
 })();
+
+// A polled [data-keep-checked] list keeps its ticked boxes across swaps.
+(function () {
+	'use strict';
+	var kept = {};
+	document.addEventListener('htmx:beforeSwap', function (e) {
+		var t = e.detail.target;
+		if (!t || !t.hasAttribute || !t.hasAttribute('data-keep-checked')) return;
+		var m = {};
+		t.querySelectorAll('input[type=checkbox]:checked').forEach(function (c) { m[c.name + '=' + c.value] = 1; });
+		kept[t.id] = m;
+	});
+	document.addEventListener('htmx:afterSettle', function () {
+		Object.keys(kept).forEach(function (id) {
+			var el = document.getElementById(id);
+			if (!el) return;
+			el.querySelectorAll('input[type=checkbox]').forEach(function (c) { if (kept[id][c.name + '=' + c.value]) c.checked = true; });
+		});
+	});
+})();
+
+// The apps list's selection bar shows while any app is ticked.
+(function () {
+	'use strict';
+	function sync() {
+		var bar = document.getElementById('apps-bulk');
+		if (bar) bar.hidden = !document.querySelector('#apps-rows input[name=sel]:checked');
+	}
+	document.addEventListener('change', function (e) { if (e.target.matches && e.target.matches('#apps-rows input[name=sel]')) sync(); });
+	document.addEventListener('htmx:afterSettle', sync);
+})();

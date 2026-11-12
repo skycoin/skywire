@@ -2,6 +2,7 @@
 package visor
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -22,6 +23,7 @@ import (
 func (hv *Hypervisor) ui2AppsRoutes(r *httputil.Router) {
 	r.Get("/ui2/visors/{pk}/apps", hv.ui2Apps(false))
 	r.Get("/ui2/visors/{pk}/apps/rows", hv.ui2Apps(true))
+	r.Post("/ui2/visors/{pk}/apps/bulk", hv.ui2AppsBulk())
 	r.Get("/ui2/visors/{pk}/apps/catalog", hv.ui2Catalog(false))
 	r.Get("/ui2/visors/{pk}/apps/catalog/body", hv.ui2Catalog(true))
 	r.Post("/ui2/visors/{pk}/apps/catalog/add", hv.ui2CatalogAdd())
@@ -57,10 +59,15 @@ func ui2LoadApps(ctx *httpCtx, pk string) ui2.Apps {
 	return a
 }
 
+// ui2LoadAppsFor is ui2LoadApps with the list filter of the request.
+func ui2LoadAppsFor(ctx *httpCtx, r *http.Request) ui2.Apps {
+	return ui2LoadApps(ctx, r.PathValue("pk")).Filter(ui2.AppFilterOf(r.FormValue))
+}
+
 // ui2Apps serves the tab, or with rows set only the polled lists.
 func (hv *Hypervisor) ui2Apps(rows bool) http.HandlerFunc {
 	return hv.withCtx(hv.ui2VisorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		a := ui2LoadApps(ctx, r.PathValue("pk"))
+		a := ui2LoadAppsFor(ctx, r)
 		if rows {
 			hv.render(w, r, ui2.AppsRows(a))
 			return
@@ -92,7 +99,7 @@ func (hv *Hypervisor) ui2AppPut(form, field string) http.HandlerFunc {
 			hv.render(w, r, ui2.CatalogBody(ui2LoadCatalog(ctx, r.PathValue("pk"))), ui2.Toast(hv.ui2T(r, "apps.operation-completed"), false))
 			return
 		}
-		a := ui2LoadApps(ctx, r.PathValue("pk"))
+		a := ui2LoadAppsFor(ctx, r)
 		hv.render(w, r, ui2.AppsRows(a), ui2.Toast(hv.ui2T(r, "apps.operation-completed"), false))
 	})
 }
@@ -291,4 +298,41 @@ func ui2FlagErr(f visorapi.AppFlag, val string) string {
 		}
 	}
 	return ""
+}
+
+// ui2AppsBulk starts, stops or sets autostart on every ticked app, as the
+// Angular list's selection actions do, one putApp call per app.
+func (hv *Hypervisor) ui2AppsBulk() http.HandlerFunc {
+	return hv.withCtx(hv.ui2VisorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		if err := r.ParseForm(); err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+			return
+		}
+		var body map[string]any
+		switch r.PostForm.Get("action") {
+		case "start":
+			body = map[string]any{"status": statusStart}
+		case "stop":
+			body = map[string]any{"status": statusStop}
+		case "auto-on":
+			body = map[string]any{"autostart": true}
+		case "auto-off":
+			body = map[string]any{"autostart": false}
+		default:
+			httputil.WriteJSON(w, r, http.StatusBadRequest, errors.New("unknown action"))
+			return
+		}
+		var errs []string
+		for _, name := range r.PostForm["sel"] {
+			if err := ui2CallFor(r, r.PathValue("pk"), name, hv.putApp(), body); err != nil {
+				errs = append(errs, name+": "+err.Error())
+			}
+		}
+		a := ui2LoadAppsFor(ctx, r)
+		msg, bad := hv.ui2T(r, "apps.operation-completed"), false
+		if len(errs) > 0 {
+			msg, bad = strings.Join(errs, "; "), true
+		}
+		hv.render(w, r, ui2.AppsRows(a), ui2.Toast(msg, bad))
+	})
 }

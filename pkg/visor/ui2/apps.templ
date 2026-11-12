@@ -11,6 +11,26 @@ templ AppsPage(a Apps) {
 			<span class="spacer"></span>
 			<a class="btn sm" href={ templ.URL(VisorURL(a.PK, "apps/catalog")) }><span class="mi">view_module</span>{ T(ctx, "apps.tabs.catalog") }</a>
 		</div>
+		<form id="apps-q" class="bar" hx-get={ a.url("/rows") } hx-target="#apps-rows" hx-swap="outerHTML" hx-trigger="input changed delay:300ms, change">
+			<input class="filter" type="search" name="f_name" placeholder={ T(ctx, "apps.apps-list.filter-dialog.name") } aria-label={ T(ctx, "apps.apps-list.filter-dialog.name") } autocomplete="off"/>
+			<input name="f_port" size="6" placeholder={ T(ctx, "apps.apps-list.filter-dialog.port") } aria-label={ T(ctx, "apps.apps-list.filter-dialog.port") }/>
+			<select name="f_state" aria-label={ T(ctx, "apps.apps-list.filter-dialog.state") }>
+				<option value="">{ T(ctx, "apps.apps-list.filter-dialog.state") }: { T(ctx, "apps.apps-list.filter-dialog.state-options.any") }</option>
+				<option value="running">{ T(ctx, "apps.apps-list.filter-dialog.state-options.running") }</option>
+				<option value="stopped">{ T(ctx, "apps.apps-list.filter-dialog.state-options.stopped") }</option>
+			</select>
+			<select name="f_auto" aria-label={ T(ctx, "apps.apps-list.filter-dialog.autostart") }>
+				<option value="">{ T(ctx, "apps.apps-list.filter-dialog.autostart") }: { T(ctx, "apps.apps-list.filter-dialog.autostart-options.any") }</option>
+				<option value="on">{ T(ctx, "apps.apps-list.filter-dialog.autostart-options.enabled") }</option>
+				<option value="off">{ T(ctx, "apps.apps-list.filter-dialog.autostart-options.disabled") }</option>
+			</select>
+		</form>
+		<div class="bar" id="apps-bulk" hidden>
+			@appsBulkBtn(a, "start", "selection.start-all")
+			@appsBulkBtn(a, "stop", "selection.stop-all")
+			@appsBulkBtn(a, "auto-on", "selection.enable-autostart-all")
+			@appsBulkBtn(a, "auto-off", "selection.disable-autostart-all")
+		</div>
 		<div id="app-panel"></div>
 		@AppsRows(a)
 	}
@@ -27,7 +47,10 @@ templ AppsRowsOOB(a Apps) {
 }
 
 templ appsRows(a Apps, oob bool) {
-	<div id="apps-rows" hx-get={ a.url("/rows") } hx-trigger="every 10s [document.visibilityState === 'visible']" hx-swap="outerHTML" { oobAttrs(oob)... }>
+	<div id="apps-rows" hx-get={ a.url("/rows") } hx-trigger="every 10s [document.visibilityState === 'visible']" hx-swap="outerHTML" hx-include="#apps-q" data-keep-checked { oobAttrs(oob)... }>
+		if a.Filtered && len(a.Official)+len(a.Other) == 0 {
+			<p class="dim">{ T(ctx, "apps.apps-list.empty-with-filter") }</p>
+		}
 		@ErrorBox(a.Err)
 		<h2>{ T(ctx, "apps.apps-list.heading-official") }</h2>
 		@appTable(a, a.Official, "apps.apps-list.empty-official")
@@ -43,6 +66,7 @@ templ appTable(a Apps, rows []App, empty string) {
 		<table class="list apps">
 			<thead>
 				<tr>
+					<th class="sel"><span class="sr">{ T(ctx, "selection.select-all") }</span></th>
 					<th title={ T(ctx, "apps.apps-list.state-tooltip") }>{ T(ctx, "apps.apps-list.state") }</th>
 					<th>{ T(ctx, "apps.apps-list.app-name") }</th>
 					<th>{ T(ctx, "apps.apps-list.port") }</th>
@@ -62,6 +86,7 @@ templ appTable(a Apps, rows []App, empty string) {
 
 templ appRow(a Apps, x App) {
 	<tr>
+		<td class="sel"><input type="checkbox" name="sel" value={ x.Name } aria-label={ x.Name }/></td>
 		<td data-label={ T(ctx, "apps.apps-list.state") }>
 			@appState(x)
 		</td>
@@ -212,4 +237,9 @@ func autostartTitle(ctx context.Context, on bool) string {
 		return T(ctx, "apps.apps-list.disable-autostart")
 	}
 	return T(ctx, "apps.apps-list.enable-autostart")
+}
+
+// appsBulkBtn runs an action on every ticked app.
+templ appsBulkBtn(a Apps, action, label string) {
+	<button class="btn sm" type="button" hx-post={ a.url("/bulk") } hx-vals={ jsonVals(map[string]string{"action": action}) } hx-include="#apps-rows, #apps-q" hx-target="#apps-rows" hx-swap="outerHTML">{ T(ctx, label) }</button>
 }

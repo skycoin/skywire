@@ -504,3 +504,12 @@ fieldset.choice legend { padding: 0; margin-bottom: 4px; }
   .top nav.home a { padding: 6px 6px; font-size: 0.88em; }
   .top select.lang { max-width: 8.5em; }
 }
+
+/* apps list filter and selection */
+#apps-q input[name="f_port"] { flex: 0 0 9em; width: 9em; }
+#apps-q select { max-width: 100%; }
+.bar[hidden] { display: none; }
+@media (max-width: 600px) {
+  .list.apps td.sel { float: right; padding: 6px 8px 0 0; }
+  .list.apps td.sel::before { content: none; }
+}
