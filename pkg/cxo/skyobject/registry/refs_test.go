@@ -936,7 +936,7 @@ func testRefsHasHash(
 	// (1) init and (2) use initialized Refs
 	for range 2 {
 
-		if ok, err = r.HasHash(pack, not); err != nil {
+		if ok, err = r.ContainsHash(pack, not); err != nil {
 			t.Error(err)
 		} else if ok == true {
 			t.Error("the Refs has hash that it should not have")
@@ -948,7 +948,7 @@ func testRefsHasHash(
 
 	for _, hash := range has {
 
-		if ok, err = r.HasHash(pack, hash); err != nil {
+		if ok, err = r.ContainsHash(pack, hash); err != nil {
 			t.Error(err)
 		} else if ok == false {
 			t.Error("missing hash:", hash.Hex()[:7])
@@ -1074,7 +1074,7 @@ func TestRefs_HasHash(t *testing.T) {
 		}
 
 		var ok bool
-		if ok, err = refs.HasHash(pack, cipher.SHA256{}); err != nil {
+		if ok, err = refs.ContainsHash(pack, cipher.SHA256{}); err != nil {
 			t.Error(err)
 		} else if ok == false {
 			t.Error("missing blank hash")
@@ -2229,7 +2229,7 @@ func testRefsDeleteByHash(
 		err error
 	)
 
-	if ok, err = r.HasHash(pack, hash); err != nil {
+	if ok, err = r.ContainsHash(pack, hash); err != nil {
 		t.Error(err)
 	} else if ok == false {
 		t.Error("missing element") // broken test case or preparation

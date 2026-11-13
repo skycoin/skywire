@@ -293,7 +293,7 @@ func (s *Server) isClosed() bool {
 	return s.closed.Load() != 0
 }
 
-// IsPublic returns true if whitelist is not enabled (server is public)
-func (s *Server) IsPublic() bool {
+// Public returns true if whitelist is not enabled (server is public)
+func (s *Server) Public() bool {
 	return !s.useWL
 }

@@ -134,23 +134,23 @@ const (
 	//
 	// A status of its own rather than a separate frame kind so the whole
 	// existing round trip — codec, deadlines, identity check — is reused.
-	// It is deliberately NOT a decision (see IsDecision) and NOT terminal:
+	// It is deliberately NOT a decision (see Decision) and NOT terminal:
 	// nothing in the join state machine may ever act on it, because a
 	// describe answer says nothing about whether the asker would be let
 	// in. See probe.go.
 	JoinStatusInfo JoinStatus = "info"
 )
 
-// IsTerminal reports whether the requester should stop re-asking.
-func (s JoinStatus) IsTerminal() bool {
+// Terminal reports whether the requester should stop re-asking.
+func (s JoinStatus) Terminal() bool {
 	return s == JoinStatusAdmitted || s == JoinStatusDenied || s == JoinStatusBanned
 }
 
-// IsDecision reports whether this status is an answer about the
+// Decision reports whether this status is an answer about the
 // requester ("you're in", "wait", "no") as opposed to an answer about
 // the responder ("I can't rule on this"). The fan-out in
 // SendJoinRequestAny keeps asking until it gets a decision.
-func (s JoinStatus) IsDecision() bool {
+func (s JoinStatus) Decision() bool {
 	return s == JoinStatusAdmitted || s == JoinStatusPending ||
 		s == JoinStatusDenied || s == JoinStatusBanned
 }
@@ -549,8 +549,8 @@ type JoinRequest struct {
 	DecidedBy cipher.PubKey `json:"decided_by,omitempty"`
 }
 
-// IsPending reports whether this request still awaits a decision.
-func (r JoinRequest) IsPending() bool { return r.Status == JoinStatusPending }
+// Pending reports whether this request still awaits a decision.
+func (r JoinRequest) Pending() bool { return r.Status == JoinStatusPending }
 
 // sortJoinRequests orders a queue newest-first, tie-broken by PK so the
 // order is total and stable. Shared by both Store backends (bbolt

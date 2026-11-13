@@ -39,7 +39,7 @@ func (c *Conn) performHandshake() error {
 	// Check specified response timeout.
 	// Handshake uses connection-level timeout; a dedicated parameter could give finer control.
 	var rt time.Duration
-	if c.IsTCP() == true { //nolint:staticcheck
+	if c.TCP() == true { //nolint:staticcheck
 		rt = c.n.config.TCP.ResponseTimeout
 	} else {
 		rt = c.n.config.UDP.ResponseTimeout
@@ -89,7 +89,7 @@ func (c *Conn) acceptHandshake() (err error) {
 	// Check specified response timeout.
 	// Handshake uses connection-level timeout; a dedicated parameter could give finer control.
 	var rt time.Duration
-	if c.IsTCP() == true { //nolint:staticcheck
+	if c.TCP() == true { //nolint:staticcheck
 		rt = c.n.config.TCP.ResponseTimeout
 	} else {
 		rt = c.n.config.UDP.ResponseTimeout

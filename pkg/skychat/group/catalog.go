@@ -139,8 +139,8 @@ type CatalogEntry struct {
 	Address string `json:"address"`
 }
 
-// IsChannel reports whether this entry is a broadcast channel.
-func (e CatalogEntry) IsChannel() bool { return e.Kind == KindChannel }
+// Channel reports whether this entry is a broadcast channel.
+func (e CatalogEntry) Channel() bool { return e.Kind == KindChannel }
 
 // Invite rebuilds the invite this entry is equivalent to, so a discovered
 // row joins through exactly the same path as a pasted link. Carries no
@@ -174,14 +174,14 @@ func (m *Manager) Catalog() ([]CatalogEntry, bool, error) {
 	}
 	out := make([]CatalogEntry, 0, len(all))
 	for _, r := range all {
-		if !r.Listed || r.Status.IsTerminal() {
+		if !r.Listed || r.Status.Terminal() {
 			continue
 		}
 		// Only a visor with roster authority can answer for a group: a
 		// plain member advertising somebody else's channel would be
 		// republishing a claim it cannot back, and its Port/policy view
 		// may be stale in ways it cannot detect.
-		if !r.IsAdmin(m.myPK) {
+		if !r.AdministeredBy(m.myPK) {
 			continue
 		}
 		out = append(out, CatalogEntry{
@@ -215,10 +215,10 @@ func (m *Manager) SetListed(id string, listed bool) (Record, error) {
 	if !ok {
 		return Record{}, fmt.Errorf("group: SetListed: no record for %s", id)
 	}
-	if !r.IsAdmin(m.myPK) {
+	if !r.AdministeredBy(m.myPK) {
 		return Record{}, errors.New("group: SetListed: only admins can publish a group")
 	}
-	if r.Status.IsTerminal() {
+	if r.Status.Terminal() {
 		return Record{}, errors.New("group: SetListed: this group is over; nothing to publish")
 	}
 	if r.Listed == listed {

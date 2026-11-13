@@ -98,8 +98,8 @@ func TestRetireTunnel_PromotesTheBestStandbyInTheSameTick(t *testing.T) {
 	require.True(t, c.retireTunnel(active, "liveness: no pong and no bytes for 47s"))
 
 	// Synchronously, with no waiting: the promote is part of the retire.
-	require.False(t, c.IsStandby(fast), "the lowest-RTT standby takes the active slot")
-	require.True(t, c.IsStandby(slow), "only ONE tunnel is promoted per death")
+	require.False(t, c.Standby(fast), "the lowest-RTT standby takes the active slot")
+	require.True(t, c.Standby(slow), "only ONE tunnel is promoted per death")
 	require.Equal(t, 1, c.activeLiveCount())
 	require.Same(t, fast, c.pickSessionFor(pickAny), "and the next stream lands on it at once")
 }
@@ -111,7 +111,7 @@ func TestRetireTunnel_StandbyDeathPromotesNothing(t *testing.T) {
 	defer cleanup()
 
 	require.True(t, c.retireTunnel(s[1], "tunnel session closed"))
-	require.True(t, c.IsStandby(s[2]), "the surviving standby stays in the pool")
+	require.True(t, c.Standby(s[2]), "the surviving standby stays in the pool")
 	require.Equal(t, 1, c.activeLiveCount())
 }
 
@@ -126,7 +126,7 @@ func TestRetireTunnel_IsOnceOnly(t *testing.T) {
 	for range 5 {
 		require.False(t, c.retireTunnel(s[0], "same tunnel, later tick"))
 	}
-	require.True(t, c.IsStandby(s[1]), "exactly one standby was spent")
+	require.True(t, c.Standby(s[1]), "exactly one standby was spent")
 	require.Equal(t, 1, c.activeLiveCount())
 }
 
@@ -219,7 +219,7 @@ func TestParkTunnel_MarksStandbyAndReportsIt(t *testing.T) {
 	defer close(c.closeC)
 
 	require.True(t, c.parkTunnel(s[0], "promoter: standby beat active by 1.3x for 15 s"))
-	require.True(t, c.IsStandby(s[0]))
+	require.True(t, c.Standby(s[0]))
 	require.False(t, c.parkTunnel(s[0], "already parked"), "parking a standby tunnel is a no-op")
 
 	select {
@@ -244,11 +244,11 @@ func TestPromoteBestStandby_PrefersAFreshTunnelOverAStaleFasterOne(t *testing.T)
 	c.recvStamp[stale].stamp.Store(time.Now().Add(-10 * standbyRTTStale).UnixNano())
 
 	require.Same(t, fresh, c.promoteBestStandby("failover: active tunnel died"))
-	require.True(t, c.IsStandby(stale))
+	require.True(t, c.Standby(stale))
 
 	// With only the stale one left, it is promoted anyway.
 	require.True(t, c.retireTunnel(fresh, "liveness"))
-	require.False(t, c.IsStandby(stale), "a stale standby still beats an 8-9 s route setup")
+	require.False(t, c.Standby(stale), "a stale standby still beats an 8-9 s route setup")
 }
 
 // The measured sequence, end to end. On the rig 2026-09-17 (campaign21,
@@ -286,8 +286,8 @@ func TestFailover_ActiveDiesStandbyPromotedRefillLandsStandby(t *testing.T) {
 
 	// 1. the active tunnel dies, and a HELD tunnel takes the slot at once.
 	require.True(t, c.retireTunnel(active, "liveness: no pong and no bytes for 47s"))
-	require.False(t, c.IsStandby(held2), "the lower-RTT held tunnel is the replacement")
-	require.True(t, c.IsStandby(held1))
+	require.False(t, c.Standby(held2), "the lower-RTT held tunnel is the replacement")
+	require.True(t, c.Standby(held1))
 	require.Equal(t, 1, c.activeLiveCount(), "the active width is whole again with no dial at all")
 
 	// 2. the death re-armed the fill; the replacement route lands in the POOL.

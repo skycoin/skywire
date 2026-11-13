@@ -87,7 +87,7 @@ func (c *Client) tunnelDepth(chunkBytes int64, up bool, fallback int) int {
 	sum, n := 0, 0
 	for i, s := range sessions {
 		m := meters[i]
-		if s == nil || s.IsClosed() || m == nil || c.IsStandby(s) {
+		if s == nil || s.IsClosed() || m == nil || c.Standby(s) {
 			continue
 		}
 		rate, _ := m.capacityDir(now, up)

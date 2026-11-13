@@ -56,12 +56,12 @@ func TestParseUnits(t *testing.T) {
 // default. That is what makes a reset on the visor side a plain delete.
 func TestApplyIsWholesaleAndBumpsVersion(t *testing.T) {
 	t.Cleanup(func() { Reset() })
-	require.False(t, IsSet(ChunkMaxBytes))
+	require.False(t, ExplicitlySet(ChunkMaxBytes))
 	before := Version()
 
 	require.True(t, Apply(map[string]int64{ChunkMaxBytes: 8 << 20}))
 	require.EqualValues(t, 8<<20, Bytes(ChunkMaxBytes))
-	require.True(t, IsSet(ChunkMaxBytes))
+	require.True(t, ExplicitlySet(ChunkMaxBytes))
 	require.Greater(t, Version(), before)
 
 	// Re-applying the same map changes nothing.
@@ -72,11 +72,11 @@ func TestApplyIsWholesaleAndBumpsVersion(t *testing.T) {
 	// A map that no longer names it is a reset of it.
 	require.True(t, Apply(map[string]int64{PoolFillInterval: int64(3e9)}))
 	require.EqualValues(t, 4<<20, Bytes(ChunkMaxBytes))
-	require.False(t, IsSet(ChunkMaxBytes))
-	require.True(t, IsSet(PoolFillInterval))
+	require.False(t, ExplicitlySet(ChunkMaxBytes))
+	require.True(t, ExplicitlySet(PoolFillInterval))
 
 	require.True(t, Reset())
-	require.False(t, IsSet(PoolFillInterval))
+	require.False(t, ExplicitlySet(PoolFillInterval))
 }
 
 // An unknown name in the map is ignored rather than fatal: an older app must be
@@ -95,8 +95,8 @@ func TestListRoundTrip(t *testing.T) {
 	const pk = "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb"
 
 	require.Empty(t, Strings(PoolExcludePKs))
-	require.False(t, IsSet(PoolExcludePKs))
-	require.True(t, IsList(PoolExcludePKs))
+	require.False(t, ExplicitlySet(PoolExcludePKs))
+	require.True(t, ListKnob(PoolExcludePKs))
 
 	norm, err := ParseList(PoolExcludePKs, " "+strings.ToUpper(pk)+" , ")
 	require.NoError(t, err)
@@ -104,14 +104,14 @@ func TestListRoundTrip(t *testing.T) {
 
 	require.True(t, ApplyText(map[string]string{PoolExcludePKs: norm}))
 	require.Equal(t, []string{pk}, Strings(PoolExcludePKs))
-	require.True(t, IsSet(PoolExcludePKs))
+	require.True(t, ExplicitlySet(PoolExcludePKs))
 	require.Equal(t, pk, Format(PoolExcludePKs, 0))
 
 	// A second identical apply is not a change; dropping the key is.
 	require.False(t, ApplyText(map[string]string{PoolExcludePKs: norm}))
 	require.True(t, ApplyText(nil))
 	require.Empty(t, Strings(PoolExcludePKs))
-	require.False(t, IsSet(PoolExcludePKs))
+	require.False(t, ExplicitlySet(PoolExcludePKs))
 
 	_, err = ParseList(PoolExcludePKs, "0281a102")
 	require.Error(t, err)
@@ -126,6 +126,6 @@ func TestApplyAndApplyTextAreIndependent(t *testing.T) {
 	require.True(t, ApplyText(map[string]string{PoolRequireTpTypes: "stcpr"}))
 	require.True(t, Apply(map[string]int64{PoolSize: 4}))
 	require.Equal(t, []string{"stcpr"}, Strings(PoolRequireTpTypes))
-	require.True(t, IsSet(PoolRequireTpTypes))
+	require.True(t, ExplicitlySet(PoolRequireTpTypes))
 	require.Equal(t, 4, Count(PoolSize))
 }

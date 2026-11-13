@@ -243,12 +243,12 @@ func (r *Refs) Reset() (err error) {
 // 2. refsNode loaded
 // 3. refsNode loaded with all subtrees
 
-// HasHash returns false if the Refs doesn't have given hash. It returns
+// ContainsHash returns false if the Refs doesn't have given hash. It returns
 // true if contains, or first error. It never returns ErrNotFound
 //
 // The big O of the call is O(1) if the HashTableIndex flag has been set.
 // Otherwise, the big O is O(n), where n is real length of the Refs
-func (r *Refs) HasHash(
+func (r *Refs) ContainsHash(
 	pack Pack, //          : pack to load (if not loaded yet)
 	hash cipher.SHA256, // : hash to check out
 ) (
@@ -287,7 +287,7 @@ func (r *Refs) HasHash(
 // hash-table used to check presence.
 //
 // The big O of the call is the same as the big O of the
-// HasHash call
+// ContainsHash call
 func (r *Refs) ValueByHash(
 	pack Pack, //          : pack to laod
 	hash cipher.SHA256, // : hash to get
@@ -299,7 +299,7 @@ func (r *Refs) ValueByHash(
 	// initilize() inside the HashHash
 
 	var ok bool
-	if ok, err = r.HasHash(pack, hash); err != nil {
+	if ok, err = r.ContainsHash(pack, hash); err != nil {
 		return
 	}
 	if !ok {

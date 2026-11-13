@@ -46,9 +46,9 @@ func NewUpstream(server string, dial DialFunc, strict bool) *Upstream {
 	return &Upstream{server: server, dial: dial, strict: strict, idle: make(chan *dns.Conn, idleConns)}
 }
 
-// HasTLS reports whether server is a public resolver known to answer
+// TLSCapable reports whether server is a public resolver known to answer
 // DNS-over-TLS, where falling back to plain DNS would only help an attacker.
-func HasTLS(server string) bool {
+func TLSCapable(server string) bool {
 	switch server {
 	case "1.1.1.1", "1.0.0.1", "8.8.8.8", "8.8.4.4", "9.9.9.9", "149.112.112.112":
 		return true

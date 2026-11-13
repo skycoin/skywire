@@ -146,8 +146,8 @@ func (s *Session) SetModeration(st ModState) []cipher.PubKey {
 func (s *Session) isBannedLocked(pk cipher.PubKey) bool { return containsPK(s.banned, pk) }
 func (s *Session) isMutedLocked(pk cipher.PubKey) bool  { return containsPK(s.muted, pk) }
 
-// IsBanned reports whether pk is barred from this group.
-func (s *Session) IsBanned(pk cipher.PubKey) bool {
+// Bans reports whether pk is barred from this group.
+func (s *Session) Bans(pk cipher.PubKey) bool {
 	s.membersMu.RLock()
 	defer s.membersMu.RUnlock()
 	return s.isBannedLocked(pk)
@@ -194,9 +194,9 @@ func (s *Session) senderAllowedToPost(senderPK cipher.PubKey, ts time.Time) (boo
 		return false, "banned"
 	case s.isMutedLocked(senderPK) && afterOrEqual(ts, s.mutedSince[senderPK.Hex()]):
 		return false, "muted"
-	case s.cfg.Record.IsChannel() && !s.cfg.Record.IsAdmin(senderPK):
+	case s.cfg.Record.Channel() && !s.cfg.Record.AdministeredBy(senderPK):
 		return false, "channel is admins-only"
-	case s.readOnly && !s.cfg.Record.IsAdmin(senderPK) && afterOrEqual(ts, s.readOnlySince):
+	case s.readOnly && !s.cfg.Record.AdministeredBy(senderPK) && afterOrEqual(ts, s.readOnlySince):
 		return false, "group is read-only"
 	default:
 		return true, ""
@@ -303,7 +303,7 @@ func (s *Session) applyModLeaf(body []byte) {
 	}
 
 	s.membersMu.Lock()
-	if !s.cfg.Record.IsAdmin(m.IssuerPK) {
+	if !s.cfg.Record.AdministeredBy(m.IssuerPK) {
 		s.membersMu.Unlock()
 		s.log.WithField("issuer", m.IssuerPK.String()).
 			Debug("group: reconcile: rejecting moderation mutation from non-admin issuer")
@@ -475,7 +475,7 @@ func (s *Session) BroadcastModeration() {
 		return
 	}
 	s.membersMu.RLock()
-	if !s.cfg.Record.IsAdmin(s.cfg.MyPK) {
+	if !s.cfg.Record.AdministeredBy(s.cfg.MyPK) {
 		s.membersMu.RUnlock()
 		return
 	}

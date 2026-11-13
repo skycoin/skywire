@@ -67,11 +67,11 @@ func wlPK(b byte) cipher.PubKey {
 func TestServer_IsPublic(t *testing.T) {
 	pub, err := NewServer(nil, nil)
 	require.NoError(t, err)
-	require.True(t, pub.IsPublic(), "no whitelist → public")
+	require.True(t, pub.Public(), "no whitelist → public")
 
 	priv, err := NewServer([]cipher.PubKey{wlPK(1)}, nil)
 	require.NoError(t, err)
-	require.False(t, priv.IsPublic(), "whitelist set → not public")
+	require.False(t, priv.Public(), "whitelist set → not public")
 }
 
 // getRemotePK returns the PK for an appnet.Addr conn and errors for an

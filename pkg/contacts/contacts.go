@@ -62,8 +62,8 @@ type Contact struct {
 	Notes    string          `json:"notes,omitempty"`
 }
 
-// HasKey reports whether pk is one of the contact's keys.
-func (c Contact) HasKey(pk cipher.PubKey) bool {
+// OwnsKey reports whether pk is one of the contact's keys.
+func (c Contact) OwnsKey(pk cipher.PubKey) bool {
 	return slices.Contains(c.Keys, pk)
 }
 
@@ -112,7 +112,7 @@ func fromCard(card vcard.Card) (Contact, error) {
 		if err := pk.Set(strings.TrimSpace(s)); err != nil {
 			return Contact{}, fmt.Errorf("contact %q: skywire key %q: %w", c.Name, s, err)
 		}
-		if !c.HasKey(pk) {
+		if !c.OwnsKey(pk) {
 			c.Keys = append(c.Keys, pk)
 		}
 	}

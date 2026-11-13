@@ -144,7 +144,7 @@ func setRangeClassifyTimeout() time.Duration {
 // rsChunkSize is the range-split chunk ceiling in force: the knob when it has
 // been set, otherwise whatever --range-chunk-kib configured this client with.
 func (c *Client) rsChunkSize() int64 {
-	if skysettings.IsSet(skysettings.ChunkMaxBytes) {
+	if skysettings.ExplicitlySet(skysettings.ChunkMaxBytes) {
 		return skysettings.Bytes(skysettings.ChunkMaxBytes)
 	}
 	return c.rs.chunkSize
@@ -154,7 +154,7 @@ func (c *Client) rsChunkSize() int64 {
 // the knob when it has been set, otherwise whatever --range-port configured.
 // Read per request, so moving it live moves the very next GET.
 func (c *Client) rsPlainPort() int {
-	if skysettings.IsSet(skysettings.RangePort) {
+	if skysettings.ExplicitlySet(skysettings.RangePort) {
 		return skysettings.Count(skysettings.RangePort)
 	}
 	return c.rs.plainPort
@@ -162,7 +162,7 @@ func (c *Client) rsPlainPort() int {
 
 // rsConcurrency is the range-split fetch concurrency in force; see rsChunkSize.
 func (c *Client) rsConcurrency() int {
-	if skysettings.IsSet(skysettings.ChunkConcurrency) {
+	if skysettings.ExplicitlySet(skysettings.ChunkConcurrency) {
 		return skysettings.Count(skysettings.ChunkConcurrency)
 	}
 	return c.rs.concurrency
@@ -235,12 +235,12 @@ func (c *Client) applyOps(ops []appserver.AppOp) {
 // `proxy settings tunnel.count=3` widens the active set by promoting from the
 // pool instead of waiting for a restart.
 func (c *Client) reconcileLiveKnobs() {
-	if skysettings.IsSet(skysettings.TunnelCount) {
+	if skysettings.ExplicitlySet(skysettings.TunnelCount) {
 		if n := setTunnelCount(); n >= 1 {
 			c.SetTunnelTarget(n)
 		}
 	}
-	if skysettings.IsSet(skysettings.PoolSize) {
+	if skysettings.ExplicitlySet(skysettings.PoolSize) {
 		c.SetStandbyPool(setPoolSize())
 	}
 	// The reconcile itself is deliberately allowed under pool.freeze: it is
@@ -252,7 +252,7 @@ func (c *Client) reconcileLiveKnobs() {
 // been set, otherwise the interval NewClient snapshotted (livenessProbeInterval,
 // which tests move before constructing a client).
 func (c *Client) livenessInterval() time.Duration {
-	if skysettings.IsSet(skysettings.TunnelLivenessInterval) {
+	if skysettings.ExplicitlySet(skysettings.TunnelLivenessInterval) {
 		return setLivenessProbeInterval()
 	}
 	return c.probeInterval
@@ -266,35 +266,35 @@ func (c *Client) livenessInterval() time.Duration {
 // default is the constant they replaced.
 
 func setUploadStripeMinBytes() int64 {
-	if skysettings.IsSet(skysettings.UploadStripeMinBytes) {
+	if skysettings.ExplicitlySet(skysettings.UploadStripeMinBytes) {
 		return skysettings.Bytes(skysettings.UploadStripeMinBytes)
 	}
 	return uploadStripeMinBytes
 }
 
 func setUploadChunkBytes() int64 {
-	if skysettings.IsSet(skysettings.UploadChunkBytes) {
+	if skysettings.ExplicitlySet(skysettings.UploadChunkBytes) {
 		return skysettings.Bytes(skysettings.UploadChunkBytes)
 	}
 	return uploadChunkBytes
 }
 
 func setUploadMemBytes() int64 {
-	if skysettings.IsSet(skysettings.UploadMemBytes) {
+	if skysettings.ExplicitlySet(skysettings.UploadMemBytes) {
 		return skysettings.Bytes(skysettings.UploadMemBytes)
 	}
 	return uploadMemBytes
 }
 
 func setUploadConcurrency() int {
-	if skysettings.IsSet(skysettings.UploadConcurrency) {
+	if skysettings.ExplicitlySet(skysettings.UploadConcurrency) {
 		return skysettings.Count(skysettings.UploadConcurrency)
 	}
 	return uploadConcurrency
 }
 
 func setUploadReplayMaxBytes() int64 {
-	if skysettings.IsSet(skysettings.UploadReplayMaxBytes) {
+	if skysettings.ExplicitlySet(skysettings.UploadReplayMaxBytes) {
 		return skysettings.Bytes(skysettings.UploadReplayMaxBytes)
 	}
 	return uploadReplayMaxBytes

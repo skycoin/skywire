@@ -482,7 +482,7 @@ func (n *Node) initConn(
 
 	var (
 		addr    = fc.GetRemoteAddr().String()
-		connStr = connString(incoming, fc.IsTCP(), addr)
+		connStr = connString(incoming, fc.TCP(), addr)
 	)
 
 	n.Debugf(ConnHskPin, "[%s] init connection", connStr)
@@ -712,8 +712,8 @@ func (n *Node) Feeds() (feeds []cipher.PubKey) {
 	return n.fs.list()
 }
 
-// IsSharing returns true if the Node is sharing given feed
-func (n *Node) IsSharing(feed cipher.PubKey) (ok bool) {
+// Sharing returns true if the Node is sharing given feed
+func (n *Node) Sharing(feed cipher.PubKey) (ok bool) {
 	return n.fs.hasFeed(feed)
 }
 
@@ -792,7 +792,7 @@ func (n *Node) evictStalePeer(existing *Conn, id cipher.PubKey) {
 		existing.String(), id.Hex())
 	existing.Close() //nolint:errcheck,gosec
 	rt := n.config.TCP.ResponseTimeout
-	if existing.IsTCP() == false { //nolint:staticcheck
+	if existing.TCP() == false { //nolint:staticcheck
 		rt = n.config.UDP.ResponseTimeout
 	}
 	if rt <= 0 {

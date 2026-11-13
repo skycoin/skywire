@@ -176,7 +176,7 @@ func TestSealedGovernanceLeafConverges(t *testing.T) {
 	require.NoError(t, err)
 	s.applyModLeaf(sealed)
 
-	require.True(t, s.IsBanned(victim), "a sealed ban did not converge")
+	require.True(t, s.Bans(victim), "a sealed ban did not converge")
 }
 
 // Compatibility in the direction that matters: leaves already sitting in
@@ -187,7 +187,7 @@ func TestLegacyPlaintextGovernanceStillAppliesOnAnEncryptedGroup(t *testing.T) {
 
 	s.applyModLeaf(signedMod(t, gid.String(), ModOpBan, victim, adminSK, time.Now().UTC()))
 
-	require.True(t, s.IsBanned(victim), "a pre-seal plaintext leaf stopped converging")
+	require.True(t, s.Bans(victim), "a pre-seal plaintext leaf stopped converging")
 }
 
 // The parking lot. A sealed governance leaf reaches us through a
@@ -204,7 +204,7 @@ func TestSealedGovernanceLeafParksUntilTheKeyArrives(t *testing.T) {
 	require.NoError(t, err)
 	s.applyModLeaf(sealed)
 
-	require.False(t, s.IsBanned(victim), "a leaf we cannot read was applied anyway")
+	require.False(t, s.Bans(victim), "a leaf we cannot read was applied anyway")
 	s.deferredGossipMu.Lock()
 	parked := len(s.deferredGossip)
 	s.deferredGossipMu.Unlock()
@@ -213,7 +213,7 @@ func TestSealedGovernanceLeafParksUntilTheKeyArrives(t *testing.T) {
 	// The key arrives — the admission response, or a rotation.
 	s.SetGroupKey(KeyState{Epoch: 1, Key: key})
 
-	require.True(t, s.IsBanned(victim), "the parked ban was not replayed once its key arrived")
+	require.True(t, s.Bans(victim), "the parked ban was not replayed once its key arrived")
 	s.deferredGossipMu.Lock()
 	parked = len(s.deferredGossip)
 	s.deferredGossipMu.Unlock()
@@ -232,7 +232,7 @@ func TestSealedGovernanceLeafFromAnotherKeyNeverApplies(t *testing.T) {
 		s.applyModLeaf(sealed)
 	}
 
-	require.False(t, s.IsBanned(victim))
+	require.False(t, s.Bans(victim))
 	s.deferredGossipMu.Lock()
 	parked := len(s.deferredGossip)
 	s.deferredGossipMu.Unlock()

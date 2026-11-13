@@ -76,7 +76,7 @@ func RemoveRootObjects(c *skyobject.Container, keepLast int) error {
 // rc).
 //
 // Lock ordering: Cache.Set takes Cache.mu, then opens a bbolt RWTx
-// via cxds.Set. Earlier versions of this function called IsCached
+// via cxds.Set. Earlier versions of this function called Cached
 // from inside the IterateDel callback (i.e. inside the cleanup
 // RWTx), which inverted that order: the cleanup goroutine held
 // bbolt.rwlock while waiting on Cache.mu, and any concurrent

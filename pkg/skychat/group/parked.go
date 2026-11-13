@@ -58,7 +58,7 @@ func (m *Manager) parkJoinRequest(targets []cipher.PubKey, req JoinRequestMsg) i
 // not wait on it.
 func (m *Manager) parkDecision(pk cipher.PubKey, resp JoinResponseMsg) {
 	p := m.parker()
-	if p == nil || !resp.Status.IsTerminal() {
+	if p == nil || !resp.Status.Terminal() {
 		return
 	}
 	body, err := encodeJoinResponse(resp)

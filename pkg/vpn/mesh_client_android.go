@@ -24,7 +24,7 @@ func (c *Client) startMeshGateway() (*meshClientGateway, error) {
 	}
 	// Other names are asked through the tunnel, so the exit's resolver path is
 	// the one used. Strict TLS wherever the resolver is known to offer it.
-	up := skydns.NewUpstream(server, c.shareDial, skydns.HasTLS(server))
+	up := skydns.NewUpstream(server, c.shareDial, skydns.TLSCapable(server))
 	sky, err := skydns.New(skydns.Config{
 		Dial:     c.cfg.MeshDial,
 		Upstream: up,

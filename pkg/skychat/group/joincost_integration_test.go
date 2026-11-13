@@ -113,7 +113,7 @@ func TestJoinCost_FloodIsThrottled(t *testing.T) {
 	require.NoError(t, err)
 	n := 0
 	for _, q := range pending {
-		if q.IsPending() {
+		if q.Pending() {
 			n++
 		}
 	}

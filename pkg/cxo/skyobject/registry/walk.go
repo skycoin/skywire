@@ -29,7 +29,7 @@ func walkSchemaHash(
 	// go deepper and we can skip all bleow the
 	// check
 
-	if sch.HasReferences() == false { //nolint:staticcheck
+	if sch.ContainsReferences() == false { //nolint:staticcheck
 		return // nothing to walk through
 	}
 
@@ -55,7 +55,7 @@ func walkSchemaData(
 ) {
 
 	// the object represents Ref, Refs or Dynamic
-	if sch.IsReference() == true { //nolint:staticcheck
+	if sch.Referential() == true { //nolint:staticcheck
 		return walkSchemaReference(pack, sch, val, walkFunc)
 	}
 
@@ -206,7 +206,7 @@ func walkArraySlice(
 		}
 
 		// if we are here, then the el contains references
-		// and we don't need to call el.HasReferences(),
+		// and we don't need to call el.ContainsReferences(),
 		// we just walk the element
 
 		err = walkSchemaData(pack, el, val[shift:shift+m], walkFunc)
@@ -251,7 +251,7 @@ func walkStruct(
 		}
 
 		// skip all fields that doesn't contains references
-		if fl.Schema().HasReferences() == false { //nolint:staticcheck
+		if fl.Schema().ContainsReferences() == false { //nolint:staticcheck
 			shift += s
 			continue
 		}

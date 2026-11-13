@@ -31,8 +31,8 @@ func TestRetireTunnel_CompactsTheSessionSlice(t *testing.T) {
 
 	// The survivors keep their identities and their state: the promote that
 	// came with the retire still holds, and the picker still finds them.
-	require.False(t, c.IsStandby(fast))
-	require.True(t, c.IsStandby(slow))
+	require.False(t, c.Standby(fast))
+	require.True(t, c.Standby(slow))
 	require.Same(t, fast, c.pickSessionFor(pickAny))
 
 	// A standby death compacts the same way, and retiring the last tunnel

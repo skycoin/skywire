@@ -320,8 +320,8 @@ func TestEnsureMinRoutesPromotesStandbysAndNeverDials(t *testing.T) {
 	require.Equal(t, 1, c.activeLiveCount())
 
 	require.Equal(t, 3, c.ensureMinRoutes(3, spreadDown, "test"), "both standbys promoted")
-	require.False(t, c.IsStandby(sb1))
-	require.False(t, c.IsStandby(sb2))
+	require.False(t, c.Standby(sb1))
+	require.False(t, c.Standby(sb2))
 
 	// Asking for more than the pool holds is not an error and dials nothing:
 	// the object runs on the width that exists.
@@ -346,11 +346,11 @@ func TestSpreadPlannerEnsureRoutesUsesThePool(t *testing.T) {
 		closeC:    make(chan struct{}),
 	}
 	require.Zero(t, c.newSpreadPlanner(spreadDown).ensureRoutes(), "set off, nothing is promoted")
-	require.True(t, c.IsStandby(sb))
+	require.True(t, c.Standby(sb))
 
 	require.True(t, skysettings.Apply(map[string]int64{skysettings.SpreadMinRoutes: 2}))
 	require.Equal(t, 2, c.newSpreadPlanner(spreadDown).ensureRoutes())
-	require.False(t, c.IsStandby(sb))
+	require.False(t, c.Standby(sb))
 }
 
 // newSpreadTestClient builds a client with `tunnels` ACTIVE tunnels and
@@ -582,8 +582,8 @@ func TestEnsureMinRoutesPromotesTheFastestStandby(t *testing.T) {
 	// Downloading: `fast` carries 8x what `near` does, though `near` answers in
 	// a third of the time. The RTT rank would have taken `near`.
 	require.Equal(t, 2, c.ensureMinRoutes(2, spreadDown, "test"))
-	require.False(t, c.IsStandby(fast), "the highest-capacity standby is promoted")
-	require.True(t, c.IsStandby(near))
+	require.False(t, c.Standby(fast), "the highest-capacity standby is promoted")
+	require.True(t, c.Standby(near))
 
 	// The direction is the object's: an upload weighs the tx estimate.
 	c2 := &Client{
@@ -593,8 +593,8 @@ func TestEnsureMinRoutesPromotesTheFastestStandby(t *testing.T) {
 		closeC:    make(chan struct{}),
 	}
 	require.Equal(t, 2, c2.ensureMinRoutes(2, spreadUp, "test"))
-	require.False(t, c2.IsStandby(near))
-	require.True(t, c2.IsStandby(fast))
+	require.False(t, c2.Standby(near))
+	require.True(t, c2.Standby(fast))
 }
 
 // With nothing measured there is no capacity to rank on, and the promotion
@@ -617,8 +617,8 @@ func TestEnsureMinRoutesFallsBackToTheRTTRank(t *testing.T) {
 		closeC:    make(chan struct{}),
 	}
 	require.Equal(t, 2, c.ensureMinRoutes(2, spreadDown, "test"))
-	require.False(t, c.IsStandby(near), "no capacity sample anywhere: the lowest RTT wins")
-	require.True(t, c.IsStandby(far))
+	require.False(t, c.Standby(near), "no capacity sample anywhere: the lowest RTT wins")
+	require.True(t, c.Standby(far))
 }
 
 // The three tiers of the promotion rank, in one table. A MEASURED standby
@@ -659,21 +659,21 @@ func TestEnsureMinRoutesRanksMeasuredThenPriorThenRTT(t *testing.T) {
 	// the throughput and the unknown route pings twenty times better.
 	c := build()
 	require.Equal(t, 2, c.ensureMinRoutes(2, spreadDown, "test"))
-	require.False(t, c.IsStandby(measured), "a busy-window sample outranks a prior")
-	require.True(t, c.IsStandby(priored))
-	require.True(t, c.IsStandby(unknown))
+	require.False(t, c.Standby(measured), "a busy-window sample outranks a prior")
+	require.True(t, c.Standby(priored))
+	require.True(t, c.Standby(unknown))
 
 	// Two more: the prior takes the next seat, and the route nothing is known
 	// about is last however well it pings.
 	c = build()
 	require.Equal(t, 3, c.ensureMinRoutes(3, spreadDown, "test"))
-	require.False(t, c.IsStandby(priored), "a prior outranks knowing nothing")
-	require.True(t, c.IsStandby(unknown), "and the unmeasured, priorless route is last")
+	require.False(t, c.Standby(priored), "a prior outranks knowing nothing")
+	require.True(t, c.Standby(unknown), "and the unmeasured, priorless route is last")
 
 	// ...and it is taken only when there is nothing else left.
 	c = build()
 	require.Equal(t, 4, c.ensureMinRoutes(4, spreadDown, "test"))
-	require.False(t, c.IsStandby(unknown))
+	require.False(t, c.Standby(unknown))
 }
 
 // Concurrent picks must not all land on the same tunnel. The download gate

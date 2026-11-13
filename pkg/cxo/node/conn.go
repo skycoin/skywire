@@ -138,8 +138,8 @@ func (c *Conn) run() {
 	c.n.removeConn(c)
 
 	// Remove from transport cache and close the underlying connection.
-	// IsTCP() distinguishes TCP from UDP, but DMSG connections also
-	// have IsTCP()==false and don't have a UDP transport. Nil-check
+	// TCP() distinguishes TCP from UDP, but DMSG connections also
+	// have TCP()==false and don't have a UDP transport. Nil-check
 	// each so a DMSG-only node (NewWithDMSG path: TCP/UDP listeners
 	// disabled) doesn't panic when its conns close.
 	//
@@ -149,7 +149,7 @@ func (c *Conn) run() {
 	// turning a single tpd restart into "this publisher's AnnounceTo
 	// returns the dead cached conn forever" until the publisher
 	// itself restarted.
-	if c.IsTCP() {
+	if c.TCP() {
 		if c.n.tcp != nil {
 			c.n.tcp.closeConn(c.Address()) //nolint:errcheck,gosec
 		}
@@ -241,14 +241,14 @@ func (c *Conn) PeerID() (id cipher.PubKey) {
 	return c.peerID
 }
 
-// IsIncoming returns true if this Conn is
+// Incoming returns true if this Conn is
 // incoming and accepted by listener
-func (c *Conn) IsIncoming() (ok bool) {
+func (c *Conn) Incoming() (ok bool) {
 	return c.incoming
 }
 
-// IsOutgoing is inverse of the IsIncoming
-func (c *Conn) IsOutgoing() (ok bool) {
+// Outgoing is inverse of the Incoming
+func (c *Conn) Outgoing() (ok bool) {
 	return c.incoming == false //nolint:staticcheck
 }
 
@@ -269,11 +269,11 @@ func (c *Conn) Feeds() (feeds []cipher.PubKey) {
 	return c.n.fs.feedsOfConnection(c)
 }
 
-// HasFeed reports whether this connection is subscribed to feed. Unlike
+// Subscribed reports whether this connection is subscribed to feed. Unlike
 // Feeds, which walks every feed of the node, it is two map lookups on the
 // node's feeds loop, so it is the one to ask per connection on a node
 // holding thousands of feeds.
-func (c *Conn) HasFeed(feed cipher.PubKey) bool {
+func (c *Conn) Subscribed(feed cipher.PubKey) bool {
 	return c.n.fs.hasConnFeed(c, feed)
 }
 
@@ -301,7 +301,7 @@ func (c *Conn) String() string {
 	if s := c.str.Load(); s != nil {
 		return *s
 	}
-	s := connString(c.incoming, c.IsTCP(), c.Address())
+	s := connString(c.incoming, c.TCP(), c.Address())
 	c.str.Store(&s)
 	return s
 }
@@ -751,7 +751,7 @@ func (c *Conn) delRequest(seq uint32) {
 }
 
 func (c *Conn) responseTimeout() (rt time.Duration) {
-	if c.IsTCP() == true { //nolint:staticcheck
+	if c.TCP() == true { //nolint:staticcheck
 		rt = c.n.config.TCP.ResponseTimeout
 	} else {
 		rt = c.n.config.UDP.ResponseTimeout
@@ -1011,7 +1011,7 @@ func (c *Conn) handleRoot(root *msg.Root) (_ error) {
 	}
 
 	// do nothing, because the Node already have this Root
-	if r.IsFull == true { //nolint:staticcheck
+	if r.Full == true { //nolint:staticcheck
 		return nil
 	}
 

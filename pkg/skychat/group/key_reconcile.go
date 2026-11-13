@@ -226,7 +226,7 @@ func (s *Session) applyKeyLeaf(body []byte) {
 	}
 
 	s.membersMu.Lock()
-	if !s.cfg.Record.IsAdmin(m.IssuerPK) {
+	if !s.cfg.Record.AdministeredBy(m.IssuerPK) {
 		s.membersMu.Unlock()
 		s.log.WithField("issuer", m.IssuerPK.String()).
 			Debug("group: reconcile: rejecting key rotation from non-admin issuer")

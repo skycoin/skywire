@@ -134,8 +134,8 @@ func sealRaw(signer cipher.PubKey, sig cipher.Sig, msg []byte, rcpt cipher.PubKe
 	return b.Bytes(), nil
 }
 
-// IsSealed reports whether body is a sealed envelope.
-func IsSealed(body []byte) bool {
+// Sealed reports whether body is a sealed envelope.
+func Sealed(body []byte) bool {
 	m, err := mail.ReadMessage(bytes.NewReader(body))
 	if err != nil {
 		return false

@@ -1393,8 +1393,8 @@ func (c *Client) StandbyPoolState() (held, standby int, settled bool, settledAt 
 	return held, standby, !settledAt.IsZero(), settledAt, reason
 }
 
-// IsStandby reports whether s is held in the pool rather than carrying streams.
-func (c *Client) IsStandby(s *yamux.Session) bool {
+// Standby reports whether s is held in the pool rather than carrying streams.
+func (c *Client) Standby(s *yamux.Session) bool {
 	c.sessionsMu.Lock()
 	defer c.sessionsMu.Unlock()
 	return c.standby[s]

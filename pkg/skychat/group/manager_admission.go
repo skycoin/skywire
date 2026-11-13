@@ -114,7 +114,7 @@ func (m *Manager) RotateKey(id string) (Record, error) {
 	if !ok {
 		return Record{}, fmt.Errorf("group: RotateKey: no record for %s", id)
 	}
-	if !r.IsAdmin(m.myPK) {
+	if !r.AdministeredBy(m.myPK) {
 		return Record{}, errors.New("group: RotateKey: only admins can rotate the group key")
 	}
 	if !r.Encrypted() {
@@ -185,7 +185,7 @@ func (m *Manager) pendingJoinCount(id string) (int, error) {
 	}
 	n := 0
 	for _, q := range reqs {
-		if q.IsPending() {
+		if q.Pending() {
 			n++
 		}
 	}
@@ -213,7 +213,7 @@ func (m *Manager) maxPendingJoins() int {
 func (m *Manager) keyRecipients(r Record) []cipher.PubKey {
 	out := make([]cipher.PubKey, 0, len(r.Members))
 	for _, pk := range r.Members {
-		if pk == m.myPK || pk == (cipher.PubKey{}) || r.IsBanned(pk) {
+		if pk == m.myPK || pk == (cipher.PubKey{}) || r.Bans(pk) {
 			continue
 		}
 		out = append(out, pk)
@@ -236,17 +236,17 @@ func (m *Manager) admissionHandler(id string) JoinRequestHandler {
 		if err != nil || !ok {
 			return JoinResponseMsg{Status: JoinStatusUnavailable, Reason: "this visor does not hold that group"}
 		}
-		if r.Status.IsTerminal() {
+		if r.Status.Terminal() {
 			return JoinResponseMsg{Status: JoinStatusUnavailable, Reason: "this visor has left or deleted the group"}
 		}
-		if r.IsBanned(req.PK) {
+		if r.Bans(req.PK) {
 			return JoinResponseMsg{Status: JoinStatusBanned, Reason: "banned from this group"}
 		}
 		// Only a visor with roster authority can admit. Reachable now that
 		// invites name several admins: any of them may have been demoted
 		// since the link was minted, and a member session answers join
 		// requests too so it can act the moment it IS promoted.
-		if !r.IsAdmin(m.myPK) {
+		if !r.AdministeredBy(m.myPK) {
 			return JoinResponseMsg{Status: JoinStatusUnavailable, Reason: "this visor holds no roster authority on the group"}
 		}
 		// Already in. A re-ask from a member is how a joiner recovers
@@ -354,7 +354,7 @@ func (m *Manager) admissionHandler(id string) JoinRequestHandler {
 					// re-queue rather than admitting on a stale record.
 				case JoinStatusPending, JoinStatusBanned:
 				}
-				if existing.IsPending() {
+				if existing.Pending() {
 					return JoinResponseMsg{Status: JoinStatusPending, Reason: "awaiting admin approval"}
 				}
 			}
@@ -412,7 +412,7 @@ func (m *Manager) notifyJoinRequest(req JoinRequest) {
 
 // PendingJoins returns the join-request queue for a group, newest
 // first. Includes decided entries so the UI can show history; callers
-// wanting only actionable items filter on IsPending.
+// wanting only actionable items filter on Pending.
 func (m *Manager) PendingJoins(id string) ([]JoinRequest, error) {
 	return m.store.ListJoinRequests(id)
 }
@@ -431,10 +431,10 @@ func (m *Manager) ApproveJoin(id string, pk cipher.PubKey) (Record, error) {
 	if !ok {
 		return Record{}, fmt.Errorf("group: ApproveJoin: no record for %s", id)
 	}
-	if !r.IsAdmin(m.myPK) {
+	if !r.AdministeredBy(m.myPK) {
 		return Record{}, errors.New("group: ApproveJoin: only admins can approve join requests")
 	}
-	if r.IsBanned(pk) {
+	if r.Bans(pk) {
 		return Record{}, errors.New("group: ApproveJoin: peer is banned; unban before approving")
 	}
 	updated, err := m.AddMember(id, pk)
@@ -470,7 +470,7 @@ func (m *Manager) DenyJoin(id string, pk cipher.PubKey) error {
 	if !ok {
 		return fmt.Errorf("group: DenyJoin: no record for %s", id)
 	}
-	if !r.IsAdmin(m.myPK) {
+	if !r.AdministeredBy(m.myPK) {
 		return errors.New("group: DenyJoin: only admins can decline join requests")
 	}
 	req, found, err := m.store.GetJoinRequest(id, pk)
@@ -503,10 +503,10 @@ func (m *Manager) RemoveMember(id string, pk cipher.PubKey) (Record, error) {
 	if !ok {
 		return Record{}, fmt.Errorf("group: RemoveMember: no record for %s", id)
 	}
-	if !r.IsAdmin(m.myPK) {
+	if !r.AdministeredBy(m.myPK) {
 		return Record{}, errors.New("group: RemoveMember: only admins can edit roster")
 	}
-	if r.IsFounder(pk) {
+	if r.FoundedBy(pk) {
 		return Record{}, errors.New("group: RemoveMember: cannot remove the founder")
 	}
 	if !containsPK(r.Members, pk) {
@@ -659,7 +659,7 @@ func (m *Manager) SetJoinPoW(id string, bits uint8) (Record, error) {
 	if !ok {
 		return Record{}, fmt.Errorf("group: SetJoinPoW: no record for %s", id)
 	}
-	if !r.IsAdmin(m.myPK) {
+	if !r.AdministeredBy(m.myPK) {
 		return Record{}, errors.New("group: SetJoinPoW: only admins can set the join cost")
 	}
 	if bits > MaxJoinPoWBits {
@@ -692,7 +692,7 @@ func (m *Manager) SetJoinPoW(id string, bits uint8) (Record, error) {
 // nothing — an admin would be told the setting took, and it would not
 // have. An error is the honest answer.
 func (m *Manager) SetPeerBackfill(id string, enabled bool) (Record, error) {
-	if r, ok, err := m.store.Get(id); err == nil && ok && r.IsChannel() {
+	if r, ok, err := m.store.Get(id); err == nil && ok && r.Channel() {
 		return Record{}, errors.New("group: SetPeerBackfill: a channel always serves history from its admins; this setting does not apply")
 	}
 	op := ModOpPeerBackfillOff
@@ -744,13 +744,13 @@ func (m *Manager) moderate(id string, pk cipher.PubKey, op ModOp, what string, m
 	if !ok {
 		return Record{}, fmt.Errorf("group: %s: no record for %s", what, id)
 	}
-	if !r.IsAdmin(m.myPK) {
+	if !r.AdministeredBy(m.myPK) {
 		return Record{}, fmt.Errorf("group: %s: only admins can moderate", what)
 	}
 	// Founder immunity, matching applyModLeaf's receive-side rule. A
 	// promoted admin must not be able to silence the founder — that
 	// would be a group-takeover primitive rather than moderation.
-	if (op == ModOpBan || op == ModOpMute) && r.IsFounder(pk) {
+	if (op == ModOpBan || op == ModOpMute) && r.FoundedBy(pk) {
 		return Record{}, fmt.Errorf("group: %s: %w", what, ErrGossipBanFounder)
 	}
 	if !op.isGroupScoped() && pk == (cipher.PubKey{}) {

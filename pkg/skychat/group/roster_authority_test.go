@@ -399,7 +399,7 @@ func TestSetAdminRoster_DemotionEvictsTheDemotedAdminsSub(t *testing.T) {
 	}
 	assertPKSet(t, "peerSubs before demotion", peerSubPKs(s), []cipher.PubKey{owner, adminA})
 
-	// Demote adminA. The founder stays an admin via IsAdmin's union.
+	// Demote adminA. The founder stays an admin via AdministeredBy's union.
 	evicted, err := s.SetAdminRoster(nil)
 	if err != nil {
 		t.Fatalf("demoting SetAdminRoster: %v", err)
@@ -442,7 +442,7 @@ func TestSetAdminRoster_PromotionOfSelfWidensTheSubSet(t *testing.T) {
 }
 
 // TestSetAdminRoster_CachesSnapshotOnRecord — the new admin set is written
-// back to cfg.Record.Admins so IsAdmin checks elsewhere (publish path, roster
+// back to cfg.Record.Admins so AdministeredBy checks elsewhere (publish path, roster
 // reconcile) read the same view, and it must be a defensive copy.
 func TestSetAdminRoster_CachesSnapshotOnRecord(t *testing.T) {
 	me, sk := cipher.GenerateKeyPair()
@@ -461,8 +461,8 @@ func TestSetAdminRoster_CachesSnapshotOnRecord(t *testing.T) {
 		t.Fatalf("SetAdminRoster: %v", err)
 	}
 	assertPKSet(t, "cached Record.Admins", s.cfg.Record.Admins, []cipher.PubKey{adminA})
-	if !s.cfg.Record.IsAdmin(adminA) {
-		t.Error("IsAdmin should see the newly cached admin")
+	if !s.cfg.Record.AdministeredBy(adminA) {
+		t.Error("AdministeredBy should see the newly cached admin")
 	}
 
 	admins[0] = other // caller mutates afterwards

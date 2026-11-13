@@ -105,7 +105,7 @@ func (s *Session) applyRosterLeaf(body []byte) {
 	s.membersMu.Lock()
 	// AUTHORITY GATE: only a current admin may mutate the roster. Without this
 	// any member could forge roster/<seq> leaves and add/remove arbitrary PKs.
-	if !s.cfg.Record.IsAdmin(m.IssuerPK) {
+	if !s.cfg.Record.AdministeredBy(m.IssuerPK) {
 		s.membersMu.Unlock()
 		s.log.WithField("issuer", m.IssuerPK.String()).
 			Debug("group: reconcile: rejecting roster mutation from non-admin issuer")
@@ -134,7 +134,7 @@ func (s *Session) applyRosterLeaf(body []byte) {
 		// freshness gate on purpose: ban is the strongest revocation the
 		// group has, and it should not depend on watermark bookkeeping
 		// being intact to hold.
-		if s.cfg.Record.IsBanned(m.PeerPK) {
+		if s.cfg.Record.Bans(m.PeerPK) {
 			s.membersMu.Unlock()
 			s.log.WithField("peer", m.PeerPK.String()).
 				Warn("group: reconcile: refusing to add a banned peer")
@@ -224,7 +224,7 @@ func (s *Session) applyAdminLeaf(body []byte) {
 	}
 
 	s.membersMu.Lock()
-	if !s.cfg.Record.IsAdmin(m.IssuerPK) {
+	if !s.cfg.Record.AdministeredBy(m.IssuerPK) {
 		s.membersMu.Unlock()
 		s.log.WithField("issuer", m.IssuerPK.String()).
 			Debug("group: reconcile: rejecting admin mutation from non-admin issuer")
@@ -246,7 +246,7 @@ func (s *Session) applyAdminLeaf(body []byte) {
 	changed := false
 	switch m.Op {
 	case AdminOpPromote:
-		if m.PeerPK != (cipher.PubKey{}) && !s.cfg.Record.IsAdmin(m.PeerPK) {
+		if m.PeerPK != (cipher.PubKey{}) && !s.cfg.Record.AdministeredBy(m.PeerPK) {
 			s.cfg.Record.Admins = append(s.cfg.Record.Admins, m.PeerPK)
 			changed = true
 		}
@@ -304,7 +304,7 @@ func (s *Session) BroadcastRoster() {
 	s.membersMu.RLock()
 	self := s.cfg.MyPK
 	owner := s.cfg.Record.OwnerPK
-	if !s.cfg.Record.IsAdmin(self) {
+	if !s.cfg.Record.AdministeredBy(self) {
 		s.membersMu.RUnlock()
 		return
 	}

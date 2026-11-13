@@ -317,7 +317,7 @@ func (c *Client) evaluateSnubs(now time.Time) {
 			continue
 		}
 		views[i] = snubView{
-			active:      !c.IsStandby(s),
+			active:      !c.Standby(s),
 			outstanding: m.outstandingWork(),
 			since:       m.sinceProgress(now),
 			bound:       m.snubBound(),

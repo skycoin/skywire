@@ -275,12 +275,12 @@ func TestManagerIntegration_RosterOps(t *testing.T) {
 	// Promote B, then it CAN.
 	promoted, err := a.mgr.PromoteAdmin(id, b.pk)
 	require.NoError(t, err, "PromoteAdmin")
-	require.True(t, promoted.IsAdmin(b.pk), "B should be an admin after promotion")
+	require.True(t, promoted.AdministeredBy(b.pk), "B should be an admin after promotion")
 
 	// Demote B again.
 	demoted, err := a.mgr.DemoteAdmin(id, b.pk)
 	require.NoError(t, err, "DemoteAdmin")
-	require.False(t, demoted.IsAdmin(b.pk), "B should not be an admin after demotion")
+	require.False(t, demoted.AdministeredBy(b.pk), "B should not be an admin after demotion")
 
 	// The founder cannot be demoted — it is the recovery anchor.
 	_, err = a.mgr.DemoteAdmin(id, a.pk)

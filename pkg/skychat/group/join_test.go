@@ -280,7 +280,7 @@ func TestStoreJoinRequestLifecycle(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("GetJoinRequest: found=%v err=%v", found, err)
 	}
-	if got.Note != "hi" || !got.IsPending() {
+	if got.Note != "hi" || !got.Pending() {
 		t.Errorf("unexpected request: %+v", got)
 	}
 
@@ -343,7 +343,7 @@ func TestStoreModerationRoundTrip(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("Get: ok=%v err=%v", ok, err)
 	}
-	if !got.IsBanned(victim) || !got.IsMuted(victim) || !got.ReadOnly {
+	if !got.Bans(victim) || !got.Mutes(victim) || !got.ReadOnly {
 		t.Errorf("moderation state did not persist: %+v", got)
 	}
 	if since := got.MuteEffectiveFrom(victim); !since.Equal(at) {
