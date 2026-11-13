@@ -2,7 +2,6 @@
 package clirewards
 
 import (
-	"bytes"
 	"cmp"
 	"encoding/json"
 	"errors"
@@ -12,7 +11,7 @@ import (
 	"math"
 	"net/http"
 	"os"
-	"os/exec"
+
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -26,6 +25,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/oschwald/geoip2-golang/v2"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/tidwall/pretty"
 
 	tgbot "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards/tgbot"
@@ -43,36 +43,77 @@ import (
 const yearlyTotalRewardsPerPool int = 408000
 
 var (
-	yearlyTotal           int
-	hwSurveyPath          string
-	wdate                 = time.Now().UTC().AddDate(0, 0, -1).Format("2006-01-02")
-	wDate                 time.Time
-	utfile                string
-	disallowArchitectures []string
-	allowArchitectures1   []string
-	allowArchitectures2   []string
-	h0                    bool
-	h1                    bool
-	h2                    bool
-	grr                   bool
-	pubkey                string
-	logLvl                string
-	processRewards        bool
-	log                   = logging.MustGetLogger("rewards")
+	wDate  time.Time
+	h0     bool
+	h1     bool
+	h2     bool
+	grr    bool
+	logLvl string
+	log    = logging.MustGetLogger("rewards")
 	// skycoinNodeURL is the node used to check which xpub addresses were already used.
-	skycoinNodeURL       = defaultSkycoinNode()
-	xpubIndexPath        = deprewards.XpubIndexFile
-	xpubIndex            *deprewards.XpubIndex
-	nodeInfoSvc          []byte
-	requireTransports    bool
-	transportHistPath    string
-	requireBandwidth     bool
-	noBWPool             bool
-	bwSkipReason         string // why pool 2 repeats pool 1, for stats.txt
-	minBWThreshold       uint64
-	saturationExponent   float64
-	bwSaturationExponent float64
+	skycoinNodeURL     = defaultSkycoinNode()
+	xpubIndexPath      = deprewards.XpubIndexFile
+	xpubIndex          *deprewards.XpubIndex
+	nodeInfoSvc        []byte
+	svcPK              string
+	svcSurveyPath      string
+	saturationExponent float64
+	// calcFlags are the bare command's calculation flags.
+	calcFlags = rewardOpts{
+		utfile:     "ut.txt",
+		surveyPath: "log_collecting",
+		histDir:    "hist",
+		minBW:      defaultMinBandwidth,
+	}
 )
+
+// rewardOpts is the input of calcRewards, the one reward calculation.
+type rewardOpts struct {
+	date       string
+	utfile     string
+	surveyPath string
+	histDir    string // bandwidth and transport files are read here, per-pool files written here
+	pubkey     string
+	yearly     int
+	noArch     []string
+	arch1      []string
+	arch2      []string
+	requireTP  bool
+	requireBW  bool
+	noBWPool   bool
+	minBW      uint64
+	satExp     float64
+	bwSatExp   float64
+}
+
+// addCalcFlags registers the calculation flags shared by `rewards` and `rewards run`,
+// with o's current values as the defaults.
+func addCalcFlags(fs *pflag.FlagSet, o *rewardOpts) {
+	o.date = time.Now().UTC().AddDate(0, 0, -1).Format("2006-01-02")
+	fs.StringVarP(&o.date, "date", "d", o.date, "date for which to calculate reward")
+	fs.StringVar(&skycoinNodeURL, "skycoin-node", skycoinNodeURL, "skycoin node API used to find unused xpub reward addresses")
+	fs.StringSliceVarP(&o.noArch, "noarch", "n", []string{"null", "wasm"}, "disallowed architectures, comma separated")
+	fs.StringSliceVarP(&o.arch1, "a1", "w", archesExcept([]string{"wasm", "amd64", "386"}), "allowed arch, comma separated (with --a2, the architectures that qualify)")
+	fs.StringSliceVarP(&o.arch2, "a2", "x", archesExcept([]string{"wasm", "arm64", "arm", "ppc64", "riscv64", "loong64", "mips", "mips64", "mips64le", "mipsle", "ppc64le", "s390x"}), "more allowed arch, comma separated (with --a1, the architectures that qualify)")
+	fs.IntVarP(&o.yearly, "year", "y", yearlyTotalRewardsPerPool, "yearly total rewards per pool")
+	fs.StringVarP(&o.surveyPath, "lpath", "p", o.surveyPath, "path to the surveys")
+	fs.BoolVarP(&o.requireTP, "require-tp", "t", false, "require minimum transports from hist/YYYY-MM-DD_transports.txt (deprecated — TPD-integrated UT data now gates >= 2 transports inherently; this flag is kept only for historical re-runs of dates before the migration)")
+	fs.BoolVarP(&o.requireBW, "require-bw", "b", o.requireBW, "pay pool 2 by bandwidth from the day's bandwidth file; without it pool 2 repeats pool 1")
+	fs.BoolVar(&o.noBWPool, "no-bw-pool", false, "recovery mode: skip the bandwidth pool and fold its budget into a doubled presence pool, so pool 2 repeats pool 1")
+	fs.Uint64VarP(&o.minBW, "min-bw", "B", o.minBW, "minimum bandwidth in bytes to qualify (used with --require-bw)")
+	fs.Float64VarP(&o.satExp, "sat-exp", "S", 0.5, "regional saturation exponent (1.0=no derating, 0.5=sqrt, 0=all countries equal)")
+	fs.Float64Var(&o.bwSatExp, "bw-sat-exp", 0.5, "bandwidth saturation exponent applied to pool 2 (1.0=strict bytes-proportional, 0.5=sqrt, 0=all senders equal)")
+}
+
+// archesExcept is every supported architecture but those in dis.
+func archesExcept(dis []string) (res []string) {
+	for _, v := range rewards.Architectures {
+		if !slices.Contains(dis, v) {
+			res = append(res, v)
+		}
+	}
+	return res
+}
 
 type nodeinfo struct {
 	SkyAddr         string  `json:"skycoin_address"`
@@ -526,7 +567,7 @@ func aggregateBy(nodes []nodeinfo, field func(nodeinfo) float64) []rewardData {
 // the broadcast pipeline (which reads _rewardtxn0.csv) is unaffected.
 func writePerPoolFiles(histDir, wdate string, nodes []nodeinfo, bwExp float64, minBW uint64) error {
 	write := func(name string, fn func(io.Writer) error) error {
-		return writeAtomic(filepath.Join(histDir, wdate+"_"+name), fn)
+		return writeAtomic(filepath.Join(histDir, wdate+"_"+name), 0600, fn)
 	}
 
 	// pool1_shares.csv — every qualifying visor.
@@ -624,12 +665,12 @@ func writePerPoolFiles(histDir, wdate string, nodes []nodeinfo, bwExp float64, m
 }
 
 // printSaturationStats prints per-country saturation statistics.
-func printSaturationStats(nodes []nodeinfo, dayReward, totalShares float64) {
-	if saturationExponent >= 1.0 {
+func printSaturationStats(w io.Writer, exp float64, nodes []nodeinfo, dayReward, totalShares float64) {
+	if exp >= 1.0 {
 		return
 	}
-	cmdutil.Printf("\n--- Regional Saturation Scaling ---\n")
-	cmdutil.Printf("saturation exponent: %.2f\n", saturationExponent)
+	fmt.Fprintf(w, "\n--- Regional Saturation Scaling ---\n") //nolint:errcheck
+	fmt.Fprintf(w, "saturation exponent: %.2f\n", exp)        //nolint:errcheck
 
 	type countryStat struct {
 		code   string
@@ -662,114 +703,11 @@ func printSaturationStats(nodes []nodeinfo, dayReward, totalShares float64) {
 		return cmp.Compare(b.shares, a.shares)
 	})
 
-	cmdutil.Printf("%-4s %7s %5s %10s %10s\n", "CC", "Visors", "IPs", "Shares", "SKY/visor")
+	fmt.Fprintf(w, "%-4s %7s %5s %10s %10s\n", "CC", "Visors", "IPs", "Shares", "SKY/visor") //nolint:errcheck
 	for _, cs := range stats {
 		sky := cs.shares * dayReward / totalShares
-		cmdutil.Printf("%-4s %7d %5d %10.2f %10.2f\n", cs.code, cs.visors, cs.ips, cs.shares, sky/float64(cs.visors))
+		fmt.Fprintf(w, "%-4s %7d %5d %10.2f %10.2f\n", cs.code, cs.visors, cs.ips, cs.shares, sky/float64(cs.visors)) //nolint:errcheck
 	}
-}
-
-// runRewardProcessing executes the complete reward processing workflow
-// This is equivalent to the reward.sh script functionality:
-// 1. Checks if rewards already processed for the date
-// 2. Fetches uptime tracker data
-// 3. Generates ineligible list, shares CSV, reward transaction CSV, and stats
-// All outputs are saved to hist/ directory with date prefix
-func runRewardProcessing() {
-	// Check if already processed
-	txnFile := fmt.Sprintf("hist/%s.txt", wdate)
-	if _, err := os.Stat(txnFile); err == nil {
-		log.Fatal("Transaction already broadcasted for ", wdate)
-	}
-
-	// Create hist directory if it doesn't exist
-	if err := os.MkdirAll("hist", 0750); err != nil {
-		log.Fatal("Failed to create hist directory: ", err)
-	}
-
-	log.Info("Processing rewards for date: ", wdate)
-
-	// Fetch uptime tracker data
-	utOutputFile := fmt.Sprintf("hist/%s_ut.txt", wdate)
-	log.Info("Fetching uptime tracker data...")
-
-	//nolint:gosec
-	cmd := exec.Command("skywire-cli", "ut", "--cdu", "hist/")
-	utData, err := cmd.Output()
-	if err != nil {
-		log.Fatal("Failed to fetch uptime tracker data: ", err)
-	}
-
-	if err := os.WriteFile(utOutputFile, utData, 0600); err != nil {
-		log.Fatal("Failed to write uptime tracker data: ", err)
-	}
-
-	// Update utfile to use the newly created file
-	utfile = utOutputFile
-
-	// Generate ineligible list
-	ineligibleFile := fmt.Sprintf("hist/%s_ineligible.csv", wdate)
-	log.Info("Generating ineligible list...")
-	//nolint:gosec
-	cmd = exec.Command("skywire-cli", "rewards", "--utfile", utfile, "-e", "-d", wdate, "-p", hwSurveyPath)
-	var ineligibleOut bytes.Buffer
-	cmd.Stdout = &ineligibleOut
-	if err := cmd.Run(); err != nil {
-		log.Fatal("Failed to generate ineligible list: ", err)
-	}
-	if err := os.WriteFile(ineligibleFile, ineligibleOut.Bytes(), 0600); err != nil {
-		log.Fatal("Failed to write ineligible list: ", err)
-	}
-
-	// Generate shares CSV
-	sharesFile := fmt.Sprintf("hist/%s_shares.csv", wdate)
-	log.Info("Generating shares CSV...")
-	//nolint:gosec
-	cmd = exec.Command("skywire-cli", "rewards", "--utfile", utfile, "-2", "-0", "-d", wdate, "-p", hwSurveyPath)
-	var sharesOut bytes.Buffer
-	cmd.Stdout = &sharesOut
-	if err := cmd.Run(); err != nil {
-		log.Fatal("Failed to generate shares CSV: ", err)
-	}
-	if err := os.WriteFile(sharesFile, sharesOut.Bytes(), 0600); err != nil {
-		log.Fatal("Failed to write shares CSV: ", err)
-	}
-
-	// Generate reward transaction CSV
-	rewardTxnFile := fmt.Sprintf("hist/%s_rewardtxn0.csv", wdate)
-	log.Info("Generating reward transaction CSV...")
-	//nolint:gosec
-	cmd = exec.Command("skywire-cli", "rewards", "--utfile", utfile, "-1", "-0", "-d", wdate, "-p", hwSurveyPath)
-	var rewardTxnOut bytes.Buffer
-	cmd.Stdout = &rewardTxnOut
-	if err := cmd.Run(); err != nil {
-		log.Fatal("Failed to generate reward transaction CSV: ", err)
-	}
-	if err := os.WriteFile(rewardTxnFile, rewardTxnOut.Bytes(), 0600); err != nil {
-		log.Fatal("Failed to write reward transaction CSV: ", err)
-	}
-
-	// Generate stats
-	statsFile := fmt.Sprintf("hist/%s_stats.txt", wdate)
-	log.Info("Generating stats...")
-	//nolint:gosec
-	cmd = exec.Command("skywire-cli", "rewards", "--utfile", utfile, "-1", "-2", "-d", wdate, "-p", hwSurveyPath)
-	var statsOut bytes.Buffer
-	cmd.Stdout = &statsOut
-	if err := cmd.Run(); err != nil {
-		log.Fatal("Failed to generate stats: ", err)
-	}
-	if err := os.WriteFile(statsFile, statsOut.Bytes(), 0600); err != nil {
-		log.Fatal("Failed to write stats: ", err)
-	}
-
-	log.Info("Reward processing complete!")
-	log.Info("Files generated:")
-	log.Info("  - ", utOutputFile)
-	log.Info("  - ", ineligibleFile)
-	log.Info("  - ", sharesFile)
-	log.Info("  - ", rewardTxnFile)
-	log.Info("  - ", statsFile)
 }
 
 func init() {
@@ -778,44 +716,14 @@ func init() {
 	)
 	RootCmd.Flags().SortFlags = false
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "s", "info", "[ debug | warn | error | fatal | panic | trace ]")
-	RootCmd.Flags().StringVarP(&wdate, "date", "d", wdate, "date for which to calculate reward")
-	RootCmd.Flags().StringVar(&skycoinNodeURL, "skycoin-node", skycoinNodeURL, "skycoin node API used to find unused xpub reward addresses")
-	RootCmd.Flags().StringVarP(&pubkey, "pk", "k", pubkey, "check reward for pubkey")
-	RootCmd.Flags().StringSliceVarP(&disallowArchitectures, "noarch", "n", []string{"null", "wasm"}, "disallowed architectures, comma separated")
-	RootCmd.Flags().StringSliceVarP(&allowArchitectures1, "a1", "w", func(all []string, dis []string) (res []string) {
-		for _, v := range all {
-			allow := !slices.Contains(dis, v)
-			if allow {
-				res = append(res, v)
-			}
-		}
-		return res
-	}(rewards.Architectures, []string{"wasm", "amd64", "386"}), "allowed arch, comma separated (with --a2, the architectures that qualify)")
-
-	RootCmd.Flags().StringSliceVarP(&allowArchitectures2, "a2", "x", func(all []string, dis []string) (res []string) {
-		for _, v := range all {
-			allow := !slices.Contains(dis, v)
-			if allow {
-				res = append(res, v)
-			}
-		}
-		return res
-	}(rewards.Architectures, []string{"wasm", "arm64", "arm", "ppc64", "riscv64", "loong64", "mips", "mips64", "mips64le", "mipsle", "ppc64le", "s390x"}), "more allowed arch, comma separated (with --a1, the architectures that qualify)")
-	RootCmd.Flags().IntVarP(&yearlyTotal, "year", "y", yearlyTotalRewardsPerPool, "yearly total rewards per pool")
-	RootCmd.Flags().StringVarP(&utfile, "utfile", "u", "ut.txt", "uptime tracker data file")
-	RootCmd.Flags().StringVarP(&hwSurveyPath, "lpath", "p", "log_collecting", "path to the surveys")
+	addCalcFlags(RootCmd.Flags(), &calcFlags)
+	RootCmd.Flags().StringVarP(&calcFlags.pubkey, "pk", "k", "", "check reward for pubkey")
+	RootCmd.Flags().StringVarP(&calcFlags.utfile, "utfile", "u", calcFlags.utfile, "uptime tracker data file")
+	RootCmd.Flags().StringVarP(&calcFlags.histDir, "tp-hist", "T", calcFlags.histDir, "path to transport history directory")
 	RootCmd.Flags().BoolVarP(&h0, "h0", "0", false, "hide statistical data")
 	RootCmd.Flags().BoolVarP(&h1, "h1", "1", false, "hide survey csv data")
 	RootCmd.Flags().BoolVarP(&h2, "h2", "2", false, "hide reward csv data")
 	RootCmd.Flags().BoolVarP(&grr, "err", "e", false, "account for non rewarded keys")
-	RootCmd.Flags().BoolVarP(&processRewards, "process", "r", false, "run complete reward processing workflow")
-	RootCmd.Flags().BoolVarP(&requireTransports, "require-tp", "t", false, "require minimum transports from hist/YYYY-MM-DD_transports.txt (deprecated — TPD-integrated UT data now gates >= 2 transports inherently; this flag is kept only for historical re-runs of dates before the migration)")
-	RootCmd.Flags().StringVarP(&transportHistPath, "tp-hist", "T", "hist", "path to transport history directory")
-	RootCmd.Flags().BoolVarP(&requireBandwidth, "require-bw", "b", false, "pay pool 2 by bandwidth from the day's bandwidth file; without it pool 2 repeats pool 1")
-	RootCmd.Flags().BoolVar(&noBWPool, "no-bw-pool", false, "recovery mode: skip the bandwidth pool and fold its budget into a doubled presence pool, so pool 2 repeats pool 1")
-	RootCmd.Flags().Uint64VarP(&minBWThreshold, "min-bw", "B", defaultMinBandwidth, "minimum bandwidth in bytes to qualify (used with --require-bw)")
-	RootCmd.Flags().Float64VarP(&saturationExponent, "sat-exp", "S", 0.5, "regional saturation exponent (1.0=no derating, 0.5=sqrt, 0=all countries equal)")
-	RootCmd.Flags().Float64Var(&bwSaturationExponent, "bw-sat-exp", 0.5, "bandwidth saturation exponent applied to pool 2 (1.0=strict bytes-proportional, 0.5=sqrt, 0=all senders equal)")
 }
 
 // RootCmd is the root command for skywire-cli rewards
@@ -830,21 +738,16 @@ fetch uptimes, calculate per-visor shares, and serve the metrics UI.
 Node operators who only want to set their own reward address or check their
 payout history want the singular command instead: 'skywire cli reward'.
 
-Typical manual pipeline:
-  Collect surveys:  skywire-cli log
-  Fetch uptimes:    skywire-cli ut > ut.txt
-  Process rewards:  skywire-cli rewards --process
-
-The 'rewards run' subcommand performs the whole hourly cycle in-process
-(the systemd unit calls it); the bare 'rewards' command calculates a single
-day from data already on disk.
+The bare 'rewards' command calculates a single day from data already on disk
+and prints the sections its -0 -1 -2 -e flags select. The 'rewards run'
+subcommand performs the whole hourly cycle and writes every section to its
+file in hist/, through the same calculation.
 
 Architectures:
 ` + fmt.Sprintf("%v", append(rewards.Architectures, "null", "all")) + `
 
 `,
 	Run: func(_ *cobra.Command, _ []string) {
-		var err error
 		if log == nil {
 			log = logging.MustGetLogger("rewards")
 		}
@@ -853,538 +756,605 @@ Architectures:
 				logging.SetLevel(lvl)
 			}
 		}
-
-		if processRewards {
-			runRewardProcessing()
-			return
-		}
-
-		sConf, err := script.Echo(string(deployment.ServicesJSON)).JQ(`.prod  | del(.stun_servers)`).Bytes()
-		if err != nil {
-			log.Fatal("error parsing json with jq:\n", err)
-		}
-		dConf, err := script.Echo(string(deployment.ServicesJSON)).JQ(`.prod`).Bytes()
-		if err != nil {
-			log.Fatal("error parsing json with jq:\n", err)
-		}
-
-		wDate, err = time.Parse("2006-01-02", wdate)
-		if err != nil {
-			log.Fatal("Error parsing date:", err)
-			return
-		}
-		_, err = os.Stat(hwSurveyPath)
-		if errors.Is(err, fs.ErrNotExist) {
-			log.Fatal("the path to the surveys does not exist\n", err, "\nfetch the surveys with:\n$ skywire-cli log")
-		}
-
-		// Initialize GeoIP database for regional saturation scaling
-		var geoDB *geoip2.Reader
-		if saturationExponent < 1.0 {
-			geoDB, err = geoip2.OpenBytes(geoip.EmbeddedDB())
-			if err != nil {
-				log.Warn("Failed to load embedded GeoIP database, disabling regional saturation: ", err)
-				saturationExponent = 1.0
-			} else {
-				defer func() { _ = geoDB.Close() }() //nolint:errcheck
-			}
-		}
-
-		_, err = os.Stat(utfile)
-		if errors.Is(err, fs.ErrNotExist) {
-			log.Fatal("uptime tracker data file not found\n", err, "\nfetch the uptime tracker data with:\n$ skywire-cli ut > ut.txt")
-		}
-
-		// Build the architecture allow-list. There is one reward model,
-		// presence plus bandwidth, so --a1 and --a2 together name the
-		// architectures that qualify; they never split visors into pools.
-		disallowedMap := make(map[string]struct{})
-		for _, arch := range disallowArchitectures {
-			disallowedMap[arch] = struct{}{}
-		}
-		supportedArchitecturesMap := make(map[string]struct{})
-		for _, arch := range rewards.Architectures {
-			supportedArchitecturesMap[arch] = struct{}{}
-		}
-		allowArchMapAll := make(map[string]struct{})
-		for _, arch := range append(append([]string{}, allowArchitectures1...), allowArchitectures2...) {
-			if _, ok := supportedArchitecturesMap[arch]; !ok {
-				log.Fatal("Error: Architecture is not valid: ", arch)
-			}
-			if _, ok := disallowedMap[arch]; !ok {
-				allowArchMapAll[arch] = struct{}{}
-			}
-		}
-
-		// Without bandwidth data Pool 2 repeats Pool 1: the presence pool
-		// gets both budgets. That holds whether -b was left off or the day's
-		// bandwidth file turns out to be missing or empty below.
-		if !requireBandwidth {
-			log.Warn("No -b: the bandwidth pool is skipped and Pool 2 repeats Pool 1")
-			noBWPool, bwSkipReason = true, "no -b"
-		}
-
-		// Load transport requirement data
-		transportMap := make(map[string]struct{})
-		if requireTransports {
-			transportFile := fmt.Sprintf("%s/%s_transports.txt", transportHistPath, wdate)
-			if data, err := os.ReadFile(transportFile); err == nil { //nolint:gosec
-				for line := range strings.SplitSeq(string(data), "\n") {
-					line = strings.TrimSpace(line)
-					if line != "" {
-						transportMap[line] = struct{}{}
-					}
-				}
-				// An exists-but-zero-non-blank-lines file is almost always
-				// upstream data unavailability (transient TPD/CXO outage
-				// at tp-collect time), not a genuine network-wide "nobody
-				// qualifies" — a real zero would itself indicate a
-				// catastrophic network event worth halting on, not
-				// silently zeroing reward eligibility. Mirror the
-				// file-absent path: skip the requirement and warn loudly
-				// so an operator notices.
-				if len(transportMap) == 0 {
-					log.Warnf("Transport file %s exists but contains zero qualifying visors. "+
-						"Treating as upstream data unavailability (likely transient TPD/CXO outage at tp-collect time) "+
-						"and skipping the transport requirement for this calc. "+
-						"If unexpected, verify tp-collect succeeded and the TPD per-key-stats endpoint is healthy "+
-						"— a genuine zero would indicate a network-wide failure.", transportFile)
-					requireTransports = false
-				} else {
-					log.Infof("Loaded %d visors with sufficient transports from %s", len(transportMap), transportFile)
-				}
-			} else {
-				log.Warnf("Transport file not found: %s (transport requirement will be skipped)", transportFile)
-				requireTransports = false
-			}
-		}
-
-		// Load bandwidth data. Prefer v2 (per-transport sender-side
-		// totals) so we can credit each visor only for bytes it actually
-		// sent, and only on transports where the counterparty is also
-		// reward-eligible. Old v1 files (bare {pk:bytes} map) still
-		// parse — they're aggregated, full sent+recv, and credited to
-		// BOTH edges with no counterparty filter, matching the
-		// pre-v2 behavior so historical rerun stays bit-exact.
-		bandwidthMap := make(map[string]uint64)
-		var bwTransports []TransportBW // populated only for v2
-		if !noBWPool {
-			bwFile := fmt.Sprintf("%s/%s_bandwidth.json", transportHistPath, wdate)
-			data, readErr := os.ReadFile(bwFile) //nolint:gosec
-			switch {
-			case readErr != nil:
-				log.Warnf("Bandwidth file not found: %s (Pool 2 repeats Pool 1)", bwFile)
-				noBWPool, bwSkipReason = true, "bandwidth file not found"
-			default:
-				var v2 BandwidthData
-				var v3 tpdstore.VisorBWDay
-				if err := json.Unmarshal(data, &v3); err == nil && v3.Version == tpdstore.VisorBWVersion {
-					// v3: TPD's settled per-visor day, same-network
-					// transports already left out. Each visor is paid for
-					// what it sent over every transport type but dmsg: a dmsg
-					// transport rides a dmsg server's bandwidth, not the
-					// visor's own.
-					for pk, byType := range v3.Visors {
-						for typ, n := range byType {
-							if typ != string(tptypes.DMSG) {
-								bandwidthMap[pk] += n
-							}
-						}
-					}
-					if len(bandwidthMap) == 0 {
-						log.Warnf("Bandwidth file %s parsed as v3 but contains zero visors: Pool 2 repeats Pool 1.", bwFile)
-						noBWPool, bwSkipReason = true, "bandwidth file has no visors"
-					} else {
-						log.Infof("Loaded v3 bandwidth data for %d visors from %s (%d of %d transports left out as same-network)",
-							len(bandwidthMap), bwFile, v3.SameNetworkExcluded, v3.Transports)
-					}
-				} else if err := json.Unmarshal(data, &v2); err == nil && v2.Version >= BandwidthDataVersion {
-					bwTransports = v2.Transports
-					if len(bwTransports) == 0 {
-						// Same defensive logic as transports.txt: empty but
-						// present means upstream data unavailability, not
-						// "no transport had bandwidth". Skip pool 2 + warn.
-						log.Warnf("Bandwidth file %s parsed as v2 but contains zero transports. "+
-							"Treating as upstream data unavailability: Pool 2 repeats Pool 1. "+
-							"Verify bw-collect succeeded and the TPD /metrics endpoint is healthy.", bwFile)
-						noBWPool, bwSkipReason = true, "bandwidth file has no transports"
-					} else {
-						log.Infof("Loaded v2 bandwidth data: %d transports from %s", len(bwTransports), bwFile)
-					}
-				} else if err := json.Unmarshal(data, &bandwidthMap); err == nil {
-					if len(bandwidthMap) == 0 {
-						log.Warnf("Bandwidth file %s parsed as v1 but contains zero visors. "+
-							"Treating as upstream data unavailability: Pool 2 repeats Pool 1.", bwFile)
-						noBWPool, bwSkipReason = true, "bandwidth file has no visors"
-					} else {
-						log.Infof("Loaded v1 bandwidth data for %d visors from %s (legacy aggregated format — no counterparty eligibility filter)", len(bandwidthMap), bwFile)
-					}
-				} else {
-					log.Warnf("Failed to parse bandwidth file %s: %v (Pool 2 repeats Pool 1)", bwFile, err)
-					noBWPool, bwSkipReason = true, "bandwidth file unreadable"
-				}
-			}
-		}
-
-		// Get public keys that met uptime requirement
-		res, belowUptime, err := uptimeKeys(utfile, strings.TrimRight(wdate, "\n"))
-		if err != nil {
-			log.Fatal("Failed to read uptime file " + utfile + ": " + err.Error())
-		}
-		if pubkey != "" {
-			keep := func(pk string) bool { return strings.Contains(pk, pubkey) }
-			res = slices.DeleteFunc(res, func(pk string) bool { return !keep(pk) })
-			belowUptime = slices.DeleteFunc(belowUptime, func(pk string) bool { return !keep(pk) })
-			if len(res) == 0 {
-				log.Fatal("Specified key " + pubkey + "\n did not achieve minimum uptime on " + wdate + " !")
-			}
-		} else if len(res) == 0 {
-			log.Fatal("No keys achieved minimum uptime on " + wdate + " !")
-		}
-
-		// Collect eligible nodes by parsing surveys
-		var nodesInfos1 []nodeinfo // every eligible visor: presence, and bandwidth when there is data
-		var grrInfos []nodeinfo    // ineligible nodes (for error reporting)
-		for _, pk := range belowUptime {
-			grrInfos = append(grrInfos, nodeinfo{PK: pk, Reason: uptimeBelowReason})
-		}
-
-		for _, pk := range res {
-			surveyPath := fmt.Sprintf("%s/%s/node-info.json", hwSurveyPath, pk)
-			survey, parseErr := parseSurvey(surveyPath)
-			if parseErr != nil {
-				log.Debug(parseErr.Error())
-				// Met uptime but no usable survey — record it as ineligible with a
-				// reason instead of a silent drop, so a survey-collection gap surfaces
-				// in the ineligible report rather than an invisible dash. Mirrors the
-				// same fix in runday.go's calcDay.
-				grrInfos = append(grrInfos, nodeinfo{PK: pk, Reason: "survey not found"})
-				continue
-			}
-
-			svcconf := checkServiceConfig(surveyPath, sConf, dConf)
-			ifc, macs := extractInterfaces(survey)
-
-			ip := survey.IPAddr
-			sky := survey.SkyAddr
-			arch := survey.Arch
-			hv := survey.SysInfo.Node.Hypervisor
-			if hv == "" {
-				hv = "null"
-			}
-			uu := survey.UUID
-
-			addrErr := rewardAddressError(sky, wDate)
-
-			_, inTransports := transportMap[pk]
-			meetsTransportReq := !requireTransports || inTransports
-			visorBW := bandwidthMap[pk]
-
-			_, archAllowed := allowArchMapAll[arch]
-
-			ni := nodeinfo{
-				IPAddr:     ip,
-				SkyAddr:    sky,
-				PK:         pk,
-				Arch:       arch,
-				Interfaces: ifc,
-				MacAddr:    macs[0],
-				UUID:       uu,
-				SvcConf:    svcconf,
-				HV:         hv,
-				Bandwidth:  visorBW,
-			}
-
-			baseEligible := archAllowed && strings.Count(ip, ".") == 3 && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" && hv == "null" && addrErr == nil && meetsTransportReq
-
-			if !baseEligible {
-				ni.Reason = func() string {
-					switch {
-					case !archAllowed:
-						return arch
-					case strings.Count(ip, ".") != 3:
-						return ip
-					case uu == "":
-						return ip
-					case ifc == "":
-						return ifc
-					case len(macs) == 0 || macs[0] == "":
-						return macs[0]
-					case hv != "null":
-						return hv
-					case addrErr != nil:
-						return addressReason(addrErr)
-					case !meetsTransportReq:
-						return "No transports"
-					default:
-						return "Unknown reason"
-					}
-				}()
-				if grr {
-					grrInfos = append(grrInfos, ni)
-				}
-				continue
-			}
-
-			// GeoIP country lookup
-			if geoDB != nil {
-				if geoRes, geoErr := geoip.Lookup(geoDB, ip); geoErr == nil && geoRes.CountryCode != "" {
-					ni.Country = geoRes.CountryCode
-				} else {
-					ni.Country = unknownCountry
-				}
-			}
-
-			nodesInfos1 = append(nodesInfos1, ni)
-		}
-
+		r := calcRewards(calcFlags)
+		w := cmdutil.Stdout()
 		if grr {
-			for _, ni := range grrInfos {
-				cmdutil.Printf("%s, %s, %s, %.6f, %.6f, %s, %s, %s, %s \n", ni.SkyAddr, ni.PK, ni.Reason, ni.Share, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces)
-			}
+			_ = writeIneligible(w, r) //nolint:errcheck
 			return
 		}
-
-		// v2 bandwidth: aggregate per-edge sent bytes for any edge that
-		// itself passed the pool 1 eligibility check (valid survey,
-		// allowed arch, valid skyaddr, non-hypervisor, met transport
-		// requirement, met uptime). Each edge is evaluated independently
-		// — counterparty eligibility is irrelevant under sender-pays,
-		// because credit only ever flows to the sender. If A is eligible
-		// and sends to B (ineligible), A still earns SentA; B was never
-		// going to receive a share regardless. The bandwidthMap was
-		// empty during the eligibility loop in this path, so initial
-		// ni.Bandwidth=0 for everyone — we re-assign from the filtered
-		// aggregation here.
-		if bwTransports != nil {
-			eligibleSet := make(map[string]struct{}, len(nodesInfos1))
-			for _, ni := range nodesInfos1 {
-				eligibleSet[ni.PK] = struct{}{}
-			}
-			var creditedEdges int
-			for _, tp := range bwTransports {
-				if _, ok := eligibleSet[tp.A]; ok {
-					bandwidthMap[tp.A] += tp.SentA
-					creditedEdges++
-				}
-				if _, ok := eligibleSet[tp.B]; ok {
-					bandwidthMap[tp.B] += tp.SentB
-					creditedEdges++
-				}
-			}
-			for i := range nodesInfos1 {
-				nodesInfos1[i].Bandwidth = bandwidthMap[nodesInfos1[i].PK]
-			}
-			log.Infof("v2 bandwidth filter: %d eligible sender-side credits applied across %d transports",
-				creditedEdges, len(bwTransports))
-		}
-
-		// Calculate daily reward amount
-		daysThisMonth := time.Date(wDate.Year(), wDate.Month()+1, 0, 0, 0, 0, 0, time.UTC).Day()
-		daysThisYear := int(time.Date(wDate.Year(), 12, 31, 23, 59, 59, 999999999, time.UTC).Sub(time.Date(wDate.Year(), 1, 1, 0, 0, 0, 0, time.UTC)).Hours()) / 24
-		monthReward := (float64(yearlyTotal) / float64(daysThisYear)) * float64(daysThisMonth)
-		dayReward := monthReward / float64(daysThisMonth)
-		wdate = strings.ReplaceAll(wdate, " ", "0")
-
-		// Build dedup counts from all eligible visors
-		allEligible := nodesInfos1
-		allIPs := make([]string, 0, len(allEligible))
-		allMACs := make([]string, 0, len(allEligible))
-		allUUIDs := make([]string, 0, len(allEligible))
-		for _, ni := range allEligible {
-			allIPs = append(allIPs, ni.IPAddr)
-			allMACs = append(allMACs, ni.MacAddr)
-			allUUIDs = append(allUUIDs, ni.UUID)
-		}
-		ipCounts := countFrequency(allIPs)
-		macCounts := countFrequency(allMACs)
-		uuidCounts := countFrequency(allUUIDs)
-
-		// ==================== TWO-POOL MODEL ====================
-		// Pool 1: Presence — equal shares with IP/MAC dedup + regional saturation
-		// Pool 2: Bandwidth — proportional to bandwidth bytes
-		//
-		// With --no-bw-pool, pool 2 is skipped and its budget folds
-		// into pool 1: presence is computed once against 2×dayReward.
-		// This is the recovery lever for days where bw-collect data
-		// is missing or corrupt — IP/MAC dedup and regional
-		// saturation still apply to the full 2-pool budget.
-
-		presenceBudget := dayReward
-		if noBWPool {
-			presenceBudget = 2 * dayReward
-		}
-
-		computePoolShares(nodesInfos1, ipCounts, macCounts)
-		totalPresenceShares := computePoolRewards(nodesInfos1, presenceBudget)
-		// Snapshot pool 1 reward per visor BEFORE pool 2 is added.
-		// Lets the per-pool CSVs + stats lines (and any future caller
-		// that needs the split) recover the breakdown without
-		// recomputation.
-		for i := range nodesInfos1 {
-			nodesInfos1[i].PresenceReward = nodesInfos1[i].Reward
-		}
-
-		// Bandwidth pool: add proportional bandwidth reward on top,
-		// dampened by --bw-sat-exp under per-IP saturation. A
-		// visor's effective weight is bytes × ip.total^(exp-1):
-		//
-		//   exp = 1.0 → bytes (strict bytes-proportional)
-		//   exp = 0.5 → bytes / sqrt(ip.total) (default; per-IP sqrt)
-		//   exp = 0.0 → bytes / ip.total (each IP contributes equal
-		//               total weight, divided proportionally by
-		//               byte share)
-		//
-		// The per-IP grouping closes the splitting bonus that the
-		// previous sum-of-sqrt-per-visor formula opened: under the
-		// old form an operator could 5× their pool 2 share by
-		// re-pointing one fat visor's traffic onto 37 PKs at the
-		// same IP, since sqrt is concave. With per-IP saturation
-		// the IP contributes ip.total^exp regardless of partition,
-		// so PK multiplication at one IP no longer pays. The same
-		// invariant holds across skycoin addresses — the per-IP
-		// total is address-agnostic.
-		ipBytes := bytesPerIP(nodesInfos1, minBWThreshold)
-		var totalBWShares float64
-		var bwPoolCount int
-		if !noBWPool {
-			for _, ni := range nodesInfos1 {
-				if ni.Bandwidth >= minBWThreshold {
-					totalBWShares += pool2Weight(ni.Bandwidth, ipBytes[ni.IPAddr], bwSaturationExponent)
-					bwPoolCount++
-				}
-			}
-			if totalBWShares > 0 {
-				for i := range nodesInfos1 {
-					if nodesInfos1[i].Bandwidth >= minBWThreshold {
-						weight := pool2Weight(nodesInfos1[i].Bandwidth, ipBytes[nodesInfos1[i].IPAddr], bwSaturationExponent)
-						bw := weight * dayReward / totalBWShares
-						nodesInfos1[i].BandwidthReward = bw
-						nodesInfos1[i].Reward += bw
-					}
-				}
-			}
-		}
-
-		// Sum the two pools for the stats block. By construction
-		// pool1Sum ≈ presenceBudget and pool2Sum ≈ dayReward (or 0
-		// when noBWPool), but reporting the actual sums catches any
-		// future drift in the share-aggregation math.
-		var pool1Sum, pool2Sum float64
-		for _, ni := range nodesInfos1 {
-			pool1Sum += ni.PresenceReward
-			pool2Sum += ni.BandwidthReward
-		}
-
-		// Output stats
 		if !h0 {
-			cmdutil.Printf("date: %s\n", wdate)
-			cmdutil.Printf("days this month: %d\n", daysThisMonth)
-			cmdutil.Printf("days in the year: %d\n", daysThisYear)
-			cmdutil.Printf("this month's rewards: %.6f\n", monthReward)
-			cmdutil.Printf("reward per pool: %.6f\n", dayReward)
-			if noBWPool {
-				reason := bwSkipReason
-				if reason == "" {
-					reason = "--no-bw-pool"
-				}
-				cmdutil.Printf("reward mode: presence only, Pool 2 repeats Pool 1 (%s)\n", reason)
-			} else {
-				cmdutil.Printf("reward mode: presence + bandwidth\n")
-			}
-			cmdutil.Printf("\n--- Presence Pool (equal shares, IP/MAC dedup) ---\n")
-			cmdutil.Printf("presence pool budget: %.6f\n", presenceBudget)
-			cmdutil.Printf("Pool 1 Total: %.6f\n", pool1Sum)
-			cmdutil.Printf("qualifying visors: %d\n", len(nodesInfos1))
-			cmdutil.Printf("total presence shares: %.6f\n", totalPresenceShares)
-			if totalPresenceShares > 0 {
-				cmdutil.Printf("Skycoin Per Share (Pool 1): %.6f\n", presenceBudget/totalPresenceShares)
-			}
-			if noBWPool {
-				cmdutil.Printf("\n--- Bandwidth Pool: DISABLED (budget folded into presence) ---\n")
-			} else {
-				cmdutil.Printf("\n--- Bandwidth Pool (sender-pays, per-IP weighted bytes^%.2f) ---\n", bwSaturationExponent)
-				cmdutil.Printf("bandwidth pool budget: %.6f\n", dayReward)
-				cmdutil.Printf("Pool 2 Total: %.6f\n", pool2Sum)
-				cmdutil.Printf("minimum bandwidth threshold: %d bytes\n", minBWThreshold)
-				cmdutil.Printf("qualifying visors: %d\n", bwPoolCount)
-				var totalBW uint64
-				for _, ni := range nodesInfos1 {
-					if ni.Bandwidth >= minBWThreshold {
-						totalBW += ni.Bandwidth
-					}
-				}
-				cmdutil.Printf("total network bandwidth: %s\n", formatBytes(totalBW))
-				cmdutil.Printf("contributing IPs: %d\n", len(ipBytes))
-				cmdutil.Printf("bandwidth saturation exponent: %.2f\n", bwSaturationExponent)
-				if totalBWShares > 0 {
-					// Pool 2 rate is SKY per unit of effective
-					// pool-2 weight, where weight = bytes ×
-					// ip.total^(exp-1). At exp=1.0 this collapses
-					// to the per-byte rate (and Skycoin Per GB is
-					// emitted explicitly below). At exp=0.5 each
-					// visor's weight is bytes/sqrt(ip.total) — a
-					// visor's reward is its share of its IP's
-					// sqrt-weighted slice of the pool. Print the
-					// rate unconditionally so operators can
-					// reproduce any visor's reward as Weight×rate.
-					cmdutil.Printf("Skycoin Per Pool 2 Weight Unit: %.12f\n", dayReward/totalBWShares)
-					if bwSaturationExponent == 1.0 {
-						cmdutil.Printf("Skycoin Per GB (Pool 2): %.6f\n", dayReward/totalBWShares*1024*1024*1024)
-					}
-				}
-			}
-			cmdutil.Printf("\nUnique mac addresses: %d\n", len(macCounts))
-			cmdutil.Printf("Unique IP Addresses: %d\n", len(ipCounts))
-			cmdutil.Printf("Unique UUIDs: %d\n", len(uuidCounts))
-			printSaturationStats(nodesInfos1, presenceBudget, totalPresenceShares)
+			_ = writeStats(w, r) //nolint:errcheck
 		}
-
 		if !h1 {
-			cmdutil.Println("Skycoin Address, Skywire Public Key, Presence Share, Bandwidth (bytes), Total Reward SKY, IP, Architecture, UUID, Interfaces, Country, XPub")
-			for _, ni := range nodesInfos1 {
-				resolved := resolveRewardAddress(ni.SkyAddr, wdate)
-				xpub := ""
-				if strings.HasPrefix(ni.SkyAddr, "xpub") {
-					xpub = ni.SkyAddr
-				}
-				cmdutil.Printf("%s, %s, %.6f, %d, %.6f, %s, %s, %s, %s, %s, %s \n", resolved, ni.PK, ni.Share, ni.Bandwidth, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces, ni.Country, xpub)
-			}
+			_ = writeShares(w, r) //nolint:errcheck
 		}
-
-		sortedAddrs := sumRewardsByAddress(nodesInfos1)
 		if !h0 {
-			total := 0.0
-			for _, a := range sortedAddrs {
-				total += a.Reward
-			}
-			cmdutil.Printf("\nTotal Reward Amount (both pools): %.6f\n", total)
+			_ = writeTotal(w, r) //nolint:errcheck
 		}
 		if !h2 {
-			cmdutil.Println("Skycoin Address, Reward Amount")
-			for _, a := range sortedAddrs {
-				cmdutil.Printf("%s, %.6f\n", resolveRewardAddress(a.SkyAddr, wdate), a.Reward)
-			}
+			_ = writeRewardTxn(w, r) //nolint:errcheck
 		}
-
-		// Per-pool detail outputs. These are side-channel files
-		// (not stdout) so they land regardless of which -h flag
-		// the caller passed — every one of the 4 invocations in
-		// the embedded reward.sh wrapper produces an up-to-date
-		// pair of pool1_*/pool2_* files, and re-runs are
-		// idempotent (same input → same files). Skipped when -k
-		// <pubkey> is set since that mode is per-visor inspection,
-		// not a full-network distribution. The combined
-		// _shares.csv and _rewardtxn0.csv are unchanged so the
-		// broadcast pipeline (which reads _rewardtxn0.csv) is
-		// unaffected.
-		if pubkey == "" {
-			if err := writePerPoolFiles(transportHistPath, wdate, nodesInfos1, bwSaturationExponent, minBWThreshold); err != nil {
+		// Per-visor inspection with -k is not a distribution, so it leaves the per-pool files alone.
+		if calcFlags.pubkey == "" {
+			if err := writePerPoolFiles(calcFlags.histDir, r.date, r.eligible, r.bwSatExp, r.minBW); err != nil {
 				log.Warnf("Failed to write per-pool detail files: %v", err)
 			}
 		}
-
 	},
+}
+
+// rewardResult is one day's calculation, enough to render every output.
+type rewardResult struct {
+	date                string
+	daysThisMonth       int
+	daysThisYear        int
+	monthReward         float64
+	dayReward           float64
+	presenceBudget      float64
+	noBWPool            bool
+	bwSkipReason        string // why pool 2 repeats pool 1, for stats.txt
+	eligible            []nodeinfo
+	ineligible          []nodeinfo
+	ipCounts            map[string]int
+	macCounts           map[string]int
+	uuidCounts          map[string]int
+	totalPresenceShares float64
+	totalBWShares       float64
+	bwPoolCount         int
+	ipBytes             map[string]uint64
+	pool1Sum            float64
+	pool2Sum            float64
+	minBW               uint64
+	satExp              float64
+	bwSatExp            float64
+}
+
+// calcRewards is the reward calculation for one day. It stops the process on
+// bad input, as the bare command always has.
+func calcRewards(o rewardOpts) *rewardResult {
+	var err error
+	saturationExponent = o.satExp
+	noBWPool, bwSkipReason := o.noBWPool, ""
+	requireTransports := o.requireTP
+	wdate := o.date
+
+	sConf, err := script.Echo(string(deployment.ServicesJSON)).JQ(`.prod  | del(.stun_servers)`).Bytes()
+	if err != nil {
+		log.Fatal("error parsing json with jq:\n", err)
+	}
+	dConf, err := script.Echo(string(deployment.ServicesJSON)).JQ(`.prod`).Bytes()
+	if err != nil {
+		log.Fatal("error parsing json with jq:\n", err)
+	}
+
+	wDate, err = time.Parse("2006-01-02", wdate)
+	if err != nil {
+		log.Fatal("Error parsing date:", err)
+	}
+	_, err = os.Stat(o.surveyPath)
+	if errors.Is(err, fs.ErrNotExist) {
+		log.Fatal("the path to the surveys does not exist\n", err, "\nfetch the surveys with:\n$ skywire-cli log")
+	}
+
+	// Initialize GeoIP database for regional saturation scaling
+	var geoDB *geoip2.Reader
+	if saturationExponent < 1.0 {
+		geoDB, err = geoip2.OpenBytes(geoip.EmbeddedDB())
+		if err != nil {
+			log.Warn("Failed to load embedded GeoIP database, disabling regional saturation: ", err)
+			saturationExponent = 1.0
+		} else {
+			defer func() { _ = geoDB.Close() }() //nolint:errcheck
+		}
+	}
+
+	_, err = os.Stat(o.utfile)
+	if errors.Is(err, fs.ErrNotExist) {
+		log.Fatal("uptime tracker data file not found\n", err, "\nfetch the uptime tracker data with:\n$ skywire-cli ut > ut.txt")
+	}
+
+	// Build the architecture allow-list. There is one reward model,
+	// presence plus bandwidth, so --a1 and --a2 together name the
+	// architectures that qualify; they never split visors into pools.
+	disallowedMap := make(map[string]struct{})
+	for _, arch := range o.noArch {
+		disallowedMap[arch] = struct{}{}
+	}
+	supportedArchitecturesMap := make(map[string]struct{})
+	for _, arch := range rewards.Architectures {
+		supportedArchitecturesMap[arch] = struct{}{}
+	}
+	allowArchMapAll := make(map[string]struct{})
+	for _, arch := range append(append([]string{}, o.arch1...), o.arch2...) {
+		if _, ok := supportedArchitecturesMap[arch]; !ok {
+			log.Fatal("Error: Architecture is not valid: ", arch)
+		}
+		if _, ok := disallowedMap[arch]; !ok {
+			allowArchMapAll[arch] = struct{}{}
+		}
+	}
+
+	// Without bandwidth data Pool 2 repeats Pool 1: the presence pool
+	// gets both budgets. That holds whether -b was left off or the day's
+	// bandwidth file turns out to be missing or empty below.
+	if !o.requireBW {
+		log.Warn("No -b: the bandwidth pool is skipped and Pool 2 repeats Pool 1")
+		noBWPool, bwSkipReason = true, "no -b"
+	}
+
+	// Load transport requirement data
+	transportMap := make(map[string]struct{})
+	if requireTransports {
+		transportFile := fmt.Sprintf("%s/%s_transports.txt", o.histDir, wdate)
+		if data, err := os.ReadFile(transportFile); err == nil { //nolint:gosec
+			for line := range strings.SplitSeq(string(data), "\n") {
+				line = strings.TrimSpace(line)
+				if line != "" {
+					transportMap[line] = struct{}{}
+				}
+			}
+			// An exists-but-zero-non-blank-lines file is almost always
+			// upstream data unavailability (transient TPD/CXO outage
+			// at tp-collect time), not a genuine network-wide "nobody
+			// qualifies" — a real zero would itself indicate a
+			// catastrophic network event worth halting on, not
+			// silently zeroing reward eligibility. Mirror the
+			// file-absent path: skip the requirement and warn loudly
+			// so an operator notices.
+			if len(transportMap) == 0 {
+				log.Warnf("Transport file %s exists but contains zero qualifying visors. "+
+					"Treating as upstream data unavailability (likely transient TPD/CXO outage at tp-collect time) "+
+					"and skipping the transport requirement for this calc. "+
+					"If unexpected, verify tp-collect succeeded and the TPD per-key-stats endpoint is healthy "+
+					"— a genuine zero would indicate a network-wide failure.", transportFile)
+				requireTransports = false
+			} else {
+				log.Infof("Loaded %d visors with sufficient transports from %s", len(transportMap), transportFile)
+			}
+		} else {
+			log.Warnf("Transport file not found: %s (transport requirement will be skipped)", transportFile)
+			requireTransports = false
+		}
+	}
+
+	// Load bandwidth data. Prefer v2 (per-transport sender-side
+	// totals) so we can credit each visor only for bytes it actually
+	// sent, and only on transports where the counterparty is also
+	// reward-eligible. Old v1 files (bare {pk:bytes} map) still
+	// parse — they're aggregated, full sent+recv, and credited to
+	// BOTH edges with no counterparty filter, matching the
+	// pre-v2 behavior so historical rerun stays bit-exact.
+	bandwidthMap := make(map[string]uint64)
+	var bwTransports []TransportBW // populated only for v2
+	if !noBWPool {
+		bwFile := fmt.Sprintf("%s/%s_bandwidth.json", o.histDir, wdate)
+		data, readErr := os.ReadFile(bwFile) //nolint:gosec
+		switch {
+		case readErr != nil:
+			log.Warnf("Bandwidth file not found: %s (Pool 2 repeats Pool 1)", bwFile)
+			noBWPool, bwSkipReason = true, "bandwidth file not found"
+		default:
+			var v2 BandwidthData
+			var v3 tpdstore.VisorBWDay
+			if err := json.Unmarshal(data, &v3); err == nil && v3.Version == tpdstore.VisorBWVersion {
+				// v3: TPD's settled per-visor day, same-network
+				// transports already left out. Each visor is paid for
+				// what it sent over every transport type but dmsg: a dmsg
+				// transport rides a dmsg server's bandwidth, not the
+				// visor's own.
+				for pk, byType := range v3.Visors {
+					for typ, n := range byType {
+						if typ != string(tptypes.DMSG) {
+							bandwidthMap[pk] += n
+						}
+					}
+				}
+				if len(bandwidthMap) == 0 {
+					log.Warnf("Bandwidth file %s parsed as v3 but contains zero visors: Pool 2 repeats Pool 1.", bwFile)
+					noBWPool, bwSkipReason = true, "bandwidth file has no visors"
+				} else {
+					log.Infof("Loaded v3 bandwidth data for %d visors from %s (%d of %d transports left out as same-network)",
+						len(bandwidthMap), bwFile, v3.SameNetworkExcluded, v3.Transports)
+				}
+			} else if err := json.Unmarshal(data, &v2); err == nil && v2.Version >= BandwidthDataVersion {
+				bwTransports = v2.Transports
+				if len(bwTransports) == 0 {
+					// Same defensive logic as transports.txt: empty but
+					// present means upstream data unavailability, not
+					// "no transport had bandwidth". Skip pool 2 + warn.
+					log.Warnf("Bandwidth file %s parsed as v2 but contains zero transports. "+
+						"Treating as upstream data unavailability: Pool 2 repeats Pool 1. "+
+						"Verify bw-collect succeeded and the TPD /metrics endpoint is healthy.", bwFile)
+					noBWPool, bwSkipReason = true, "bandwidth file has no transports"
+				} else {
+					log.Infof("Loaded v2 bandwidth data: %d transports from %s", len(bwTransports), bwFile)
+				}
+			} else if err := json.Unmarshal(data, &bandwidthMap); err == nil {
+				if len(bandwidthMap) == 0 {
+					log.Warnf("Bandwidth file %s parsed as v1 but contains zero visors. "+
+						"Treating as upstream data unavailability: Pool 2 repeats Pool 1.", bwFile)
+					noBWPool, bwSkipReason = true, "bandwidth file has no visors"
+				} else {
+					log.Infof("Loaded v1 bandwidth data for %d visors from %s (legacy aggregated format — no counterparty eligibility filter)", len(bandwidthMap), bwFile)
+				}
+			} else {
+				log.Warnf("Failed to parse bandwidth file %s: %v (Pool 2 repeats Pool 1)", bwFile, err)
+				noBWPool, bwSkipReason = true, "bandwidth file unreadable"
+			}
+		}
+	}
+
+	// Get public keys that met uptime requirement
+	res, belowUptime, err := uptimeKeys(o.utfile, strings.TrimRight(wdate, "\n"))
+	if err != nil {
+		log.Fatal("Failed to read uptime file " + o.utfile + ": " + err.Error())
+	}
+	if o.pubkey != "" {
+		keep := func(pk string) bool { return strings.Contains(pk, o.pubkey) }
+		res = slices.DeleteFunc(res, func(pk string) bool { return !keep(pk) })
+		belowUptime = slices.DeleteFunc(belowUptime, func(pk string) bool { return !keep(pk) })
+		if len(res) == 0 {
+			log.Fatal("Specified key " + o.pubkey + "\n did not achieve minimum uptime on " + wdate + " !")
+		}
+	} else if len(res) == 0 {
+		log.Fatal("No keys achieved minimum uptime on " + wdate + " !")
+	}
+
+	// Collect eligible nodes by parsing surveys
+	var nodesInfos1 []nodeinfo // every eligible visor: presence, and bandwidth when there is data
+	var grrInfos []nodeinfo    // ineligible nodes (for error reporting)
+	for _, pk := range belowUptime {
+		grrInfos = append(grrInfos, nodeinfo{PK: pk, Reason: uptimeBelowReason})
+	}
+
+	for _, pk := range res {
+		surveyPath := fmt.Sprintf("%s/%s/node-info.json", o.surveyPath, pk)
+		survey, parseErr := parseSurvey(surveyPath)
+		if parseErr != nil {
+			log.Debug(parseErr.Error())
+			// Met uptime but no usable survey — record it as ineligible with a
+			// reason instead of a silent drop, so a survey-collection gap surfaces
+			// in the ineligible report rather than an invisible dash.
+			grrInfos = append(grrInfos, nodeinfo{PK: pk, Reason: "survey not found"})
+			continue
+		}
+
+		svcconf := checkServiceConfig(surveyPath, sConf, dConf)
+		ifc, macs := extractInterfaces(survey)
+
+		ip := survey.IPAddr
+		sky := survey.SkyAddr
+		arch := survey.Arch
+		hv := survey.SysInfo.Node.Hypervisor
+		if hv == "" {
+			hv = "null"
+		}
+		uu := survey.UUID
+
+		addrErr := rewardAddressError(sky, wDate)
+
+		_, inTransports := transportMap[pk]
+		meetsTransportReq := !requireTransports || inTransports
+		visorBW := bandwidthMap[pk]
+
+		_, archAllowed := allowArchMapAll[arch]
+
+		ni := nodeinfo{
+			IPAddr:     ip,
+			SkyAddr:    sky,
+			PK:         pk,
+			Arch:       arch,
+			Interfaces: ifc,
+			MacAddr:    macs[0],
+			UUID:       uu,
+			SvcConf:    svcconf,
+			HV:         hv,
+			Bandwidth:  visorBW,
+		}
+
+		baseEligible := archAllowed && strings.Count(ip, ".") == 3 && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" && hv == "null" && addrErr == nil && meetsTransportReq
+
+		if !baseEligible {
+			ni.Reason = func() string {
+				switch {
+				case !archAllowed:
+					return arch
+				case strings.Count(ip, ".") != 3:
+					return ip
+				case uu == "":
+					return ip
+				case ifc == "":
+					return ifc
+				case len(macs) == 0 || macs[0] == "":
+					return macs[0]
+				case hv != "null":
+					return hv
+				case addrErr != nil:
+					return addressReason(addrErr)
+				case !meetsTransportReq:
+					return "No transports"
+				default:
+					return "Unknown reason"
+				}
+			}()
+			grrInfos = append(grrInfos, ni)
+			continue
+		}
+
+		// GeoIP country lookup
+		if geoDB != nil {
+			if geoRes, geoErr := geoip.Lookup(geoDB, ip); geoErr == nil && geoRes.CountryCode != "" {
+				ni.Country = geoRes.CountryCode
+			} else {
+				ni.Country = unknownCountry
+			}
+		}
+
+		nodesInfos1 = append(nodesInfos1, ni)
+	}
+
+	// v2 bandwidth: aggregate per-edge sent bytes for any edge that
+	// itself passed the pool 1 eligibility check (valid survey,
+	// allowed arch, valid skyaddr, non-hypervisor, met transport
+	// requirement, met uptime). Each edge is evaluated independently
+	// — counterparty eligibility is irrelevant under sender-pays,
+	// because credit only ever flows to the sender. If A is eligible
+	// and sends to B (ineligible), A still earns SentA; B was never
+	// going to receive a share regardless. The bandwidthMap was
+	// empty during the eligibility loop in this path, so initial
+	// ni.Bandwidth=0 for everyone — we re-assign from the filtered
+	// aggregation here.
+	if bwTransports != nil {
+		eligibleSet := make(map[string]struct{}, len(nodesInfos1))
+		for _, ni := range nodesInfos1 {
+			eligibleSet[ni.PK] = struct{}{}
+		}
+		var creditedEdges int
+		for _, tp := range bwTransports {
+			if _, ok := eligibleSet[tp.A]; ok {
+				bandwidthMap[tp.A] += tp.SentA
+				creditedEdges++
+			}
+			if _, ok := eligibleSet[tp.B]; ok {
+				bandwidthMap[tp.B] += tp.SentB
+				creditedEdges++
+			}
+		}
+		for i := range nodesInfos1 {
+			nodesInfos1[i].Bandwidth = bandwidthMap[nodesInfos1[i].PK]
+		}
+		log.Infof("v2 bandwidth filter: %d eligible sender-side credits applied across %d transports",
+			creditedEdges, len(bwTransports))
+	}
+
+	// Calculate daily reward amount
+	daysThisMonth := time.Date(wDate.Year(), wDate.Month()+1, 0, 0, 0, 0, 0, time.UTC).Day()
+	daysThisYear := int(time.Date(wDate.Year(), 12, 31, 23, 59, 59, 999999999, time.UTC).Sub(time.Date(wDate.Year(), 1, 1, 0, 0, 0, 0, time.UTC)).Hours()) / 24
+	monthReward := (float64(o.yearly) / float64(daysThisYear)) * float64(daysThisMonth)
+	dayReward := monthReward / float64(daysThisMonth)
+	wdate = strings.ReplaceAll(wdate, " ", "0")
+
+	// Build dedup counts from all eligible visors
+	allEligible := nodesInfos1
+	allIPs := make([]string, 0, len(allEligible))
+	allMACs := make([]string, 0, len(allEligible))
+	allUUIDs := make([]string, 0, len(allEligible))
+	for _, ni := range allEligible {
+		allIPs = append(allIPs, ni.IPAddr)
+		allMACs = append(allMACs, ni.MacAddr)
+		allUUIDs = append(allUUIDs, ni.UUID)
+	}
+	ipCounts := countFrequency(allIPs)
+	macCounts := countFrequency(allMACs)
+	uuidCounts := countFrequency(allUUIDs)
+
+	// ==================== TWO-POOL MODEL ====================
+	// Pool 1: Presence — equal shares with IP/MAC dedup + regional saturation
+	// Pool 2: Bandwidth — proportional to bandwidth bytes
+	//
+	// With --no-bw-pool, pool 2 is skipped and its budget folds
+	// into pool 1: presence is computed once against 2×dayReward.
+	// This is the recovery lever for days where bw-collect data
+	// is missing or corrupt — IP/MAC dedup and regional
+	// saturation still apply to the full 2-pool budget.
+
+	presenceBudget := dayReward
+	if noBWPool {
+		presenceBudget = 2 * dayReward
+	}
+
+	computePoolShares(nodesInfos1, ipCounts, macCounts)
+	totalPresenceShares := computePoolRewards(nodesInfos1, presenceBudget)
+	// Snapshot pool 1 reward per visor BEFORE pool 2 is added, so the
+	// per-pool CSVs and stats lines can recover the split.
+	for i := range nodesInfos1 {
+		nodesInfos1[i].PresenceReward = nodesInfos1[i].Reward
+	}
+
+	// Bandwidth pool: add proportional bandwidth reward on top,
+	// dampened by --bw-sat-exp under per-IP saturation. A
+	// visor's effective weight is bytes × ip.total^(exp-1):
+	//
+	//   exp = 1.0 → bytes (strict bytes-proportional)
+	//   exp = 0.5 → bytes / sqrt(ip.total) (default; per-IP sqrt)
+	//   exp = 0.0 → bytes / ip.total (each IP contributes equal
+	//               total weight, divided proportionally by
+	//               byte share)
+	//
+	// The per-IP grouping closes the splitting bonus that the
+	// previous sum-of-sqrt-per-visor formula opened: under the
+	// old form an operator could 5× their pool 2 share by
+	// re-pointing one fat visor's traffic onto 37 PKs at the
+	// same IP, since sqrt is concave. With per-IP saturation
+	// the IP contributes ip.total^exp regardless of partition,
+	// so PK multiplication at one IP no longer pays. The same
+	// invariant holds across skycoin addresses — the per-IP
+	// total is address-agnostic.
+	ipBytes := bytesPerIP(nodesInfos1, o.minBW)
+	var totalBWShares float64
+	var bwPoolCount int
+	if !noBWPool {
+		for _, ni := range nodesInfos1 {
+			if ni.Bandwidth >= o.minBW {
+				totalBWShares += pool2Weight(ni.Bandwidth, ipBytes[ni.IPAddr], o.bwSatExp)
+				bwPoolCount++
+			}
+		}
+		if totalBWShares > 0 {
+			for i := range nodesInfos1 {
+				if nodesInfos1[i].Bandwidth >= o.minBW {
+					weight := pool2Weight(nodesInfos1[i].Bandwidth, ipBytes[nodesInfos1[i].IPAddr], o.bwSatExp)
+					bw := weight * dayReward / totalBWShares
+					nodesInfos1[i].BandwidthReward = bw
+					nodesInfos1[i].Reward += bw
+				}
+			}
+		}
+	}
+
+	// Sum the two pools for the stats block. By construction
+	// pool1Sum ≈ presenceBudget and pool2Sum ≈ dayReward (or 0
+	// when noBWPool), but reporting the actual sums catches any
+	// future drift in the share-aggregation math.
+	var pool1Sum, pool2Sum float64
+	for _, ni := range nodesInfos1 {
+		pool1Sum += ni.PresenceReward
+		pool2Sum += ni.BandwidthReward
+	}
+
+	return &rewardResult{
+		date:                wdate,
+		daysThisMonth:       daysThisMonth,
+		daysThisYear:        daysThisYear,
+		monthReward:         monthReward,
+		dayReward:           dayReward,
+		presenceBudget:      presenceBudget,
+		noBWPool:            noBWPool,
+		bwSkipReason:        bwSkipReason,
+		eligible:            nodesInfos1,
+		ineligible:          grrInfos,
+		ipCounts:            ipCounts,
+		macCounts:           macCounts,
+		uuidCounts:          uuidCounts,
+		totalPresenceShares: totalPresenceShares,
+		totalBWShares:       totalBWShares,
+		bwPoolCount:         bwPoolCount,
+		ipBytes:             ipBytes,
+		pool1Sum:            pool1Sum,
+		pool2Sum:            pool2Sum,
+		minBW:               o.minBW,
+		satExp:              saturationExponent,
+		bwSatExp:            o.bwSatExp,
+	}
+}
+
+// writeIneligible is the -e output, hist/<date>_ineligible.csv.
+func writeIneligible(w io.Writer, r *rewardResult) error {
+	for _, ni := range r.ineligible {
+		if _, err := fmt.Fprintf(w, "%s, %s, %s, %.6f, %.6f, %s, %s, %s, %s \n", ni.SkyAddr, ni.PK, ni.Reason, ni.Share, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// writeStats is the statistics block the bare command prints unless -0.
+func writeStats(w io.Writer, r *rewardResult) error {
+	p := func(format string, a ...any) { fmt.Fprintf(w, format, a...) } //nolint:errcheck
+	p("date: %s\n", r.date)
+	p("days this month: %d\n", r.daysThisMonth)
+	p("days in the year: %d\n", r.daysThisYear)
+	p("this month's rewards: %.6f\n", r.monthReward)
+	p("reward per pool: %.6f\n", r.dayReward)
+	if r.noBWPool {
+		reason := r.bwSkipReason
+		if reason == "" {
+			reason = "--no-bw-pool"
+		}
+		p("reward mode: presence only, Pool 2 repeats Pool 1 (%s)\n", reason)
+	} else {
+		p("reward mode: presence + bandwidth\n")
+	}
+	p("\n--- Presence Pool (equal shares, IP/MAC dedup) ---\n")
+	p("presence pool budget: %.6f\n", r.presenceBudget)
+	p("Pool 1 Total: %.6f\n", r.pool1Sum)
+	p("qualifying visors: %d\n", len(r.eligible))
+	p("total presence shares: %.6f\n", r.totalPresenceShares)
+	if r.totalPresenceShares > 0 {
+		p("Skycoin Per Share (Pool 1): %.6f\n", r.presenceBudget/r.totalPresenceShares)
+	}
+	if r.noBWPool {
+		p("\n--- Bandwidth Pool: DISABLED (budget folded into presence) ---\n")
+	} else {
+		p("\n--- Bandwidth Pool (sender-pays, per-IP weighted bytes^%.2f) ---\n", r.bwSatExp)
+		p("bandwidth pool budget: %.6f\n", r.dayReward)
+		p("Pool 2 Total: %.6f\n", r.pool2Sum)
+		p("minimum bandwidth threshold: %d bytes\n", r.minBW)
+		p("qualifying visors: %d\n", r.bwPoolCount)
+		var totalBW uint64
+		for _, ni := range r.eligible {
+			if ni.Bandwidth >= r.minBW {
+				totalBW += ni.Bandwidth
+			}
+		}
+		p("total network bandwidth: %s\n", formatBytes(totalBW))
+		p("contributing IPs: %d\n", len(r.ipBytes))
+		p("bandwidth saturation exponent: %.2f\n", r.bwSatExp)
+		if r.totalBWShares > 0 {
+			// SKY per unit of pool 2 weight (bytes × ip.total^(exp-1)), so any
+			// visor's reward can be reproduced as Weight × rate.
+			p("Skycoin Per Pool 2 Weight Unit: %.12f\n", r.dayReward/r.totalBWShares)
+			if r.bwSatExp == 1.0 {
+				p("Skycoin Per GB (Pool 2): %.6f\n", r.dayReward/r.totalBWShares*1024*1024*1024)
+			}
+		}
+	}
+	p("\nUnique mac addresses: %d\n", len(r.macCounts))
+	p("Unique IP Addresses: %d\n", len(r.ipCounts))
+	p("Unique UUIDs: %d\n", len(r.uuidCounts))
+	printSaturationStats(w, r.satExp, r.eligible, r.presenceBudget, r.totalPresenceShares)
+	return nil
+}
+
+// writeShares is the per-visor CSV the bare command prints unless -1.
+func writeShares(w io.Writer, r *rewardResult) error {
+	if _, err := fmt.Fprintln(w, "Skycoin Address, Skywire Public Key, Presence Share, Bandwidth (bytes), Total Reward SKY, IP, Architecture, UUID, Interfaces, Country, XPub"); err != nil {
+		return err
+	}
+	for _, ni := range r.eligible {
+		resolved := resolveRewardAddress(ni.SkyAddr, r.date)
+		xpub := ""
+		if strings.HasPrefix(ni.SkyAddr, "xpub") {
+			xpub = ni.SkyAddr
+		}
+		if _, err := fmt.Fprintf(w, "%s, %s, %.6f, %d, %.6f, %s, %s, %s, %s, %s, %s \n", resolved, ni.PK, ni.Share, ni.Bandwidth, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces, ni.Country, xpub); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// writeTotal is the total line that follows the statistics unless -0.
+func writeTotal(w io.Writer, r *rewardResult) error {
+	total := 0.0
+	for _, a := range sumRewardsByAddress(r.eligible) {
+		total += a.Reward
+	}
+	_, err := fmt.Fprintf(w, "\nTotal Reward Amount (both pools): %.6f\n", total)
+	return err
+}
+
+// writeRewardTxn is the per-address payout CSV the bare command prints unless -2.
+func writeRewardTxn(w io.Writer, r *rewardResult) error {
+	if _, err := fmt.Fprintln(w, "Skycoin Address, Reward Amount"); err != nil {
+		return err
+	}
+	for _, a := range sumRewardsByAddress(r.eligible) {
+		if _, err := fmt.Fprintf(w, "%s, %.6f\n", resolveRewardAddress(a.SkyAddr, r.date), a.Reward); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // resolveRewardAddress resolves an xpub key to an external chain address that has
@@ -1433,8 +1403,8 @@ func init() {
 	)
 	testCmd.Flags().SortFlags = false
 	testCmd.Flags().StringVarP(&logLvl, "loglvl", "s", "info", "[ debug | warn | error | fatal | panic | trace ]")
-	testCmd.Flags().StringVarP(&pubkey, "pk", "k", pubkey, "verify services in survey for pubkey")
-	testCmd.Flags().StringVarP(&hwSurveyPath, "lpath", "p", "log_collecting", "path to the surveys")
+	testCmd.Flags().StringVarP(&svcPK, "pk", "k", "", "verify services in survey for pubkey")
+	testCmd.Flags().StringVarP(&svcSurveyPath, "lpath", "p", "log_collecting", "path to the surveys")
 }
 
 var testCmd = &cobra.Command{
@@ -1460,16 +1430,16 @@ comparison. Detects both http and dmsghttp service configs.`,
 		}
 
 		var pk1 cipher.PubKey
-		err = pk1.Set(pubkey)
+		err = pk1.Set(svcPK)
 		if err != nil {
 			log.Fatal("invalid public key\n", err)
 		}
 
-		mustExist(hwSurveyPath)
-		mustExist(fmt.Sprintf("%s/%s/node-info.json", hwSurveyPath, pubkey))
+		mustExist(svcSurveyPath)
+		mustExist(fmt.Sprintf("%s/%s/node-info.json", svcSurveyPath, svcPK))
 
 		//stun_servers does not currently match between conf.skywire.skycoin.com & https://github.com/skycoin/skywire/blob/develop/services-config.json ; omit checking them until next version
-		nodeInfoSvc, err = script.File(fmt.Sprintf("%s/%s/node-info.json", hwSurveyPath, pubkey)).JQ(`.services | del(.stun_servers)`).Bytes()
+		nodeInfoSvc, err = script.File(fmt.Sprintf("%s/%s/node-info.json", svcSurveyPath, svcPK)).JQ(`.services | del(.stun_servers)`).Bytes()
 		if err != nil {
 			log.Fatal("error parsing json with jq:\n", err)
 		}
@@ -1483,7 +1453,7 @@ comparison. Detects both http and dmsghttp service configs.`,
 			log.Fatal("error parsing json with jq:\n", err)
 		}
 
-		confType, err := script.File(fmt.Sprintf("%s/%s/node-info.json", hwSurveyPath, pubkey)).JQ(`.services.dmsg_discovery`).Replace("\"", "").String()
+		confType, err := script.File(fmt.Sprintf("%s/%s/node-info.json", svcSurveyPath, svcPK)).JQ(`.services.dmsg_discovery`).Replace("\"", "").String()
 		if err != nil {
 			log.Fatal("could not determine config type ; error parsing json with jq:\n", err)
 		}
