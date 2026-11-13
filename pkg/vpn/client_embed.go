@@ -20,6 +20,7 @@ import "net"
 func NewClientEmbedded(cfg ClientConfig) *Client {
 	c := &Client{
 		cfg:    cfg,
+		log:    cfg.Log,
 		closeC: make(chan struct{}),
 	}
 	c.initDirectRoutes()

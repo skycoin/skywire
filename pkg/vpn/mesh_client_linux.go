@@ -45,7 +45,7 @@ type meshClientGateway struct {
 var meshResolverUpstreams = []string{"8.8.8.8", "8.8.4.4"}
 
 func (c *Client) startMeshGateway() (*meshClientGateway, error) {
-	return startMeshClientGateway(context.Background(), c.cfg, logging.StandardLogger())
+	return startMeshClientGateway(context.Background(), c.cfg, c.logger())
 }
 
 // engine is nil here: this gateway works beside the tunnel, through iptables.
