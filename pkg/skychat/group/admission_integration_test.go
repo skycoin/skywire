@@ -368,10 +368,15 @@ func TestAdmission_NonAdminAnswersUnavailable(t *testing.T) {
 	// ErrJoinNoAdmin, so go one level down to see the actual answer. The
 	// requester PK has to be A's own: the responder takes the identity
 	// from the authenticated stream and refuses a mismatched claim.
-	ctx, cancel := context.WithTimeout(t.Context(), joinResponseReadTimeout+5*time.Second)
-	defer cancel()
-	resp, err := SendJoinRequest(ctx, a.dmsgC, rec.ID, b.pk, rec.Port, a.pk, "")
-	require.NoError(t, err, "a member session must answer join requests at all")
+	// B's member session starts listening after Join returns, so the first
+	// dial can find no listener yet.
+	var resp JoinResponseMsg
+	require.Eventually(t, func() bool {
+		ctx, cancel := context.WithTimeout(t.Context(), joinResponseReadTimeout+5*time.Second)
+		defer cancel()
+		resp, err = SendJoinRequest(ctx, a.dmsgC, rec.ID, b.pk, rec.Port, a.pk, "")
+		return err == nil
+	}, 60*time.Second, 250*time.Millisecond, "a member session must answer join requests at all")
 	require.Equal(t, JoinStatusUnavailable, resp.Status,
 		"a non-admin must not answer a join request with a terminal refusal")
 	require.False(t, resp.Status.IsTerminal())
