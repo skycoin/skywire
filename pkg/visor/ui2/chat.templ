@@ -216,7 +216,7 @@ templ ChatPassword(c Chat) {
 		@ErrorBox(c.PwErr)
 		<form class="form narrow-form" hx-post={ c.url("/password") } hx-target="#chat-pw" hx-swap="outerHTML">
 			if c.PwSet {
-				<label>{ T(ctx, "skychat.password.old") }<input type="password" name="old" autocomplete="current-password"/></label>
+				<label>{ T(ctx, "skychat.password.old") }<input type="password" name="old" autocomplete="new-password"/></label>
 			}
 			<label>{ T(ctx, "skychat.password.new") }<input type="password" name="new" autocomplete="new-password"/></label>
 			<label>{ T(ctx, "skychat.password.confirm") }<input type="password" name="confirm" autocomplete="new-password"/></label>
