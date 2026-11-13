@@ -106,7 +106,7 @@ func (c *resolvedClient) dialVisor(ctx context.Context, rPK cipher.PubKey, dial 
 		}
 	}
 
-	if visorData.IsLocal || selfConnection || samePublicIP {
+	if visorData.Local || selfConnection || samePublicIP {
 		if selfConnection {
 			c.log.Debug("Detected self-connection, trying local addresses to avoid NAT issues")
 		}

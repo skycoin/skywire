@@ -183,7 +183,7 @@ func dmsgServerSessions(srv *dmsg.Server) (total, peers int, clients []visorapi.
 		if ses == nil {
 			continue
 		}
-		peer := srv.IsPeerPK(pk)
+		peer := srv.PeerServer(pk)
 		if peer {
 			peers++
 		}

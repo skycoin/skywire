@@ -91,7 +91,7 @@ func (v *Visor) browseAliases() map[string]cipher.PubKey {
 func (v *Visor) browseHomePage(host string) *visorapi.SkynetHTTPResponse {
 	host = browseStripHost(host)
 	for _, suffix := range []string{".dmsg", ".skynet"} {
-		if dmsgweb.IsHomeHost(host, suffix) {
+		if dmsgweb.HomeHost(host, suffix) {
 			body := v.homePage(suffix)
 			return &visorapi.SkynetHTTPResponse{
 				StatusCode: 200,

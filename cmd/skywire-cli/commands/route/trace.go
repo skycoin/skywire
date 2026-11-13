@@ -147,7 +147,7 @@ Output:
 		for i, pk := range intermediates {
 			results[i].Index = i + 1
 			results[i].PK = pk
-			results[i].IsDestination = (pk == dstPK)
+			results[i].Destination = (pk == dstPK)
 			rtt, perr := bestOfDmsgPings(rpcClient, pk, tracePings)
 			if perr != nil {
 				results[i].Error = perr.Error()
@@ -171,7 +171,7 @@ Output:
 				rtt = r.RTT.Round(time.Microsecond).String()
 			}
 			notes := ""
-			if r.IsDestination {
+			if r.Destination {
 				notes = "destination"
 			}
 			if r.Error != "" {

@@ -988,13 +988,13 @@ func (a *visorAPIAdapter) Overview() (*tpviz.VisorOverview, error) {
 	// Convert transports
 	for _, tp := range ov.Transports {
 		result.Transports = append(result.Transports, &tpviz.TransportSummary{
-			ID:      tp.ID,
-			Local:   tp.Local,
-			Remote:  tp.Remote,
-			Type:    tp.Type,
-			Log:     tp.Log,
-			IsSetup: tp.IsSetup,
-			Label:   tp.Label,
+			ID:     tp.ID,
+			Local:  tp.Local,
+			Remote: tp.Remote,
+			Type:   tp.Type,
+			Log:    tp.Log,
+			Setup:  tp.IsSetup,
+			Label:  tp.Label,
 		})
 	}
 
@@ -1041,12 +1041,12 @@ func (a *visorAPIAdapter) AddTransport(ctx context.Context, remotePK, tpType str
 	}
 
 	return &tpviz.TransportSummary{
-		ID:      tp.Entry.ID,
-		Local:   a.v.conf.PK,
-		Remote:  tp.Remote(),
-		Type:    tp.Type(),
-		IsSetup: true,
-		Label:   tp.Entry.Label,
+		ID:     tp.Entry.ID,
+		Local:  a.v.conf.PK,
+		Remote: tp.Remote(),
+		Type:   tp.Type(),
+		Setup:  true,
+		Label:  tp.Entry.Label,
 	}, nil
 }
 
@@ -1431,7 +1431,7 @@ func wireDirectDialPolicyHook(v *Visor, mux *transport.VStreamMux) {
 		info := router.DialInfo{
 			AppName:       appName,
 			PeerPK:        remotePK,
-			IsDirectDial:  true,
+			DirectDial:    true,
 			TransportKind: transportKind,
 		}
 		adj, err := hook.BeforeDial(context.Background(), info)

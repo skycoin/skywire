@@ -109,7 +109,7 @@ func (s *memoryStore) GetTransportsByEdgeNoLatency(_ context.Context, pk cipher.
 	res := make([]*transport.Entry, 0)
 
 	for _, entry := range s.transports {
-		if entry != nil && entry.HasEdge(pk) {
+		if entry != nil && entry.ContainsEdge(pk) {
 			res = append(res, entry)
 		}
 	}

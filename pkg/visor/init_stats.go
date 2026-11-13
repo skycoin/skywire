@@ -431,7 +431,7 @@ func liveTransportIDs(v *Visor) map[uuid.UUID]struct{} {
 		return out
 	}
 	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
-		if !tp.IsClosed() {
+		if !tp.Closed() {
 			out[tp.Entry.ID] = struct{}{}
 		}
 		return true
@@ -650,7 +650,7 @@ func transportsProbe(v *Visor) func() []stats.TransportProbe {
 		self := v.selfPublicIP()
 		localIPs, _ := netutil.LocalNetworkInterfaceIPs() //nolint:errcheck // best-effort; nil is handled
 		v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
-			if tp.IsClosed() {
+			if tp.Closed() {
 				return true
 			}
 			bw := tp.GetBandwidth()
@@ -714,7 +714,7 @@ func countLiveTransports(v *Visor) int {
 	}
 	n := 0
 	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
-		if !tp.IsClosed() {
+		if !tp.Closed() {
 			n++
 		}
 		return true

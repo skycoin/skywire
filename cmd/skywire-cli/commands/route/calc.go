@@ -385,7 +385,7 @@ func routeCapacityTPS(src, dst cipher.PubKey, entries []*transport.Entry) (route
 		if e == nil {
 			continue
 		}
-		if e.HasEdge(src) {
+		if e.ContainsEdge(src) {
 			if r := e.RemoteEdge(src); r == dst {
 				directCount++
 				if directBest == nil || tptypes.TypePreference(e.Type) < tptypes.TypePreference(*directBest) {
@@ -396,7 +396,7 @@ func routeCapacityTPS(src, dst cipher.PubKey, entries []*transport.Entry) (route
 				keepBest(srcPeers, r, e.Type)
 			}
 		}
-		if e.HasEdge(dst) {
+		if e.ContainsEdge(dst) {
 			if r := e.RemoteEdge(dst); r != src {
 				keepBest(dstPeers, r, e.Type)
 			}

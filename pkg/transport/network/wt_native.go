@@ -69,7 +69,7 @@ func (c *wtClient) dialResolvedWT(ctx context.Context, rPK cipher.PubKey) (net.C
 	if lip := ar.LocalPublicIP(); lip != "" && remotePublicIP != "" {
 		samePublicIP = lip == remotePublicIP
 	}
-	if vd.IsLocal || self || samePublicIP {
+	if vd.Local || self || samePublicIP {
 		for _, host := range vd.Addresses {
 			if !self && (host == "127.0.0.1" || host == "::1") {
 				continue

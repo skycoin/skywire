@@ -236,7 +236,7 @@ func (d *routerSkynetDialer) directNonDmsgPeers(exclude cipher.PubKey) []cipher.
 	var peers []cipher.PubKey
 	d.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
 		r := tp.Remote()
-		if tp.IsClosed() || tp.Type() == "dmsg" || r == d.localPK || r == exclude {
+		if tp.Closed() || tp.Type() == "dmsg" || r == d.localPK || r == exclude {
 			return true
 		}
 		if _, dup := seen[r]; dup {

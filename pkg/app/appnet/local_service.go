@@ -109,8 +109,8 @@ func LocalServiceFor(addr Addr) (LocalService, bool) {
 	return svc.svc, ok
 }
 
-// HasLocalService reports whether addr names a registered local service.
-func HasLocalService(addr Addr) bool {
+// LocalServiceRegistered reports whether addr names a registered local service.
+func LocalServiceRegistered(addr Addr) bool {
 	_, ok := LocalServiceFor(addr)
 	return ok
 }

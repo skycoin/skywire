@@ -142,9 +142,9 @@ func (k *Knob) Strings() []string {
 	return nil
 }
 
-// IsSet reports whether the knob has been explicitly set — the difference
+// ExplicitlySet reports whether the knob has been explicitly set — the difference
 // between "the compiled default" and "set to a value that equals the default".
-func (k *Knob) IsSet() bool { return k.set.Load() }
+func (k *Knob) ExplicitlySet() bool { return k.set.Load() }
 
 var (
 	mu      sync.RWMutex

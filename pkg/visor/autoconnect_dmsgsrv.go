@@ -135,7 +135,7 @@ func (a *autoconnector) dialDmsgServers(ctx context.Context, v *Visor) {
 	}
 	var local []tptypes.Type
 	for _, t := range dmsgServerTransportTypes {
-		if a.tm.IsKnownNetwork(t) && a.tm.CanCreateTransport(t) {
+		if a.tm.KnownNetwork(t) && a.tm.CanCreateTransport(t) {
 			local = append(local, t)
 		}
 	}

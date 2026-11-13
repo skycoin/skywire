@@ -265,14 +265,14 @@ const MarkerHeader = "X-Skywire-Interstitial"
 // markerHeaderLine is MarkerHeader as a ready-to-write response header line.
 const markerHeaderLine = MarkerHeader + ": 1\r\n"
 
-// IsSyntheticResponse reports whether raw HTTP response bytes were synthesized
+// SyntheticResponse reports whether raw HTTP response bytes were synthesized
 // by this package rather than relayed from a real exit. It checks MarkerHeader
 // first and falls back to sniffing the two page bodies for their distinctive
 // markup, so a NEWER verifier still recognizes a page served by an OLDER
 // skysocks-client build that predates the header. raw may be a prefix of the
 // response (callers commonly read a bounded first chunk), so the sniff runs
 // over whatever was supplied.
-func IsSyntheticResponse(raw []byte) bool {
+func SyntheticResponse(raw []byte) bool {
 	head := raw
 	if before, _, ok := bytes.Cut(raw, []byte("\r\n\r\n")); ok {
 		head = before

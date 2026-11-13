@@ -111,7 +111,7 @@ func (v *Visor) serviceHost(ctx context.Context, service cipher.PubKey) (cipher.
 		sysFeed bool
 	)
 	for _, e := range entries {
-		if e != nil && tptypes.IsLocal(e.Type) {
+		if e != nil && tptypes.Local(e.Type) {
 			host, sysFeed = e.RemoteEdge(service), e.Label == transport.LabelSysFeed
 			break
 		}

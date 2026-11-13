@@ -78,7 +78,7 @@ func dialViaResolver(ctx context.Context, appCl *app.Client, port routing.Port, 
 	}
 	var host strings.Builder
 	for _, rl := range route {
-		if rl.IsTpID {
+		if rl.ByTpID {
 			host.WriteString(rl.TpID.String())
 		} else {
 			host.WriteString(rl.PK.DNSLabel())

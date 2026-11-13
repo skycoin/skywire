@@ -438,7 +438,7 @@ func TestPageMechanismAndSteps(t *testing.T) {
 
 // TestSyntheticMarker pins the header that lets a caller tell a page minted in
 // this process from a reply actually relayed by an exit. Both synthetic
-// responses must carry it, and IsSyntheticResponse must accept it as well as
+// responses must carry it, and SyntheticResponse must accept it as well as
 // the pre-header body markers an older client build would emit.
 func TestSyntheticMarker(t *testing.T) {
 	t.Run("interstitial response carries the marker", func(t *testing.T) {
@@ -450,8 +450,8 @@ func TestSyntheticMarker(t *testing.T) {
 		if !strings.Contains(got, MarkerHeader+": 1\r\n") {
 			t.Errorf("interstitial response is missing %s", MarkerHeader)
 		}
-		if !IsSyntheticResponse([]byte(got)) {
-			t.Error("IsSyntheticResponse rejected the interstitial response")
+		if !SyntheticResponse([]byte(got)) {
+			t.Error("SyntheticResponse rejected the interstitial response")
 		}
 		if err := <-done; err != nil {
 			t.Errorf("ServeSOCKS5: %v", err)
@@ -467,8 +467,8 @@ func TestSyntheticMarker(t *testing.T) {
 		if !strings.Contains(got, MarkerHeader+": 1\r\n") {
 			t.Errorf("reload response is missing %s", MarkerHeader)
 		}
-		if !IsSyntheticResponse([]byte(got)) {
-			t.Error("IsSyntheticResponse rejected the reload response")
+		if !SyntheticResponse([]byte(got)) {
+			t.Error("SyntheticResponse rejected the reload response")
 		}
 		if err := <-done; err != nil {
 			t.Errorf("ServeSOCKS5: %v", err)
@@ -481,8 +481,8 @@ func TestSyntheticMarker(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !IsSyntheticResponse(raw) {
-			t.Error("IsSyntheticResponse rejected the Conn response")
+		if !SyntheticResponse(raw) {
+			t.Error("SyntheticResponse rejected the Conn response")
 		}
 	})
 
@@ -507,8 +507,8 @@ func TestSyntheticMarker(t *testing.T) {
 				"HTTP/1.1 200 OK\r\n\r\nX-Skywire-Interstitial: 1 (quoted in an article)", false,
 			},
 		} {
-			if got := IsSyntheticResponse([]byte(tc.raw)); got != tc.want {
-				t.Errorf("%s: IsSyntheticResponse = %v, want %v", name, got, tc.want)
+			if got := SyntheticResponse([]byte(tc.raw)); got != tc.want {
+				t.Errorf("%s: SyntheticResponse = %v, want %v", name, got, tc.want)
 			}
 		}
 	})

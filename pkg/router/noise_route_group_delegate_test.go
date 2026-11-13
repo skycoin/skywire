@@ -30,7 +30,7 @@ func TestNoiseRouteGroupDelegators(t *testing.T) {
 	require.Equal(t, rg.desc.Src(), nrg.RemoteAddr())
 
 	// A freshly-built group is alive and not closed.
-	require.True(t, nrg.IsAlive())
+	require.True(t, nrg.Alive())
 	require.False(t, nrg.isClosed())
 
 	// Stat reads are zero on a group that has not moved data.

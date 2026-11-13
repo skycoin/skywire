@@ -56,17 +56,17 @@ type RoutingContext struct {
 	// the dial came from a launched app rather than a CLI command.
 	CLIOverrides map[string]string
 
-	// IsDirectDial signals the dial is going through the
+	// DirectDial signals the dial is going through the
 	// sky_forward_conn / VStreamMux short-circuit (an existing
 	// direct transport) rather than the overlay route-finder.
 	// Mux / distribution are no-ops on direct dials; the most
 	// useful return from the script in this case is
 	// fallback="drop" to refuse, or a bare RouteSpec() to allow.
 	// Surfaced as `ctx.is_direct_dial` in Starlark.
-	IsDirectDial bool
+	DirectDial bool
 
 	// TransportKind is the network type ("stcpr"/"sudph"/"stcp"/
-	// "dmsg") of the direct transport when IsDirectDial is true.
+	// "dmsg") of the direct transport when DirectDial is true.
 	// Surfaced as `ctx.transport_kind`.
 	TransportKind string
 

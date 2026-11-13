@@ -39,12 +39,12 @@ func WithRecursionGuard(ctx context.Context) context.Context {
 	return context.WithValue(ctx, recursionGuardKey{}, true)
 }
 
-// IsInsideTransport reports whether ctx was tagged by
+// InsideTransport reports whether ctx was tagged by
 // WithRecursionGuard somewhere up the stack. dmsgfirst's
 // fallbackClient checks this in each of its APIClient methods;
 // when true, it short-circuits to the plain-HTTP fallback rather
 // than calling its dmsghttp-backed primary.
-func IsInsideTransport(ctx context.Context) bool {
+func InsideTransport(ctx context.Context) bool {
 	v, _ := ctx.Value(recursionGuardKey{}).(bool)
 	return v
 }

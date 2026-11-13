@@ -57,22 +57,22 @@ func TestIsWhitelisted(t *testing.T) {
 
 	t.Run("empty whitelist is always allowed", func(t *testing.T) {
 		c := reqFrom("127.0.0.1:1234")
-		assert.True(t, IsWhitelisted(c, nil))
+		assert.True(t, Whitelisted(c, nil))
 	})
 
 	t.Run("whitelisted PK", func(t *testing.T) {
 		c := reqFrom(pk.Hex())
-		assert.True(t, IsWhitelisted(c, []cipher.PubKey{pk}))
+		assert.True(t, Whitelisted(c, []cipher.PubKey{pk}))
 	})
 
 	t.Run("non-whitelisted PK", func(t *testing.T) {
 		c := reqFrom(other.Hex())
-		assert.False(t, IsWhitelisted(c, []cipher.PubKey{pk}))
+		assert.False(t, Whitelisted(c, []cipher.PubKey{pk}))
 	})
 
 	t.Run("null PK is not whitelisted", func(t *testing.T) {
 		c := reqFrom("not-a-pk")
-		assert.False(t, IsWhitelisted(c, []cipher.PubKey{pk}))
+		assert.False(t, Whitelisted(c, []cipher.PubKey{pk}))
 	})
 }
 

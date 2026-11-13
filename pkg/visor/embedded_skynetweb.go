@@ -343,7 +343,7 @@ func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKe
 	}
 	// A single transport ID that joins this visor to remote pins the direct
 	// stream to that transport (<tpid>.<dest>.skynet), with no fallback.
-	if len(route) == 1 && route[0].IsTpID && d.tpM != nil {
+	if len(route) == 1 && route[0].ByTpID && d.tpM != nil {
 		if tp := d.tpM.Transport(route[0].TpID); tp != nil && tp.Remote() == remote {
 			if mux == nil {
 				return nil, errors.New("skynet: direct streams are not up")
@@ -524,7 +524,7 @@ func sourceRouteKey(dest cipher.PubKey, route []skynetweb.RouteLabel) string {
 	b.WriteString(dest.Hex())
 	for _, rl := range route {
 		b.WriteByte('|')
-		if rl.IsTpID {
+		if rl.ByTpID {
 			b.WriteString("t:")
 			b.WriteString(rl.TpID.String())
 		} else {
@@ -544,7 +544,7 @@ func (d *routerSkynetDialer) buildSourceRoute(ctx context.Context, dest cipher.P
 	for _, rl := range route {
 		var next cipher.PubKey
 		var tpID uuid.UUID
-		if rl.IsTpID {
+		if rl.ByTpID {
 			tpID = rl.TpID
 			a, b, rerr := d.resolveTpEdges(ctx, tpID)
 			if rerr != nil {

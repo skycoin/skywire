@@ -23,7 +23,7 @@ func (selfHealEngine) OnLegChange(context.Context, RoutingContext, []LegInfo, Le
 func (selfHealEngine) OnTick(context.Context, RoutingContext, []LegInfo) (RotationAction, error) {
 	return RotationAction{}, nil
 }
-func (selfHealEngine) IsActive() bool                { return true }
+func (selfHealEngine) Active() bool                  { return true }
 func (selfHealEngine) Source() string                { return "<fake>" }
 func (selfHealEngine) Close() error                  { return nil }
 func (e selfHealEngine) SelfHealTarget() (int, bool) { return e.target, e.ok }

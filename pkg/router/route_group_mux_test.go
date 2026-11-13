@@ -387,7 +387,7 @@ func TestPruneLivenessDeadLegs(t *testing.T) {
 	for _, tp := range legTransports(rg.legs) {
 		require.NotEqual(t, deadID, tp.Entry.ID, "the black-holing leg must be gone")
 	}
-	require.False(t, mts[1].IsClosed(), "liveness prune must NOT close the (shared) transport")
+	require.False(t, mts[1].Closed(), "liveness prune must NOT close the (shared) transport")
 }
 
 // TestPruneLivenessPreservesLastLeg verifies the prune never drops below one

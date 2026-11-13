@@ -130,7 +130,7 @@ func (rg *RouteGroup) shapeLegs() []shapeLeg {
 	out := make([]shapeLeg, 0, len(rg.legs))
 	for i, lg := range rg.legs {
 		tp := lg.tp
-		if i == 0 || tp == nil || tp.IsClosed() {
+		if i == 0 || tp == nil || tp.Closed() {
 			continue
 		}
 		out = append(out, shapeLeg{idx: i, tp: tp.Entry.ID, direct: tp.Remote() == dst})
@@ -145,7 +145,7 @@ func (rg *RouteGroup) firstLegTpID() uuid.UUID {
 	defer rg.mu.Unlock()
 	for _, lg := range rg.legs {
 		tp := lg.tp
-		if tp != nil && !tp.IsClosed() {
+		if tp != nil && !tp.Closed() {
 			return tp.Entry.ID
 		}
 	}

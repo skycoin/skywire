@@ -94,7 +94,7 @@ func TestEmuReleasedLegClosesWithoutTheCapability(t *testing.T) {
 	tp := rig.A.tps[1]
 	rig.A.rg.releaseLegByTransport(poolTakenLeg{tpID: tp.Entry.ID, from: 4}, "no load")
 
-	require.True(t, tp.IsClosed(), "a leg that cannot be split must have its transport closed")
+	require.True(t, tp.Closed(), "a leg that cannot be split must have its transport closed")
 	require.Eventually(t, func() bool { a, _ := rig.AddedLegs(); return a == 1 }, 5*time.Second, 20*time.Millisecond,
 		"the released leg must be pruned")
 }
@@ -129,6 +129,6 @@ func TestEmuReleasedLegClosesWhenTheExitNeverAcks(t *testing.T) {
 	require.Greater(t, after.LegSplitsSent, before.LegSplitsSent, "the split request must have been sent")
 	require.Greater(t, after.LegSplitsFailed, before.LegSplitsFailed, "an unanswered split must count as failed")
 	require.Equal(t, before.LegSplitsAcked, after.LegSplitsAcked, "nothing acked it")
-	require.True(t, tp.IsClosed(), "the unanswered split must fall back to closing the transport")
+	require.True(t, tp.Closed(), "the unanswered split must fall back to closing the transport")
 	require.Nil(t, rig.A.host.singleLegGroupOn(tp.Entry.ID), "no half-built standby group may be left behind")
 }

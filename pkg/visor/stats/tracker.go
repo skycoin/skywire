@@ -303,7 +303,7 @@ func (t *Tracker) sample(now time.Time) {
 				} else {
 					entries = append(entries, e)
 				}
-				if ck := (telemetrywire.CheckpointEntry{ID: tp.ID, Sent: tp.Sent, Recv: tp.Recv}); ck.HasAny() {
+				if ck := (telemetrywire.CheckpointEntry{ID: tp.ID, Sent: tp.Sent, Recv: tp.Recv}); ck.Populated() {
 					checkpoints = append(checkpoints, ck)
 				}
 			}

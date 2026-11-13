@@ -539,7 +539,7 @@ func relayedResponseOK(raw []byte) bool {
 	if err != nil || code < 100 || code >= 600 {
 		return false
 	}
-	return !proxyinterstitial.IsSyntheticResponse(raw)
+	return !proxyinterstitial.SyntheticResponse(raw)
 }
 
 // vnetProxyDialer adapts bottle/vnet dialing to x/net/proxy's Dialer, so the

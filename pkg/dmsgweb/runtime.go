@@ -565,7 +565,7 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 					// precede it). A .dmsg address carries a single routing PK (the
 					// server); if more are present the one nearest the dest wins.
 					rl := route[len(route)-1]
-					if rl.IsTpID {
+					if rl.ByTpID {
 						return nil, fmt.Errorf("dmsg address %q: routing label must be a dmsg server PK, not a transport ID", origHost)
 					}
 					serverPK := rl.PK

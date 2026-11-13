@@ -122,7 +122,7 @@ type decideCase struct {
 func toPresetCtx(r policy.RoutingContext) preset.Context {
 	return preset.Context{
 		App: r.App, PeerPK: r.PeerPK, Port: r.Port, NowUnixNano: r.Now.UnixNano(),
-		CLIOverrides: r.CLIOverrides, IsDirectDial: r.IsDirectDial, TransportKind: r.TransportKind,
+		CLIOverrides: r.CLIOverrides, DirectDial: r.DirectDial, TransportKind: r.TransportKind,
 		ReverseCandidates: toPresetCands(r.ReverseCandidates),
 	}
 }

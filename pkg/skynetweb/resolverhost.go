@@ -38,9 +38,9 @@ import (
 // RouteLabel is one parsed routing-chain element: either a visor public key
 // (auto/any transport) or a specific transport ID.
 type RouteLabel struct {
-	IsTpID bool
-	PK     cipher.PubKey // valid when !IsTpID
-	TpID   uuid.UUID     // valid when IsTpID
+	ByTpID bool
+	PK     cipher.PubKey // valid when !ByTpID
+	TpID   uuid.UUID     // valid when ByTpID
 }
 
 // classifyRouteLabel reports whether label is a routing element (PK or TpID)
@@ -51,7 +51,7 @@ func classifyRouteLabel(label string) (RouteLabel, bool) {
 		return RouteLabel{PK: pk}, true
 	}
 	if id, err := uuid.Parse(label); err == nil {
-		return RouteLabel{IsTpID: true, TpID: id}, true
+		return RouteLabel{ByTpID: true, TpID: id}, true
 	}
 	return RouteLabel{}, false
 }

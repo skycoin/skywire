@@ -535,7 +535,7 @@ func (m *routeMux) legProbeExhausted(idx int) bool {
 func (m *routeMux) firstProbeReadyLeg(legs []groupLeg) int {
 	for idx := range legs {
 		tp := legs[idx].tp
-		if tp == nil || tp.IsClosed() || !m.legReadyAt(idx) {
+		if tp == nil || tp.Closed() || !m.legReadyAt(idx) {
 			continue
 		}
 		if !m.legProbeExhausted(idx) {

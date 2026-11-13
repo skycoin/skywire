@@ -122,7 +122,7 @@ func (r *router) directSetupPeer(pk cipher.PubKey) bool {
 	}
 	found := false
 	r.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
-		if tp != nil && !tp.IsClosed() && tp.Entry.RemoteEdge(r.conf.PubKey) == pk {
+		if tp != nil && !tp.Closed() && tp.Entry.RemoteEdge(r.conf.PubKey) == pk {
 			found = true
 			return false
 		}
@@ -137,7 +137,7 @@ func (r *router) transportTo(id uuid.UUID, pk cipher.PubKey) bool {
 		return false
 	}
 	tp := r.tm.Transport(id)
-	return tp != nil && !tp.IsClosed() && tp.Entry.RemoteEdge(r.conf.PubKey) == pk
+	return tp != nil && !tp.Closed() && tp.Entry.RemoteEdge(r.conf.PubKey) == pk
 }
 
 // serveDirectSetup serves one direct peer's setup connection.

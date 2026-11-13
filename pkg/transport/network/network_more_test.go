@@ -508,7 +508,7 @@ func TestDialVisor_LocalLAN(t *testing.T) {
 	ar.On("LocalPublicIP").Return("")
 	ar.On("Resolve", mock.Anything, mock.Anything, remote).Return(addrresolver.VisorData{
 		RemoteAddr: "1.2.3.4:5",
-		IsLocal:    true,
+		Local:      true,
 		LocalAddresses: addrresolver.LocalAddresses{
 			Port:      "5",
 			Addresses: []string{"127.0.0.1", "192.168.1.2"}, // loopback skipped (not self)
@@ -681,7 +681,7 @@ func TestDialVisor_LANFailsFallsBackToPublic(t *testing.T) {
 	ar.On("LocalPublicIP").Return("")
 	ar.On("Resolve", mock.Anything, mock.Anything, remote).Return(addrresolver.VisorData{
 		RemoteAddr: "1.2.3.4",
-		IsLocal:    true,
+		Local:      true,
 		Port:       "5",
 		Addresses:  []string{"192.168.1.2"},
 	}, nil)

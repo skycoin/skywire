@@ -210,15 +210,15 @@ func TestDatagramRouteGroupHandleAfterCloseReturnsClosedPipe(t *testing.T) {
 func TestDatagramRouteGroupIsAlive(t *testing.T) {
 	dg := newTestDatagramGroup(t)
 
-	assert.True(t, dg.IsAlive(), "fresh group should be alive")
+	assert.True(t, dg.Alive(), "fresh group should be alive")
 
 	// Simulate accumulated write failures.
 	dg.consecutiveWriteFailures.Store(maxConsecutiveWriteFailures)
-	assert.False(t, dg.IsAlive(), "group with maxed-out failures should not be alive")
+	assert.False(t, dg.Alive(), "group with maxed-out failures should not be alive")
 
 	dg.consecutiveWriteFailures.Store(0)
 	require.NoError(t, dg.Close())
-	assert.False(t, dg.IsAlive(), "closed group should not be alive")
+	assert.False(t, dg.Alive(), "closed group should not be alive")
 }
 
 func TestDatagramRouteGroupSatisfiesPacketConn(t *testing.T) {

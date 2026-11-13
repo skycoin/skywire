@@ -224,7 +224,7 @@ func (v *Visor) transportRelayNominees(seen map[cipher.PubKey]struct{}, limit in
 	var pins, rest []cipher.PubKey
 	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
 		pk := tp.Remote()
-		if tp.IsClosed() {
+		if tp.Closed() {
 			return true
 		}
 		if _, dup := seen[pk]; dup {
@@ -310,7 +310,7 @@ func (v *Visor) hasTransportTo(pk cipher.PubKey) bool {
 	}
 	found := false
 	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
-		if tp.Remote() == pk && !tp.IsClosed() {
+		if tp.Remote() == pk && !tp.Closed() {
 			found = true
 			return false
 		}

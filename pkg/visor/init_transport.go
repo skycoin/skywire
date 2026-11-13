@@ -1242,7 +1242,7 @@ func reconcileTPD(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// Stats.Disabled, or buildStatsPublisher having failed (non-fatal by
 	// design, see init_stats.go). That is a different deployment mode, not a
 	// fallback.
-	if v.tpM != nil && v.tpM.HasTPDLeafPublisher() {
+	if v.tpM != nil && v.tpM.TPDLeafPublisherSet() {
 		return nil
 	}
 

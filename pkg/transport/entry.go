@@ -139,14 +139,14 @@ func (e *Entry) EdgeIndex(pk cipher.PubKey) int {
 	return -1
 }
 
-// IsLeastSignificantEdge returns true if given pk is least significant edge
+// LeastSignificantEdge returns true if given pk is least significant edge
 // of this entry
-func (e *Entry) IsLeastSignificantEdge(pk cipher.PubKey) bool {
+func (e *Entry) LeastSignificantEdge(pk cipher.PubKey) bool {
 	return e.EdgeIndex(pk) == 0
 }
 
-// HasEdge returns true if the provided edge is present in 'e.Edges' field.
-func (e *Entry) HasEdge(edge cipher.PubKey) bool {
+// ContainsEdge returns true if the provided edge is present in 'e.Edges' field.
+func (e *Entry) ContainsEdge(edge cipher.PubKey) bool {
 	for _, pk := range e.Edges {
 		if pk == edge {
 			return true
@@ -247,10 +247,10 @@ func NewSignedEntry(entry *Entry, pk cipher.PubKey, secKey cipher.SecKey) (*Sign
 // the services it runs, which no route may use. It copies only when it drops one.
 func Routable(entries []*Entry) []*Entry {
 	for i, e := range entries {
-		if e != nil && types.IsLocal(e.Type) {
+		if e != nil && types.Local(e.Type) {
 			out := append(make([]*Entry, 0, len(entries)-1), entries[:i]...)
 			for _, e := range entries[i+1:] {
-				if e == nil || !types.IsLocal(e.Type) {
+				if e == nil || !types.Local(e.Type) {
 					out = append(out, e)
 				}
 			}

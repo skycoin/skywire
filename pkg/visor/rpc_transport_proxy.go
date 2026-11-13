@@ -105,8 +105,8 @@ func (v *Visor) ensureFastTransport(remotePK cipher.PubKey) error {
 		return nil
 	}
 
-	localSTCPR := v.tpM.IsKnownNetwork(tptypes.STCPR)
-	localSUDPH := v.tpM.IsKnownNetwork(tptypes.SUDPH)
+	localSTCPR := v.tpM.KnownNetwork(tptypes.STCPR)
+	localSUDPH := v.tpM.KnownNetwork(tptypes.SUDPH)
 	if !localSTCPR && !localSUDPH {
 		return fmt.Errorf("local visor has neither stcpr nor sudph available")
 	}

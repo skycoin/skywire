@@ -348,7 +348,7 @@ func (m *procManager) Register(conf appcommon.ProcConfig) (appcommon.ProcKey, er
 	if existingProc, ok := m.procs[conf.AppName]; ok {
 		// Check if the existing proc is actually alive.
 		// Internal apps can exit without cleaning up the proc map.
-		if existingProc.IsRunning() {
+		if existingProc.Running() {
 			return appcommon.ProcKey{}, ErrAppAlreadyStarted
 		}
 		// Dead proc — clean it up so we can restart. Close its connCh first so

@@ -56,7 +56,7 @@ func verifyReserveChain(t *testing.T, payload []byte, rsnPK cipher.PubKey, targe
 		require.NoErrorf(t, cs.Verify(target), "layer %d signature for target %s", i, target)
 		// terminal layer carries no further payload
 		if i == len(targets)-1 {
-			assert.True(t, cs.IsTerminal(), "last layer must be terminal")
+			assert.True(t, cs.Terminal(), "last layer must be terminal")
 		} else {
 			require.NotEmptyf(t, cs.Payload, "layer %d must wrap an inner payload", i)
 		}
@@ -304,7 +304,7 @@ func simulateReserveCascade(t *testing.T, payload []byte, targets []cipher.PubKe
 			*nextID++
 		}
 		if i == len(targets)-1 {
-			require.Truef(t, cs.IsTerminal(), "reserve last layer must be terminal")
+			require.Truef(t, cs.Terminal(), "reserve last layer must be terminal")
 		} else {
 			require.NotEmptyf(t, cs.Payload, "reserve layer %d must wrap inner payload", i)
 			payload = cs.Payload
@@ -400,13 +400,13 @@ func TestInstallCascade_EdgeMarkedOnDestinationOnly(t *testing.T) {
 		require.NoErrorf(t, err, "fwd install layer %d", i)
 		require.NoError(t, cs.Verify(target))
 		if i == len(srcFirst)-1 {
-			require.True(t, cs.IsEdge(), "destination layer must be an edge")
+			require.True(t, cs.Edge(), "destination layer must be an edge")
 			require.Equal(t, fwdRt.Desc, cs.EdgeDesc, "edge desc must be the forward route descriptor")
 			rules, err := routing.DeserializeRules(cs.RuleData)
 			require.NoError(t, err)
 			require.Len(t, rules, 2, "edge carries exactly [Forward, Reverse]")
 		} else {
-			require.Falsef(t, cs.IsEdge(), "intermediary layer %d must not be an edge", i)
+			require.Falsef(t, cs.Edge(), "intermediary layer %d must not be an edge", i)
 			payload = cs.Payload
 		}
 	}
@@ -417,7 +417,7 @@ func TestInstallCascade_EdgeMarkedOnDestinationOnly(t *testing.T) {
 		cs, err := routing.UnmarshalCascadeSetup(payload)
 		require.NoErrorf(t, err, "rev install layer %d", i)
 		require.NoError(t, cs.Verify(target))
-		require.Falsef(t, cs.IsEdge(), "reverse install layer %d must not be an edge", i)
+		require.Falsef(t, cs.Edge(), "reverse install layer %d must not be an edge", i)
 		if i < len(srcFirst)-1 {
 			payload = cs.Payload
 		}

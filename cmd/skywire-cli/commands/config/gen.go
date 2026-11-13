@@ -898,7 +898,7 @@ func fetchServiceConfig(log *logging.Logger) {
 		}
 		// Supplement missing DMSG fields from embedded config if the
 		// config bootstrapper hasn't been updated to serve them yet.
-		if !services.HasDmsgEndpoints() {
+		if !services.DmsgEndpointsSet() {
 			embedded := deployment.Prod
 			services.DmsgServers = embedded.DmsgServers
 			services.ConfDmsg = embedded.ConfDmsg
@@ -1268,7 +1268,7 @@ func configureDMSGHTTP(log *logging.Logger, outerErr error) {
 			if err != nil {
 				log.WithError(err).Fatal("Failed to unmarshal " + skyenv.DMSGHTTPName)
 			}
-		} else if !services.HasDmsgEndpoints() {
+		} else if !services.DmsgEndpointsSet() {
 			// Fallback: if fetched config didn't have DMSG fields,
 			// try parsing the embedded config for legacy DmsgHTTPServers format
 			err := json.Unmarshal(deployment.ServicesJSON, &dmsgHTTPServersList)
@@ -1652,7 +1652,7 @@ func configureLauncher(log *logging.Logger) {
 	// the primary config fields. (Plain-HTTP to deployment services is no longer
 	// supported — the former --http / --dual modes are gone.) The dmsg URLs come
 	// from services-config.json's *_dmsg fields, the single source of truth.
-	if services.HasDmsgEndpoints() {
+	if services.DmsgEndpointsSet() {
 		conf.Dmsg.Servers = deployment.DmsgServerEntriesToDisc(services.DmsgServers)
 		conf.Dmsg.Discovery = services.DmsgDiscoveryDmsg
 		conf.Transport.AddressResolver = services.AddressResolverDmsg

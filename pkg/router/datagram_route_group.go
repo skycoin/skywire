@@ -55,7 +55,7 @@ type Group interface {
 	Close() error
 	LocalAddr() net.Addr
 	RemoteAddr() net.Addr
-	IsAlive() bool
+	Alive() bool
 }
 
 // MaxDatagramPayload is the largest datagram body that fits in a
@@ -441,10 +441,10 @@ func (dg *DatagramRouteGroup) SetWriteDeadline(t time.Time) error {
 	return nil
 }
 
-// IsAlive returns true if the group is open and recent writes have
-// succeeded. Mirror of RouteGroup.IsAlive's shape so the Group
+// Alive returns true if the group is open and recent writes have
+// succeeded. Mirror of RouteGroup.Alive's shape so the Group
 // interface stays narrow.
-func (dg *DatagramRouteGroup) IsAlive() bool {
+func (dg *DatagramRouteGroup) Alive() bool {
 	if dg.isClosed() {
 		return false
 	}
