@@ -19,14 +19,14 @@ func (c *Client) SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 		return fmt.Errorf("error parsing IP CIDR: %w", err)
 	}
 	if err := c.setSysPrivileges(); err != nil {
-		print(fmt.Sprintf("Failed to setup system privileges for SetupTUN: %v\n", err))
+		c.logger().WithError(err).Error("Failed to setup system privileges for SetupTUN")
 		return err
 	}
 	defer c.releaseSysPrivileges()
 	if c.cfg.DNSAddr != "" {
 		c.SetupDNS()
 	}
-	fmt.Println(c.defaultSystemDNS)
+	c.logger().Debugf("Default system DNS: %s", c.defaultSystemDNS)
 	return osutil.Run("ifconfig", ifcName, ip, gateway, "mtu", strconv.Itoa(mtu), "netmask", netmask, "up")
 }
 
@@ -34,15 +34,15 @@ func (c *Client) SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 func (c *Client) SetupDNS() {
 	defaultDNSByte, err := osutil.RunWithResult("networksetup", "-getdnsservers", "Wi-Fi")
 	if err != nil {
-		fmt.Printf("Failed to get current DNS servers: %s\n", err)
+		c.logger().WithError(err).Warn("Failed to get current DNS servers")
 	}
 	c.defaultSystemDNS = string(defaultDNSByte)
 
 	err = osutil.Run("networksetup", "-setdnsservers", "Wi-Fi", c.cfg.DNSAddr)
 	if err != nil {
-		fmt.Printf("Failed to setup DNS. Continue with machine default DNS setting: %s\n", err)
+		c.logger().WithError(err).Warn("Failed to setup DNS. Continue with machine default DNS setting")
 	} else {
-		fmt.Printf("DNS setup successful: %s\n", c.cfg.DNSAddr)
+		c.logger().Infof("DNS setup successful: %s", c.cfg.DNSAddr)
 	}
 }
 
@@ -50,9 +50,10 @@ func (c *Client) SetupDNS() {
 func (c *Client) RevertDNS() {
 	if c.cfg.DNSAddr != "" {
 		if err := osutil.Run("networksetup", "-setdnsservers", "Wi-Fi", c.defaultSystemDNS); err != nil {
-			fmt.Printf("Failed to revert DNS: %s\n", err)
+			c.logger().WithError(err).Warn("Failed to revert DNS")
+		} else {
+			c.logger().Infof("System DNS value reverted back to %s", c.defaultSystemDNS)
 		}
-		fmt.Printf("System DNS value revert back to %s\n", c.defaultSystemDNS)
 	}
 }
 
@@ -87,7 +88,7 @@ func (c *Client) modifyRoutingTable(action, ipCIDR, gateway string) error {
 	}
 
 	if err := c.setSysPrivileges(); err != nil {
-		print(fmt.Sprintf("Failed to setup system privileges for %s: %v\n", action, err))
+		c.logger().WithError(err).Errorf("Failed to setup system privileges for %s", action)
 		return err
 	}
 	defer c.releaseSysPrivileges()

@@ -3,6 +3,7 @@ package vpn
 
 import (
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skynetca"
 	"github.com/skycoin/skywire/pkg/vpnrouter/meshgw"
 )
@@ -44,4 +45,7 @@ type ClientConfig struct {
 	// MeshTLSMinter, when set, enables TLS-MITM for HTTPS to *.dmsg / *.skynet.
 	// The host must trust the minter's CA. Optional.
 	MeshTLSMinter skynetca.LeafMinter
+
+	// Log receives the client's diagnostics. Nil uses the vpn_client module logger.
+	Log logging.FieldLogger
 }

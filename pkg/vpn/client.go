@@ -23,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -37,6 +38,7 @@ const (
 // Client is a VPN client.
 type Client struct {
 	cfg         ClientConfig
+	log         logging.FieldLogger
 	appCl       *app.Client
 	directIPSMu sync.Mutex
 	directIPs   []netip.Addr // every IP with a direct route installed
@@ -100,18 +102,27 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 		return nil, fmt.Errorf("error getting default network gateway: %w", err)
 	}
 
-	fmt.Printf("Got default network gateway IP: %s\n", defaultGateway)
-
 	c := &Client{
 		cfg:            cfg,
+		log:            cfg.Log,
 		appCl:          appCl,
 		directIPs:      filterOutEqualIPs(directIPs),
 		defaultGateway: defaultGateway,
 		gatewayFn:      gatewayFn,
 		closeC:         make(chan struct{}),
 	}
+	c.logger().Infof("Got default network gateway IP: %s", defaultGateway)
 	c.initDirectRoutes()
 	return c, nil
+}
+
+// logger is the configured logger, or the vpn_client module logger when none
+// was set (as in tests that build a Client literal).
+func (c *Client) logger() logging.FieldLogger {
+	if c.log == nil {
+		return logging.MustGetLogger("vpn_client")
+	}
+	return c.log
 }
 
 // directIPsFromEnv is every IP the visor named for the tunnel to route
@@ -193,7 +204,7 @@ func (c *Client) Serve() error {
 		meshGW, err := c.startMeshGateway()
 		if err != nil {
 			// Non-fatal: the VPN still works, just without mesh-name resolution.
-			fmt.Printf("mesh gateway disabled: %v\n", err)
+			c.logger().WithError(err).Warn("Mesh gateway disabled")
 		} else {
 			c.mesh = meshGW
 			defer meshGW.stop()
@@ -205,7 +216,7 @@ func (c *Client) Serve() error {
 		if c.cfg.Killswitch {
 			c.prevTUNGatewayMu.Lock()
 			if c.prevTUNGateway.IsValid() {
-				fmt.Printf("Routing traffic directly, previous TUN gateway: %s\n", c.prevTUNGateway.String())
+				c.logger().Infof("Routing traffic directly, previous TUN gateway: %s", c.prevTUNGateway.String())
 				c.routeTrafficDirectly(c.prevTUNGateway)
 			}
 			c.prevTUNGateway = netip.Addr{}
@@ -213,10 +224,10 @@ func (c *Client) Serve() error {
 		}
 
 		if err := c.closeTUN(); err != nil {
-			print(fmt.Sprintf("Failed to close TUN: %v\n", err))
+			c.logger().WithError(err).Error("Failed to close TUN")
 		}
 
-		fmt.Println("Closing TUN")
+		c.logger().Info("Closing TUN")
 	}()
 
 	defer func() {
@@ -248,7 +259,7 @@ func (c *Client) Serve() error {
 				c.resetConnDuration()
 				c.setAppStatus(appserver.AppDetailedStatusReconnecting)
 				c.setAppError(errTimeout)
-				fmt.Println("\nConnection broke, reconnecting...")
+				c.logger().Warn("Connection broke, reconnecting...")
 				return fmt.Errorf("dialServeConn: %w", err)
 			}
 		}
@@ -264,18 +275,18 @@ func (c *Client) Serve() error {
 // ListenIPC starts named-pipe based connection server for windows or unix socket in Linux/Mac
 func (c *Client) ListenIPC(client *ipc.Client) {
 	if client == nil {
-		print(fmt.Sprintln("Unable to create IPC Client: server is non-existent"))
+		c.logger().Error("Unable to create IPC Client: server is non-existent")
 		return
 	}
 	for {
 		m, err := client.Read()
 		if err != nil {
-			print(fmt.Sprintf("%s IPC received error: %v\n", skyenv.VPNClientName, err))
+			c.logger().WithError(err).Errorf("%s IPC received error", skyenv.VPNClientName)
 		}
 
 		if m != nil {
 			if m.MsgType == skyenv.IPCShutdownMessageType {
-				fmt.Println("Stopping " + skyenv.VPNClientName + " via IPC")
+				c.logger().Infof("Stopping %s via IPC", skyenv.VPNClientName)
 				break
 			}
 		}
@@ -419,15 +430,15 @@ func (c *Client) setupTUN(tunIP, tunGateway netip.Addr) error {
 func (c *Client) serveConn(conn net.Conn) error {
 	tunIP, tunGateway, err := c.shakeHands(conn)
 	if err != nil {
-		fmt.Printf("error during client/server handshake: %s\n", err)
+		c.logger().WithError(err).Error("Error during client/server handshake")
 		return err
 	}
 
-	fmt.Printf("Performed handshake with %s\n", conn.RemoteAddr())
-	fmt.Printf("Local TUN IP: %s\n", tunIP.String())
-	fmt.Printf("Local TUN gateway: %s\n", tunGateway.String())
+	c.logger().Infof("Performed handshake with %s", conn.RemoteAddr())
+	c.logger().Infof("Local TUN IP: %s", tunIP.String())
+	c.logger().Infof("Local TUN gateway: %s", tunGateway.String())
 
-	fmt.Println("CREATING TUN INTERFACE")
+	c.logger().Debug("Creating TUN interface")
 	tun, err := c.createTUN()
 	if err != nil {
 		return fmt.Errorf("error allocating TUN interface: %w", err)
@@ -438,9 +449,9 @@ func (c *Client) serveConn(conn net.Conn) error {
 	// in case app got stopped, TUN will be closed in the outer code, while in
 	// case of connection failure it will be reused
 
-	fmt.Printf("Allocated TUN %s: %v\n", tun.Name(), err)
+	c.logger().Infof("Allocated TUN %s", tun.Name())
 
-	fmt.Printf("Setting up TUN device with: %s and Gateway %s\n", tunIP, tunGateway)
+	c.logger().Debugf("Setting up TUN device with: %s and Gateway %s", tunIP, tunGateway)
 	if err := c.setupTUN(tunIP, tunGateway); err != nil {
 		return fmt.Errorf("error setting up TUN %s: %w", tun.Name(), err)
 	}
@@ -453,7 +464,7 @@ func (c *Client) serveConn(conn net.Conn) error {
 		time.Sleep(13 * time.Second)
 	}
 
-	fmt.Printf("TUN %s all sets\n", tunIP)
+	c.logger().Infof("TUN %s all set", tunIP)
 
 	newRoute := true
 	if c.cfg.Killswitch {
@@ -465,7 +476,7 @@ func (c *Client) serveConn(conn net.Conn) error {
 		c.prevTUNGatewayMu.Unlock()
 	}
 
-	fmt.Printf("Routing all traffic through TUN %s: %v\n", tun.Name(), err)
+	c.logger().Infof("Routing all traffic through TUN %s", tun.Name())
 	if err := c.routeTrafficThroughTUN(tunGateway, newRoute); err != nil {
 		return fmt.Errorf("error routing traffic through TUN %s: %w", tun.Name(), err)
 	}
@@ -477,7 +488,7 @@ func (c *Client) serveConn(conn net.Conn) error {
 
 	defer func() {
 		if !c.cfg.Killswitch {
-			fmt.Println("serveConn done, killswitch disabled, routing traffic directly")
+			c.logger().Info("serveConn done, killswitch disabled, routing traffic directly")
 			c.routeTrafficDirectly(tunGateway)
 		}
 	}()
@@ -511,7 +522,7 @@ func (c *Client) serveConn(conn net.Conn) error {
 
 		if _, err := io.Copy(inbound, conn); err != nil {
 			if !c.isClosed() {
-				print(fmt.Sprintf("Error resending traffic from TUN %s to VPN server: %v\n", tun.Name(), err))
+				c.logger().WithError(err).Errorf("Error resending traffic from TUN %s to VPN server", tun.Name())
 				// when the vpn-server is closed we get the error EOF
 				if err.Error() == io.EOF.Error() {
 					c.setAppError(errVPNServerClosed)
@@ -524,7 +535,7 @@ func (c *Client) serveConn(conn net.Conn) error {
 
 		if _, err := io.Copy(outbound, tun); err != nil {
 			if !c.isClosed() {
-				print(fmt.Sprintf("Error resending traffic from VPN server to TUN %s: %v\n", tun.Name(), err))
+				c.logger().WithError(err).Errorf("Error resending traffic from VPN server to TUN %s", tun.Name())
 			}
 		}
 	}()
@@ -551,14 +562,14 @@ serveLoop:
 func (c *Client) dialServeConn() error {
 	conn, err := c.dialServer(c.appCl, c.cfg.ServerPK)
 	if err != nil {
-		fmt.Printf("error connecting to VPN server: %s\n", err)
+		c.logger().WithError(err).Error("Error connecting to VPN server")
 		return err
 	}
-	fmt.Printf("Dialed %s\n", conn.RemoteAddr())
+	c.logger().Infof("Dialed %s", conn.RemoteAddr())
 
 	defer func() {
 		if err := conn.Close(); err != nil {
-			print(fmt.Sprintf("Error closing app conn: %v\n", err))
+			c.logger().WithError(err).Warn("Error closing app conn")
 		}
 	}()
 
@@ -567,7 +578,7 @@ func (c *Client) dialServeConn() error {
 	}
 
 	if err := c.serveConn(conn); err != nil {
-		fmt.Printf("error serving app conn: %s", err)
+		c.logger().WithError(err).Error("Error serving app conn")
 		return err
 	}
 
@@ -596,14 +607,14 @@ func (c *Client) routeTrafficThroughTUN(tunGateway netip.Addr, newRoute bool) er
 }
 
 func (c *Client) routeTrafficDirectly(tunGateway netip.Addr) {
-	fmt.Println("Routing all traffic through default network gateway")
+	c.logger().Info("Routing all traffic through default network gateway")
 
 	// remove main route
 	if err := c.DeleteRoute(ipv4FirstHalfAddr, tunGateway.String()); err != nil {
-		print(fmt.Sprintf("Error routing traffic through default network gateway: %v\n", err))
+		c.logger().WithError(err).Error("Error routing traffic through default network gateway")
 	}
 	if err := c.DeleteRoute(ipv4SecondHalfAddr, tunGateway.String()); err != nil {
-		print(fmt.Sprintf("Error routing traffic through default network gateway: %v\n", err))
+		c.logger().WithError(err).Error("Error routing traffic through default network gateway")
 	}
 }
 
@@ -622,7 +633,7 @@ func (c *Client) setupDirectRoutes() error {
 
 func (c *Client) setupDirectRoute(ip netip.Addr) error {
 	if !ip.IsLoopback() {
-		fmt.Printf("Adding direct route to %s, via %s\n", ip.String(), c.defaultGateway.String())
+		c.logger().Infof("Adding direct route to %s, via %s", ip.String(), c.defaultGateway.String())
 		if err := c.AddRoute(ip.String()+directRouteNetmaskCIDR, c.defaultGateway.String()); err != nil {
 			return fmt.Errorf("error adding direct route to %s: %w", ip.String(), err)
 		}
@@ -633,7 +644,7 @@ func (c *Client) setupDirectRoute(ip netip.Addr) error {
 
 func (c *Client) removeDirectRoute(ip netip.Addr) error {
 	if !ip.IsLoopback() {
-		fmt.Printf("Removing direct route to %s\n", ip.String())
+		c.logger().Infof("Removing direct route to %s", ip.String())
 		if err := c.DeleteRoute(ip.String()+directRouteNetmaskCIDR, c.defaultGateway.String()); err != nil {
 			return err
 		}
@@ -649,7 +660,7 @@ func (c *Client) removeDirectRoutes() {
 	for _, ip := range c.directIPs {
 		if err := c.removeDirectRoute(ip); err != nil {
 			// shouldn't return, just keep on trying the other IPs
-			print(fmt.Sprintf("Error removing direct route to %s: %v\n", ip.String(), err))
+			c.logger().WithError(err).Warnf("Error removing direct route to %s", ip.String())
 		}
 	}
 }
@@ -784,7 +795,7 @@ func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway netip.Addr, err er
 
 	const handshakeTimeout = 5 * time.Second
 
-	fmt.Printf("Sending client hello: %v\n", cHello)
+	c.logger().Debugf("Sending client hello: %v", cHello)
 
 	if err := WriteJSONWithTimeout(conn, &cHello, handshakeTimeout); err != nil {
 		return netip.Addr{}, netip.Addr{}, fmt.Errorf("error sending client hello: %w", err)
@@ -792,7 +803,7 @@ func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway netip.Addr, err er
 
 	var sHello ServerHello
 	if err := ReadJSONWithTimeout(conn, &sHello, handshakeTimeout); err != nil {
-		fmt.Printf("error reading server hello: %v\n", err)
+		c.logger().WithError(err).Error("Error reading server hello")
 		if strings.Contains(err.Error(), appnet.ErrServiceOffline(skyenv.VPNServerPort).Error()) {
 			err = appserver.RPCErr{
 				Err: err.Error(),
@@ -801,7 +812,7 @@ func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway netip.Addr, err er
 		return netip.Addr{}, netip.Addr{}, err
 	}
 
-	fmt.Printf("Got server hello: %v", sHello)
+	c.logger().Debugf("Got server hello: %v", sHello)
 
 	if sHello.Status != HandshakeStatusOK {
 		return netip.Addr{}, netip.Addr{}, sHello.Status.getError()
@@ -847,7 +858,7 @@ func (c *Client) setAppStatus(status appserver.AppDetailedStatus) {
 		return // embedded client (NewClientEmbedded): no app RPC to report to
 	}
 	if err := c.appCl.SetDetailedStatus(string(status)); err != nil {
-		print(fmt.Sprintf("Failed to set status %v: %v\n", status, err))
+		c.logger().WithError(err).Warnf("Failed to set status %v", status)
 	}
 }
 
@@ -856,7 +867,7 @@ func (c *Client) setConnectionDuration() {
 		return
 	}
 	if err := c.appCl.SetConnectionDuration(c.connectedDuration.Load()); err != nil {
-		print(fmt.Sprintf("Failed to set connection duration: %v\n", err))
+		c.logger().WithError(err).Warn("Failed to set connection duration")
 	}
 }
 
@@ -865,7 +876,7 @@ func (c *Client) setAppError(appErr error) {
 		return
 	}
 	if err := c.appCl.SetError(appErr.Error()); err != nil {
-		print(fmt.Sprintf("Failed to set error %v: %v\n", appErr, err))
+		c.logger().WithError(err).Warnf("Failed to set error %v", appErr)
 	}
 }
 

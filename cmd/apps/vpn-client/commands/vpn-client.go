@@ -265,6 +265,7 @@ func RunVPNClient(ctx context.Context, args []string) error {
 		MuxRoutes:    muxRoutes,
 		MinHops:      minHops,
 		DmsgFallback: dmsgFallback,
+		Log:          logger,
 	}
 	// A native client's tunnel is on its computer already.
 	vpnClientCfg.Host = hostTUN && runtime.GOOS == "js"

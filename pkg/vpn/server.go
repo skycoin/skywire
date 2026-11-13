@@ -14,12 +14,14 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
 )
 
 // Server is a VPN server.
 type Server struct {
 	cfg                        ServerConfig
+	log                        logging.FieldLogger
 	lisMx                      sync.Mutex
 	lis                        net.Listener
 	serveOnce                  sync.Once
@@ -45,10 +47,14 @@ func NewServer(cfg ServerConfig, appCl *app.Client) (*Server, error) {
 
 	s := &Server{
 		cfg:       cfg,
+		log:       cfg.Log,
 		ipGen:     NewIPGenerator(),
 		appCl:     appCl,
 		whitelist: wlMap,
 		useWL:     len(cfg.Whitelist) > 0,
+	}
+	if s.log == nil {
+		s.log = logging.MustGetLogger("vpn_server")
 	}
 
 	if cfg.NetworkInterface != "" {
@@ -65,11 +71,11 @@ func NewServer(cfg ServerConfig, appCl *app.Client) (*Server, error) {
 		ifcs := strings.Split(defaultNetworkIfcs, "\n")
 		defaultNetworkIfc = ifcs[0]
 		if len(ifcs) > 1 {
-			fmt.Printf("Several default routes %v, using %s (lowest metric); set another via --netifc\n", ifcs, defaultNetworkIfc)
+			s.log.Warnf("Several default routes %v, using %s (lowest metric); set another via --netifc", ifcs, defaultNetworkIfc)
 		}
 	}
 
-	fmt.Printf("Got default network interface: %s\n", defaultNetworkIfc)
+	s.log.Infof("Got default network interface: %s", defaultNetworkIfc)
 
 	// The interface IPs are informational only (stored, not used for routing/NAT),
 	// so a lookup failure must not stop the server — on Windows the interface may
@@ -77,10 +83,10 @@ func NewServer(cfg ServerConfig, appCl *app.Client) (*Server, error) {
 	// like the loopback used for tests), yet the server can still serve fine.
 	defaultNetworkIfcIPs, err := netutil.NetworkInterfaceIPs(defaultNetworkIfc)
 	if err != nil {
-		fmt.Printf("Could not get IPs of interface %s (non-fatal): %v\n", defaultNetworkIfc, err)
+		s.log.WithError(err).Warnf("Could not get IPs of interface %s (non-fatal)", defaultNetworkIfc)
 	}
 
-	fmt.Printf("Got IPs of interface %s: %v\n", defaultNetworkIfc, defaultNetworkIfcIPs)
+	s.log.Infof("Got IPs of interface %s: %v", defaultNetworkIfc, defaultNetworkIfcIPs)
 
 	ipv4ForwardingVal, err := GetIPv4ForwardingValue()
 	if err != nil {
@@ -91,15 +97,14 @@ func NewServer(cfg ServerConfig, appCl *app.Client) (*Server, error) {
 		return nil, fmt.Errorf("error getting IPv6 forwarding value")
 	}
 
-	fmt.Println("Old IP forwarding values:")
-	fmt.Printf("IPv4: %s, IPv6: %s\n", ipv4ForwardingVal, ipv6ForwardingVal)
+	s.log.Infof("Old IP forwarding values: IPv4: %s, IPv6: %s", ipv4ForwardingVal, ipv6ForwardingVal)
 
 	iptablesForwardPolicy, err := GetIPTablesForwardPolicy()
 	if err != nil {
 		return nil, fmt.Errorf("error getting iptables forward policy: %w", err)
 	}
 
-	fmt.Printf("Old iptables forward policy: %s\n", iptablesForwardPolicy)
+	s.log.Infof("Old iptables forward policy: %s", iptablesForwardPolicy)
 
 	s.defaultNetworkInterface = defaultNetworkIfc
 	s.defaultNetworkInterfaceIPs = defaultNetworkIfcIPs
@@ -119,7 +124,7 @@ func (s *Server) Serve(l net.Listener) error {
 			serveErr = fmt.Errorf("error enabling IPv4 forwarding: %w", err)
 			return
 		}
-		fmt.Println("Set IPv4 forwarding = 1")
+		s.log.Info("Set IPv4 forwarding = 1")
 		defer func() {
 			s.revertIPv4ForwardingValue()
 		}()
@@ -128,7 +133,7 @@ func (s *Server) Serve(l net.Listener) error {
 			serveErr = fmt.Errorf("error enabling IPv6 forwarding: %w", err)
 			return
 		}
-		fmt.Println("Set IPv6 forwarding = 1")
+		s.log.Info("Set IPv6 forwarding = 1")
 		defer func() {
 			s.revertIPv6ForwardingValue()
 		}()
@@ -138,7 +143,7 @@ func (s *Server) Serve(l net.Listener) error {
 			return
 		}
 
-		fmt.Println("Enabled IP masquerading")
+		s.log.Info("Enabled IP masquerading")
 
 		defer func() {
 			s.disableIPMasquerading()
@@ -148,7 +153,7 @@ func (s *Server) Serve(l net.Listener) error {
 			serveErr = fmt.Errorf("error settings iptables forward policy to ACCEPT")
 			return
 		}
-		fmt.Println("Set iptables forward policy to ACCEPT")
+		s.log.Info("Set iptables forward policy to ACCEPT")
 
 		defer func() {
 			s.restoreIPTablesForwardPolicy()
@@ -186,7 +191,7 @@ func (s *Server) Serve(l net.Listener) error {
 				if closed {
 					return
 				}
-				fmt.Printf("Failed to accept VPN client connection, continuing: %v\n", err)
+				s.log.WithError(err).Warn("Failed to accept VPN client connection, continuing")
 				continue
 			}
 
@@ -220,39 +225,39 @@ func (s *Server) Close() error {
 
 func (s *Server) revertIPv4ForwardingValue() {
 	if err := SetIPv4ForwardingValue(s.ipv4ForwardingVal); err != nil {
-		print(fmt.Sprintf("Error reverting IPv4 forwarding: %v\n", err))
+		s.log.WithError(err).Error("Error reverting IPv4 forwarding")
 	} else {
-		fmt.Printf("Set IPv4 forwarding = %s\n", s.ipv4ForwardingVal)
+		s.log.Infof("Set IPv4 forwarding = %s", s.ipv4ForwardingVal)
 	}
 }
 
 func (s *Server) revertIPv6ForwardingValue() {
 	if err := SetIPv6ForwardingValue(s.ipv6ForwardingVal); err != nil {
-		print(fmt.Sprintf("Error reverting IPv6 forwarding: %v\n", err))
+		s.log.WithError(err).Error("Error reverting IPv6 forwarding")
 	} else {
-		fmt.Printf("Set IPv6 forwarding = %s\n", s.ipv6ForwardingVal)
+		s.log.Infof("Set IPv6 forwarding = %s", s.ipv6ForwardingVal)
 	}
 }
 
 func (s *Server) disableIPMasquerading() {
 	if err := DisableIPMasquerading(s.defaultNetworkInterface); err != nil {
-		print(fmt.Sprintf("Error disabling IP masquerading for %s: %v\n", s.defaultNetworkInterface, err))
+		s.log.WithError(err).Errorf("Error disabling IP masquerading for %s", s.defaultNetworkInterface)
 	} else {
-		fmt.Printf("Disabled IP masquerading for %s\n", s.defaultNetworkInterface)
+		s.log.Infof("Disabled IP masquerading for %s", s.defaultNetworkInterface)
 	}
 }
 
 func (s *Server) restoreIPTablesForwardPolicy() {
 	if err := SetIPTablesForwardPolicy(s.iptablesForwardPolicy); err != nil {
-		print(fmt.Sprintf("Error restoring iptables forward policy to %s: %v\n", s.iptablesForwardPolicy, err))
+		s.log.WithError(err).Errorf("Error restoring iptables forward policy to %s", s.iptablesForwardPolicy)
 	} else {
-		fmt.Printf("Restored iptables forward policy to %s\n", s.iptablesForwardPolicy)
+		s.log.Infof("Restored iptables forward policy to %s", s.iptablesForwardPolicy)
 	}
 }
 
 func (s *Server) closeConn(conn net.Conn) {
 	if err := conn.Close(); err != nil {
-		print(fmt.Sprintf("Error closing client %s connection: %v\n", conn.RemoteAddr(), err))
+		s.log.WithError(err).Warnf("Error closing client %s connection", conn.RemoteAddr())
 	}
 }
 
@@ -263,40 +268,40 @@ func (s *Server) serveConn(conn net.Conn) {
 	if s.useWL {
 		remotePK, err := s.getRemotePK(conn)
 		if err != nil {
-			print(fmt.Sprintf("Failed to get remote PK, rejecting connection: %v\n", err))
+			s.log.WithError(err).Warn("Failed to get remote PK, rejecting connection")
 			return
 		}
 
 		if _, allowed := s.whitelist[remotePK]; !allowed {
-			print(fmt.Sprintf("Connection rejected: %s not in whitelist\n", remotePK.Hex()))
+			s.log.Warnf("Connection rejected: %s not in whitelist", remotePK.Hex())
 			return
 		}
 
-		fmt.Printf("Whitelisted connection accepted from %s\n", remotePK.Hex())
+		s.log.Infof("Whitelisted connection accepted from %s", remotePK.Hex())
 	}
 
 	tunIP, tunGateway, allowTrafficToLocalNet, err := s.shakeHands(conn)
 	if err != nil {
-		print(fmt.Sprintf("Error negotiating with client %s: %v\n", conn.RemoteAddr(), err))
+		s.log.WithError(err).Errorf("Error negotiating with client %s", conn.RemoteAddr())
 		return
 	}
 	defer allowTrafficToLocalNet()
 
 	tun, err := newTUNDevice()
 	if err != nil {
-		print(fmt.Sprintf("Error allocating TUN interface: %v\n", err))
+		s.log.WithError(err).Error("Error allocating TUN interface")
 		return
 	}
 	defer func() {
 		if err := tun.Close(); err != nil {
-			print(fmt.Sprintf("Error closing TUN %s: %v\n", tun.Name(), err))
+			s.log.WithError(err).Warnf("Error closing TUN %s", tun.Name())
 		}
 	}()
 
-	fmt.Printf("Allocated TUN %s", tun.Name())
+	s.log.Infof("Allocated TUN %s", tun.Name())
 
 	if err := s.SetupTUN(tun.Name(), tunIP.String()+TUNNetmaskCIDR, tunGateway.String(), TUNMTU); err != nil {
-		print(fmt.Sprintf("Error setting up TUN %s: %v", tun.Name(), err))
+		s.log.WithError(err).Errorf("Error setting up TUN %s", tun.Name())
 		return
 	}
 
@@ -308,7 +313,7 @@ func (s *Server) serveConn(conn net.Conn) {
 		if _, err := io.Copy(tun, conn); err != nil {
 			// when the vpn-client is closed we get the error "EOF"
 			if err.Error() != io.EOF.Error() {
-				print(fmt.Sprintf("Error resending traffic from VPN client to TUN %s: %v\n", tun.Name(), err))
+				s.log.WithError(err).Errorf("Error resending traffic from VPN client to TUN %s", tun.Name())
 			}
 		}
 	}()
@@ -318,7 +323,7 @@ func (s *Server) serveConn(conn net.Conn) {
 		if _, err := io.Copy(conn, tun); err != nil {
 			// when the vpn-client is closed we get the error "read tun: file already closed"
 			if err.Error() != "read tun: file already closed" {
-				print(fmt.Sprintf("Error resending traffic from TUN %s to VPN client: %v\n", tun.Name(), err))
+				s.log.WithError(err).Errorf("Error resending traffic from TUN %s to VPN client", tun.Name())
 			}
 		}
 	}()
@@ -339,7 +344,7 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway netip.Addr, unsecu
 	// default value
 	unsecureVPN = func() {}
 
-	fmt.Printf("Got client hello: %v", cHello)
+	s.log.Debugf("Got client hello: %v", cHello)
 
 	for _, ip := range cHello.UnavailablePrivateIPs {
 		if err := s.ipGen.Reserve(ip); err != nil {
@@ -384,7 +389,7 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway netip.Addr, unsecu
 
 		unsecureVPN = func() {
 			if err := AllowIPToLocalNetwork(cTUNIP, sTUNIP); err != nil {
-				print(fmt.Sprintf("Error allowing traffic to local network: %v\n", err))
+				s.log.WithError(err).Error("Error allowing traffic to local network")
 			}
 		}
 	}
@@ -405,13 +410,13 @@ func (s *Server) shakeHands(conn net.Conn) (tunIP, tunGateway netip.Addr, unsecu
 
 func (s *Server) setAppStatus(status appserver.AppDetailedStatus) {
 	if err := s.appCl.SetDetailedStatus(string(status)); err != nil {
-		fmt.Printf("Failed to set status %v: %v\n", status, err)
+		s.log.WithError(err).Warnf("Failed to set status %v", status)
 	}
 }
 
 func (s *Server) setAppError(appErr error) {
 	if err := s.appCl.SetError(appErr.Error()); err != nil {
-		fmt.Printf("Failed to set error %v: %v\n", appErr, err)
+		s.log.WithError(err).Warnf("Failed to set error %v", appErr)
 	}
 }
 
@@ -421,7 +426,7 @@ func (s *Server) sendServerErrHello(conn net.Conn, status HandshakeStatus) {
 	}
 
 	if err := WriteJSON(conn, &sHello); err != nil {
-		print(fmt.Sprintf("Error sending server hello: %v\n", err))
+		s.log.WithError(err).Warn("Error sending server hello")
 	}
 }
 
