@@ -132,7 +132,7 @@ func TestTransportQueryGateway_CompactEntriesOverWire(t *testing.T) {
 
 	// The requester reconstructs full entries from the compact response.
 	entries := reconstructDstEntries(dstPK, &reply)
-	if len(entries) != 2 || !entries[0].HasEdge(dstPK) || !entries[0].HasEdge(peer1) {
+	if len(entries) != 2 || !entries[0].ContainsEdge(dstPK) || !entries[0].ContainsEdge(peer1) {
 		t.Fatalf("reconstruct failed: %+v", entries)
 	}
 }

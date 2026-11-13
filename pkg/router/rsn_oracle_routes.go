@@ -438,7 +438,7 @@ func (r *router) fetchOraclePlan(fctx context.Context, oracle DstTransportOracle
 
 	var localTps []oracleLocalTp
 	r.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
-		if tp == nil || tp.IsClosed() {
+		if tp == nil || tp.Closed() {
 			return true
 		}
 		if tp.Entry.Label == transport.LabelSetup {

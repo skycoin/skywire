@@ -52,7 +52,7 @@ func (v *Visor) DiagSnapshot() *visorapi.DiagSnapshot {
 		d.DialStats, d.DialFailures = v.tpM.DialStats()
 		now := time.Now()
 		v.tpM.WalkTransports(func(mt *transport.ManagedTransport) bool {
-			if mt.IsClosed() {
+			if mt.Closed() {
 				return true
 			}
 			ago := -1.0

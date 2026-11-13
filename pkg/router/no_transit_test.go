@@ -70,8 +70,8 @@ func TestCascadeHandler_RefusesTransitButNotEdges(t *testing.T) {
 	dst, _ := cipher.GenerateKeyPair()
 	transit := &routing.CascadeSetup{}
 	edge := &routing.CascadeSetup{EdgeDesc: routing.NewRouteDescriptor(src, dst, 100, 110)}
-	require.False(t, transit.IsEdge())
-	require.True(t, edge.IsEdge())
+	require.False(t, transit.Edge())
+	require.True(t, edge.Edge())
 
 	ch := &CascadeHandler{}
 	ch.SetNoTransit(false)

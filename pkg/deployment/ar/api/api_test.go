@@ -301,7 +301,7 @@ func TestResolve(t *testing.T) {
 		var vd addrresolver.VisorData
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &vd))
 		require.Equal(t, "198.51.100.7", vd.RemoteAddr)
-		require.False(t, vd.IsLocal) // sender remote (203.0.113.5) != receiver (198.51.100.7)
+		require.False(t, vd.Local) // sender remote (203.0.113.5) != receiver (198.51.100.7)
 	})
 }
 

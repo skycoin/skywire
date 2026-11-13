@@ -828,8 +828,8 @@ func (rg *RouteGroup) SetWriteDeadline(t time.Time) error {
 	return nil
 }
 
-// IsAlive checks whether connection is alive.
-func (rg *RouteGroup) IsAlive() bool {
+// Alive checks whether connection is alive.
+func (rg *RouteGroup) Alive() bool {
 	return !rg.isClosed() && !rg.isRemoteClosed()
 }
 

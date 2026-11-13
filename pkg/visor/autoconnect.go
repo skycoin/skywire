@@ -160,12 +160,12 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			// false and the corresponding phase is skipped entirely — no wasted dials,
 			// no per-cycle "creation disabled" warnings from the funnel. dmsg is not an
 			// autoconnect phase, so the visor still keeps its dmsg baseline.
-			localSupportsSUDPH := a.tm.IsKnownNetwork(tptypes.SUDPH) && a.tm.CanCreateTransport(tptypes.SUDPH)
-			localSupportsSTCPR := a.tm.IsKnownNetwork(tptypes.STCPR) && a.tm.CanCreateTransport(tptypes.STCPR)
-			localSupportsSQUICR := a.tm.IsKnownNetwork(tptypes.QUIC) && a.tm.CanCreateTransport(tptypes.QUIC)            // QUIC(squicr): 3rd distinct carrier family for route diversity
-			localSupportsWEBRTC := a.tm.IsKnownNetwork(tptypes.WEBRTC) && a.tm.CanCreateTransport(tptypes.WEBRTC)        // NAT-traversing (ICE/STUN); reaches more NAT types than sudph hole-punch
-			localSupportsWT := a.tm.IsKnownNetwork(tptypes.WT) && a.tm.CanCreateTransport(tptypes.WT)                    // WT(swtr): HTTP/3 carrier — one of the three a browser visor can dial
-			localSupportsWS := a.tm.IsKnownNetwork(tptypes.WS) && a.tm.CanCreateTransport(tptypes.WS) && wsPageAllowed() // WS(swsr): WebSocket riding the peer's stcpr port — but an HTTPS page blocks ws:// as mixed content, so don't waste the dials there
+			localSupportsSUDPH := a.tm.KnownNetwork(tptypes.SUDPH) && a.tm.CanCreateTransport(tptypes.SUDPH)
+			localSupportsSTCPR := a.tm.KnownNetwork(tptypes.STCPR) && a.tm.CanCreateTransport(tptypes.STCPR)
+			localSupportsSQUICR := a.tm.KnownNetwork(tptypes.QUIC) && a.tm.CanCreateTransport(tptypes.QUIC)            // QUIC(squicr): 3rd distinct carrier family for route diversity
+			localSupportsWEBRTC := a.tm.KnownNetwork(tptypes.WEBRTC) && a.tm.CanCreateTransport(tptypes.WEBRTC)        // NAT-traversing (ICE/STUN); reaches more NAT types than sudph hole-punch
+			localSupportsWT := a.tm.KnownNetwork(tptypes.WT) && a.tm.CanCreateTransport(tptypes.WT)                    // WT(swtr): HTTP/3 carrier — one of the three a browser visor can dial
+			localSupportsWS := a.tm.KnownNetwork(tptypes.WS) && a.tm.CanCreateTransport(tptypes.WS) && wsPageAllowed() // WS(swsr): WebSocket riding the peer's stcpr port — but an HTTPS page blocks ws:// as mixed content, so don't waste the dials there
 			if !localSupportsSUDPH && !localSupportsSTCPR && !localSupportsSQUICR &&
 				!localSupportsWT && !localSupportsWS && !localSupportsWEBRTC {
 				a.log.Warn("No supported network types available locally — skipping autoconnect cycle")
@@ -223,7 +223,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 					existingByPK[remotePK] = make(map[tptypes.Type]bool)
 				}
 				existingByPK[remotePK][autoconnTP.Type()] = true
-				if !autoconnTP.IsInitiator() {
+				if !autoconnTP.Initiator() {
 					continue
 				}
 				switch autoconnTP.Type() {
@@ -607,7 +607,7 @@ func (a *autoconnector) filterDuplicates(pks []cipher.PubKey, trs []*transport.M
 	for _, pk := range pks {
 		found := false
 		for _, tr := range trs {
-			if tr.Entry.HasEdge(pk) {
+			if tr.Entry.ContainsEdge(pk) {
 				found = true
 				break
 			}
@@ -687,7 +687,7 @@ func (a *autoconnector) filterDuplicatesOfType(pks []cipher.PubKey, t tptypes.Ty
 	for _, pk := range pks {
 		found := false
 		for _, tr := range trs {
-			if tr.Entry.Type == t && tr.Entry.HasEdge(pk) {
+			if tr.Entry.Type == t && tr.Entry.ContainsEdge(pk) {
 				found = true
 				break
 			}

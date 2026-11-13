@@ -81,7 +81,7 @@ func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, 
 		Label:         tp.Entry.Label,
 		LatencyMS:     tp.GetLatency(),
 		ThroughputBps: tp.GetThroughputBps(),
-		Initiator:     tp.IsInitiator(),
+		Initiator:     tp.Initiator(),
 	}
 	if includeLogs {
 		summary.Log = tp.LogEntry

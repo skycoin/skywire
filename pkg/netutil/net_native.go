@@ -105,9 +105,9 @@ func DefaultNetworkInterfaceIPs() ([]net.IP, error) {
 	return localIPs, nil
 }
 
-// HasPublicIP returns true if this machine has at least one
+// PublicIPPresent returns true if this machine has at least one
 // publically available IP address
-func HasPublicIP() (bool, error) {
+func PublicIPPresent() (bool, error) {
 	localIPs, err := LocalNetworkInterfaceIPs()
 	if err != nil {
 		return false, err

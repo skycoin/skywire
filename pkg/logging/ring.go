@@ -51,9 +51,9 @@ type Record struct {
 	Module  string
 	Message string
 	Fields  map[string]string
-	// IsEvent is true for a layered route/transport event (events bucket),
+	// Event is true for a layered route/transport event (events bucket),
 	// false for the app's own log output (logs bucket).
-	IsEvent bool
+	Event bool
 }
 
 type appRing struct {
@@ -90,7 +90,7 @@ func (b *Broadcaster) record(e *Entry) {
 		Level:   e.Level,
 		Module:  module,
 		Message: e.Message,
-		IsEvent: event,
+		Event:   event,
 	}
 	if len(e.Data) > 0 {
 		rec.Fields = make(map[string]string, len(e.Data))

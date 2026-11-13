@@ -131,7 +131,7 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 				// A type this visor has no client for (a browser has no stcpr/sudph
 				// socket) can only fail with ErrUnknownNetwork — skip it rather than
 				// spend the retrier's three attempts (~4 s) on it at every dial.
-				if !tm.IsKnownNetwork(nType) {
+				if !tm.KnownNetwork(nType) {
 					continue
 				}
 				switch nType {

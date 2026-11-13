@@ -54,7 +54,7 @@ func TestReadLoopSurvivesConnSwap(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("a packet on the new conn never reached readCh: readLoop died with the old conn")
 	}
-	require.False(t, mt.IsClosed(), "the transport must survive the conn swap")
+	require.False(t, mt.Closed(), "the transport must survive the conn swap")
 	for _, ev := range tm.Events() {
 		require.NotEqual(t, "close", ev.Event, "no close event may be recorded for a swapped transport: %+v", ev)
 	}

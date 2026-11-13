@@ -78,7 +78,7 @@ func (rg *RouteGroup) sendKeepAlive() error {
 		tp := rg.legs[i].tp
 		rule := rg.legs[i].fwd
 
-		if tp == nil || tp.IsClosed() {
+		if tp == nil || tp.Closed() {
 			continue
 		}
 

@@ -24,16 +24,16 @@ func TestEveryKnobRoundTrips(t *testing.T) {
 
 			k := Lookup(e.Name)
 			require.NotNil(t, k)
-			require.False(t, k.IsSet(), "nothing is set before a set")
+			require.False(t, k.ExplicitlySet(), "nothing is set before a set")
 
 			raw := bumpedValue(t, k)
 			require.NoError(t, Set(e.Name, raw))
-			require.True(t, k.IsSet())
+			require.True(t, k.ExplicitlySet())
 			require.Equal(t, raw, FormatKnob(k, k.Raw()), "the set value reads back as written")
 
 			Reset()
 			require.Equal(t, e.Def.Default, k.Raw(), "reset restores the compiled default")
-			require.False(t, k.IsSet())
+			require.False(t, k.ExplicitlySet())
 		})
 	}
 }

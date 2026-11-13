@@ -226,13 +226,13 @@ type VisorOverview struct {
 // TransportSummary contains transport summary data.
 // This mirrors visor.TransportSummary but is defined locally.
 type TransportSummary struct {
-	ID      uuid.UUID           `json:"id"`
-	Local   cipher.PubKey       `json:"local_pk"`
-	Remote  cipher.PubKey       `json:"remote_pk"`
-	Type    tptypes.Type        `json:"type"`
-	Log     *transport.LogEntry `json:"log,omitempty"`
-	IsSetup bool                `json:"is_setup"`
-	Label   transport.Label     `json:"label"`
+	ID     uuid.UUID           `json:"id"`
+	Local  cipher.PubKey       `json:"local_pk"`
+	Remote cipher.PubKey       `json:"remote_pk"`
+	Type   tptypes.Type        `json:"type"`
+	Log    *transport.LogEntry `json:"log,omitempty"`
+	Setup  bool                `json:"is_setup"`
+	Label  transport.Label     `json:"label"`
 }
 
 // TPSAPI defines the interface for the embedded Transport Setup Node.
@@ -394,7 +394,7 @@ type LocalTransport struct {
 	RemotePK  string `json:"remote_pk"`
 	Type      string `json:"type"`
 	Label     string `json:"label,omitempty"`
-	IsSetup   bool   `json:"is_setup"`
+	Setup     bool   `json:"is_setup"`
 	SentBytes uint64 `json:"sent_bytes"`
 	RecvBytes uint64 `json:"recv_bytes"`
 	// Bandwidth deltas for animation
@@ -1538,7 +1538,7 @@ func (s *Server) refreshVisorData() {
 			RemotePK: tp.Remote.String(),
 			Type:     string(tp.Type),
 			Label:    string(tp.Label),
-			IsSetup:  tp.IsSetup,
+			Setup:    tp.Setup,
 		}
 		if tp.Log != nil {
 			if tp.Log.RecvBytes != nil {

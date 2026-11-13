@@ -444,7 +444,7 @@ func (m *routeMux) fecStripeReassign(legs []groupLeg, idx int) (int, bool) {
 			continue
 		}
 		tp := legs[j].tp
-		if tp == nil || tp.IsClosed() || !m.legReadyAt(j) {
+		if tp == nil || tp.Closed() || !m.legReadyAt(j) {
 			continue
 		}
 		if m.fecStripeUsed[j] < m.knInt(routersettings.FECR) {

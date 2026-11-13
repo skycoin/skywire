@@ -11,15 +11,15 @@ import (
 )
 
 func TestCarrierDialContext(t *testing.T) {
-	require.False(t, IsCarrierDial(context.Background()), "an ordinary dial is not a carrier dial")
-	require.False(t, IsCarrierDial(nil), "a nil context must not panic") //nolint:staticcheck // SA1012: nil-safety is the assertion
-	require.True(t, IsCarrierDial(WithCarrierDial(context.Background())))
+	require.False(t, CarrierDial(context.Background()), "an ordinary dial is not a carrier dial")
+	require.False(t, CarrierDial(nil), "a nil context must not panic") //nolint:staticcheck // SA1012: nil-safety is the assertion
+	require.True(t, CarrierDial(WithCarrierDial(context.Background())))
 
 	// The marker survives derivation, which is how it reaches the networker:
 	// the visor wraps the dial ctx and then applies a timeout to it.
 	ctx, cancel := context.WithCancel(WithCarrierDial(context.Background()))
 	defer cancel()
-	require.True(t, IsCarrierDial(ctx))
+	require.True(t, CarrierDial(ctx))
 }
 
 // min_hops is a property of TRAFFIC — it keeps an intermediate from learning

@@ -86,7 +86,7 @@ func (v *Visor) autoUpgradeHypervisorTransport(ctx context.Context, hvPK cipher.
 		// and gating on the pair meant it never upgraded off the dmsg relay
 		// at all. Re-read every cycle — the order is settable at runtime and
 		// the RPC API can flip which networks are known.
-		candidates := directCarrierCandidates(tptypes.PreferenceOrder(), v.tpM.IsKnownNetwork)
+		candidates := directCarrierCandidates(tptypes.PreferenceOrder(), v.tpM.KnownNetwork)
 		if len(candidates) == 0 {
 			backoff = hypervisorTransportReconcileInterval
 			continue

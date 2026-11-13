@@ -415,28 +415,28 @@ func (p *visorPolicyProvider) Kind(pk string) string {
 	return ""
 }
 
-// IsTrusted implements policy.Provider. True when the PK is in
+// Trusted implements policy.Provider. True when the PK is in
 // either the dmsgpty whitelist or the hypervisor list (which is
 // auto-trusted).
-func (p *visorPolicyProvider) IsTrusted(pk string) bool {
+func (p *visorPolicyProvider) Trusted(pk string) bool {
 	_, ok := p.trusted[strings.ToLower(pk)]
 	return ok
 }
 
-// IsHypervisor implements policy.Provider. True when the PK is
+// Hypervisor implements policy.Provider. True when the PK is
 // in conf.Hypervisors.
-func (p *visorPolicyProvider) IsHypervisor(pk string) bool {
+func (p *visorPolicyProvider) Hypervisor(pk string) bool {
 	_, ok := p.hypervisors[strings.ToLower(pk)]
 	return ok
 }
 
-// HasTransport implements policy.Provider. True when the visor
+// Connected implements policy.Provider. True when the visor
 // already holds a live transport to the peer (any type). Backed by
 // the same preferred-transport lookup Latency/Kind use, so it's a
 // near-instant map hit in the transport manager — cheap enough for
 // the dial hot path. Lets "prefer-connected" policies bias toward
 // peers we're already wired to, avoiding a fresh-transport setup.
-func (p *visorPolicyProvider) HasTransport(pk string) bool {
+func (p *visorPolicyProvider) Connected(pk string) bool {
 	if p.tpM == nil {
 		return false
 	}

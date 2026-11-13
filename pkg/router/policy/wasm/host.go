@@ -131,7 +131,7 @@ func installHostFunctions(_ context.Context, env *hostEnv, builder wazero.HostMo
 			pkLen := api.DecodeU32(stack[1])
 			pk := readString(mod.Memory(), pkOff, pkLen)
 			b := uint64(0)
-			if env.provider != nil && env.provider.IsTrusted(pk) {
+			if env.provider != nil && env.provider.Trusted(pk) {
 				b = 1
 			}
 			stack[0] = b
@@ -144,7 +144,7 @@ func installHostFunctions(_ context.Context, env *hostEnv, builder wazero.HostMo
 			pkLen := api.DecodeU32(stack[1])
 			pk := readString(mod.Memory(), pkOff, pkLen)
 			b := uint64(0)
-			if env.provider != nil && env.provider.IsHypervisor(pk) {
+			if env.provider != nil && env.provider.Hypervisor(pk) {
 				b = 1
 			}
 			stack[0] = b

@@ -18,7 +18,7 @@ func TestFECStripeCap(t *testing.T) {
 	for i := range 4 {
 		m.markLegReady(i)
 	}
-	tps := []*transport.ManagedTransport{{}, {}, {}, {}} // zero-value: IsClosed()==false
+	tps := []*transport.ManagedTransport{{}, {}, {}, {}} // zero-value: Closed()==false
 
 	if !m.fecStripeActive() {
 		t.Fatal("cap should be active (fecEnabled + 4 active legs)")

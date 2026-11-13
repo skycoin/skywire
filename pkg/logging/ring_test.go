@@ -40,11 +40,11 @@ func TestRingClassifiesEventsAndLogs(t *testing.T) {
 	if len(logs) != 1 {
 		t.Fatalf("want 1 log, got %d: %+v", len(logs), logs)
 	}
-	if !events[0].IsEvent || events[1].IsEvent == false {
-		t.Fatalf("events should be marked IsEvent")
+	if !events[0].Event || events[1].Event == false {
+		t.Fatalf("events should be marked Event")
 	}
-	if logs[0].IsEvent {
-		t.Fatalf("log line should not be marked IsEvent")
+	if logs[0].Event {
+		t.Fatalf("log line should not be marked Event")
 	}
 
 	// Nothing captured for an unknown app.

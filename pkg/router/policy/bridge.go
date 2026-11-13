@@ -73,13 +73,13 @@ func peersModule(p Provider) *starlarkstruct.Module {
 		Name: "peers",
 		Members: starlark.StringDict{
 			"is_trusted": starlark.NewBuiltin("is_trusted", oneStringArg(func(pk string) starlark.Value {
-				return starlark.Bool(p.IsTrusted(pk))
+				return starlark.Bool(p.Trusted(pk))
 			})),
 			"is_hypervisor": starlark.NewBuiltin("is_hypervisor", oneStringArg(func(pk string) starlark.Value {
-				return starlark.Bool(p.IsHypervisor(pk))
+				return starlark.Bool(p.Hypervisor(pk))
 			})),
 			"has_transport": starlark.NewBuiltin("has_transport", oneStringArg(func(pk string) starlark.Value {
-				return starlark.Bool(p.HasTransport(pk))
+				return starlark.Bool(p.Connected(pk))
 			})),
 		},
 	}
@@ -196,7 +196,7 @@ func buildContextValue(rctx RoutingContext) starlark.Value {
 			}),
 			"cli_overrides":      cliOverrides,
 			"reverse_candidates": buildCandidatesValue(rctx.ReverseCandidates),
-			"is_direct_dial":     starlark.Bool(rctx.IsDirectDial),
+			"is_direct_dial":     starlark.Bool(rctx.DirectDial),
 			"transport_kind":     starlark.String(rctx.TransportKind),
 		},
 	)

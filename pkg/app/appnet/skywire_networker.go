@@ -135,7 +135,7 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 	// and get a single direct hop, bypassing the privacy constraint before
 	// route setup was ever reached. A session CARRIER dial is the one thing it
 	// does not apply to; see appnet.WithCarrierDial.
-	if r.directShortcutEligible(opts, IsCarrierDial(ctx)) {
+	if r.directShortcutEligible(opts, CarrierDial(ctx)) {
 		if directConn, ok := r.tryDirectDial(addr, opts.AppName); ok {
 			return &SkywireConn{
 				Conn:     directConn,

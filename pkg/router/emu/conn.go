@@ -149,8 +149,8 @@ func (d *Direction) Cut() { d.l.Cut() }
 // Restore lifts a Cut.
 func (d *Direction) Restore() { d.l.Restore() }
 
-// IsCut reports whether the direction is cut.
-func (d *Direction) IsCut() bool { return d.l.IsCut() }
+// Severed reports whether the direction is cut.
+func (d *Direction) Severed() bool { return d.l.Severed() }
 
 // Stats returns the direction's lifetime counters.
 func (d *Direction) Stats() LinkStats { return d.l.stats() }

@@ -110,7 +110,7 @@ func (m *routeMux) selectTransportRaw(legs []groupLeg, payload []byte) (*transpo
 			// leg answers false, so a group of comparable legs is unchanged.
 			if idx < len(legs) && !m.legProbeExhausted(idx) {
 				tp := legs[idx].tp
-				if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) {
+				if tp != nil && !tp.Closed() && m.legReadyAt(idx) {
 					return tp, legs[idx].fwd, idx, nil
 				}
 			}
@@ -141,7 +141,7 @@ func (m *routeMux) selectTransportRaw(legs []groupLeg, payload []byte) (*transpo
 		}
 		if idx < len(legs) {
 			tp := legs[idx].tp
-			if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) {
+			if tp != nil && !tp.Closed() && m.legReadyAt(idx) {
 				return tp, legs[idx].fwd, idx, nil
 			}
 		}
@@ -157,7 +157,7 @@ func (m *routeMux) selectTransportRaw(legs []groupLeg, payload []byte) (*transpo
 	for i := range n {
 		idx := int((start + i) % n) //nolint:gosec
 		tp := legs[idx].tp
-		if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) {
+		if tp != nil && !tp.Closed() && m.legReadyAt(idx) {
 			return tp, legs[idx].fwd, idx, nil
 		}
 	}
@@ -177,7 +177,7 @@ func (m *routeMux) selectTransportRaw(legs []groupLeg, payload []byte) (*transpo
 	for i := range n {
 		idx := int((start + i) % n) //nolint:gosec
 		tp := legs[idx].tp
-		if tp != nil && !tp.IsClosed() && m.legSelectableIgnoringStandby(idx) {
+		if tp != nil && !tp.Closed() && m.legSelectableIgnoringStandby(idx) {
 			return tp, legs[idx].fwd, idx, nil
 		}
 	}
@@ -205,7 +205,7 @@ func (m *routeMux) selectFastestTransport(legs []groupLeg) (*transport.ManagedTr
 	bestLat := -1.0
 	for idx := range legs {
 		tp := legs[idx].tp
-		if tp == nil || tp.IsClosed() || !m.legReadyAt(idx) {
+		if tp == nil || tp.Closed() || !m.legReadyAt(idx) {
 			continue
 		}
 		if firstReady < 0 {
@@ -257,7 +257,7 @@ func (m *routeMux) selectRetxTransport(legs []groupLeg, avoid uuid.UUID) (*trans
 	bestLat := -1.0
 	for idx := range legs {
 		tp := legs[idx].tp
-		if tp == nil || tp.IsClosed() || tp.Entry.ID == avoid || !m.legReadyAt(idx) {
+		if tp == nil || tp.Closed() || tp.Entry.ID == avoid || !m.legReadyAt(idx) {
 			continue
 		}
 		if firstReady < 0 {
@@ -383,7 +383,7 @@ func (m *routeMux) selectConfinedForwardFor(legs []groupLeg, payload []byte,
 		m.feedInflight(legs)
 		if m.tpSelector.Saturated(idx) {
 			if alt := m.tpSelector.FirstUnsaturated(); alt >= 0 && alt < len(legs) {
-				if tp := legs[alt].tp; tp != nil && !tp.IsClosed() && m.legReadyAt(alt) {
+				if tp := legs[alt].tp; tp != nil && !tp.Closed() && m.legReadyAt(alt) {
 					return tp, legs[alt].fwd, alt, true
 				}
 			}
@@ -400,7 +400,7 @@ func (m *routeMux) selectConfinedForwardFor(legs []groupLeg, payload []byte,
 func (m *routeMux) forwardCandidates(legs []groupLeg, wantDirect bool, dst, src cipher.PubKey) []int {
 	live := func(idx int) bool {
 		tp := legs[idx].tp
-		return tp != nil && !tp.IsClosed()
+		return tp != nil && !tp.Closed()
 	}
 	for _, match := range []func(int) bool{
 		func(idx int) bool {
@@ -483,7 +483,7 @@ func (m *routeMux) confinedForwardLeg(legs []groupLeg, wantDirect bool, dst, src
 	now := time.Now().UnixNano()
 	if m.confinedFwdIdx >= 0 && m.confinedFwdIdx < len(legs) &&
 		now-m.confinedFwdAtNano < int64(confinedForwardRefresh) {
-		if tp := legs[m.confinedFwdIdx].tp; tp != nil && !tp.IsClosed() && m.legReadyAt(m.confinedFwdIdx) {
+		if tp := legs[m.confinedFwdIdx].tp; tp != nil && !tp.Closed() && m.legReadyAt(m.confinedFwdIdx) {
 			return m.confinedFwdIdx
 		}
 	}

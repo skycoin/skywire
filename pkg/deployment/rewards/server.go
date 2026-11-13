@@ -15,7 +15,7 @@ import (
 func WhitelistAuth(wlkeys []cipher.PubKey) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !IsWhitelisted(r, wlkeys) {
+			if !Whitelisted(r, wlkeys) {
 				http.Error(w, "401 Unauthorized", http.StatusUnauthorized)
 				return
 			}
@@ -24,9 +24,9 @@ func WhitelistAuth(wlkeys []cipher.PubKey) func(http.Handler) http.Handler {
 	}
 }
 
-// IsWhitelisted checks if the current request is from a whitelisted PK
+// Whitelisted checks if the current request is from a whitelisted PK
 // without blocking. Used for UI rendering (show/hide links).
-func IsWhitelisted(r *http.Request, wlkeys []cipher.PubKey) bool {
+func Whitelisted(r *http.Request, wlkeys []cipher.PubKey) bool {
 	if len(wlkeys) == 0 {
 		return true
 	}

@@ -55,7 +55,7 @@ type RoutingContextWire struct {
 	LocalPort         uint16            `json:"local_port,omitempty"`
 	NowUnixNano       int64             `json:"now_unix_nano"`
 	CLIOverrides      map[string]string `json:"cli_overrides"`
-	IsDirectDial      bool              `json:"is_direct_dial"`
+	DirectDial        bool              `json:"is_direct_dial"`
 	TransportKind     string            `json:"transport_kind"`
 	ReverseCandidates []CandidateWire   `json:"reverse_candidates"`
 }

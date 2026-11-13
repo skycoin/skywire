@@ -259,7 +259,7 @@ func (v *Visor) scanPendingPairs() {
 		return
 	}
 	v.tpM.WalkTransports(func(mt *transport.ManagedTransport) bool {
-		if mt.Type() == tptypes.WS && mt.Attached() && !mt.IsClosed() {
+		if mt.Type() == tptypes.WS && mt.Attached() && !mt.Closed() {
 			v.notePendingHypervisor(mt.Remote(), "transport")
 		}
 		return true

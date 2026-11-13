@@ -92,7 +92,7 @@ func (h *Hook) Snapshot() HookSnapshot {
 	if h.loader != nil {
 		out.Default = &EngineSnapshot{
 			Source: h.loader.Source(),
-			Active: h.loader.IsActive(),
+			Active: h.loader.Active(),
 		}
 	}
 	if len(h.byApp) > 0 {
@@ -103,7 +103,7 @@ func (h *Hook) Snapshot() HookSnapshot {
 			}
 			out.PerApp[name] = &EngineSnapshot{
 				Source: eng.Source(),
-				Active: eng.IsActive(),
+				Active: eng.Active(),
 			}
 		}
 	}
@@ -175,7 +175,7 @@ func (h *Hook) loaderFor(appName string) Engine {
 //     proceeds (failure-safe at the router layer too).
 func (h *Hook) BeforeDial(ctx context.Context, info router.DialInfo) (router.DialAdjustment, error) {
 	loader := h.loaderFor(info.AppName)
-	if loader == nil || !loader.IsActive() {
+	if loader == nil || !loader.Active() {
 		return router.DialAdjustment{}, nil
 	}
 	rctx := RoutingContext{
@@ -183,7 +183,7 @@ func (h *Hook) BeforeDial(ctx context.Context, info router.DialInfo) (router.Dia
 		PeerPK:        info.PeerPK.Hex(),
 		Port:          uint16(info.RPort),
 		CLIOverrides:  info.CLIOverrides,
-		IsDirectDial:  info.IsDirectDial,
+		DirectDial:    info.DirectDial,
 		TransportKind: info.TransportKind,
 	}
 	spec, err := loader.Decide(ctx, rctx, nil)
@@ -247,7 +247,7 @@ func (h *Hook) BeforeDial(ctx context.Context, info router.DialInfo) (router.Dia
 // with no drop signal maps to Chosen=-1 (defer to router's pick).
 func (h *Hook) SelectRoute(ctx context.Context, info router.DialInfo, forward, reverse []router.CandidateInfo) (router.RouteSelection, error) {
 	loader := h.loaderFor(info.AppName)
-	if loader == nil || !loader.IsActive() || len(forward) == 0 {
+	if loader == nil || !loader.Active() || len(forward) == 0 {
 		return router.RouteSelection{Chosen: -1, ReverseChosen: -1}, nil
 	}
 	prov := h.provider
@@ -361,7 +361,7 @@ func hopsEqual(a, b []string) bool {
 // route group to drop legs unexpectedly.
 func (h *Hook) OnTick(info router.DialInfo, legs []router.LegInfo) router.RotationAction {
 	loader := h.loaderFor(info.AppName)
-	if loader == nil || !loader.IsActive() {
+	if loader == nil || !loader.Active() {
 		return router.RotationAction{}
 	}
 	policyLegs := make([]LegInfo, 0, len(legs))
@@ -437,7 +437,7 @@ func (h *Hook) SelfHealTarget() (int, bool) {
 // that as "leave distribution unchanged."
 func (h *Hook) OnLegChange(info router.DialInfo, legs []router.LegInfo, change router.LegChange) router.DistributionConfig {
 	loader := h.loaderFor(info.AppName)
-	if loader == nil || !loader.IsActive() {
+	if loader == nil || !loader.Active() {
 		return router.DistributionConfig{}
 	}
 	policyLegs := make([]LegInfo, 0, len(legs))

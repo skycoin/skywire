@@ -18,7 +18,7 @@ func mustPK(t *testing.T, hex string) cipher.PubKey {
 }
 
 func pkLabel(pk cipher.PubKey) RouteLabel { return RouteLabel{PK: pk} }
-func tpLabel(id uuid.UUID) RouteLabel     { return RouteLabel{IsTpID: true, TpID: id} }
+func tpLabel(id uuid.UUID) RouteLabel     { return RouteLabel{ByTpID: true, TpID: id} }
 
 func TestParseResolverHost(t *testing.T) {
 	dest := "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c"

@@ -181,7 +181,7 @@ func applyServiceEndpoints(conf *visorconfig.V1) {
 
 	// Deployment services are dmsg-only: the dmsg:// URLs go into the primary
 	// fields, mirroring configureServiceURLs() in gen.go.
-	if services.HasDmsgEndpoints() {
+	if services.DmsgEndpointsSet() {
 		if servers := deployment.DmsgServerEntriesToDisc(services.DmsgServers); len(servers) > 0 {
 			conf.Dmsg.Servers = servers
 		}

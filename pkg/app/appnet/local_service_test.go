@@ -37,7 +37,7 @@ func TestLocalServiceRoundTrip(t *testing.T) {
 	seen := make(chan net.Addr, 1)
 	RegisterLocalService(pk, LocalService{Port: addr.Port, Label: "skynet_web", Suffixes: []string{".skynet"}}, echoService(t, seen))
 
-	require.True(t, HasLocalService(addr))
+	require.True(t, LocalServiceRegistered(addr))
 	svc, ok := LocalServiceFor(addr)
 	require.True(t, ok)
 	require.Equal(t, "skynet_web", svc.Label)
@@ -83,7 +83,7 @@ func TestLocalServiceAddressFamilyIgnored(t *testing.T) {
 	// Registered once, reachable by either family: a local service is served
 	// before any carrier is chosen.
 	for _, n := range []Type{TypeSkynet, TypeDmsg} {
-		require.True(t, HasLocalService(Addr{Net: n, PubKey: pk, Port: routing.Port(4445)}), n)
+		require.True(t, LocalServiceRegistered(Addr{Net: n, PubKey: pk, Port: routing.Port(4445)}), n)
 	}
 }
 
@@ -105,7 +105,7 @@ func TestLocalServiceMisses(t *testing.T) {
 	require.ErrorIs(t, err, ErrNoLocalService)
 
 	UnregisterLocalService(pk, routing.Port(4445))
-	require.False(t, HasLocalService(Addr{Net: TypeSkynet, PubKey: pk, Port: routing.Port(4445)}))
+	require.False(t, LocalServiceRegistered(Addr{Net: TypeSkynet, PubKey: pk, Port: routing.Port(4445)}))
 	_, err = DialLocalService(Addr{Net: TypeSkynet, PubKey: pk, Port: routing.Port(4445)})
 	require.ErrorIs(t, err, ErrNoLocalService)
 }

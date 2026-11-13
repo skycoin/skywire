@@ -26,13 +26,13 @@ func TestPublishLocalResolverUsesTheVisorsOwnPK(t *testing.T) {
 	// The key is the visor's own PK on the resolver's own SOCKS port, read as a
 	// routing port — what an app's dial to its own visor carries.
 	addr := appnet.Addr{Net: appnet.TypeSkynet, PubKey: pk, Port: routing.Port(4446)}
-	require.True(t, appnet.HasLocalService(addr))
+	require.True(t, appnet.LocalServiceRegistered(addr))
 	got, _ := appnet.LocalServiceFor(addr)
 	require.Equal(t, svc, got)
 	require.Equal(t, []appnet.LocalService{svc}, appnet.LocalServices(pk))
 
 	v.unpublishLocalResolver(routing.Port(4446))
-	require.False(t, appnet.HasLocalService(addr))
+	require.False(t, appnet.LocalServiceRegistered(addr))
 	require.Empty(t, appnet.LocalServices(pk))
 }
 

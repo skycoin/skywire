@@ -38,7 +38,7 @@ import (
 // for one.
 func anyLiveTransport(legs []groupLeg) bool {
 	for _, lg := range legs {
-		if tp := lg.tp; tp != nil && !tp.IsClosed() {
+		if tp := lg.tp; tp != nil && !tp.Closed() {
 			return true
 		}
 	}

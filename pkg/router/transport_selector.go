@@ -381,7 +381,7 @@ func (ts *transportSelector) Rebuild(legs []groupLeg) {
 		schedule := make([]int, 0, n)
 		for i := range legs {
 			tp := legs[i].tp
-			if tp != nil && !tp.IsClosed() {
+			if tp != nil && !tp.Closed() {
 				schedule = append(schedule, i)
 			}
 		}
@@ -411,7 +411,7 @@ func (ts *transportSelector) Rebuild(legs []groupLeg) {
 		maxW := 0.0
 		for i := range legs {
 			tp := legs[i].tp
-			if tp == nil || tp.IsClosed() {
+			if tp == nil || tp.Closed() {
 				continue
 			}
 			w := 0.0
@@ -459,7 +459,7 @@ func (ts *transportSelector) Rebuild(legs []groupLeg) {
 			schedule := make([]int, 0, n)
 			for i := range legs {
 				tp := legs[i].tp
-				if tp != nil && !tp.IsClosed() {
+				if tp != nil && !tp.Closed() {
 					schedule = append(schedule, i)
 				}
 			}
@@ -481,7 +481,7 @@ func (ts *transportSelector) Rebuild(legs []groupLeg) {
 		schedule := make([]int, 0, 16)
 		for i := range legs {
 			tp := legs[i].tp
-			if tp == nil || tp.IsClosed() {
+			if tp == nil || tp.Closed() {
 				continue
 			}
 			w := 1.0
@@ -514,7 +514,7 @@ func (ts *transportSelector) Rebuild(legs []groupLeg) {
 			if i == 0 {
 				continue
 			}
-			if tp != nil && !tp.IsClosed() {
+			if tp != nil && !tp.Closed() {
 				smallSched = append(smallSched, i)
 			}
 		}
@@ -537,7 +537,7 @@ func (ts *transportSelector) Rebuild(legs []groupLeg) {
 			if i == 0 {
 				continue
 			}
-			if tp != nil && !tp.IsClosed() {
+			if tp != nil && !tp.Closed() {
 				smallSched = append(smallSched, i)
 			}
 		}
@@ -562,7 +562,7 @@ func (ts *transportSelector) Rebuild(legs []groupLeg) {
 		liveTps := make([]*transport.ManagedTransport, 0, n)
 		for i := range legs {
 			tp := legs[i].tp
-			if tp != nil && !tp.IsClosed() {
+			if tp != nil && !tp.Closed() {
 				live = append(live, i)
 				liveTps = append(liveTps, tp)
 			}
@@ -603,7 +603,7 @@ func (ts *transportSelector) Rebuild(legs []groupLeg) {
 		schedule := make([]int, 0, n)
 		for i := range legs {
 			tp := legs[i].tp
-			if tp != nil && !tp.IsClosed() {
+			if tp != nil && !tp.Closed() {
 				schedule = append(schedule, i)
 			}
 		}
@@ -617,7 +617,7 @@ func (ts *transportSelector) Rebuild(legs []groupLeg) {
 	// Compute weights as integer multiples
 	for i := range legs {
 		tp := legs[i].tp
-		if tp == nil || tp.IsClosed() {
+		if tp == nil || tp.Closed() {
 			weights[i] = 0
 			continue
 		}

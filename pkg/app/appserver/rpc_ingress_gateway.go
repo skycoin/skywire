@@ -623,7 +623,7 @@ func (r *RPCIngressGateway) dialInternal(remote appnet.Addr, req *DialOptionsReq
 	// can hand them a .skynet / .dmsg name over the data plane it already
 	// holds instead of through a second SOCKS hop on localhost. See
 	// pkg/app/appnet/local_service.go.
-	if appnet.HasLocalService(remote) {
+	if appnet.LocalServiceRegistered(remote) {
 		conn, lErr := appnet.DialLocalService(remote)
 		if lErr != nil {
 			free()

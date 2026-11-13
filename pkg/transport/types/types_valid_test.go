@@ -26,33 +26,33 @@ func TestValidAndKnown(t *testing.T) {
 
 func TestIsRelayIsDirect(t *testing.T) {
 	// DMSG is the only relay; every other known type is direct.
-	if !IsRelay(DMSG) {
+	if !Relay(DMSG) {
 		t.Error("DMSG must be a relay")
 	}
-	if IsDirect(DMSG) {
+	if Direct(DMSG) {
 		t.Error("DMSG must not be direct")
 	}
 	for _, ty := range Known() {
 		if ty == DMSG {
 			continue
 		}
-		if !IsDirect(ty) {
+		if !Direct(ty) {
 			t.Errorf("known type %q must be direct", ty)
 		}
-		if IsRelay(ty) {
+		if Relay(ty) {
 			t.Errorf("known type %q must not be a relay", ty)
 		}
 	}
 	// webrtc is the genuinely-p2p transport — direct, not relay.
-	if !IsDirect(WEBRTC) || IsRelay(WEBRTC) {
+	if !Direct(WEBRTC) || Relay(WEBRTC) {
 		t.Error("WEBRTC must be direct, not relay")
 	}
 	// Alias-aware: legacy names classify by their canonical type.
-	if !IsDirect(QUICLegacy) || !IsDirect(WSLegacy) || !IsDirect(WTLegacy) {
+	if !Direct(QUICLegacy) || !Direct(WSLegacy) || !Direct(WTLegacy) {
 		t.Error("legacy direct aliases (quic/ws/wt) must be direct")
 	}
 	// Unknown types are neither direct nor relay.
-	if IsDirect("bogus") || IsRelay("bogus") || IsDirect("") {
+	if Direct("bogus") || Relay("bogus") || Direct("") {
 		t.Error("unknown/empty types must be neither direct nor relay")
 	}
 }

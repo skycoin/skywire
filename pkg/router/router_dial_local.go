@@ -202,7 +202,7 @@ func (r *router) directRoute(src, dst cipher.PubKey) (fwd, rev []routing.Hop, ok
 	r.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
 		// Mirror calculateLocalRoutes' direct probe: skip closed / pong-dead legs
 		// and setup-labeled (RSN control-plane) transports, and match dst.
-		if tp == nil || tp.IsClosed() || tp.Entry.Label == transport.LabelSetup {
+		if tp == nil || tp.Closed() || tp.Entry.Label == transport.LabelSetup {
 			return true
 		}
 		if tp.Entry.RemoteEdge(src) == dst {
@@ -241,7 +241,7 @@ func (r *router) directRoutes(src, dst cipher.PubKey) [][]routing.Hop {
 	}
 	var cands []cand
 	r.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
-		if tp == nil || tp.IsClosed() || tp.Entry.Label == transport.LabelSetup {
+		if tp == nil || tp.Closed() || tp.Entry.Label == transport.LabelSetup {
 			return true
 		}
 		if tp.Entry.RemoteEdge(src) == dst {
@@ -298,7 +298,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 		// IsClosed() catches both explicitly-closed and silently-dead legs — we
 		// must not build a route out over one. This is the local-calc analog
 		// of the per-leg liveness probe: don't originate a leg on a dead edge.
-		if tp.IsClosed() {
+		if tp.Closed() {
 			return true
 		}
 		// Exclude "setup" labeled transports — those are for RSN control-plane
@@ -771,7 +771,7 @@ func (r *router) directHopExcluding(src, dst cipher.PubKey, exclude []uuid.UUID)
 	// with gaps on sudph, restart to restart, from the same three transports.
 	var best *transport.ManagedTransport
 	r.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
-		if tp == nil || tp.IsClosed() || tp.Entry.Label == transport.LabelSetup {
+		if tp == nil || tp.Closed() || tp.Entry.Label == transport.LabelSetup {
 			return true
 		}
 		if tp.Entry.RemoteEdge(src) != dst || slices.Contains(exclude, tp.Entry.ID) {

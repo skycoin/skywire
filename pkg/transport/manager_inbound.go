@@ -78,7 +78,7 @@ func (tm *Manager) SetCreateRestriction(r CreateRestriction) { tm.restrict.Store
 func (tm *Manager) CloseDirectTransports() int {
 	var ids []uuid.UUID
 	tm.WalkTransports(func(tp *ManagedTransport) bool {
-		if types.IsDirect(types.NormalizeType(tp.Type())) {
+		if types.Direct(types.NormalizeType(tp.Type())) {
 			ids = append(ids, tp.Entry.ID)
 		}
 		return true

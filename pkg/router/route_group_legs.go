@@ -106,7 +106,7 @@ func (rg *RouteGroup) aliveLegCount() int {
 	n := 0
 	for _, lg := range rg.legs {
 		tp := lg.tp
-		if tp != nil && !tp.IsClosed() {
+		if tp != nil && !tp.Closed() {
 			n++
 		}
 	}
@@ -296,7 +296,7 @@ func (rg *RouteGroup) snapshotLegs() []LegInfo {
 		if tp != nil {
 			l.Kind = string(tp.Entry.Type)
 			l.TransportID = tp.Entry.ID.String()
-			l.Alive = !tp.IsClosed()
+			l.Alive = !tp.Closed()
 			// Prefer the measured END-TO-END per-leg latency (whole route) over
 			// the first-hop transport RTT — it is the leg-quality signal the
 			// policy's slowest-leg eviction should judge. Falls back to the
@@ -647,7 +647,7 @@ func (rg *RouteGroup) dropLegs(want []uuid.UUID) {
 	aliveCount := 0
 	for _, lg := range rg.legs {
 		tp := lg.tp
-		if tp != nil && !tp.IsClosed() {
+		if tp != nil && !tp.Closed() {
 			aliveCount++
 		}
 	}
@@ -660,7 +660,7 @@ func (rg *RouteGroup) dropLegs(want []uuid.UUID) {
 			continue
 		}
 		tp := rg.legs[idx].tp
-		if tp.IsClosed() || slices.Contains(ids, id) {
+		if tp.Closed() || slices.Contains(ids, id) {
 			continue
 		}
 		if aliveCount <= 1 {
@@ -1166,7 +1166,7 @@ func (rg *RouteGroup) enforceBottleneckGroups(recvDeltas map[uuid.UUID]uint64) {
 	// Distinct-group admission: park any redundant co-bottlenecked active legs.
 	legs := make([]bottleneckLeg, 0, len(tpsCopy))
 	for i, tp := range tpsCopy {
-		if tp == nil || tp.IsClosed() {
+		if tp == nil || tp.Closed() {
 			continue
 		}
 		legs = append(legs, bottleneckLeg{
@@ -1341,7 +1341,7 @@ func (rg *RouteGroup) bandLegsLocked(recvDeltas map[uuid.UUID]uint64) ([]bandLeg
 	legs := make([]bandLeg, 0, len(rg.legs))
 	for i, lg := range rg.legs {
 		tp := lg.tp
-		if tp == nil || tp.IsClosed() {
+		if tp == nil || tp.Closed() {
 			continue
 		}
 		latMs, windowed := rg.legBandMinLatencyMs(tp)
@@ -1388,7 +1388,7 @@ func (rg *RouteGroup) keepReverseFloor(demote []uuid.UUID, recvDeltas map[uuid.U
 	var activeDL []legGoodput
 	for i, lg := range rg.legs {
 		tp := lg.tp
-		if tp == nil || tp.IsClosed() || rg.mux.isLegStandby(i) {
+		if tp == nil || tp.Closed() || rg.mux.isLegStandby(i) {
 			continue
 		}
 		if rg.mux.legIsDirectTp(tp) != flipped { // not a download-class leg
@@ -1698,7 +1698,7 @@ func (rg *RouteGroup) pruneDeadTransports() []int {
 
 	for i, lg := range rg.legs {
 		tp := lg.tp
-		if tp != nil && !tp.IsClosed() {
+		if tp != nil && !tp.Closed() {
 			alive = append(alive, lg)
 		} else {
 			if lg.fwd != nil {

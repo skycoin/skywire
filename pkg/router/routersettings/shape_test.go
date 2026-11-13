@@ -13,7 +13,7 @@ import (
 func TestShapeKnobRejectsGarbage(t *testing.T) {
 	t.Cleanup(Reset)
 	require.Equal(t, ShapeAuto, MuxShape.Text(), "the compiled default is auto")
-	require.False(t, MuxShape.IsSet())
+	require.False(t, MuxShape.ExplicitlySet())
 
 	for _, ok := range []string{"auto", "2x2", "4x1", "1x4", "1,3", "2,1,1", " 2X2 ", "16x1"} {
 		require.NoError(t, Set(MuxShape.Name(), ok), "%q must be accepted", ok)
@@ -31,7 +31,7 @@ func TestShapeKnobRejectsGarbage(t *testing.T) {
 
 	// Set, read back and reset — the round trip the whole catalog promises.
 	require.NoError(t, Set(MuxShape.Name(), "2x2"))
-	require.True(t, MuxShape.IsSet())
+	require.True(t, MuxShape.ExplicitlySet())
 	for _, e := range Snapshot() {
 		if e.Name != MuxShape.Name() {
 			continue
@@ -42,7 +42,7 @@ func TestShapeKnobRejectsGarbage(t *testing.T) {
 	}
 	Reset()
 	require.Equal(t, ShapeAuto, MuxShape.Text())
-	require.False(t, MuxShape.IsSet())
+	require.False(t, MuxShape.ExplicitlySet())
 }
 
 // A string knob resolves per app, exactly like a numeric one: the app's own

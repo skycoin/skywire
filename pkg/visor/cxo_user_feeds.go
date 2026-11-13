@@ -237,7 +237,7 @@ func (v *Visor) setTPDLeafPubReason(reason string) {
 func (v *Visor) tpdLeafPublisherState() *visorapi.TPDLeafPublisherState {
 	st := &visorapi.TPDLeafPublisherState{}
 	if v.tpM != nil {
-		st.Wired = v.tpM.HasTPDLeafPublisher()
+		st.Wired = v.tpM.TPDLeafPublisherSet()
 	}
 	if st.Wired {
 		st.Announce = v.tpdAnnounce.state()

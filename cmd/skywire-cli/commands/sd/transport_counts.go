@@ -61,7 +61,7 @@ func (c *transportCounts) add(t tptypes.Type) bool {
 func (c *transportCounts) direct() int {
 	n := 0
 	for _, t := range tptypes.Known() {
-		if tptypes.IsDirect(t) {
+		if tptypes.Direct(t) {
 			n += *c.field(t)
 		}
 	}

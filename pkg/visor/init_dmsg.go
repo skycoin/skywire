@@ -1656,7 +1656,7 @@ func foldedWSSSuffix(srvCfg *dmsgc.DmsgServerConfig, pk cipher.PubKey) (suffix s
 	if s := strings.TrimPrefix(srvCfg.WSSDomainSuffix, "."); s != "" {
 		return s, false
 	}
-	if s := strings.TrimPrefix(deployment.Prod.WSSDomainSuffix, "."); s != "" && deployment.Prod.IsKnownDmsgServer(pk) {
+	if s := strings.TrimPrefix(deployment.Prod.WSSDomainSuffix, "."); s != "" && deployment.Prod.KnownDmsgServer(pk) {
 		return s, true
 	}
 	return "", false

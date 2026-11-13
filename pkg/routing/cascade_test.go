@@ -36,9 +36,9 @@ func TestCascadeSetup_MarshalRoundTrip_WithEdgeDesc(t *testing.T) {
 	got, err := UnmarshalCascadeSetup(b)
 	require.NoError(t, err)
 	assert.Equal(t, desc, got.EdgeDesc)
-	assert.True(t, got.IsEdge())
+	assert.True(t, got.Edge())
 	assert.Equal(t, cs.RuleData, got.RuleData)
-	assert.True(t, got.IsTerminal())
+	assert.True(t, got.Terminal())
 }
 
 // TestCascadeSetup_BackwardCompat_NoTrailingEdgeDesc simulates a message from a
@@ -64,6 +64,6 @@ func TestCascadeSetup_BackwardCompat_NoTrailingEdgeDesc(t *testing.T) {
 
 	got, err := UnmarshalCascadeSetup(oldWire)
 	require.NoError(t, err)
-	assert.False(t, got.IsEdge(), "missing trailing EdgeDesc must parse as non-edge")
+	assert.False(t, got.Edge(), "missing trailing EdgeDesc must parse as non-edge")
 	assert.Equal(t, cs.RuleData, got.RuleData)
 }

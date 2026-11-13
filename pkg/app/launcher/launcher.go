@@ -201,11 +201,11 @@ func (l *AppLauncher) AppState(name string) (*appserver.AppState, bool) {
 		if connSummary != nil {
 			state.Status = appserver.AppStatusRunning
 			state.DetailedStatus = procStatus
-		} else if proc.IsRunning() && procStatus == appserver.AppDetailedStatusRunning {
+		} else if proc.Running() && procStatus == appserver.AppDetailedStatusRunning {
 			// App is running but doesn't use connections (e.g. skynet server)
 			state.Status = appserver.AppStatusRunning
 			state.DetailedStatus = procStatus
-		} else if proc.IsRunning() && isRawProcessApp(ac) {
+		} else if proc.Running() && isRawProcessApp(ac) {
 			// Raw external apps (skycoin-daemon, skycoin-web — cobra
 			// subcommands of the skywire binary that don't speak the
 			// appserver IPC) never call SetDetailedStatus("Running")
@@ -228,7 +228,7 @@ func (l *AppLauncher) AppState(name string) (*appserver.AppState, bool) {
 			// Don't downgrade raw-process apps that we just promoted
 			// to Running above — IsRunning() is the source of truth
 			// for them since they never call SetDetailedStatus.
-			if !(proc.IsRunning() && isRawProcessApp(ac)) {
+			if !(proc.Running() && isRawProcessApp(ac)) {
 				state.Status = appserver.AppStatusStarting
 				state.DetailedStatus = procStatus
 			}

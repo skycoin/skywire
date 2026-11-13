@@ -372,7 +372,7 @@ func poolCandidates(g *RouteGroup, pool []*RouteGroup, sibling map[uuid.UUID]str
 			continue
 		}
 		s.mu.Lock()
-		ok := len(s.legs) == 1 && s.legs[0].tp != nil && !s.legs[0].tp.IsClosed()
+		ok := len(s.legs) == 1 && s.legs[0].tp != nil && !s.legs[0].tp.Closed()
 		var first uuid.UUID
 		var lat, thr float64
 		if ok {
@@ -507,7 +507,7 @@ func (rg *RouteGroup) notePoolLegTaken(c poolCandidate, now time.Time, reason, h
 	for _, t := range rg.poolTaken {
 		for _, lg := range rg.legs {
 			tp := lg.tp
-			if tp != nil && !tp.IsClosed() && tp.Entry.ID == t.tpID {
+			if tp != nil && !tp.Closed() && tp.Entry.ID == t.tpID {
 				live = append(live, t)
 				break
 			}
@@ -567,7 +567,7 @@ func (rg *RouteGroup) releasePoolLegs(now time.Time, keep int) {
 		alive := 0
 		for _, lg := range rg.legs {
 			tp := lg.tp
-			if tp != nil && !tp.IsClosed() {
+			if tp != nil && !tp.Closed() {
 				alive++
 			}
 		}
@@ -646,7 +646,7 @@ func (rg *RouteGroup) releasableLegIndex(tpID uuid.UUID) int {
 	alive, idx := 0, -1
 	for i, lg := range rg.legs {
 		tp := lg.tp
-		if tp == nil || tp.IsClosed() {
+		if tp == nil || tp.Closed() {
 			continue
 		}
 		alive++
@@ -807,7 +807,7 @@ func (rg *RouteGroup) shedLegsForStandby() {
 	alive := 0
 	for _, lg := range rg.legs {
 		tp := lg.tp
-		if tp == nil || tp.IsClosed() {
+		if tp == nil || tp.Closed() {
 			continue
 		}
 		alive++

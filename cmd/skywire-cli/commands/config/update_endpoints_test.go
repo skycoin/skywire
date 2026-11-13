@@ -37,7 +37,7 @@ func TestFetchServiceConfigFallsBackToEmbedded(t *testing.T) {
 
 	fetchServiceConfig(logging.MustGetLogger("test"))
 
-	require.True(t, services.HasDmsgEndpoints(),
+	require.True(t, services.DmsgEndpointsSet(),
 		"embedded fallback must populate the dmsg service endpoints")
 	require.NotEmpty(t, services.RouteFinderDmsg)
 	require.NotEmpty(t, services.AddressResolverDmsg)

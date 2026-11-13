@@ -147,7 +147,7 @@ func (r *router) isTpdExist(rPK cipher.PubKey) bool {
 	// the stale-direct path that made `cli route trace` (default min-hops 1)
 	// report a direct route the live dial path would skip.
 	for _, netType := range []types.Type{types.STCPR, types.SUDPH, types.DMSG} {
-		if tp, err := r.tm.GetTransport(rPK, netType); err == nil && !tp.IsClosed() {
+		if tp, err := r.tm.GetTransport(rPK, netType); err == nil && !tp.Closed() {
 			return true
 		}
 	}

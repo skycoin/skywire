@@ -61,10 +61,10 @@ type ManagedTransportConfig struct {
 	// QueueDeletion, when set, defers TPD deregistration to the manager's batch
 	// deletion loop instead of making an HTTP call per transport close.
 	QueueDeletion func(id uuid.UUID)
-	// IsInitiator records whether this visor originated the transport (dialed
+	// Initiator records whether this visor originated the transport (dialed
 	// out) rather than accepting an inbound dial. Used only for reporting
 	// (outgoing vs incoming counts); the transport itself is bidirectional.
-	IsInitiator bool
+	Initiator bool
 }
 
 // ManagedTransport manages a direct line of communication between two visor nodes.
@@ -271,14 +271,14 @@ func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 		done:          make(chan struct{}),
 		timeout:       conf.InactiveTimeout,
 		queueDeletion: conf.QueueDeletion,
-		initiator:     conf.IsInitiator,
+		initiator:     conf.Initiator,
 	}
 	return mt
 }
 
-// IsInitiator reports whether this visor originated the transport (dialed
+// Initiator reports whether this visor originated the transport (dialed
 // out, "outgoing") rather than accepting an inbound dial ("incoming").
-func (mt *ManagedTransport) IsInitiator() bool { return mt.initiator }
+func (mt *ManagedTransport) Initiator() bool { return mt.initiator }
 
 // GetLatency returns the average inter-visor ping latency in milliseconds.
 // For backwards compatibility, returns the average latency.
@@ -964,9 +964,9 @@ func (mt *ManagedTransport) Close() (err error) {
 	return nil
 }
 
-// IsClosed returns true when the transport is closed
+// Closed returns true when the transport is closed
 // This instance cannot be used anymore and should be discarded
-func (mt *ManagedTransport) IsClosed() bool {
+func (mt *ManagedTransport) Closed() bool {
 	select {
 	case <-mt.done:
 		return true
