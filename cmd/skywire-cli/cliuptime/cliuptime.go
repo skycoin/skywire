@@ -35,6 +35,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -102,7 +103,7 @@ func newTableCmd(cfg Config) *cobra.Command {
 			if (dr.days > 0 || dr.since != "" || dr.until != "" || dr.all) && versionStr == "v1" {
 				versionStr = "v2"
 			}
-			entries, err := fetchEntries(c, baseURL, versionStr, visorFilter, cacheDir, cacheAge)
+			entries, err := FetchEntries(c.Flags(), baseURL, versionStr, visorFilter, cacheDir, cacheAge)
 			if err != nil {
 				fatal(c, err)
 			}
@@ -196,7 +197,7 @@ Modes (mutually exclusive after flags):
 Date range flags (--days/--since/--until/--all) apply to the default
 and --per-day modes; --hours ignores them.`,
 		Run: func(c *cobra.Command, _ []string) {
-			entries, err := fetchEntries(c, baseURL, "v3", visorFilter, cacheDir, cacheAge)
+			entries, err := FetchEntries(c.Flags(), baseURL, "v3", visorFilter, cacheDir, cacheAge)
 			if err != nil {
 				fatal(c, err)
 			}
@@ -266,20 +267,20 @@ and --per-day modes; --hours ignores them.`,
 	return cmd
 }
 
-// fetchEntries builds the /uptimes URL and hands it off to
+// FetchEntries builds the /uptimes URL and hands it off to
 // clirpc.FetchCachedServiceURL so we share the RPC → DMSG → HTTP
 // fallback chain + disk cache with every other uptime-consuming CLI
 // command. Never use uptimestats.Client.VisorUptimes from CLI — it
 // bypasses the cache and can trip the deployment services' rate
 // limits when users iterate on flag combos.
-func fetchEntries(c *cobra.Command, baseURL, version string, visors []string, cacheDir string, cacheAge int) ([]uptimestats.VisorSummary, error) {
+func FetchEntries(flags *pflag.FlagSet, baseURL, version string, visors []string, cacheDir string, cacheAge int) ([]uptimestats.VisorSummary, error) {
 	pks, err := parsePKs(visors)
 	if err != nil {
 		return nil, err
 	}
 	fullURL := buildUptimesURL(baseURL, version, pks)
 	cacheFile := cacheFilePath(cacheDir, baseURL, version, pks)
-	raw := clirpc.FetchCachedServiceURL(c.Flags(), cacheFile, fullURL, cacheAge)
+	raw := clirpc.FetchCachedServiceURL(flags, cacheFile, fullURL, cacheAge)
 	if raw == "" {
 		return nil, fmt.Errorf("empty response from %s (all fetch paths failed; see --no-cxo / --no-rpc / --no-dmsg flags)", fullURL)
 	}

@@ -1,549 +1,254 @@
 // Package clirewards cmd/skywire-cli/commands/rewards/runday.go c4-vis-cli
 //
-// runday.go provides the in-process orchestration of the full hourly reward
-// cycle, replacing the bash pipeline that was previously emitted by
-// `skywire cli rewards script reward | bash`. It performs:
-//
-//  1. Survey collection via the existing cli log Run function (in-process)
-//  2. Transport count collection via tp-collect (in-process)
-//  3. Bandwidth collection via bw-collect (in-process)
-//  4. UT fetch, filtered to a single day's slice
-//  5. Reward calculation (calcDay) — pure, returns a dayResult
-//  6. Writes the four output files (ineligible, shares, rewardtxn0, stats)
-//     directly from the dayResult — no second calculation pass.
+// runday.go runs the hourly reward cycle in-process, the steps of the
+// skywire-reward.service pipeline (`cli log --no-fetch`, `bw-collect`,
+// `script reward | bash`), with the calculation done once by calcRewards.
 package clirewards
 
 import (
 	"cmp"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"io/fs"
-	"math"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/bitfield/script"
-	"github.com/oschwald/geoip2-golang/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/skycoin/skywire/cmd/skywire-cli/cliuptime"
 	clilog "github.com/skycoin/skywire/cmd/skywire-cli/commands/log"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	deprewards "github.com/skycoin/skywire/pkg/deployment/rewards"
-	"github.com/skycoin/skywire/pkg/geoip"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/rewards"
+	"github.com/skycoin/skywire/pkg/uptimestats"
 )
 
-// runDate, runHistDir, runHwSurveyPath are bound to the `cli rewards run` flags.
 var (
-	runDate         string
-	runHistDir      string
-	runHwSurveyPath string
-	runMinVersion   string
-	runSkipCollect  bool
-	runProxy        string
+	// runOpts defaults to what the reward script passes: -b -B 0 -p log_backups.
+	runOpts = rewardOpts{
+		surveyPath: "log_backups",
+		histDir:    "hist",
+		requireBW:  true,
+	}
+	runUTFile      string
+	runSkipCollect bool
+	runFetch       bool
+	runPruneBelow  string
+	runMinVersion  string
+	runProxy       string
 )
 
 func init() {
 	RootCmd.AddCommand(runCmd)
-	runCmd.Flags().SortFlags = false
-	runCmd.Flags().StringVarP(&runDate, "date", "d", "", "date to calculate (YYYY-MM-DD); default = yesterday UTC")
-	runCmd.Flags().StringVarP(&runHistDir, "hist", "H", "hist", "history output directory")
-	runCmd.Flags().StringVar(&skycoinNodeURL, "skycoin-node", skycoinNodeURL, "skycoin node API used to find unused xpub reward addresses")
-	runCmd.Flags().StringVarP(&runHwSurveyPath, "lpath", "p", "log_backups", "path to collected surveys")
-	runCmd.Flags().StringVar(&runMinVersion, "minv", "", "minimum skywire version to fetch from / keep surveys for")
-	runCmd.Flags().BoolVar(&runSkipCollect, "skip-collect", false, "skip survey/tp/bw collection (use existing data on disk)")
-	runCmd.Flags().StringVar(&runProxy, "proxy", "", "collect surveys via a dmsgweb SOCKS5 resolving proxy (host:port, e.g. 127.0.0.1:4443)\ninstead of an own dmsg client — reuses a running `skywire dmsg web`'s warm sessions")
-	runCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
+	f := runCmd.Flags()
+	f.SortFlags = false
+	f.StringVarP(&logLvl, "loglvl", "s", "info", "[ debug | warn | error | fatal | panic | trace ]")
+	addCalcFlags(f, &runOpts)
+	f.StringVarP(&runOpts.histDir, "hist", "H", runOpts.histDir, "history directory, read for bandwidth and written with every output")
+	f.StringVarP(&runUTFile, "utfile", "u", "", "uptime file to calculate from instead of fetching hist/<date>_ut.txt")
+	f.BoolVar(&runSkipCollect, "skip-collect", false, "skip the survey cleanup and bandwidth collection (use data already on disk)")
+	f.StringVar(&runPruneBelow, "prune-below-version", "auto", "remove surveys whose skywire_version is below this (\"auto\" = the 14-day reward floor, \"\" = keep)")
+	f.BoolVar(&runFetch, "fetch", false, "fetch surveys from visors (cli log --survey) instead of only cleaning the surveys visors push")
+	f.StringVar(&runMinVersion, "minv", "", "with --fetch, minimum skywire version to fetch from")
+	f.StringVar(&runProxy, "proxy", "", "with --fetch, collect surveys via a dmsgweb SOCKS5 resolving proxy (host:port, e.g. 127.0.0.1:4443)")
+	f.StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 	clirpc.RegisterFetchFlags(runCmd)
 }
 
 var runCmd = &cobra.Command{
 	Use:   "run",
 	Short: "run the full hourly reward cycle in-process (no bash)",
-	Long: `Performs the entire hourly reward cycle:
+	Long: `Performs the hourly reward cycle of skywire-reward.service in one process:
 
-  1. Collect surveys (skywire cli log --survey --cleanup)
-  2. Collect transport counts (skywire cli rewards tp-collect)
-  3. Collect bandwidth data (skywire cli rewards bw-collect)
-  4. Fetch uptime tracker data, prune to single day
-  5. Calculate rewards
-  6. Write hist/{date}_{ut.txt,ut.json,ineligible.csv,shares.csv,rewardtxn0.csv,stats.txt}
+  1. Clean the surveys visors push (cli log --no-fetch --prune-below-version auto)
+  2. Collect today's bandwidth (cli rewards bw-collect)
+  3. Stop if hist/<date>.txt shows the date's rewards were already sent
+  4. Fetch the TPD uptimes for the date into hist/<date>_ut.txt, hist/<date>_ut.json
+     and hist/uptimes.json (as cli ut tpd --since <date> --until <date>)
+  5. Calculate with the same code as the bare 'rewards' command
+  6. Write hist/<date>_{ineligible.csv,shares.csv,rewardtxn0.csv,stats.txt}
+     and the per-pool files
 
-Designed to be invoked directly by systemd:
+The date defaults to yesterday in UTC, as the service runs with TZ=UTC.
+The calculation flags default to what the reward script passes (-b -B 0 -p log_backups).
 
-  ExecStart=/usr/bin/skywire cli rewards run
-
-Replaces the legacy 'script reward | bash' pipeline.`,
+  ExecStart=/usr/bin/skywire cli rewards run`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		if log == nil {
 			log = logging.MustGetLogger("rewards")
 		}
-
-		date := runDate
-		if date == "" {
-			date = time.Now().UTC().AddDate(0, 0, -1).Format("2006-01-02")
+		if logLvl != "" {
+			if lvl, err := logging.LevelFromString(logLvl); err == nil {
+				logging.SetLevel(lvl)
+			}
 		}
-		if _, err := time.Parse("2006-01-02", date); err != nil {
+		o := runOpts
+		if _, err := time.Parse("2006-01-02", o.date); err != nil {
 			log.Fatal("Invalid --date: ", err)
 		}
+		if err := os.MkdirAll(o.histDir, 0750); err != nil {
+			log.Fatal("Failed to create hist dir: ", err)
+		}
+		xpubIndexPath = filepath.Join(filepath.Dir(o.histDir), deprewards.XpubIndexFile)
 
-		// Bail if rewards already broadcast for this date.
-		if _, err := os.Stat(filepath.Join(runHistDir, date+".txt")); err == nil {
-			log.Infof("Transaction already broadcasted for %s; nothing to do", date)
+		// Collection runs even when the date was paid, as in the service: bw-collect fills today's file.
+		if !runSkipCollect {
+			collectAll(o)
+		}
+
+		if _, err := os.Stat(filepath.Join(o.histDir, o.date+".txt")); err == nil {
+			log.Infof("Transaction already broadcasted for %s; nothing to do", o.date)
 			return
 		}
 
-		if err := os.MkdirAll(runHistDir, 0750); err != nil {
-			log.Fatal("Failed to create hist dir: ", err)
-		}
-		xpubIndexPath = filepath.Join(filepath.Dir(runHistDir), deprewards.XpubIndexFile)
-
-		if !runSkipCollect {
-			collectAll(date, runMinVersion, runProxy)
-		}
-
-		// Fetch & prune UT for this date.
-		if err := fetchAndSaveUT(cmd.Flags(), date, runHistDir); err != nil {
-			log.Fatal("UT fetch failed: ", err)
-		}
-
-		opts := calcOpts{
-			Date:           date,
-			HistDir:        runHistDir,
-			HwSurveyPath:   runHwSurveyPath,
-			YearlyTotal:    yearlyTotalRewardsPerPool,
-			SaturationExp:  0.5,
-			MinBWThreshold: defaultMinBandwidth,
-		}
-		result, err := calcDay(opts)
-		if err != nil {
-			log.Fatal("Reward calculation failed: ", err)
-		}
-
-		if err := writeAllOutputs(result, runHistDir); err != nil {
-			log.Fatal("Failed to write outputs: ", err)
-		}
-
-		log.Infof("Reward cycle complete for %s", date)
-	},
-}
-
-// collectAll runs the three in-process collection steps. Failures are logged
-// but do not abort the cycle — the calculation can still proceed with whatever
-// data is already on disk (matching the previous bash pipeline's behavior).
-func collectAll(date, minVer, proxy string) {
-	log.Info("Collecting surveys (cli log --survey --cleanup)")
-	if err := runLogCollection(minVer, proxy); err != nil {
-		log.WithError(err).Warn("survey collection step reported errors; continuing")
-	}
-
-	log.Info("Collecting transport counts (tp-collect)")
-	tpCollectCmd.Run(tpCollectCmd, nil)
-
-	log.Info("Collecting bandwidth (bw-collect)")
-	bwCollectCmd.Run(bwCollectCmd, nil)
-
-	_ = date // reserved for future date-scoped collection
-}
-
-// runLogCollection invokes the cli log subcommand in-process, configured for
-// surveys-only collection and post-cleanup with min-version pruning.
-func runLogCollection(minVer, proxy string) error {
-	// Reach into clilog's exported root cmd — set its flag values rather
-	// than re-implementing the collection loop.
-	cmd := clilog.RootCmd
-	flags := cmd.Flags()
-
-	if err := flags.Set("survey", "true"); err != nil {
-		return fmt.Errorf("set --survey: %w", err)
-	}
-	if err := flags.Set("cleanup", "true"); err != nil {
-		return fmt.Errorf("set --cleanup: %w", err)
-	}
-	// Fetch via the dmsgweb SOCKS5 resolving proxy (warm sessions) when configured,
-	// instead of cli log opening its own cold dmsg client.
-	if proxy != "" {
-		if err := flags.Set("proxy", proxy); err != nil {
-			return fmt.Errorf("set --proxy: %w", err)
-		}
-	}
-	if minVer != "" {
-		if err := flags.Set("minv", minVer); err != nil {
-			return fmt.Errorf("set --minv: %w", err)
-		}
-		if err := flags.Set("prune-below-version", minVer); err != nil {
-			return fmt.Errorf("set --prune-below-version: %w", err)
-		}
-	}
-	cmd.Run(cmd, nil)
-	return nil
-}
-
-// fetchAndSaveUT downloads the uptime tracker response, prunes each visor's
-// .daily map to only the requested date, and writes the pruned views to
-// hist/{date}_ut.json and hist/{date}_ut.txt. This replaces the previous
-// `skywire cli ut | tee ...` (which kept all 7 days) plus the jq prune step.
-//
-// The source is the TPD-integrated uptime endpoint (`tpd/.../uptimes?v=v2`),
-// not the standalone uptime tracker. TPD only credits heartbeats from
-// visors that hold >= 2 transports, so the formerly-separate
-// hist/{date}_transports.txt eligibility gate is now implicit in the UT
-// data itself — no manual transport-count tracking required.
-func fetchAndSaveUT(flags *pflag.FlagSet, date, histDir string) error {
-	dep := getDeploymentForUT()
-	url := strings.TrimRight(dep.TransportDiscovery, "/") + "/uptimes?v=v2"
-
-	// The deployment services answer over dmsg only, so fetch the way the other
-	// collection steps do: CXO cache, then the visor's RPC, then a dmsg client.
-	body, err := clirpc.FetchServiceURL(flags, url)
-	if err != nil {
-		return fmt.Errorf("fetch %s: %w", url, err)
-	}
-
-	type utEntry struct {
-		PK      string            `json:"pk"`
-		On      bool              `json:"on"`
-		Version string            `json:"version,omitempty"`
-		Daily   map[string]string `json:"daily,omitempty"`
-	}
-	var entries []utEntry
-	if err := json.Unmarshal(body, &entries); err != nil {
-		return fmt.Errorf("parse UT JSON: %w", err)
-	}
-
-	// Prune each visor's daily map to the single requested date and write
-	// the JSON cache. The text file is built from the same pruned data.
-	pruned := make([]utEntry, 0, len(entries))
-	var txtBuf strings.Builder
-	for _, e := range entries {
-		v, ok := e.Daily[date]
-		single := map[string]string{date: ""}
-		if ok {
-			single[date] = v
-			// Match the legacy "<pk> <date> <pct>" textual format.
-			fmt.Fprintf(&txtBuf, "%s %s %s\n", e.PK, date, v)
-		}
-		e.Daily = single
-		pruned = append(pruned, e)
-	}
-
-	jsonOut, err := json.Marshal(pruned)
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(histDir, date+"_ut.json"), jsonOut, 0600); err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(histDir, date+"_ut.txt"), []byte(txtBuf.String()), 0600); err != nil {
-		return err
-	}
-	return nil
-}
-
-// getDeploymentForUT is the production deployment.
-func getDeploymentForUT() deployment.Services {
-	return deployment.Prod
-}
-
-// calcOpts is the input to calcDay. All paths are relative to the caller's
-// working directory.
-type calcOpts struct {
-	Date           string
-	HistDir        string
-	HwSurveyPath   string
-	YearlyTotal    int
-	SaturationExp  float64
-	MinBWThreshold uint64
-}
-
-// dayResult captures everything the four output files need to render. All
-// expensive work (parsing surveys, counting freq, applying saturation) is
-// done once during calcDay and never repeated.
-type dayResult struct {
-	Date          string
-	WDate         time.Time
-	DaysThisMonth int
-	DaysThisYear  int
-	MonthReward   float64
-	DayReward     float64
-
-	// Every eligible visor. Pool 2 repeats Pool 1, so there is one list.
-	NodesInfos1 []nodeinfo
-	Ineligible  []nodeinfo
-
-	IPCounts   map[string]int
-	MacCounts  map[string]int
-	UUIDCounts map[string]int
-
-	TotalShares1   float64
-	SaturationExp  float64
-	MinBWThreshold uint64
-}
-
-// calcDay performs the per-day reward calculation as a pure-ish function:
-// it reads from disk (UT data, surveys, transport/bandwidth files) but does
-// not write any output. The returned dayResult is enough to render all four
-// output files via writeAllOutputs.
-func calcDay(opts calcOpts) (*dayResult, error) {
-	wDate, err := time.Parse("2006-01-02", opts.Date)
-	if err != nil {
-		return nil, fmt.Errorf("parse date: %w", err)
-	}
-
-	if _, err := os.Stat(opts.HwSurveyPath); errors.Is(err, fs.ErrNotExist) {
-		return nil, fmt.Errorf("survey path does not exist: %s", opts.HwSurveyPath)
-	}
-
-	utfilePath := filepath.Join(opts.HistDir, opts.Date+"_ut.txt")
-	if _, err := os.Stat(utfilePath); errors.Is(err, fs.ErrNotExist) {
-		return nil, fmt.Errorf("ut file not found: %s", utfilePath)
-	}
-
-	// Service-config JSON used by checkServiceConfig.
-	sConf, err := script.Echo(string(deployment.ServicesJSON)).JQ(`.prod | del(.stun_servers)`).Bytes()
-	if err != nil {
-		return nil, fmt.Errorf("parse services JSON: %w", err)
-	}
-	dConf, err := script.Echo(string(deployment.ServicesJSON)).JQ(`.prod`).Bytes()
-	if err != nil {
-		return nil, fmt.Errorf("parse services JSON (dmsg): %w", err)
-	}
-
-	// Architectures that qualify: the union of RootCmd's --a1 and --a2 defaults,
-	// which never split visors into pools.
-	allowArch := buildArchMap(rewards.Architectures, []string{"wasm", "amd64", "386"})
-	for arch := range buildArchMap(rewards.Architectures, []string{"wasm", "arm64", "arm", "ppc64", "riscv64", "loong64", "mips", "mips64", "mips64le", "mipsle", "ppc64le", "s390x"}) {
-		allowArch[arch] = struct{}{}
-	}
-
-	// GeoIP for regional saturation.
-	var geoDB *geoip2.Reader
-	satExp := opts.SaturationExp
-	if satExp < 1.0 {
-		geoDB, err = geoip2.OpenBytes(geoip.EmbeddedDB())
-		if err != nil {
-			log.Warnf("Failed to load embedded GeoIP database, disabling regional saturation: %v", err)
-			satExp = 1.0
-		} else {
-			defer func() { _ = geoDB.Close() }() //nolint:errcheck
-		}
-	}
-
-	// Transport requirement is now implicit in the UT source. Since
-	// fetchAndSaveUT pulls from TPD's integrated /uptimes endpoint
-	// (which only credits heartbeats while the visor holds >= 2
-	// transports), any PK in hist/{date}_ut.txt has already passed the
-	// "had transports yesterday" gate. We no longer read or honor a
-	// separate hist/{date}_transports.txt file here. tp-collect remains
-	// available for diagnostics but is not load-bearing for rewards.
-
-	// Get PKs that met uptime on this date.
-	res, belowUptime, err := uptimeKeys(utfilePath, strings.TrimRight(opts.Date, "\n"))
-	if err != nil {
-		return nil, fmt.Errorf("read uptime file: %w", err)
-	}
-	if len(res) == 0 {
-		return nil, fmt.Errorf("no keys achieved minimum uptime on %s", opts.Date)
-	}
-
-	var nodesInfos1, grrInfos []nodeinfo
-	for _, pk := range belowUptime {
-		grrInfos = append(grrInfos, nodeinfo{PK: pk, Reason: uptimeBelowReason})
-	}
-	for _, pk := range res {
-		surveyPath := fmt.Sprintf("%s/%s/node-info.json", opts.HwSurveyPath, pk)
-		survey, parseErr := parseSurvey(surveyPath)
-		if parseErr != nil {
-			log.Debug(parseErr.Error())
-			// This PK met the daily uptime bar (it's in _ut.txt) but its survey is
-			// missing or unreadable, so it can't be scored. Record it as ineligible
-			// with an explicit reason instead of silently dropping it: previously such
-			// a visor was an invisible dash in the reward tables — neither rewarded nor
-			// listed in the ineligible report — so operators had no way to see WHY a
-			// demonstrably-up visor wasn't paid. The usual cause is a survey-collection
-			// gap (the hourly collector gated on the UT online flag and skipped
-			// reachable-but-flag-offline visors); see the survey-push redesign.
-			grrInfos = append(grrInfos, nodeinfo{PK: pk, Reason: "survey not found"})
-			continue
-		}
-
-		svcconf := checkServiceConfig(surveyPath, sConf, dConf)
-		ifc, macs := extractInterfaces(survey)
-
-		ip := survey.IPAddr
-		sky := survey.SkyAddr
-		arch := survey.Arch
-		hv := survey.SysInfo.Node.Hypervisor
-		if hv == "" {
-			hv = "null"
-		}
-		uu := survey.UUID
-
-		addrErr := rewardAddressError(sky, wDate)
-
-		// TPD-integrated UT already gated >= 2 transports at heartbeat
-		// time, so every pk we're iterating qualified by definition.
-		meetsTransportReq := true
-
-		_, archAllowed := allowArch[arch]
-
-		ni := nodeinfo{
-			IPAddr:     ip,
-			SkyAddr:    sky,
-			PK:         pk,
-			Arch:       arch,
-			Interfaces: ifc,
-			MacAddr:    macs[0],
-			UUID:       uu,
-			SvcConf:    svcconf,
-			HV:         hv,
-		}
-
-		baseEligible := archAllowed && strings.Count(ip, ".") == 3 && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" && hv == "null" && addrErr == nil && meetsTransportReq
-
-		if !baseEligible {
-			ni.Reason = ineligibilityReason(archAllowed, arch, ip, uu, ifc, macs, hv, addrErr, meetsTransportReq)
-			grrInfos = append(grrInfos, ni)
-			continue
-		}
-
-		if geoDB != nil {
-			if geoRes, geoErr := geoip.Lookup(geoDB, ip); geoErr == nil && geoRes.CountryCode != "" {
-				ni.Country = geoRes.CountryCode
-			} else {
-				ni.Country = unknownCountry
+		o.utfile = runUTFile
+		if o.utfile == "" {
+			o.utfile = filepath.Join(o.histDir, o.date+"_ut.txt")
+			if err := fetchAndSaveUT(cmd.Flags(), o.date, o.histDir); err != nil {
+				log.Fatal("UT fetch failed: ", err)
 			}
 		}
 
-		nodesInfos1 = append(nodesInfos1, ni)
-	}
-
-	daysThisMonth := time.Date(wDate.Year(), wDate.Month()+1, 0, 0, 0, 0, 0, time.UTC).Day()
-	daysThisYear := int(time.Date(wDate.Year(), 12, 31, 23, 59, 59, 999999999, time.UTC).Sub(time.Date(wDate.Year(), 1, 1, 0, 0, 0, 0, time.UTC)).Hours()) / 24
-	monthReward := (float64(opts.YearlyTotal) / float64(daysThisYear)) * float64(daysThisMonth)
-	dayReward := monthReward / float64(daysThisMonth)
-
-	allEligible := nodesInfos1
-	allIPs := make([]string, 0, len(allEligible))
-	allMACs := make([]string, 0, len(allEligible))
-	allUUIDs := make([]string, 0, len(allEligible))
-	for _, ni := range allEligible {
-		allIPs = append(allIPs, ni.IPAddr)
-		allMACs = append(allMACs, ni.MacAddr)
-		allUUIDs = append(allUUIDs, ni.UUID)
-	}
-	ipCounts := countFrequency(allIPs)
-	macCounts := countFrequency(allMACs)
-	uuidCounts := countFrequency(allUUIDs)
-
-	// Compute shares + rewards for each pool. Set the package-level
-	// saturationExponent so computePoolShares (which reads it via
-	// applyRegionalSaturation) uses the configured value for this run.
-	prevSat := saturationExponent
-	saturationExponent = satExp
-	defer func() { saturationExponent = prevSat }()
-
-	computePoolShares(nodesInfos1, ipCounts, macCounts)
-	// Pool 2 repeats Pool 1: one presence pool pays both budgets.
-	totalShares1 := computePoolRewards(nodesInfos1, 2*dayReward)
-
-	return &dayResult{
-		Date:           opts.Date,
-		WDate:          wDate,
-		DaysThisMonth:  daysThisMonth,
-		DaysThisYear:   daysThisYear,
-		MonthReward:    monthReward,
-		DayReward:      dayReward,
-		NodesInfos1:    nodesInfos1,
-		Ineligible:     grrInfos,
-		IPCounts:       ipCounts,
-		MacCounts:      macCounts,
-		UUIDCounts:     uuidCounts,
-		TotalShares1:   totalShares1,
-		SaturationExp:  satExp,
-		MinBWThreshold: opts.MinBWThreshold,
-	}, nil
+		r := calcRewards(o)
+		if err := writeAllOutputs(r, o.histDir); err != nil {
+			log.Fatal("Failed to write outputs: ", err)
+		}
+		if err := writePerPoolFiles(o.histDir, r.date, r.eligible, r.bwSatExp, r.minBW); err != nil {
+			log.Warnf("Failed to write per-pool detail files: %v", err)
+		}
+		log.Infof("Reward cycle complete for %s", r.date)
+	},
 }
 
-// ineligibilityReason returns a human-readable reason; matches the legacy
-// switch logic but with descriptive strings instead of returning empty
-// values when IP/UUID are missing.
-func ineligibilityReason(archAllowed bool, arch, ip, uu, ifc string, macs []string, hv string, addrErr error, meetsTP bool) string {
-	switch {
-	case !archAllowed:
-		return arch
-	case strings.Count(ip, ".") != 3:
-		return "No IP"
-	case uu == "":
-		return "No UUID"
-	case ifc == "":
-		return "No interfaces"
-	case len(macs) == 0 || macs[0] == "":
-		return "No MAC"
-	case hv != "null":
-		return hv
-	case addrErr != nil:
-		return addressReason(addrErr)
-	case !meetsTP:
-		return "No transports"
-	default:
-		return "Unknown reason"
-	}
-}
-
-// buildArchMap returns the set of supported architectures minus the
-// excluded ones; used for the per-pool allow lists.
-func buildArchMap(all, exclude []string) map[string]struct{} {
-	excl := make(map[string]struct{}, len(exclude))
-	for _, e := range exclude {
-		excl[e] = struct{}{}
-	}
-	out := make(map[string]struct{})
-	for _, a := range all {
-		if _, bad := excl[a]; !bad {
-			out[a] = struct{}{}
+// collectAll runs the collection steps of the service. A fatal error in
+// either stops the cycle, as the service's && chain does.
+func collectAll(o rewardOpts) {
+	flags := clilog.RootCmd.Flags()
+	set := func(name, value string) {
+		if err := flags.Set(name, value); err != nil {
+			log.Fatalf("set cli log --%s: %v", name, err)
 		}
 	}
-	return out
+	if runFetch {
+		log.Info("Collecting surveys (cli log --survey --cleanup)")
+		set("survey", "true")
+		set("cleanup", "true")
+		if runProxy != "" {
+			set("proxy", runProxy)
+		}
+		if runMinVersion != "" {
+			set("minv", runMinVersion)
+		}
+	} else {
+		log.Info("Cleaning pushed surveys (cli log --no-fetch)")
+		set("no-fetch", "true")
+	}
+	set("backup-dir", o.surveyPath)
+	set("prune-below-version", runPruneBelow)
+	clilog.RootCmd.Run(clilog.RootCmd, nil)
+
+	log.Info("Collecting bandwidth (bw-collect)")
+	histPath = o.histDir
+	bwCollectCmd.Run(bwCollectCmd, nil)
 }
 
-// writeAllOutputs writes the four reward-cycle output files atomically
-// (each via a temp+rename) so a partial write can't leave a half-built file.
-func writeAllOutputs(r *dayResult, histDir string) error {
-	type job struct {
-		path string
-		fn   func(io.Writer) error
+// fetchAndSaveUT writes what the reward script gets from
+// `cli ut tpd --since <date> --until <date> --cache-dir hist/`: the date's
+// uptimes as "<pk> <date> <pct>" lines in hist/<date>_ut.txt, the whole
+// answer in hist/uptimes.json, and the date's slice of it in hist/<date>_ut.json.
+func fetchAndSaveUT(flags *pflag.FlagSet, date, histDir string) error {
+	entries, err := cliuptime.FetchEntries(flags, deployment.Prod.TransportDiscovery, "v3", nil, histDir, 5)
+	if err != nil {
+		return err
 	}
-	jobs := []job{
-		{filepath.Join(histDir, r.Date+"_ineligible.csv"), func(w io.Writer) error { return writeIneligibleCSV(w, r) }},
-		{filepath.Join(histDir, r.Date+"_shares.csv"), func(w io.Writer) error { return writeSharesCSV(w, r) }},
-		{filepath.Join(histDir, r.Date+"_rewardtxn0.csv"), func(w io.Writer) error { return writeRewardTxnCSV(w, r) }},
-		{filepath.Join(histDir, r.Date+"_stats.txt"), func(w io.Writer) error { return writeStatsTxt(w, r) }},
+
+	sorted := slices.Clone(entries)
+	slices.SortFunc(sorted, func(a, b uptimestats.VisorSummary) int { return cmp.Compare(a.PK.Hex(), b.PK.Hex()) })
+	var txt strings.Builder
+	for _, e := range sorted {
+		if v, ok := e.Daily[date]; ok {
+			fmt.Fprintf(&txt, "%s %s %s\n", e.PK.Hex(), date, v)
+		}
+	}
+	if err := writeAtomic(filepath.Join(histDir, date+"_ut.txt"), 0644, func(w io.Writer) error {
+		_, err := io.WriteString(w, txt.String())
+		return err
+	}); err != nil {
+		return err
+	}
+
+	if err := writeAtomic(filepath.Join(histDir, "uptimes.json"), 0644, func(w io.Writer) error {
+		return json.NewEncoder(w).Encode(entries)
+	}); err != nil {
+		return err
+	}
+
+	// The reward UI reads this as the script's jq writes it:
+	// [.[] | {pk, on, version, daily: {($date): .daily[$date]}}]
+	type utDay struct {
+		PK      string             `json:"pk"`
+		On      bool               `json:"on"`
+		Version *string            `json:"version"`
+		Daily   map[string]*string `json:"daily"`
+	}
+	days := make([]utDay, 0, len(entries))
+	for _, e := range entries {
+		d := utDay{PK: e.PK.Hex(), On: e.Online, Daily: map[string]*string{date: nil}}
+		if e.Version != "" {
+			d.Version = &e.Version
+		}
+		if v, ok := e.Daily[date]; ok {
+			d.Daily[date] = &v
+		}
+		days = append(days, d)
+	}
+	return writeAtomic(filepath.Join(histDir, date+"_ut.json"), 0644, func(w io.Writer) error {
+		enc := json.NewEncoder(w)
+		enc.SetEscapeHTML(false)
+		enc.SetIndent("", "  ")
+		return enc.Encode(days)
+	})
+}
+
+// writeAllOutputs writes the four files the script tees from the four bare
+// command calls (-e, -20, -10, -12), in the same order.
+func writeAllOutputs(r *rewardResult, histDir string) error {
+	jobs := []struct {
+		name string
+		fn   func(io.Writer) error
+	}{
+		{"ineligible.csv", func(w io.Writer) error { return writeIneligible(w, r) }},
+		{"shares.csv", func(w io.Writer) error { return writeShares(w, r) }},
+		{"rewardtxn0.csv", func(w io.Writer) error { return writeRewardTxn(w, r) }},
+		{"stats.txt", func(w io.Writer) error {
+			if err := writeStats(w, r); err != nil {
+				return err
+			}
+			return writeTotal(w, r)
+		}},
 	}
 	for _, j := range jobs {
-		if err := writeAtomic(j.path, j.fn); err != nil {
-			return fmt.Errorf("%s: %w", j.path, err)
+		path := filepath.Join(histDir, r.date+"_"+j.name)
+		if err := writeAtomic(path, 0644, j.fn); err != nil {
+			return fmt.Errorf("%s: %w", path, err)
 		}
-		log.Infof("wrote %s", j.path)
+		log.Infof("wrote %s", path)
 	}
 	return nil
 }
 
-func writeAtomic(path string, write func(io.Writer) error) error {
+// writeAtomic writes path through a temporary file and a rename, so a reader never sees half a file.
+func writeAtomic(path string, mode os.FileMode, write func(io.Writer) error) error {
 	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp.*")
 	if err != nil {
 		return err
 	}
 	tmpName := tmp.Name()
-	// Best-effort cleanup; rename success leaves nothing to remove.
 	defer func() { _ = os.Remove(tmpName) }() //nolint:errcheck
 	if err := write(tmp); err != nil {
 		_ = tmp.Close() //nolint:errcheck
@@ -552,104 +257,8 @@ func writeAtomic(path string, write func(io.Writer) error) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if err := os.Chmod(tmpName, 0600); err != nil {
+	if err := os.Chmod(tmpName, mode); err != nil {
 		return err
 	}
 	return os.Rename(tmpName, path)
-}
-
-// writeIneligibleCSV mirrors the legacy `-e` (grr) output format used by the
-// reward UI: one CSV row per ineligible visor with the inferred reason.
-func writeIneligibleCSV(w io.Writer, r *dayResult) error {
-	for _, ni := range r.Ineligible {
-		if _, err := fmt.Fprintf(w, "%s, %s, %s, %.6f, %.6f, %s, %s, %s, %s \n",
-			ni.SkyAddr, ni.PK, ni.Reason, ni.Share, ni.Reward,
-			ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// writeSharesCSV mirrors the legacy `-2 -0` output (suppress stats &
-// rewardtxn) — header line plus one row per eligible visor.
-func writeSharesCSV(w io.Writer, r *dayResult) error {
-	if _, err := fmt.Fprintln(w, "Skycoin Address, Skywire Public Key, Reward Shares, Reward SKY Amount, IP, Architecture, UUID, Interfaces, Country, XPub"); err != nil {
-		return err
-	}
-	combined := r.NodesInfos1
-	for _, ni := range combined {
-		resolved := resolveRewardAddress(ni.SkyAddr, r.Date)
-		xpub := ""
-		if strings.HasPrefix(ni.SkyAddr, "xpub") {
-			xpub = ni.SkyAddr
-		}
-		if _, err := fmt.Fprintf(w, "%s, %s, %.6f, %.6f, %s, %s, %s, %s, %s, %s \n",
-			resolved, ni.PK, ni.Share, ni.Reward, ni.IPAddr, ni.Arch,
-			ni.UUID, ni.Interfaces, ni.Country, xpub); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// writeRewardTxnCSV mirrors the legacy `-1 -0` output (suppress stats &
-// shares) — `Skycoin Address, Reward Amount` rows aggregated per address.
-func writeRewardTxnCSV(w io.Writer, r *dayResult) error {
-	combined := r.NodesInfos1
-	sums := make(map[string]float64)
-	for _, ni := range combined {
-		sums[ni.SkyAddr] += ni.Reward
-	}
-	type pair struct {
-		addr string
-		amt  float64
-	}
-	rows := make([]pair, 0, len(sums))
-	for a, v := range sums {
-		rows = append(rows, pair{a, v})
-	}
-	slices.SortFunc(rows, func(a, b pair) int {
-		return cmp.Compare(b.amt, a.amt)
-	})
-	if _, err := fmt.Fprintln(w, "Skycoin Address, Reward Amount"); err != nil {
-		return err
-	}
-	for _, p := range rows {
-		if _, err := fmt.Fprintf(w, "%s, %.6f\n", resolveRewardAddress(p.addr, r.Date), p.amt); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// writeStatsTxt mirrors the legacy `-1 -2` output (suppress shares &
-// rewardtxn) — the human-readable per-day stats block.
-func writeStatsTxt(w io.Writer, r *dayResult) error {
-	fmt.Fprintf(w, "date: %s\n", r.Date)                                                                     //nolint:errcheck
-	fmt.Fprintf(w, "days this month: %d\n", r.DaysThisMonth)                                                 //nolint:errcheck
-	fmt.Fprintf(w, "days in the year: %d\n", r.DaysThisYear)                                                 //nolint:errcheck
-	fmt.Fprintf(w, "this month's rewards: %.6f\n", r.MonthReward)                                            //nolint:errcheck
-	fmt.Fprintf(w, "reward total per pool: %.6f\n", r.DayReward)                                             //nolint:errcheck
-	fmt.Fprintf(w, "Visors meeting uptime & other requirements (Pool 1): %d\n", len(r.NodesInfos1))          //nolint:errcheck
-	fmt.Fprintln(w, "reward mode: presence only, Pool 2 repeats Pool 1 (rewards run has no bandwidth pool)") //nolint:errcheck
-	fmt.Fprintf(w, "Unique mac addresses for first interface after lo: %d\n", len(r.MacCounts))              //nolint:errcheck
-	fmt.Fprintf(w, "Unique IP Addresses: %d\n", len(r.IPCounts))                                             //nolint:errcheck
-	fmt.Fprintf(w, "Unique UUIDs: %d\n", len(r.UUIDCounts))                                                  //nolint:errcheck
-	if r.SaturationExp < 1.0 {
-		fmt.Fprintf(w, "Regional saturation exponent: %.2f\n", r.SaturationExp) //nolint:errcheck
-	}
-	fmt.Fprintf(w, "Total valid shares (Pool 1): %.6f\n", r.TotalShares1) //nolint:errcheck
-	if r.TotalShares1 != 0 {
-		fmt.Fprintf(w, "Skycoin Per Share (Pool 1): %.6f\n", 2*r.DayReward/r.TotalShares1) //nolint:errcheck
-	} else {
-		fmt.Fprintln(w, "Skycoin Per Share (Pool 1): 0") //nolint:errcheck
-	}
-	combined := r.NodesInfos1
-	total := 0.0
-	for _, ni := range combined {
-		total += ni.Reward
-	}
-	fmt.Fprintf(w, "Total Reward Amount: %.6f\n", math.Round(total*1000000)/1000000) //nolint:errcheck
-	return nil
 }

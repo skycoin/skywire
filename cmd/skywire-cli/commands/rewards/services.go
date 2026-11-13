@@ -201,9 +201,8 @@ Unit=skywire-reward.service
 WantedBy=multi-user.target
 `
 
-// Log Collection & reward calculation. The orchestrator (`cli rewards run`)
-// performs survey collection, tp-collect, bw-collect, UT fetch, calculation,
-// and writes all four output files in-process — no bash or shell pipeline.
+// Reward calculation. `cli rewards run` cleans the pushed surveys, runs
+// bw-collect, fetches the UT, calculates and writes the outputs in-process.
 const skywireRewardSvcTpl = `
 [Unit]
 Description=skywire reward service
