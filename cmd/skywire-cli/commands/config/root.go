@@ -85,7 +85,7 @@ var (
 	all                        bool
 	outUnset                   bool
 	ver                        string
-	root                       = visorconfig.IsRoot()
+	root                       = visorconfig.RunningAsRoot()
 	gHiddenFlags               []string
 	uHiddenFlags               []string
 	binPath                    string

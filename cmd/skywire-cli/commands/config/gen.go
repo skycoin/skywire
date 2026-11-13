@@ -1740,7 +1740,7 @@ func configureLauncher(log *logging.Logger) {
 	}
 
 	// Configure public visor
-	conf.IsPublic = public
+	conf.Public = public
 	if public {
 		regTimeout := visorconfig.Duration(skyenv.PublicVisorRegistrationTimeout)
 		if publicVisorRegTimeout != "" {

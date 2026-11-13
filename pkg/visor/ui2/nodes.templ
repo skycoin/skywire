@@ -123,7 +123,7 @@ templ nodeRow(n Node, parent string) {
 				} else {
 					<span data-label-for={ n.PK }>{ n.Name() }</span>
 				}
-				if n.IsHV {
+				if n.HV {
 					<span class="badge" title={ T(ctx, "nodes.hypervisor-info") }>{ T(ctx, "nodes.hypervisor") }</span>
 				}
 				if len(n.Children) > 0 {

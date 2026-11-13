@@ -76,7 +76,7 @@ func (hv *Hypervisor) ui2RSN() http.HandlerFunc {
 		for _, s := range stats {
 			row := ui2.RSNRow{PK: s.PK.Hex(), Err: s.Error}
 			if sn := s.Snapshot; sn != nil {
-				row.HasStats = true
+				row.StatsAvailable = true
 				row.Rate, row.Successful, row.Failed, row.Active = sn.SuccessRatePct, sn.Successful, sn.Failed, sn.ActiveRequests
 				row.P50, row.P95, row.P99 = sn.LatencyMs.P50, sn.LatencyMs.P95, sn.LatencyMs.P99
 				if sn.LastSuccessAt != nil && !sn.LastSuccessAt.IsZero() {

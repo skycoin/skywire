@@ -301,7 +301,7 @@ func initVisorControlBtns(conf *visorconfig.V1) {
 func visorControlPoll(rpcClient visorapi.API) {
 	for {
 		if rpcClient != nil {
-			if suspended, err := rpcClient.IsSuspended(); err == nil {
+			if suspended, err := rpcClient.Suspended(); err == nil {
 				if suspended {
 					mSuspend.SetTitle("Resume visor")
 				} else {
@@ -318,7 +318,7 @@ func handleSuspendButton(rpcClient visorapi.API) {
 	if rpcClient == nil {
 		return
 	}
-	suspended, err := rpcClient.IsSuspended()
+	suspended, err := rpcClient.Suspended()
 	if err != nil {
 		mLog.WithError(err).Error("failed to query suspend state")
 		return

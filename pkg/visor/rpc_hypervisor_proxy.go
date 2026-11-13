@@ -115,7 +115,7 @@ func (v *Visor) HVListDirectVisors() ([]visorapi.HVVisorEntry, error) {
 	if v.hvInstance == nil {
 		return nil, fmt.Errorf("hypervisor not running")
 	}
-	if !v.hvInstance.IsEnabled() {
+	if !v.hvInstance.Enabled() {
 		return nil, fmt.Errorf("hypervisor not enabled")
 	}
 
@@ -172,7 +172,7 @@ func (v *Visor) HVListVisors() ([]visorapi.HVVisorEntry, error) {
 	if v.hvInstance == nil {
 		return nil, fmt.Errorf("hypervisor not running")
 	}
-	if !v.hvInstance.IsEnabled() {
+	if !v.hvInstance.Enabled() {
 		return nil, fmt.Errorf("hypervisor not enabled")
 	}
 
@@ -373,7 +373,7 @@ func (v *Visor) HVListVisorsTree() (*visorapi.HVVisorTree, error) {
 	if v.hvInstance == nil {
 		return nil, fmt.Errorf("hypervisor not running")
 	}
-	if !v.hvInstance.IsEnabled() {
+	if !v.hvInstance.Enabled() {
 		return nil, fmt.Errorf("hypervisor not enabled")
 	}
 

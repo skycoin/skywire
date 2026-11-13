@@ -818,7 +818,7 @@ func RSNStats(rows []RSNRow) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var47 = []any{"dot", templ.KV("on", r.HasStats), templ.KV("off", !r.HasStats)}
+				var templ_7745c5c3_Var47 = []any{"dot", templ.KV("on", r.StatsAvailable), templ.KV("off", !r.StatsAvailable)}
 				templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_ElementWriter, templ_7745c5c3_Var47...)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
@@ -876,7 +876,7 @@ func RSNStats(rows []RSNRow) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			if r.HasStats {
+			if r.StatsAvailable {
 				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 70, "<span class=\"spacer\"></span> ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
@@ -971,7 +971,7 @@ func RSNStats(rows []RSNRow) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			if r.HasStats {
+			if r.StatsAvailable {
 				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 79, "<dl class=\"kv small\"><dt>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err

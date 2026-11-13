@@ -213,7 +213,7 @@ func (l visorLevers) pauseAutoconnect(on bool) {
 	v := l.v
 	s := &v.meter
 	if on {
-		if v.IsPublicAutoconnectRunning() {
+		if v.PublicAutoconnectRunning() {
 			_ = v.StopPublicAutoconnect() //nolint:errcheck
 			s.acPaused = true
 		}

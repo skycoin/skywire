@@ -45,7 +45,7 @@ type Transports struct {
 	ByType      []TypeCount
 	Types       []string
 	Autoconnect bool
-	IsPublic    bool
+	Public      bool
 	Err         string
 }
 

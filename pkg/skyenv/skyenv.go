@@ -633,8 +633,8 @@ const (
 	// IPCShutdownMessageType sends IPC shutdown message type
 	IPCShutdownMessageType = 68
 
-	// IsPublic advertises the visor in the service discovery
-	IsPublic = false
+	// Public advertises the visor in the service discovery
+	Public = false
 
 	// RewardFile is the name of the file containing skycoin rewards address and privacy setting
 	RewardFile string = "reward.txt"

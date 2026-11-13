@@ -21,9 +21,9 @@ type stubAPI struct {
 }
 
 // The suspend trio is on API but not on the generated stub this embeds.
-func (*stubAPI) Suspend() error             { return ErrProxyNotSupported }
-func (*stubAPI) Resume() error              { return ErrProxyNotSupported }
-func (*stubAPI) IsSuspended() (bool, error) { return false, ErrProxyNotSupported }
+func (*stubAPI) Suspend() error           { return ErrProxyNotSupported }
+func (*stubAPI) Resume() error            { return ErrProxyNotSupported }
+func (*stubAPI) Suspended() (bool, error) { return false, ErrProxyNotSupported }
 
 func TestLocalAPIUnsetIsNil(t *testing.T) {
 	t.Cleanup(func() { visorapi.RegisterLocalAPI(nil) })

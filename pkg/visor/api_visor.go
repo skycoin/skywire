@@ -233,11 +233,11 @@ func (v *Visor) Summary() (*visorapi.Summary, error) {
 		RewardEligible:         rewardEligible,
 		RewardIneligibleReason: rewardIneligibleReason,
 		PublicAutoconnect:      v.conf.Transport.PublicAutoconnect,
-		IsPublic:               v.conf.IsPublic,
+		IsPublic:               v.conf.Public,
 		DmsgStats:              dmsgStatValue,
 		ConnectedDmsgServers:   connectedDmsgServers,
 		DMSGServers:            dmsgServers,
-		IsHypervisor:           v.IsHypervisorEnabled(),
+		IsHypervisor:           v.HypervisorEnabled(),
 		Load:                   collectLoadStats(),
 	}
 	conn := v.Connectivity()
@@ -299,20 +299,20 @@ func (v *Visor) DisableHypervisor() error {
 	return v.hvInstance.Disable()
 }
 
-// IsHypervisorEnabled implements API.
-func (v *Visor) IsHypervisorEnabled() bool {
+// HypervisorEnabled implements API.
+func (v *Visor) HypervisorEnabled() bool {
 	if v.hvInstance == nil {
 		return false
 	}
-	return v.hvInstance.IsEnabled()
+	return v.hvInstance.Enabled()
 }
 
-// IsHypervisorUIServing implements API. Reports whether the web UI is serving.
-func (v *Visor) IsHypervisorUIServing() bool {
+// HypervisorUIServing implements API. Reports whether the web UI is serving.
+func (v *Visor) HypervisorUIServing() bool {
 	if v.hvInstance == nil {
 		return false
 	}
-	return v.hvInstance.IsUIServing()
+	return v.hvInstance.UIServing()
 }
 
 // DmsgPortHits implements API. Returns inbound dmsg stream requests that hit a
@@ -375,9 +375,9 @@ func (v *Visor) SetHypervisorAuthPersist(enable, persist bool) error {
 	return nil
 }
 
-// IsHypervisorAuthEnabled reports whether the hypervisor web UI requires a
+// HypervisorAuthEnabled reports whether the hypervisor web UI requires a
 // login right now. False when this visor runs no hypervisor.
-func (v *Visor) IsHypervisorAuthEnabled() bool {
+func (v *Visor) HypervisorAuthEnabled() bool {
 	if v.hvInstance == nil {
 		return false
 	}
@@ -426,8 +426,8 @@ func (v *Visor) persistHypervisorEnabled(enable bool) error {
 	return v.conf.Flush()
 }
 
-// IsStartupComplete implements API.
-func (v *Visor) IsStartupComplete() bool {
+// StartupComplete implements API.
+func (v *Visor) StartupComplete() bool {
 	select {
 	case <-v.startupComplete:
 		return true

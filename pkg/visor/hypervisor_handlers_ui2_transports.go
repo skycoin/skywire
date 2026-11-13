@@ -37,7 +37,7 @@ func (hv *Hypervisor) ui2TransportsRoutes(r *httputil.Router) {
 		return ui2CallAPI(w, r, hv.putPublicAutoconnect(), publicAutoconnectReq{PublicAutoconnect: r.FormValue("on") != ""})
 	}, "transports.changes-made"))
 	r.Put("/visors/{pk}/transports/public", hv.ui2TransportWrite(func(hv *Hypervisor, w http.ResponseWriter, r *http.Request, _ *httpCtx) bool {
-		return ui2CallAPI(w, r, hv.putIsPublic(), isPublicResp{IsPublic: r.FormValue("on") != ""})
+		return ui2CallAPI(w, r, hv.putIsPublic(), isPublicResp{Public: r.FormValue("on") != ""})
 	}, "transports.changes-made"))
 	r.Put("/visors/{pk}/transports/persistent", hv.ui2TransportWrite(ui2SetPersistent, "transports.changes-made"))
 }
@@ -57,7 +57,7 @@ func ui2LoadTransports(ctx *httpCtx, r *http.Request) ui2.Transports {
 	if types, err := ctx.API.TransportTypes(); err == nil {
 		t.Types = types
 	}
-	t.IsPublic = ctx.API.GetIsPublic()
+	t.Public = ctx.API.GetIsPublic()
 	// The autoconnect setting is the config value, as the Angular tab reads
 	// it from the summary.
 	if raw, err := ctx.API.GetRuntimeConfig(); err == nil {

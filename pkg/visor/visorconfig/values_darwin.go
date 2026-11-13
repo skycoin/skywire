@@ -64,10 +64,10 @@ func SystemSurvey() (Survey, error) {
 	return s, nil
 }
 
-// IsRoot checks for root permissions. Resolves euid first (0 == root, no passwd
+// RunningAsRoot checks for root permissions. Resolves euid first (0 == root, no passwd
 // lookup) so a nil user.Current() on a build without a resolvable passwd entry
 // can't nil-deref (see the values_linux.go note).
-func IsRoot() bool {
+func RunningAsRoot() bool {
 	if os.Geteuid() == 0 {
 		return true
 	}

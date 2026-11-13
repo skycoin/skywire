@@ -174,7 +174,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 
 			// Check if this visor is configured as public
 			// This uses the same config flag that initPublicVisor uses to decide whether to register in SD
-			visorIsPublic := v.conf.IsPublic
+			visorIsPublic := v.conf.Public
 			a.visorIsPublic = visorIsPublic
 			if visorIsPublic {
 				a.log.Debug("This visor is configured as public")

@@ -34,9 +34,9 @@ func (hv *Hypervisor) ui2RewardView(pk, addr string) ui2.Rewards {
 		return rw
 	}
 	_, xpub, err := rewardconfig.ValidateRewardAddress(addr)
-	rw.IsXpub = err == nil && xpub
+	rw.Xpub = err == nil && xpub
 	switch {
-	case rw.IsXpub:
+	case rw.Xpub:
 		if rw.Addresses, err = rewardconfig.RewardAddresses(addr, 5); err != nil {
 			rw.XpubErr = err.Error()
 		}

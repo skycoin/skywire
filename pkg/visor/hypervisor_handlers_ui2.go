@@ -139,7 +139,7 @@ func (hv *Hypervisor) ui2Auth(next http.Handler) http.Handler {
 	}
 	authed := hv.users.Authorize(next)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if hv.users.HasSession(r) {
+		if hv.users.SessionLive(r) {
 			authed.ServeHTTP(w, r)
 			return
 		}
@@ -155,7 +155,7 @@ func (hv *Hypervisor) ui2Auth(next http.Handler) http.Handler {
 // ui2Ctx is the request context with the page settings the templates read.
 func (hv *Hypervisor) ui2Ctx(r *http.Request) context.Context {
 	p := ui2.Page{Base: ui2.BaseFor(r.URL.Path), HVPK: hv.c.PK.Hex(), TPViz: hv.tpvizServer != nil}
-	p.Auth = hv.c.EnableAuth && hv.users != nil && hv.users.HasSession(r)
+	p.Auth = hv.c.EnableAuth && hv.users != nil && hv.users.SessionLive(r)
 	var lang string
 	if c, err := r.Cookie(ui2.LangCookie); err == nil {
 		lang = c.Value
@@ -234,11 +234,11 @@ func callJSON(w http.ResponseWriter, r *http.Request, h http.Handler, v any) *ca
 
 func (hv *Hypervisor) ui2LoginPage() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !hv.c.EnableAuth || hv.users == nil || hv.users.HasSession(r) {
+		if !hv.c.EnableAuth || hv.users == nil || hv.users.SessionLive(r) {
 			ui2Redirect(w, "./")
 			return
 		}
-		hv.render(w, r, ui2.LoginPage(!hv.users.HasUser(), ""))
+		hv.render(w, r, ui2.LoginPage(!hv.users.AdminExists(), ""))
 	}
 }
 
@@ -246,7 +246,7 @@ func (hv *Hypervisor) ui2LoginPage() http.HandlerFunc {
 // /api/create-account, from a plain form post.
 func (hv *Hypervisor) ui2LoginPost() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !hv.c.EnableAuth || hv.users == nil || hv.users.HasSession(r) {
+		if !hv.c.EnableAuth || hv.users == nil || hv.users.SessionLive(r) {
 			ui2Redirect(w, "./")
 			return
 		}
@@ -259,7 +259,7 @@ func (hv *Hypervisor) ui2LoginPost() http.HandlerFunc {
 			Username string `json:"username"`
 			Password string `json:"password"`
 		}{r.PostForm.Get("username"), r.PostForm.Get("password")}
-		create := r.PostForm.Get("create") != "" && !hv.users.HasUser()
+		create := r.PostForm.Get("create") != "" && !hv.users.AdminExists()
 		fail := func(msg string) {
 			hv.renderStatus(w, r, http.StatusUnauthorized, ui2.LoginPage(create, msg))
 		}
@@ -344,7 +344,7 @@ func ui2NodesOf(secs []VisorTreeSection) []ui2.Node {
 			if c.PK == ns[i].PK {
 				continue
 			}
-			c.ViaSub, c.IsHV = !direct[c.PK], false
+			c.ViaSub, c.HV = !direct[c.PK], false
 			ns[i].Children = append(ns[i].Children, c)
 		}
 		ui2.SortNodes(ns[i].Children)

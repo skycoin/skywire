@@ -52,7 +52,7 @@ func TestNodesRender(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
 	ns := []Node{
 		{PK: "b", Hostname: "zeta", Online: true},
-		{PK: pk.Hex(), Hostname: "hv", Online: true, IsHV: true, Transports: 3, Apps: 4, AppsRunning: 2, Reward: "x"},
+		{PK: pk.Hex(), Hostname: "hv", Online: true, HV: true, Transports: 3, Apps: 4, AppsRunning: 2, Reward: "x"},
 		{PK: "a", Hostname: "alpha", LastSeen: "2026-11-03 10:00:00"},
 	}
 	SortNodes(ns)

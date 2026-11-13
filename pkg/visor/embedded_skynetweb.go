@@ -138,8 +138,8 @@ func (e *EmbeddedSkynetWeb) Stop() error {
 	return nil
 }
 
-// IsRunning reports whether the resolver goroutine is currently alive.
-func (e *EmbeddedSkynetWeb) IsRunning() bool {
+// Running reports whether the resolver goroutine is currently alive.
+func (e *EmbeddedSkynetWeb) Running() bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.running

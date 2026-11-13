@@ -60,17 +60,17 @@ type Node interface {
 	StateSnapshot() (*StateSnapshot, error)
 	StateSnapshotProjected(fields []string) (*StateSnapshot, error)
 	Health() (*HealthInfo, error)
-	IsStartupComplete() bool
+	StartupComplete() bool
 	EnableHypervisor() error
 	DisableHypervisor() error
 	EnableHypervisorPersist(persist bool) error
 	DisableHypervisorPersist(persist bool) error
-	IsHypervisorEnabled() bool
+	HypervisorEnabled() bool
 	EnableHypervisorUIPersist(persist bool) error
 	DisableHypervisorUIPersist(persist bool) error
-	IsHypervisorUIServing() bool
+	HypervisorUIServing() bool
 	SetHypervisorAuthPersist(enable, persist bool) error
-	IsHypervisorAuthEnabled() bool
+	HypervisorAuthEnabled() bool
 	Uptime() (float64, error)
 	UptimeHistory(args UptimeHistoryArgs) (*UptimeHistoryResponse, error)
 	RuntimeStats() (*RuntimeStatsInfo, error)
@@ -78,7 +78,7 @@ type Node interface {
 	Reload() error
 	Suspend() error
 	Resume() error
-	IsSuspended() (bool, error)
+	Suspended() (bool, error)
 	Shutdown() error
 	RuntimeLogs() (string, error)
 	RuntimeLogsSince(since int64) (RuntimeLogsDelta, error)
@@ -421,7 +421,7 @@ type Diagnostics interface {
 type Dmsg interface {
 	DmsgPortHits() []dmsg.PortHit
 	DmsgPtyExec(args DmsgPtyExecArgs) (*pty.CommandExecResult, error)
-	IsDMSGClientReady() (bool, error)
+	DMSGClientReady() (bool, error)
 	DMSGServers() ([]DMSGServerInfo, error)
 	// LAN DMSG server
 	SetLANDmsgServer(LANDmsgServerInfo) error

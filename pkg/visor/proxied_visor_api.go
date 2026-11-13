@@ -196,7 +196,7 @@ func (p *proxiedVisorAPI) GetRewardAddress() (string, error) {
 	return s.RewardAddress, nil
 }
 
-func (p *proxiedVisorAPI) IsHypervisorEnabled() bool {
+func (p *proxiedVisorAPI) HypervisorEnabled() bool {
 	s, err := p.hvAPI.HVVisorSummary(p.targetPK)
 	if err != nil || s == nil {
 		return false
@@ -261,7 +261,7 @@ func (p *proxiedVisorAPI) Resume() error {
 	return errors.New("resume is local-only: a suspended visor is unreachable over dmsg; resume it from its own host RPC")
 }
 
-func (p *proxiedVisorAPI) IsSuspended() (bool, error) {
+func (p *proxiedVisorAPI) Suspended() (bool, error) {
 	return false, errors.New("suspend state is not queryable over the hypervisor: a suspended visor is unreachable over dmsg")
 }
 

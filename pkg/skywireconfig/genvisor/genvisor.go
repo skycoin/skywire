@@ -47,10 +47,10 @@ type Options struct {
 	// SecKey pointer is passed; see ensureKeys).
 	SecretKey cipher.SecKey
 
-	// IsHypervisor enables the local hypervisor stanza
+	// Hypervisor enables the local hypervisor stanza
 	// (V1.Hypervisor.Enable=true and the rest of HypervisorConfig
 	// gets populated by visorconfig.GenerateWorkDirConfig).
-	IsHypervisor bool
+	Hypervisor bool
 
 	// HypervisorPKs is a list of remote hypervisor public keys to
 	// dial. The visor opens a persistent RPC channel to each on
@@ -63,10 +63,10 @@ type Options struct {
 	// own deeper validation on first start.
 	RewardAddress string
 
-	// IsPublic toggles V1.IsPublic — when true, the visor
+	// Public toggles V1.Public — when true, the visor
 	// announces itself to the service-discovery service so other
 	// operators can dial it as a transport endpoint.
-	IsPublic bool
+	Public bool
 
 	// WalletCustody, when non-empty, sets V1.Wallet.Custody — where the
 	// skycoin-web wallet keeps keys (browser | disk | remote; see the
@@ -122,7 +122,7 @@ func Generate(opts Options) (*visorconfig.V1, error) {
 		return nil, errors.New("genvisor: MakeBaseConfig returned nil (services unmarshal failed)")
 	}
 
-	if opts.IsHypervisor {
+	if opts.Hypervisor {
 		conf.Hypervisor = hypervisorConfigDefault()
 	}
 
@@ -147,7 +147,7 @@ func Generate(opts Options) (*visorconfig.V1, error) {
 		}
 	}
 
-	conf.IsPublic = opts.IsPublic
+	conf.Public = opts.Public
 
 	return conf, nil
 }

@@ -253,7 +253,7 @@ func getPublicIP(v *Visor, service string) (string, error) {
 	// unused TPD-registration hint, so boot with an empty IP instead of aborting.
 	// This lets a visor with no STUN (e.g. a loopback / native e2e deployment)
 	// start and use dmsg-bridged transports.
-	if !v.conf.IsPublic {
+	if !v.conf.Public {
 		return "", nil
 	}
 	return pIP, fmt.Errorf("cannot fetch public ip")

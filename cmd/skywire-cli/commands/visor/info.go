@@ -232,7 +232,7 @@ var readyCmd = &cobra.Command{
 				time.Sleep(2 * time.Second)
 				continue
 			}
-			if rpcClient.IsStartupComplete() {
+			if rpcClient.StartupComplete() {
 				internal.PrintOutput(cmd.Flags(), "ready\n", "ready\n")
 				return
 			}

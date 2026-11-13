@@ -52,7 +52,7 @@ func TestSuspendSelectiveTeardown(t *testing.T) {
 	require.NoError(t, v.Suspend())
 
 	// suspended flag set.
-	suspended, err := v.IsSuspended()
+	suspended, err := v.Suspended()
 	require.NoError(t, err)
 	require.True(t, suspended)
 

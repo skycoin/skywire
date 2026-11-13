@@ -226,7 +226,7 @@ func TestConfigGenDefault(t *testing.T) {
 	if conf.Hypervisor != nil && conf.Hypervisor.Enable {
 		t.Error("hypervisor should not be enabled by default")
 	}
-	if conf.IsPublic {
+	if conf.Public {
 		t.Error("should not be public by default")
 	}
 }
@@ -327,7 +327,7 @@ func TestConfigGenPublicVisor(t *testing.T) {
 	}
 	conf := runConfigGen(t, "--public", "--maxtransports 500", "--regtimeout 5m")
 
-	if !conf.IsPublic {
+	if !conf.Public {
 		t.Error("IsPublic should be true")
 	}
 	if conf.PublicVisorConfig == nil {

@@ -218,7 +218,7 @@ func (hv *Hypervisor) putIsPublic() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 			return
 		}
-		if err := ctx.API.SetIsPublic(req.IsPublic); err != nil {
+		if err := ctx.API.SetIsPublic(req.Public); err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
