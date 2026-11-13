@@ -753,13 +753,13 @@ func (v *Visor) SetPublicAutoconnect(pAc bool) error {
 
 // SetIsPublic sets is_public config of visor and flushes the config.
 func (v *Visor) SetIsPublic(public bool) error {
-	v.conf.IsPublic = public
+	v.conf.Public = public
 	return v.conf.Flush()
 }
 
 // GetIsPublic returns the current is_public config setting.
 func (v *Visor) GetIsPublic() bool {
-	return v.conf.IsPublic
+	return v.conf.Public
 }
 
 // GetRuntimeConfig returns the visor's running config as JSON bytes with the
@@ -783,5 +783,5 @@ func (v *Visor) GetConfigPath() (string, error) {
 
 // PublicAutoconnectStatus returns whether public autoconnect is currently running
 func (v *Visor) PublicAutoconnectStatus() (bool, error) {
-	return v.IsPublicAutoconnectRunning(), nil
+	return v.PublicAutoconnectRunning(), nil
 }

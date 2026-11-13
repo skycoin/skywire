@@ -73,7 +73,7 @@ var (
 //
 //gocyclo:ignore
 func init() {
-	root = visorconfig.IsRoot()
+	root = visorconfig.RunningAsRoot()
 	RootCmd.Flags().SortFlags = false
 	//the default is not set to fix the aesthetic of the help command
 	RootCmd.Flags().StringVarP(&confPath, "config", "c", "", "config file to use (default): "+skyenv.ConfigName)

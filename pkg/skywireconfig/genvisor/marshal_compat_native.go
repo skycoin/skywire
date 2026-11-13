@@ -391,7 +391,7 @@ func marshalV1Native(w *strings.Builder, v *visorconfig.V1, indent int) {
 	}
 
 	o.field("is_public")
-	writeBoolNative(w, v.IsPublic)
+	writeBoolNative(w, v.Public)
 
 	if v.PublicVisorConfig != nil {
 		o.field("public_visor")

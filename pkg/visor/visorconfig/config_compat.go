@@ -77,7 +77,7 @@ type v1JSON struct {
 	Skyenv               string                       `json:"skyenv,omitempty"`
 	StunServers          []string                     `json:"stun_servers"`
 	ShutdownTimeout      Duration                     `json:"shutdown_timeout,omitempty"`
-	IsPublic             bool                         `json:"is_public"`
+	Public               bool                         `json:"is_public"`
 	PublicVisorConfig    *PublicVisorConfig           `json:"public_visor,omitempty"`
 	GeoIP                string                       `json:"geoip"`
 	PersistentTransports []tspec.PersistentTransports `json:"persistent_transports"`
@@ -149,7 +149,7 @@ func (v *V1) UnmarshalJSON(data []byte) error {
 	v.Skyenv = mirror.Skyenv
 	v.StunServers = mirror.StunServers
 	v.ShutdownTimeout = mirror.ShutdownTimeout
-	v.IsPublic = mirror.IsPublic
+	v.Public = mirror.Public
 	v.PublicVisorConfig = mirror.PublicVisorConfig
 	v.GeoIP = mirror.GeoIP
 	v.PersistentTransports = mirror.PersistentTransports

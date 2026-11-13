@@ -30,7 +30,7 @@ templ RewardAddress(rw Rewards) {
 			<dd>
 				if rw.Address != "" {
 					<span class="mono small key" data-copy={ rw.Address }>{ rw.Address }</span>
-					if !rw.IsXpub {
+					if !rw.Xpub {
 						<a href={ templ.URL("https://explorer.skycoin.com/app/address/" + rw.Address) } target="_blank" rel="noreferrer nofollow noopener" title={ T(ctx, "node.details.rewards-info.open-in-explorer") }><span class="mi">open_in_browser</span></a>
 					}
 				} else {
@@ -46,10 +46,10 @@ templ RewardAddress(rw Rewards) {
 				}
 				{ T(ctx, "node.details.rewards-info.exposed-action") }
 			</p>
-		} else if rw.Address != "" && !rw.IsXpub {
+		} else if rw.Address != "" && !rw.Xpub {
 			<p class="alert">{ T(ctx, "node.details.rewards-info.single-risk") }</p>
 		}
-		if rw.IsXpub {
+		if rw.Xpub {
 			@xpubList(rw.Addresses, rw.XpubErr)
 		}
 		if rw.Editing {

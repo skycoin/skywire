@@ -1000,8 +1000,8 @@ func (v *Visor) StopPublicAutoconnect() error {
 	return nil
 }
 
-// IsPublicAutoconnectRunning returns whether public autoconnect is running.
-func (v *Visor) IsPublicAutoconnectRunning() bool {
+// PublicAutoconnectRunning returns whether public autoconnect is running.
+func (v *Visor) PublicAutoconnectRunning() bool {
 	v.autoconnect.mu.Lock()
 	defer v.autoconnect.mu.Unlock()
 	return v.autoconnect.running
@@ -1015,7 +1015,7 @@ func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error { /
 	// ensuring old service discovery entries are cleaned up before re-registering.
 	v.serviceDisc.VisorUpdater(0).Stop()
 
-	if !v.conf.IsPublic {
+	if !v.conf.Public {
 		return nil
 	}
 	logger := v.MasterLogger().PackageLogger("public_visor")

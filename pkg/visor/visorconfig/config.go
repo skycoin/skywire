@@ -100,7 +100,7 @@ func MakeBaseConfig(common *Common, dmsgHTTP bool, services *Services, dmsgHTTPS
 			conf.Launcher.ServiceDisc = dmsgHTTPServersList.Prod.ServiceDiscovery
 		}
 	}
-	conf.IsPublic = skyenv.IsPublic
+	conf.Public = skyenv.Public
 	conf.PublicVisorConfig = &PublicVisorConfig{
 		RegistrationTimeout: Duration(skyenv.PublicVisorRegistrationTimeout),
 		MaxTransports:       PublicVisorMaxTransports,

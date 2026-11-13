@@ -49,7 +49,7 @@ performs) rebuilds it from /etc/skywire.conf and resets the change.`,
 		}
 		if len(args) == 0 {
 			state := "off"
-			if rpcClient.IsHypervisorAuthEnabled() {
+			if rpcClient.HypervisorAuthEnabled() {
 				state = "on"
 			}
 			internal.PrintOutput(cmd.Flags(), state, fmt.Sprintf("Hypervisor UI auth: %s\n", state))

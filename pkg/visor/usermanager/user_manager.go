@@ -84,14 +84,14 @@ func (s *UserManager) UserExists() http.HandlerFunc {
 	}
 }
 
-// HasUser reports whether the admin account exists, as UserExists does.
-func (s *UserManager) HasUser() bool {
+// AdminExists reports whether the admin account exists, as UserExists does.
+func (s *UserManager) AdminExists() bool {
 	user, err := s.db.User("admin")
 	return err == nil && user != nil
 }
 
-// HasSession reports whether r carries a live session.
-func (s *UserManager) HasSession(r *http.Request) bool {
+// SessionLive reports whether r carries a live session.
+func (s *UserManager) SessionLive(r *http.Request) bool {
 	_, _, ok := s.session(r)
 	return ok
 }

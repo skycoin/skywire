@@ -20,8 +20,8 @@ var suspendKeepSrc = map[string]bool{
 	"cli.grpc":     true,
 }
 
-// IsSuspended reports whether the visor is currently suspended.
-func (v *Visor) IsSuspended() (bool, error) {
+// Suspended reports whether the visor is currently suspended.
+func (v *Visor) Suspended() (bool, error) {
 	v.suspendMu.Lock()
 	defer v.suspendMu.Unlock()
 	return v.suspended, nil

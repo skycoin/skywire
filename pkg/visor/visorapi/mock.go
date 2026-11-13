@@ -229,8 +229,8 @@ func (mc *mockRPCClient) Health() (*HealthInfo, error) {
 	return hi, nil
 }
 
-// IsStartupComplete implements API
-func (mc *mockRPCClient) IsStartupComplete() bool {
+// StartupComplete implements API
+func (mc *mockRPCClient) StartupComplete() bool {
 	return true
 }
 
@@ -246,8 +246,8 @@ func (mc *mockRPCClient) EnableHypervisorPersist(_ bool) error { return nil }
 // DisableHypervisorPersist implements API
 func (mc *mockRPCClient) DisableHypervisorPersist(_ bool) error { return nil }
 
-// IsHypervisorEnabled implements API
-func (mc *mockRPCClient) IsHypervisorEnabled() bool { return false }
+// HypervisorEnabled implements API
+func (mc *mockRPCClient) HypervisorEnabled() bool { return false }
 
 // EnableHypervisorUIPersist implements API
 func (mc *mockRPCClient) EnableHypervisorUIPersist(_ bool) error { return nil }
@@ -258,11 +258,11 @@ func (mc *mockRPCClient) DisableHypervisorUIPersist(_ bool) error { return nil }
 // SetHypervisorAuthPersist implements API
 func (mc *mockRPCClient) SetHypervisorAuthPersist(_, _ bool) error { return nil }
 
-// IsHypervisorAuthEnabled implements API
-func (mc *mockRPCClient) IsHypervisorAuthEnabled() bool { return false }
+// HypervisorAuthEnabled implements API
+func (mc *mockRPCClient) HypervisorAuthEnabled() bool { return false }
 
-// IsHypervisorUIServing implements API
-func (mc *mockRPCClient) IsHypervisorUIServing() bool { return false }
+// HypervisorUIServing implements API
+func (mc *mockRPCClient) HypervisorUIServing() bool { return false }
 
 // DmsgPortHits implements API
 func (mc *mockRPCClient) DmsgPortHits() []dmsg.PortHit { return nil }
@@ -950,8 +950,8 @@ func (mc *mockRPCClient) Resume() error {
 	return nil
 }
 
-// IsSuspended implements API.
-func (mc *mockRPCClient) IsSuspended() (bool, error) {
+// Suspended implements API.
+func (mc *mockRPCClient) Suspended() (bool, error) {
 	return false, nil
 }
 
@@ -1082,8 +1082,8 @@ func (mc *mockRPCClient) Ports() (map[string]PortDetail, error) {
 	return map[string]PortDetail{}, nil
 }
 
-// IsDMSGClientReady implements API.
-func (mc *mockRPCClient) IsDMSGClientReady() (bool, error) {
+// DMSGClientReady implements API.
+func (mc *mockRPCClient) DMSGClientReady() (bool, error) {
 	return false, nil
 }
 

@@ -101,7 +101,7 @@ type V1 struct {
 	Skyenv               string                       `json:"skyenv,omitempty"` // the skywire.conf config gen read; live changes are written back there
 	StunServers          []string                     `json:"stun_servers"`
 	ShutdownTimeout      Duration                     `json:"shutdown_timeout,omitempty"` // time value, examples: 10s, 1m, etc
-	IsPublic             bool                         `json:"is_public"`
+	Public               bool                         `json:"is_public"`
 	PublicVisorConfig    *PublicVisorConfig           `json:"public_visor,omitempty"`
 	GeoIP                string                       `json:"geoip"`
 	PersistentTransports []tspec.PersistentTransports `json:"persistent_transports"`

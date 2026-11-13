@@ -322,8 +322,8 @@ func (rc *rpcClient) Health() (*HealthInfo, error) {
 	return hi, err
 }
 
-// IsStartupComplete calls IsStartupComplete
-func (rc *rpcClient) IsStartupComplete() bool {
+// StartupComplete calls StartupComplete
+func (rc *rpcClient) StartupComplete() bool {
 	var out bool
 	if err := rc.Call("IsStartupComplete", &struct{}{}, &out); err != nil {
 		return false
@@ -353,8 +353,8 @@ func (rc *rpcClient) DisableHypervisorPersist(persist bool) error {
 	return rc.Call("DisableHypervisor", &persist, &struct{}{})
 }
 
-// IsHypervisorEnabled calls IsHypervisorEnabled
-func (rc *rpcClient) IsHypervisorEnabled() bool {
+// HypervisorEnabled calls HypervisorEnabled
+func (rc *rpcClient) HypervisorEnabled() bool {
 	var out bool
 	if err := rc.Call("IsHypervisorEnabled", &struct{}{}, &out); err != nil {
 		return false
@@ -378,8 +378,8 @@ func (rc *rpcClient) SetHypervisorAuthPersist(enable, persist bool) error {
 	return rc.Call("SetHypervisorAuth", &SetHypervisorAuthIn{Enable: enable, Persist: persist}, &struct{}{})
 }
 
-// IsHypervisorAuthEnabled reports whether the hypervisor UI requires a login.
-func (rc *rpcClient) IsHypervisorAuthEnabled() bool {
+// HypervisorAuthEnabled reports whether the hypervisor UI requires a login.
+func (rc *rpcClient) HypervisorAuthEnabled() bool {
 	var out bool
 	if err := rc.Call("IsHypervisorAuthEnabled", &struct{}{}, &out); err != nil {
 		return false
@@ -387,8 +387,8 @@ func (rc *rpcClient) IsHypervisorAuthEnabled() bool {
 	return out
 }
 
-// IsHypervisorUIServing calls IsHypervisorUIServing
-func (rc *rpcClient) IsHypervisorUIServing() bool {
+// HypervisorUIServing calls HypervisorUIServing
+func (rc *rpcClient) HypervisorUIServing() bool {
 	var out bool
 	if err := rc.Call("IsHypervisorUIServing", &struct{}{}, &out); err != nil {
 		return false
@@ -1150,8 +1150,8 @@ func (rc *rpcClient) Resume() error {
 	return rc.Call("Resume", &struct{}{}, &struct{}{})
 }
 
-// IsSuspended calls IsSuspended.
-func (rc *rpcClient) IsSuspended() (bool, error) {
+// Suspended calls Suspended.
+func (rc *rpcClient) Suspended() (bool, error) {
 	var suspended bool
 	err := rc.Call("IsSuspended", &struct{}{}, &suspended)
 	return suspended, err
@@ -1354,8 +1354,8 @@ func (rc *rpcClient) Ports() (map[string]PortDetail, error) {
 	return output, nil
 }
 
-// IsDMSGClientReady return availability of dsmg client
-func (rc *rpcClient) IsDMSGClientReady() (bool, error) {
+// DMSGClientReady return availability of dsmg client
+func (rc *rpcClient) DMSGClientReady() (bool, error) {
 	var out bool
 	err := rc.Call("IsDMSGClientReady", &struct{}{}, &out)
 	return out, err

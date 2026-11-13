@@ -219,8 +219,8 @@ func getNodeHypervisor() string {
 	return ""
 }
 
-// IsRoot checks for root permissions
-func IsRoot() bool {
+// RunningAsRoot checks for root permissions
+func RunningAsRoot() bool {
 	var sid *windows.SID
 
 	err := windows.AllocateAndInitializeSid(

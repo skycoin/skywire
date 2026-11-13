@@ -916,7 +916,7 @@ func nodeRow(n Node, parent string) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		if n.IsHV {
+		if n.HV {
 			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 73, "<span class=\"badge\" title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err

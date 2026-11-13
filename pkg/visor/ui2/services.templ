@@ -115,9 +115,9 @@ templ RSNStats(rows []RSNRow) {
 		for _, r := range rows {
 			<div class="card sub">
 				<div class="bar">
-					<span class={ "dot", templ.KV("on", r.HasStats), templ.KV("off", !r.HasStats) }></span>
+					<span class={ "dot", templ.KV("on", r.StatsAvailable), templ.KV("off", !r.StatsAvailable) }></span>
 					<span class="mono small pk-text" title={ r.PK }>{ r.PK }</span>
-					if r.HasStats {
+					if r.StatsAvailable {
 						<span class="spacer"></span>
 						<strong class={ rateTone(r.Rate) }>{ pct(r.Rate) }</strong>
 					}
@@ -125,7 +125,7 @@ templ RSNStats(rows []RSNRow) {
 				if r.Err != "" {
 					<p class="small error">{ T(ctx, "services-health.rsn-error") }: { r.Err }</p>
 				}
-				if r.HasStats {
+				if r.StatsAvailable {
 					<dl class="kv small">
 						<dt>{ T(ctx, "services-health.rsn-success") }</dt>
 						<dd>{ u64(r.Successful) }</dd>

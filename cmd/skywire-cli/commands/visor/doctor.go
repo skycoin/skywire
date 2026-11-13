@@ -168,7 +168,7 @@ func probeVisor(r *doctorReport, rc visorapi.API) {
 		return
 	}
 	r.Visor.Reachable = true
-	r.Visor.Ready = rc.IsStartupComplete()
+	r.Visor.Ready = rc.StartupComplete()
 	r.Visor.UptimeSeconds = summary.Uptime
 	r.Visor.RoutesCount = summary.Overview.RoutesCount
 	r.Visor.TransportCount = len(summary.Overview.Transports)
