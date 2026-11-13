@@ -96,7 +96,7 @@ func TestPublisherSelfHealsFillingTrapObject(t *testing.T) {
 	if _, err := c.Inc(staticHash, -1<<20); err != nil {
 		t.Fatalf("Inc(staticHash) down: %v", err)
 	}
-	if !c.IsCached(staticHash) {
+	if !c.Cached(staticHash) {
 		t.Fatalf("expected staticHash retained as a filling cache item")
 	}
 	if _, _, err := cxds.Get(staticHash, 0); err == nil {

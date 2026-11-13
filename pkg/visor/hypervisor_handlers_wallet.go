@@ -189,7 +189,7 @@ func (hv *Hypervisor) walletCoinProxy(w http.ResponseWriter, r *http.Request, re
 		http.Error(w, "unknown coin", http.StatusNotFound)
 		return
 	}
-	if coin.IsBitcoin() {
+	if coin.Bitcoin() {
 		// The browser derives + signs BTC itself; only chain queries come here,
 		// to the in-process electrum gateway. Normalize the path to /v1/btc/… (the
 		// wallet addresses it as coin/<index>/api/v1/btc/…). The backend electrum

@@ -91,8 +91,8 @@ func TestPickSession_SkipsStandby(t *testing.T) {
 	}
 	require.Same(t, active, c.pickSessionFor(pickAny), "a lone stream must not land on a standby tunnel")
 	require.Same(t, active, c.pickSessionFor(pickRecv), "a range chunk must not land on a standby tunnel either")
-	require.True(t, c.IsStandby(standby))
-	require.False(t, c.IsStandby(active))
+	require.True(t, c.Standby(standby))
+	require.False(t, c.Standby(active))
 }
 
 // ...and the escape: with no active tunnel live, the pool is what the proxy

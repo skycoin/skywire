@@ -338,10 +338,10 @@ func (r receiver) Deliver(_ context.Context, env skymailbridge.Envelope) (string
 func (mb *Mailbox) file(peer cipher.PubKey, body []byte, sealedOnly bool) (string, error) {
 	r := receiver{mb}
 	sender, relay := peer, cipher.PubKey{}
-	if sealedOnly && (!r.mb.sealing() || !IsSealed(body)) {
+	if sealedOnly && (!r.mb.sealing() || !Sealed(body)) {
 		return "", &skymailbridge.Reply{Code: 554, Enhanced: "5.6.0", Text: "not a sealed envelope"}
 	}
-	if r.mb.sealing() && IsSealed(body) {
+	if r.mb.sealing() && Sealed(body) {
 		msg, signer, err := r.mb.cfg.Sealer.Open(body)
 		if err != nil {
 			return "", &skymailbridge.Reply{Code: 554, Enhanced: "5.7.5", Text: err.Error()}

@@ -161,7 +161,7 @@ func (s *Service) Reload() error {
 	}
 	s.mb.SetLimits(saved.Over(s.cfg.Base))
 	s.relay.Store(&saved.Relay)
-	if s.mb.HasOutbox() {
+	if s.mb.OutboxEnabled() {
 		return s.mb.Retry("")
 	}
 	return nil
@@ -200,17 +200,17 @@ func (s *Service) RelayFor() ([]cipher.PubKey, bool) {
 
 // Status is the state of a running mailbox.
 type Status struct {
-	Address     string          `json:"address"`
-	AddressDmsg string          `json:"address_dmsg"`
-	Dir         string          `json:"dir"`
-	Limits      Limits          `json:"limits"`
-	Usage       int64           `json:"usage"`
-	Whitelist   []cipher.PubKey `json:"whitelist"`
-	Unread      int             `json:"unread"`
-	Total       int             `json:"total"`
-	HasOutbox   bool            `json:"has_outbox"`
-	Outbox      int             `json:"outbox"`
-	Sealing     bool            `json:"sealing"`
+	Address       string          `json:"address"`
+	AddressDmsg   string          `json:"address_dmsg"`
+	Dir           string          `json:"dir"`
+	Limits        Limits          `json:"limits"`
+	Usage         int64           `json:"usage"`
+	Whitelist     []cipher.PubKey `json:"whitelist"`
+	Unread        int             `json:"unread"`
+	Total         int             `json:"total"`
+	OutboxEnabled bool            `json:"has_outbox"`
+	Outbox        int             `json:"outbox"`
+	Sealing       bool            `json:"sealing"`
 
 	Helpers         []cipher.PubKey `json:"helpers"`
 	HelpersDefault  bool            `json:"helpers_default"`
@@ -222,17 +222,17 @@ type Status struct {
 func (s *Service) Status() Status {
 	mb := s.mb
 	st := Status{
-		Address:     mb.Address("", Suffixes[0]),
-		AddressDmsg: mb.Address("", Suffixes[1]),
-		Dir:         s.cfg.Dir,
-		Limits:      mb.Limits(),
-		Whitelist:   mb.Whitelist(),
-		HasOutbox:   mb.HasOutbox(),
-		Outbox:      mb.Queued(),
-		Sealing:     mb.sealing(),
+		Address:       mb.Address("", Suffixes[0]),
+		AddressDmsg:   mb.Address("", Suffixes[1]),
+		Dir:           s.cfg.Dir,
+		Limits:        mb.Limits(),
+		Whitelist:     mb.Whitelist(),
+		OutboxEnabled: mb.OutboxEnabled(),
+		Outbox:        mb.Queued(),
+		Sealing:       mb.sealing(),
 	}
 	st.Usage, _ = mb.Usage() //nolint:errcheck // a status line, not a decision
-	if st.HasOutbox {
+	if st.OutboxEnabled {
 		st.Helpers, st.HelpersDefault = s.helpers()
 		st.RelayFor, st.RelayForDefault = s.RelayFor()
 	}

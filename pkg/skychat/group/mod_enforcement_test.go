@@ -70,7 +70,7 @@ func TestMuteIsForwardOnly(t *testing.T) {
 	muteAt := time.Now().UTC()
 	s.applyModLeaf(signedMod(t, s.cfg.Record.ID, ModOpMute, victim, adminSK, muteAt))
 
-	if !s.cfg.Record.IsMuted(victim) {
+	if !s.cfg.Record.Mutes(victim) {
 		t.Fatal("mute was not applied")
 	}
 	before := muteAt.Add(-time.Hour)
@@ -129,7 +129,7 @@ func TestBanDropsHistoryAndRoster(t *testing.T) {
 
 	s.applyModLeaf(signedMod(t, s.cfg.Record.ID, ModOpBan, victim, adminSK, time.Now().UTC()))
 
-	if !s.cfg.Record.IsBanned(victim) {
+	if !s.cfg.Record.Bans(victim) {
 		t.Fatal("ban was not applied")
 	}
 	if containsPK(s.cfg.Record.Members, victim) {
@@ -159,7 +159,7 @@ func TestUnbanDoesNotReadmit(t *testing.T) {
 	s.applyModLeaf(signedMod(t, gid, ModOpBan, victim, adminSK, banAt))
 	s.applyModLeaf(signedMod(t, gid, ModOpUnban, victim, adminSK, banAt.Add(time.Second)))
 
-	if s.cfg.Record.IsBanned(victim) {
+	if s.cfg.Record.Bans(victim) {
 		t.Fatal("unban did not lift the ban")
 	}
 	if containsPK(s.cfg.Record.Members, victim) {
@@ -175,7 +175,7 @@ func TestModLeafFromNonAdminRejected(t *testing.T) {
 
 	s.applyModLeaf(signedMod(t, s.cfg.Record.ID, ModOpBan, victim, outsiderSK, time.Now().UTC()))
 
-	if s.cfg.Record.IsBanned(victim) {
+	if s.cfg.Record.Bans(victim) {
 		t.Fatal("a non-admin's ban was applied — any member could evict anyone")
 	}
 }
@@ -187,7 +187,7 @@ func TestModLeafWrongGroupIgnored(t *testing.T) {
 
 	s.applyModLeaf(signedMod(t, uuid.NewString(), ModOpBan, victim, adminSK, time.Now().UTC()))
 
-	if s.cfg.Record.IsBanned(victim) {
+	if s.cfg.Record.Bans(victim) {
 		t.Fatal("a mutation scoped to a different group was applied")
 	}
 }
@@ -204,7 +204,7 @@ func TestFounderCannotBeBannedOrMuted(t *testing.T) {
 
 	gid := s.cfg.Record.ID
 	s.applyModLeaf(signedMod(t, gid, ModOpBan, founderPK, traitorSK, time.Now().UTC()))
-	if s.cfg.Record.IsBanned(founderPK) {
+	if s.cfg.Record.Bans(founderPK) {
 		t.Fatal("founder was banned by another admin")
 	}
 	if !containsPK(s.cfg.Record.Members, founderPK) {
@@ -212,7 +212,7 @@ func TestFounderCannotBeBannedOrMuted(t *testing.T) {
 	}
 
 	s.applyModLeaf(signedMod(t, gid, ModOpMute, founderPK, traitorSK, time.Now().UTC()))
-	if s.cfg.Record.IsMuted(founderPK) {
+	if s.cfg.Record.Mutes(founderPK) {
 		t.Fatal("founder was muted by another admin")
 	}
 }

@@ -173,14 +173,14 @@ func (d *DMSG) ConnectPK(ctx context.Context, remotePK cipher.PubKey) (*Conn, er
 	// lands. Adopting the live conn keeps a single, stable conn per peer
 	// for the whole fill — every leaf, telemetry included.
 	//
-	// Guard on !IsTCP so a node that also holds a TCP conn to this peer
+	// Guard on !TCP so a node that also holds a TCP conn to this peer
 	// still dials a real DMSG conn here rather than adopting the TCP one
 	// into the DMSG cache. The deployment nodes this matters for (the TPD
 	// aggregator, the visor stats publisher) are DMSG-only, so in practice
 	// hasPeer only ever returns the DMSG conn — this is defense in depth.
 	var peerID skycipher.PubKey
 	copy(peerID[:], remotePK[:])
-	if existing, ok := d.n.hasPeer(peerID); ok && !existing.IsTCP() && connIsAlive(existing) {
+	if existing, ok := d.n.hasPeer(peerID); ok && !existing.TCP() && connIsAlive(existing) {
 		d.n.Debugf(NewOutConnPin, "[dmsg:%s] adopting existing conn; skipping redundant reverse dial", remotePK.String())
 		// Mirror the adopted conn into d.cs so subsequent getConn hits
 		// and closeConn (on teardown) can evict it. addConn is a no-op
@@ -199,7 +199,7 @@ func (d *DMSG) ConnectPK(ctx context.Context, remotePK cipher.PubKey) (*Conn, er
 	c, err := d.n.initConn(fc, false)
 	if err != nil {
 		d.n.Errorf(err, "[dmsg:%s] failed to connect", remotePK.String())
-		if !fc.IsClosed() {
+		if !fc.Closed() {
 			fc.Close() //nolint:errcheck,gosec
 		}
 		return nil, err
@@ -215,7 +215,7 @@ func (d *DMSG) acceptConn(fc *transport.Connection) {
 	c, err := d.n.initConn(fc, true)
 	if err != nil {
 		d.n.Errorf(err, "[dmsg] failed to accept from %s", fc.GetRemoteAddr())
-		if !fc.IsClosed() {
+		if !fc.Closed() {
 			fc.Close() //nolint:errcheck,gosec
 		}
 		return
@@ -264,7 +264,7 @@ func (d *DMSG) closeConn(c *Conn) {
 			break
 		}
 	}
-	if !c.Connection.IsClosed() {
+	if !c.Connection.Closed() {
 		c.Connection.Close()
 	}
 }
@@ -290,7 +290,7 @@ func connIsAlive(c *Conn) bool {
 		return false
 	default:
 	}
-	if c.Connection != nil && c.Connection.IsClosed() {
+	if c.Connection != nil && c.Connection.Closed() {
 		return false
 	}
 	return true
@@ -306,7 +306,7 @@ func (d *DMSG) CloseConn(pk cipher.PubKey) error {
 		return errors.New("connection not found")
 	}
 
-	if !c.Connection.IsClosed() {
+	if !c.Connection.Closed() {
 		c.Connection.Close() //nolint:errcheck,gosec
 	}
 

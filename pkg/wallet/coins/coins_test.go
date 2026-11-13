@@ -21,10 +21,10 @@ func TestRegistryShape(t *testing.T) {
 			t.Errorf("coin %d: ServerWallets must be false (browser-held keys)", i)
 		}
 	}
-	if Registry[0].CoinType != "skycoin" || Registry[0].IsBitcoin() {
+	if Registry[0].CoinType != "skycoin" || Registry[0].Bitcoin() {
 		t.Errorf("coin 0 should be skycoin")
 	}
-	if !Registry[1].IsBitcoin() {
+	if !Registry[1].Bitcoin() {
 		t.Errorf("coin 1 should be bitcoin")
 	}
 }
@@ -40,7 +40,7 @@ func TestJSONRoundTrip(t *testing.T) {
 }
 
 func TestByIndex(t *testing.T) {
-	if c, ok := ByIndex(1); !ok || !c.IsBitcoin() {
+	if c, ok := ByIndex(1); !ok || !c.Bitcoin() {
 		t.Errorf("ByIndex(1) should be bitcoin, ok=%v", ok)
 	}
 	if _, ok := ByIndex(5); ok {

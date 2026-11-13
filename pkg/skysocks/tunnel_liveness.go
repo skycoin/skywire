@@ -38,7 +38,7 @@ var sessionProbeFailWindow = 60 * time.Second
 // probeFailWindow is the window in force: the live knob when it has been set,
 // otherwise what NewClient snapshotted.
 func (c *Client) probeFailWindow() time.Duration {
-	if skysettings.IsSet(skysettings.TunnelProbeFailWindow) {
+	if skysettings.ExplicitlySet(skysettings.TunnelProbeFailWindow) {
 		return skysettings.Dur(skysettings.TunnelProbeFailWindow)
 	}
 	return c.probeFailWin

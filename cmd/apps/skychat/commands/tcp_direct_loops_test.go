@@ -18,7 +18,7 @@
 //
 // Goroutine/cleanup note: these loops read the package-level chatCtrl. Every
 // test that reaches chatCtrl.Serve waits until the conn is actually cached
-// (HasConn takes the controller's mutex, which orders that read before the
+// (Connected takes the controller's mutex, which orders that read before the
 // harness restores the global) or joins the goroutine it owns. Canceling and
 // hoping is not enough for the race detector — see lifecycle_test.go.
 package commands
@@ -107,13 +107,13 @@ func waitListening(t *testing.T, addr string) {
 }
 
 // waitConnCached polls until the controller has cached a conn for pk. The
-// HasConn read takes the controller's mutex, which is what orders the
+// Connected read takes the controller's mutex, which is what orders the
 // goroutine's chatCtrl access before this test's cleanup.
 func waitConnCached(t *testing.T, pk cipher.PubKey) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		if chatCtrl.HasConn(pk) {
+		if chatCtrl.Connected(pk) {
 			return
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -227,7 +227,7 @@ func TestRunTCPListen_RejectsNonWhitelistedPeer(t *testing.T) {
 	if errors.As(rerr, &nerr) && nerr.Timeout() {
 		t.Errorf("read timed out (%v) instead of failing on a closed conn — the peer was served", rerr)
 	}
-	if chatCtrl.HasConn(cliPK) {
+	if chatCtrl.Connected(cliPK) {
 		t.Error("a non-whitelisted peer must not be cached in the controller")
 	}
 }

@@ -182,8 +182,8 @@ func TestUpstreamStrictRejectsAnUntrustedCertificate(t *testing.T) {
 }
 
 func TestHasTLS(t *testing.T) {
-	if !HasTLS("1.1.1.1") || HasTLS("192.168.1.1") {
-		t.Fatal("HasTLS")
+	if !TLSCapable("1.1.1.1") || TLSCapable("192.168.1.1") {
+		t.Fatal("TLSCapable")
 	}
 }
 

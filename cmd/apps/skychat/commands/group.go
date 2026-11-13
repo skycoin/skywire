@@ -597,7 +597,7 @@ func groupJoinHandler() http.HandlerFunc {
 		}
 		// A single UI field takes either, so route by shape rather than
 		// trusting which key it arrived under.
-		if invite != "" && !address.IsInvite(invite) {
+		if invite != "" && !address.LooksLikeInvite(invite) {
 			invite, addr = "", invite
 		}
 		var info visorapi.GroupInfo

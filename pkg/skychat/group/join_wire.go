@@ -202,7 +202,7 @@ func SendJoinRequestAny(ctx context.Context, dmsgC *dmsg.Client, groupID string,
 			// Reported through the same "nobody could rule" channel so the
 			// requester's record stays retryable.
 			unavailable = fmt.Sprintf("%s: %s", att.pk, att.resp.Reason)
-		case att.resp.Status.IsDecision():
+		case att.resp.Status.Decision():
 			return att.resp, nil
 		default:
 			// Unknown status; decodeJoinResponse already rejects these,

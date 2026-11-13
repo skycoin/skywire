@@ -79,7 +79,7 @@ func TestAdmission_PrivateGroupRequiresApproval(t *testing.T) {
 	require.NoError(t, err, "PendingJoins")
 	require.Len(t, reqs, 1, "expected exactly one queued request")
 	require.Equal(t, b.pk, reqs[0].PK, "the queue must name the AUTHENTICATED requester")
-	require.True(t, reqs[0].IsPending())
+	require.True(t, reqs[0].Pending())
 
 	// B is not in the roster and holds no key while it waits.
 	pending, ok, err := b.mgr.Get(rec.ID)
@@ -126,7 +126,7 @@ func TestAdmission_DeniedRequestIsTerminal(t *testing.T) {
 	reqs, err := a.mgr.PendingJoins(rec.ID)
 	require.NoError(t, err)
 	for _, q := range reqs {
-		require.False(t, q.IsPending(), "the declined request came back as pending")
+		require.False(t, q.Pending(), "the declined request came back as pending")
 	}
 }
 
@@ -157,7 +157,7 @@ func TestAdmission_AskAgainRequeuesAfterDecline(t *testing.T) {
 	require.NoError(t, err)
 	pending := false
 	for _, q := range reqs {
-		if q.PK == b.pk && q.IsPending() {
+		if q.PK == b.pk && q.Pending() {
 			pending = true
 		}
 	}
@@ -183,7 +183,7 @@ func TestAdmission_BannedPeerCannotRejoinOpenGroup(t *testing.T) {
 
 	banned, err := a.mgr.BanMember(rec.ID, b.pk)
 	require.NoError(t, err, "BanMember")
-	require.True(t, banned.IsBanned(b.pk))
+	require.True(t, banned.Bans(b.pk))
 	require.NotContains(t, banned.Members, b.pk, "a ban must take the roster seat too")
 
 	// Clear B's local record so it genuinely re-asks rather than
@@ -211,7 +211,7 @@ func TestAdmission_RemovedPeerMayRejoin(t *testing.T) {
 	removed, err := a.mgr.RemoveMember(rec.ID, b.pk)
 	require.NoError(t, err, "RemoveMember")
 	require.NotContains(t, removed.Members, b.pk)
-	require.False(t, removed.IsBanned(b.pk), "a kick must not imply a ban")
+	require.False(t, removed.Bans(b.pk), "a kick must not imply a ban")
 
 	require.NoError(t, b.mgr.Leave(rec.ID))
 	require.NoError(t, b.store.Delete(rec.ID))
@@ -235,7 +235,7 @@ func TestAdmission_FounderIsProtected(t *testing.T) {
 	// A promotes B, then B tries to take over.
 	_, err = a.mgr.PromoteAdmin(rec.ID, b.pk)
 	require.NoError(t, err, "PromoteAdmin")
-	waitMember(t, b, rec.ID, func(r Record) bool { return r.IsAdmin(b.pk) }, "B never saw its own promotion")
+	waitMember(t, b, rec.ID, func(r Record) bool { return r.AdministeredBy(b.pk) }, "B never saw its own promotion")
 
 	_, err = b.mgr.BanMember(rec.ID, a.pk)
 	require.Error(t, err, "an admin banned the founder")
@@ -268,7 +268,7 @@ func TestAdmission_SecondAdminAdmitsWhileFounderIsOffline(t *testing.T) {
 	require.NoError(t, err, "B joins")
 	_, err = a.mgr.PromoteAdmin(rec.ID, b.pk)
 	require.NoError(t, err, "PromoteAdmin")
-	waitMember(t, b, rec.ID, func(r Record) bool { return r.IsAdmin(b.pk) }, "B never saw its own promotion")
+	waitMember(t, b, rec.ID, func(r Record) bool { return r.AdministeredBy(b.pk) }, "B never saw its own promotion")
 
 	// The link B hands out names B as well as the founder.
 	inv := inviteFor(t, b, rec.ID)
@@ -323,7 +323,7 @@ func TestAdmission_SecondAdminApprovesWhileFounderIsOffline(t *testing.T) {
 
 	_, err = a.mgr.PromoteAdmin(rec.ID, b.pk)
 	require.NoError(t, err, "PromoteAdmin")
-	waitMember(t, b, rec.ID, func(r Record) bool { return r.IsAdmin(b.pk) }, "B never saw its own promotion")
+	waitMember(t, b, rec.ID, func(r Record) bool { return r.AdministeredBy(b.pk) }, "B never saw its own promotion")
 
 	inv := inviteFor(t, b, rec.ID)
 	require.Empty(t, inv.AESKey, "the link must stay keyless")
@@ -379,7 +379,7 @@ func TestAdmission_NonAdminAnswersUnavailable(t *testing.T) {
 	}, 60*time.Second, 250*time.Millisecond, "a member session must answer join requests at all")
 	require.Equal(t, JoinStatusUnavailable, resp.Status,
 		"a non-admin must not answer a join request with a terminal refusal")
-	require.False(t, resp.Status.IsTerminal())
+	require.False(t, resp.Status.Terminal())
 }
 
 // --- helpers ---------------------------------------------------------------

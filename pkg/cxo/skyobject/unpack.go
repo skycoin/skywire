@@ -203,7 +203,7 @@ func (c *Container) Save(up *Unpack, r *registry.Root) (err error) {
 	// ok, let's save the Root
 
 	// check out Index first (has feed)
-	if c.HasFeed(r.Pub) == false { //nolint:staticcheck
+	if c.ContainsFeed(r.Pub) == false { //nolint:staticcheck
 		return data.ErrNoSuchFeed
 	}
 
@@ -303,7 +303,7 @@ func (i *Index) saveRoot(
 
 		val = r.Encode()
 		r.Hash = cipher.SumSHA256(val)
-		r.IsFull = true
+		r.Full = true
 
 		// sign
 

@@ -144,7 +144,7 @@ func init() {
 				if err != nil {
 					return err
 				}
-				yep, err := r.Node().IsSharing(pk)
+				yep, err := r.Node().Sharing(pk)
 				if err != nil {
 					return err
 				}
@@ -729,7 +729,7 @@ func execIsSharing(r *node.RPCClient, parts []string) error {
 	if err != nil {
 		return err
 	}
-	yep, err := r.Node().IsSharing(pk)
+	yep, err := r.Node().Sharing(pk)
 	if err != nil {
 		return err
 	}

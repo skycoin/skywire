@@ -174,7 +174,7 @@ func TestApplyAdminLeaf_PromoteConverges(t *testing.T) {
 	path, body := signedAdminLeaf(t, gid, AdminOpPromote, promoted, ownerSK, 1)
 	s.onUpdate([]treestore.UpdateEvent{{Path: path, Value: body}})
 
-	if !s.cfg.Record.IsAdmin(promoted) {
+	if !s.cfg.Record.AdministeredBy(promoted) {
 		t.Error("admin promote should add the peer to the admin set")
 	}
 }
@@ -196,7 +196,7 @@ func TestApplyAdminLeaf_CannotDemoteFounder(t *testing.T) {
 	path, body := signedAdminLeaf(t, gid, AdminOpDemote, ownerPK, admin2SK, 1)
 	s.onUpdate([]treestore.UpdateEvent{{Path: path, Value: body}})
 
-	if !s.cfg.Record.IsAdmin(ownerPK) {
+	if !s.cfg.Record.AdministeredBy(ownerPK) {
 		t.Error("the founder must never be demotable")
 	}
 }

@@ -159,11 +159,11 @@ func TestController_SendReceive(t *testing.T) {
 	}
 }
 
-// TestController_AcceptedConnIsCached pins what HasConn answers: "are we
+// TestController_AcceptedConnIsCached pins what Connected answers: "are we
 // connected to this peer", not "have we dialed this peer".
 //
 // The skychat app's file-transfer policy asks exactly that question before
-// taking an inbound file (isEstablishedPeer → HasConn). While accepted conns
+// taking an inbound file (isEstablishedPeer → Connected). While accepted conns
 // were left out of the cache, a peer who had only ever connected TO us was
 // invisible to it: every file they offered was declined as coming from a
 // stranger, while their text messages — which arrive on that very conn — kept
@@ -191,7 +191,7 @@ func TestController_AcceptedConnIsCached(t *testing.T) {
 	// means the cache write has already happened — no polling for it.
 	waitFor(t, recB, func(e Event) bool { return e.Dir == "in" && e.Text == "inbound only" })
 
-	if !ctrlB.HasConn(pkA) {
+	if !ctrlB.Connected(pkA) {
 		t.Error("a conn we accepted must count as a live conn to its peer")
 	}
 	if n := ctrlB.Conns(); n != 1 {

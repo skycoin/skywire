@@ -260,13 +260,13 @@ func TestNode_Publish(t *testing.T) {
 
 	assertNil(t, c.Subscribe(pk))
 	assertIDs(t, ln.ConnectionsOfFeed(pk), sn1.ID(), sn2.ID())
-	assertTrue(t, c.HasFeed(pk), "sn2 conn should have the feed it subscribed")
-	assertTrue(t, !c.HasFeed(cipher.PubKey{1}), "sn2 conn should not have an unrelated feed")
+	assertTrue(t, c.Subscribed(pk), "sn2 conn should have the feed it subscribed")
+	assertTrue(t, !c.Subscribed(cipher.PubKey{1}), "sn2 conn should not have an unrelated feed")
 
 	// un1
 	c, err = un1.TCP().Connect(ln.TCP().Address())
 	assertNil(t, err)
-	assertTrue(t, !c.HasFeed(pk), "un1 conn never subscribed")
+	assertTrue(t, !c.Subscribed(pk), "un1 conn never subscribed")
 	assertTrue(t, c.PeerID() == ln.ID(), "wrong id")
 	waitForCondition(t, "ln sees un1 connected", func() bool {
 		return len(ln.Connections()) >= 3
@@ -425,7 +425,7 @@ func TestNode_Share(t *testing.T) {
 		t.Fatal("share something, but should not")
 	}
 
-	if n.IsSharing(pk1) == true {
+	if n.Sharing(pk1) == true {
 		t.Error("share, but should not")
 	}
 
@@ -433,7 +433,7 @@ func TestNode_Share(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if n.IsSharing(pk1) == true {
+	if n.Sharing(pk1) == true {
 		t.Error("share, but should not")
 	}
 
@@ -443,7 +443,7 @@ func TestNode_Share(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if n.IsSharing(pk1) == false {
+	if n.Sharing(pk1) == false {
 		t.Error("doesn't share, but should")
 	}
 
@@ -463,7 +463,7 @@ func TestNode_Share(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if n.IsSharing(pk1) == true {
+	if n.Sharing(pk1) == true {
 		t.Error("share, but should not")
 	}
 
@@ -482,7 +482,7 @@ func TestNode_Share(t *testing.T) {
 	}
 
 	for _, pk := range fs {
-		if n.IsSharing(pk) == false {
+		if n.Sharing(pk) == false {
 			t.Error("doesn't share, but should")
 		}
 	}

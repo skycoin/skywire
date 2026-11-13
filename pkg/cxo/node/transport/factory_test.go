@@ -49,7 +49,7 @@ func TestTCPFactoryRoundTrip(t *testing.T) {
 	conn, err := cli.Connect(addr)
 	require.NoError(t, err)
 	defer conn.Close()
-	assert.True(t, conn.IsTCP())
+	assert.True(t, conn.TCP())
 
 	srvConn := acceptWithin(t, accepted, 10*time.Second)
 	defer srvConn.Close()
@@ -104,7 +104,7 @@ func TestUDPFactoryRoundTrip(t *testing.T) {
 	conn, err := cli.Connect(addr)
 	require.NoError(t, err)
 	defer conn.Close()
-	assert.False(t, conn.IsTCP())
+	assert.False(t, conn.TCP())
 
 	srvConn := acceptWithin(t, accepted, 5*time.Second)
 	defer srvConn.Close()

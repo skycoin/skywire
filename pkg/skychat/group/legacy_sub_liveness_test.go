@@ -16,7 +16,7 @@ import (
 )
 
 // nonNilSubSentinel returns a *treestore.Subscriber whose only
-// purpose is to satisfy s.sub != nil for HasLegacySub /
+// purpose is to satisfy s.sub != nil for LegacySubPresent /
 // LegacySubLastInbound. Never call Connect on the returned value —
 // the zero-value Subscriber has no node attached and will panic.
 func nonNilSubSentinel() *treestore.Subscriber {
@@ -28,14 +28,14 @@ func TestLegacySubLastInboundZeroOnOwnerSession(t *testing.T) {
 	// (s.sub is nil by construction in openOwner). Accessor must
 	// short-circuit to zero time so the detectStaleAndReconnect
 	// branch never enrolls owner sessions in the legacy-sub stale
-	// loop. HasLegacySub mirrors this so callers can fast-skip
+	// loop. LegacySubPresent mirrors this so callers can fast-skip
 	// without dereferencing the time.
 	s := &Session{}
 	if !s.LegacySubLastInbound().IsZero() {
 		t.Errorf("owner session: LegacySubLastInbound should be zero, got %v", s.LegacySubLastInbound())
 	}
-	if s.HasLegacySub() {
-		t.Errorf("owner session: HasLegacySub should be false, got true")
+	if s.LegacySubPresent() {
+		t.Errorf("owner session: LegacySubPresent should be false, got true")
 	}
 }
 
@@ -58,8 +58,8 @@ func TestLegacySubLastInboundReturnsStoredTime(t *testing.T) {
 	if !got.Equal(now) {
 		t.Errorf("LegacySubLastInbound got %v want %v", got, now)
 	}
-	if !s.HasLegacySub() {
-		t.Errorf("HasLegacySub: expected true with s.sub set")
+	if !s.LegacySubPresent() {
+		t.Errorf("LegacySubPresent: expected true with s.sub set")
 	}
 }
 
@@ -67,7 +67,7 @@ func TestLegacySubLastInboundZeroWhenSubNilEvenIfNsSet(t *testing.T) {
 	// Defensive: if a future refactor leaves subLastInboundNs bumped
 	// after tearing s.sub down (e.g. SetAllowlist drops the legacy
 	// subscriber), the accessor must still report zero — operators
-	// reading IsSubscriberAlive should see "no legacy sub" rather
+	// reading SubscriberAlive should see "no legacy sub" rather
 	// than a stale-but-non-zero timestamp that maps to "alive".
 	s := &Session{}
 	s.subLastInboundNs.Store(time.Now().UnixNano())
@@ -77,7 +77,7 @@ func TestLegacySubLastInboundZeroWhenSubNilEvenIfNsSet(t *testing.T) {
 }
 
 func TestReconnectLegacySubNoopOnOwnerSession(t *testing.T) {
-	// Manager.tryReconnectLegacySub is gated by HasLegacySub, but
+	// Manager.tryReconnectLegacySub is gated by LegacySubPresent, but
 	// Session.ReconnectLegacySub also has to be safe for direct
 	// callers that haven't checked. Confirms the no-op + nil-error
 	// contract for the s.sub == nil branch.

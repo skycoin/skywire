@@ -524,11 +524,11 @@ func TestSessionIsSubscriberAlive(t *testing.T) {
 	// Owner role has no legacy subscriber — reported alive so a
 	// subscriber-health field never reads "down" for a publisher-only visor.
 	owner := newRosterSession(t, me, sk, Record{ID: uuid.NewString(), OwnerPK: me, Role: RoleOwner})
-	if !owner.IsSubscriberAlive() {
+	if !owner.SubscriberAlive() {
 		t.Error("an owner-role session (no legacy subscriber) should report alive")
 	}
 	owner.closed.Store(true)
-	if !owner.IsSubscriberAlive() {
+	if !owner.SubscriberAlive() {
 		t.Error("the nil-sub owner short-circuit runs before the closed check")
 	}
 
@@ -549,21 +549,21 @@ func TestSessionIsSubscriberAlive(t *testing.T) {
 
 	// Never observed an inbound → not alive (still converging or wedged).
 	fresh := newMember(t)
-	if fresh.IsSubscriberAlive() {
+	if fresh.SubscriberAlive() {
 		t.Error("a member session that never saw an inbound should not report alive")
 	}
 
 	// Recent inbound → alive.
 	live := newMember(t)
 	live.lastInboundNs.Store(time.Now().UnixNano())
-	if !live.IsSubscriberAlive() {
+	if !live.SubscriberAlive() {
 		t.Error("a member session with a recent inbound should report alive")
 	}
 
 	// Inbound older than the stale threshold → not alive.
 	stale := newMember(t)
 	stale.lastInboundNs.Store(time.Now().Add(-subscriberStaleThreshold - time.Minute).UnixNano())
-	if stale.IsSubscriberAlive() {
+	if stale.SubscriberAlive() {
 		t.Errorf("an inbound older than %v should report not alive", subscriberStaleThreshold)
 	}
 
@@ -571,7 +571,7 @@ func TestSessionIsSubscriberAlive(t *testing.T) {
 	closed := newMember(t)
 	closed.lastInboundNs.Store(time.Now().UnixNano())
 	closed.closed.Store(true)
-	if closed.IsSubscriberAlive() {
+	if closed.SubscriberAlive() {
 		t.Error("a closed session must never report alive")
 	}
 
@@ -585,7 +585,7 @@ func TestSessionIsSubscriberAlive(t *testing.T) {
 	if err := reallyClosed.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
-	if reallyClosed.IsSubscriberAlive() {
+	if reallyClosed.SubscriberAlive() {
 		t.Error("a member session closed via Close() must not report subscriber_alive")
 	}
 }

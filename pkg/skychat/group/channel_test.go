@@ -106,7 +106,7 @@ func TestChannel_OnlyAdminsMayPost(t *testing.T) {
 	}
 
 	require.Equal(t, PostAdminsOnly, r.PostPolicy(), "a channel is admins-only whatever ReadOnly says")
-	require.True(t, r.IsChannel())
+	require.True(t, r.Channel())
 
 	for _, pk := range []cipher.PubKey{owner, admin} {
 		ok, reason := r.CanPost(pk)

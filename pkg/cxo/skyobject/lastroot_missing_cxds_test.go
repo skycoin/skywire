@@ -14,7 +14,7 @@
 //	  pkg/cxo/treestore.NewWithDMSG                        publisher.go:219
 //	  pkg/visor/visorinit.(*Module).InitConcurrent
 //
-// because the panic site `r.IsFull = true` dereferenced a nil r
+// because the panic site `r.Full = true` dereferenced a nil r
 // returned from rootByHash. Caller (Publisher.New) already had
 // graceful error fallback to an empty in-memory tree — the panic
 // was the only thing that turned the inconsistency into a crashloop.

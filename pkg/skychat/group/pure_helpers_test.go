@@ -2,7 +2,7 @@
 //
 // Unit coverage for the package's pure helpers and record predicates
 // that the CXO-fixture tests only exercise transitively: Mode.IsValid,
-// Record.IsFounder/IsAdmin/EnsureFounderInAdmins, the roster set
+// Record.FoundedBy/AdministeredBy/EnsureFounderInAdmins, the roster set
 // utilities, the session-level classifiers, and the store's MarkMessage.
 package group
 
@@ -31,25 +31,25 @@ func TestRecordIsFounderIsAdmin(t *testing.T) {
 		Admins:  []cipher.PubKey{admin},
 		Members: []cipher.PubKey{owner, admin, member},
 	}
-	if !r.IsFounder(owner) || r.IsFounder(admin) {
-		t.Error("IsFounder should be true only for the owner")
+	if !r.FoundedBy(owner) || r.FoundedBy(admin) {
+		t.Error("FoundedBy should be true only for the owner")
 	}
 	// Founder is implicitly an admin; explicit admins are admins;
 	// plain members are not.
-	if !r.IsAdmin(owner) || !r.IsAdmin(admin) {
+	if !r.AdministeredBy(owner) || !r.AdministeredBy(admin) {
 		t.Error("founder and explicit admin should both be admins")
 	}
-	if r.IsAdmin(member) {
+	if r.AdministeredBy(member) {
 		t.Error("plain member should not be an admin")
 	}
 
 	// Legacy record with a nil Admins slice still treats the founder as
-	// an admin (the union check short-circuits on IsFounder).
+	// an admin (the union check short-circuits on FoundedBy).
 	legacy := Record{OwnerPK: owner}
-	if !legacy.IsAdmin(owner) {
+	if !legacy.AdministeredBy(owner) {
 		t.Error("legacy record: founder should still be admin")
 	}
-	if legacy.IsAdmin(member) {
+	if legacy.AdministeredBy(member) {
 		t.Error("legacy record: non-founder should not be admin")
 	}
 }
@@ -139,10 +139,10 @@ func TestIsSubscribeRejected(t *testing.T) {
 }
 
 func TestIsHeartbeat(t *testing.T) {
-	if !IsHeartbeat(Message{Text: HeartbeatMarker}) {
+	if !Heartbeat(Message{Text: HeartbeatMarker}) {
 		t.Error("the heartbeat marker should be recognized")
 	}
-	if IsHeartbeat(Message{Text: "hello"}) {
+	if Heartbeat(Message{Text: "hello"}) {
 		t.Error("normal chat text is not a heartbeat")
 	}
 }

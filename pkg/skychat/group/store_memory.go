@@ -179,7 +179,7 @@ func (s *Store) Get(id string) (Record, bool, error) {
 	if err := s.decodeRecord(raw, &r); err != nil {
 		return r, true, err
 	}
-	// Match store_bbolt.Get: normalize legacy records (nil Admins) so IsAdmin
+	// Match store_bbolt.Get: normalize legacy records (nil Admins) so AdministeredBy
 	// and admin-gated ops see a consistent shape.
 	r.EnsureFounderInAdmins()
 	r.EnsureKind()

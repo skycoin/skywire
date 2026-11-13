@@ -493,20 +493,20 @@ func Strings(name string) []string {
 	return nil
 }
 
-// IsList reports whether the named knob carries a token list rather than an
+// ListKnob reports whether the named knob carries a token list rather than an
 // int64 — the one thing a caller parsing `key=value` has to know before it
 // picks which map the value belongs in.
-func IsList(name string) bool {
+func ListKnob(name string) bool {
 	k := lookup(name)
 	return k != nil && k.def.Kind == KindList
 }
 
-// IsSet reports whether the knob has been explicitly set — the difference
+// ExplicitlySet reports whether the knob has been explicitly set — the difference
 // between "the compiled default" and "set to a value that happens to equal
 // the default". Use sites that OVERRIDE a per-client configuration (the
 // range-split chunk size and concurrency, which also have boot flags) read
 // this to decide whether the knob or the flag wins.
-func IsSet(name string) bool {
+func ExplicitlySet(name string) bool {
 	if k := lookup(name); k != nil {
 		return k.set.Load()
 	}

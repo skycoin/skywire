@@ -133,7 +133,7 @@ func TestPreviewLookupIsFixedCostAndHoldsNothing(t *testing.T) {
 	// is subscribed to nothing.
 	n := reader.Node()
 	require.Empty(t, n.Feeds(), "preview must leave the reader subscribed to nothing")
-	require.False(t, n.IsSharing(skycipher.PubKey(arPK)),
+	require.False(t, n.Sharing(skycipher.PubKey(arPK)),
 		"the preview callback returned false, so the feed must not be subscribed")
 }
 

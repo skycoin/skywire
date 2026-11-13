@@ -92,7 +92,7 @@ func (v *Visor) GroupJoin(args visorapi.GroupJoinArgs) (visorapi.GroupInfo, erro
 	if raw == "" {
 		return visorapi.GroupInfo{}, errors.New("grouping: join: invite or address required")
 	}
-	if skychataddr.IsInvite(raw) {
+	if skychataddr.LooksLikeInvite(raw) {
 		inv, err := skychatgroup.DecodeInvite(raw)
 		if err != nil {
 			return visorapi.GroupInfo{}, err
@@ -107,7 +107,7 @@ func (v *Visor) GroupJoin(args visorapi.GroupJoinArgs) (visorapi.GroupInfo, erro
 	if err != nil {
 		return visorapi.GroupInfo{}, err
 	}
-	if !addr.IsGroup() {
+	if !addr.TargetsGroup() {
 		return visorapi.GroupInfo{}, errors.New("grouping: join: that address names a person, not a group — open a direct message instead")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), groupJoinByAddressBudget)
@@ -143,7 +143,7 @@ func (v *Visor) GroupResolve(args visorapi.GroupResolveArgs) (visorapi.GroupReso
 	// A pasted invite link is answered from the link itself. No round
 	// trip, and it works while the host is offline — which is the reason
 	// links still exist alongside addresses.
-	if skychataddr.IsInvite(raw) {
+	if skychataddr.LooksLikeInvite(raw) {
 		inv, err := skychatgroup.DecodeInvite(raw)
 		if err != nil {
 			return visorapi.GroupResolveResult{}, err
@@ -169,7 +169,7 @@ func (v *Visor) GroupResolve(args visorapi.GroupResolveArgs) (visorapi.GroupReso
 	if err != nil {
 		return visorapi.GroupResolveResult{}, err
 	}
-	if !addr.IsGroup() {
+	if !addr.TargetsGroup() {
 		return visorapi.GroupResolveResult{
 			Target:  string(skychataddr.KindDM),
 			PK:      addr.PK,
@@ -258,7 +258,7 @@ func (v *Visor) GroupList() ([]visorapi.GroupInfo, error) {
 	out := make([]visorapi.GroupInfo, 0, len(all))
 	for _, r := range all {
 		info := v.toInfoFor(r, mgr)
-		info.SubscriberAlive = mgr.IsSubscriberAlive(r.ID)
+		info.SubscriberAlive = mgr.SubscriberAlive(r.ID)
 		info.PeerLastInbound = peerLivenessHex(mgr.PeerLiveness(r.ID))
 		info.SubDropCount = subDrop
 		info.DeliverCount = deliverCount
@@ -344,7 +344,7 @@ func (v *Visor) GroupGet(id string) (visorapi.GroupInfo, error) {
 		return visorapi.GroupInfo{}, ErrGroupNotFound
 	}
 	info := v.toInfoFor(r, mgr)
-	info.SubscriberAlive = mgr.IsSubscriberAlive(r.ID)
+	info.SubscriberAlive = mgr.SubscriberAlive(r.ID)
 	info.PeerLastInbound = peerLivenessHex(mgr.PeerLiveness(r.ID))
 	info.SubDropCount = v.groupSubDropCount()
 	info.DeliverCount = v.groupDeliverCount()
@@ -915,10 +915,10 @@ func (v *Visor) toInfoFor(r skychatgroup.Record, mgr *skychatgroup.Manager) viso
 	canPost, reason := r.CanPost(v.conf.PK)
 	info.CanPost, info.CannotPostReason = canPost, reason
 	info.CannotPostCode = r.PostBlock(v.conf.PK)
-	if mgr != nil && r.IsAdmin(v.conf.PK) {
+	if mgr != nil && r.AdministeredBy(v.conf.PK) {
 		if reqs, err := mgr.PendingJoins(r.ID); err == nil {
 			for _, q := range reqs {
-				if q.IsPending() {
+				if q.Pending() {
 					info.PendingJoins++
 				}
 			}
@@ -1015,10 +1015,10 @@ func (g *groupInbox) setManager(mgr *skychatgroup.Manager) {
 }
 
 func (g *groupInbox) deliver(groupID string, senderPK cipher.PubKey, msg skychatgroup.Message) {
-	// The filter IsHeartbeat was exposed for: the inbox is the user-facing
+	// The filter Heartbeat was exposed for: the inbox is the user-facing
 	// surface, and a heartbeat that slips past the session layer must not
 	// reach subscribers, the ring, history, or last_message_at.
-	if skychatgroup.IsHeartbeat(msg) {
+	if skychatgroup.Heartbeat(msg) {
 		return
 	}
 	gm := visorapi.GroupMessage{

@@ -543,7 +543,7 @@ name the group, not a way around its door.`,
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		join := visorapi.GroupJoinArgs{Invite: args[0]}
-		if !skychataddr.IsInvite(args[0]) {
+		if !skychataddr.LooksLikeInvite(args[0]) {
 			join = visorapi.GroupJoinArgs{Address: args[0]}
 		}
 		info, err := rpcClient.GroupJoin(join)

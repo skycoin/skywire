@@ -353,7 +353,7 @@ func (m *Manager) Join(inv Invite) (Record, error) {
 // Leave also asks an admin to take this visor off the roster, in the
 // background, so the others stop listing it.
 func (m *Manager) Leave(id string) error {
-	if r, ok, err := m.store.Get(id); err == nil && ok && !r.Status.IsTerminal() && !r.IsFounder(m.myPK) {
+	if r, ok, err := m.store.Get(id); err == nil && ok && !r.Status.Terminal() && !r.FoundedBy(m.myPK) {
 		ctx, cancel := context.WithTimeout(context.Background(), leaveAnnounceTimeout)
 		m.mu.Lock()
 		m.leaving[id] = cancel
@@ -388,7 +388,7 @@ func (m *Manager) stopLeaving(id string) {
 func (m *Manager) leaveHandler(id string) LeaveHandler {
 	return func(pk cipher.PubKey) bool {
 		r, ok, err := m.store.Get(id)
-		if err != nil || !ok || !r.IsAdmin(m.myPK) || r.IsFounder(pk) {
+		if err != nil || !ok || !r.AdministeredBy(m.myPK) || r.FoundedBy(pk) {
 			return false
 		}
 		if !containsPK(r.Members, pk) {
@@ -403,7 +403,7 @@ func (m *Manager) leaveHandler(id string) LeaveHandler {
 }
 
 // Delete tears down an admin-side group and marks it revoked. Only
-// visors that IsAdmin on the record may delete; non-admin members
+// visors that AdministeredBy on the record may delete; non-admin members
 // should call Leave instead. Returns an error for the wrong-role
 // case so a typo doesn't silently revoke a group that another
 // admin still owns.
@@ -415,7 +415,7 @@ func (m *Manager) Delete(id string) error {
 	if !ok {
 		return nil // already gone — idempotent, matches terminate's contract
 	}
-	if !r.IsAdmin(m.myPK) {
+	if !r.AdministeredBy(m.myPK) {
 		return errors.New("group: Delete: only admins can revoke a group; use Leave to depart")
 	}
 	return m.terminate(id, StatusRevoked)
@@ -540,9 +540,9 @@ func (m *Manager) AddMember(id string, pk cipher.PubKey) (Record, error) {
 	// on Role. Role still distinguishes publisher (owner) from
 	// subscriber (member) infrastructure at session-open time, but
 	// "who can add members" is now any visor whose PK is in
-	// r.IsAdmin(). The founder check inside IsAdmin keeps the legacy
+	// r.AdministeredBy(). The founder check inside AdministeredBy keeps the legacy
 	// owner-only behavior on records whose Admins slice is empty.
-	if !r.IsAdmin(m.myPK) {
+	if !r.AdministeredBy(m.myPK) {
 		return Record{}, errors.New("group: AddMember: only admins can edit roster")
 	}
 	if slices.Contains(r.Members, pk) {
@@ -607,13 +607,13 @@ func (m *Manager) PromoteAdmin(id string, pk cipher.PubKey) (Record, error) {
 	if !ok {
 		return Record{}, fmt.Errorf("group: PromoteAdmin: no record for %s", id)
 	}
-	if !r.IsAdmin(m.myPK) {
+	if !r.AdministeredBy(m.myPK) {
 		return Record{}, errors.New("group: PromoteAdmin: only admins can promote")
 	}
 	if pk == (cipher.PubKey{}) {
 		return Record{}, errors.New("group: PromoteAdmin: pk required")
 	}
-	if r.IsAdmin(pk) {
+	if r.AdministeredBy(pk) {
 		return r, nil // already admin (founder OR explicit) — idempotent
 	}
 	r.Admins = append(r.Admins, pk)
@@ -668,13 +668,13 @@ func (m *Manager) DemoteAdmin(id string, pk cipher.PubKey) (Record, error) {
 	if !ok {
 		return Record{}, fmt.Errorf("group: DemoteAdmin: no record for %s", id)
 	}
-	if !r.IsAdmin(m.myPK) {
+	if !r.AdministeredBy(m.myPK) {
 		return Record{}, errors.New("group: DemoteAdmin: only admins can demote")
 	}
 	if pk == (cipher.PubKey{}) {
 		return Record{}, errors.New("group: DemoteAdmin: pk required")
 	}
-	if r.IsFounder(pk) {
+	if r.FoundedBy(pk) {
 		return Record{}, errors.New("group: DemoteAdmin: cannot demote the founder")
 	}
 	out := r.Admins[:0]
@@ -746,7 +746,7 @@ func (m *Manager) Resume() error {
 		return fmt.Errorf("group: Resume: list: %w", err)
 	}
 	for _, r := range all {
-		if r.Status.IsTerminal() || r.Status == StatusAwaitingApproval {
+		if r.Status.Terminal() || r.Status == StatusAwaitingApproval {
 			continue
 		}
 		if _, err := m.openLocked(r); err != nil {
@@ -810,7 +810,7 @@ const reconnectWarmupInterval = 3 * time.Second
 // a reconnect attempt. Set to 3× the owner heartbeat cadence (~30s)
 // plus jitter, so a single missed heartbeat doesn't trigger flap but
 // two consecutive misses do. Used both by
-// Session.IsSubscriberAlive (the operator-visible /status flag) and
+// Session.SubscriberAlive (the operator-visible /status flag) and
 // Manager.detectStaleAndReconnect (the background recovery driver).
 //
 // Post-#unified-liveness: there is now ONE liveness signal
@@ -872,7 +872,7 @@ func (m *Manager) startReconnectLoop() {
 // recorded). Status is no longer manipulated by this loop — Status
 // is configuration state (Active/Pending/Revoked) set by the
 // operator's join/leave actions and by Connect-result transitions.
-// Health is computed live from LastInbound by IsSubscriberAlive.
+// Health is computed live from LastInbound by SubscriberAlive.
 //
 // Logging levels follow the spec:
 //   - debug: every reconnect attempt (success or failure)
@@ -972,7 +972,7 @@ func (m *Manager) peerReconnectFailures(id string, pk cipher.PubKey) uint32 {
 // LastInbound).
 //
 // This is the recovery driver for the unified liveness signal:
-// IsSubscriberAlive is a pure function of LastInbound, and this
+// SubscriberAlive is a pure function of LastInbound, and this
 // pass is what wakes a stuck subscriber back up. Unlike the
 // pre-#unified-liveness version, this does NOT touch
 // Record.Status — Status now reflects configuration state only
@@ -1096,7 +1096,7 @@ func (m *Manager) detectStaleAndReconnect(ctx context.Context) {
 		// so without this branch a wedged s.sub stays dead until the
 		// operator does leave + rejoin.
 		legacySubStale := false
-		if sess.HasLegacySub() {
+		if sess.LegacySubPresent() {
 			last := sess.LegacySubLastInbound()
 			var lag time.Duration
 			if last.IsZero() {
@@ -1161,7 +1161,7 @@ func (m *Manager) promoteIfRecovered(r Record) {
 // idempotent on records that were already Active). On failure: bumps
 // the counter and applies any configured backoff transition.
 // Health-reflection from this success now flows automatically:
-// Session.Connect bumps lastInboundNs, so IsSubscriberAlive becomes
+// Session.Connect bumps lastInboundNs, so SubscriberAlive becomes
 // true on the very next /status read.
 func (m *Manager) tryReconnect(ctx context.Context, sess *Session, id string) {
 	m.log.WithField("id", id).Debug("group: reconnect: attempting subscribe")
@@ -1282,7 +1282,7 @@ func (m *Manager) tryReconnectPeers(ctx context.Context, sess *Session, id strin
 // independently go stale, and routing through a single helper would
 // blur which one a given log line refers to.
 func (m *Manager) tryReconnectLegacySub(ctx context.Context, sess *Session, id string) {
-	if !sess.HasLegacySub() {
+	if !sess.LegacySubPresent() {
 		return
 	}
 	m.log.WithField("id", id).
@@ -1467,7 +1467,7 @@ func (m *Manager) kickReconnect(ctx context.Context, id string) {
 	if !ok || sess == nil || sess.sub == nil {
 		return
 	}
-	if sess.IsSubscriberAlive() {
+	if sess.SubscriberAlive() {
 		return
 	}
 	// Best-effort: don't block the SendToGroup caller. The retry
@@ -1572,21 +1572,21 @@ func (m *Manager) MarkMessageDelivered(groupID string, ts time.Time) {
 	// signal, used to seed lastInboundNs after a visor restart.
 }
 
-// IsSubscriberAlive reports the live subscriber health for the group
+// SubscriberAlive reports the live subscriber health for the group
 // id, surfaced by the chat-app's /status endpoint as the per-group
 // `subscriber_alive` field. Returns true for owner-role sessions
 // (no subscriber) and for member-role sessions whose most recent
 // Connect() succeeded. Returns false for member-role sessions sitting
 // at StatusPending or when no live session exists for the id (e.g.
 // the record was left/revoked).
-func (m *Manager) IsSubscriberAlive(id string) bool {
+func (m *Manager) SubscriberAlive(id string) bool {
 	m.mu.RLock()
 	sess, ok := m.sessions[id]
 	m.mu.RUnlock()
 	if !ok || sess == nil {
 		return false
 	}
-	return sess.IsSubscriberAlive()
+	return sess.SubscriberAlive()
 }
 
 // PeerLiveness returns the per-peer last-inbound timestamps for the
@@ -1638,7 +1638,7 @@ func (m *Manager) PeerUpdateCount(id string) map[cipher.PubKey]uint64 {
 func (m *Manager) List() ([]Record, error) { return m.store.List() }
 
 // BuildInvite encodes an invite link for an admin-side group. Any
-// visor that IsAdmin on the record can issue invites — the founder
+// visor that AdministeredBy on the record can issue invites — the founder
 // implicitly, and explicit Admins entries (set via PromoteAdmin).
 // Non-admin members get an error so the legacy owner-only invariant
 // is preserved on records whose Admins slice is still founder-only.
@@ -1650,7 +1650,7 @@ func (m *Manager) BuildInvite(id string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("group: BuildInvite: no record for %s", id)
 	}
-	if !r.IsAdmin(m.myPK) {
+	if !r.AdministeredBy(m.myPK) {
 		return "", errors.New("group: BuildInvite: only admins can issue invites")
 	}
 	inv := Invite{

@@ -138,7 +138,7 @@ func (s *Session) MessagesSealed() uint64 { return s.msgsSealed.Load() }
 func (s *Session) KeyRotationDue(now time.Time) (RotationReason, bool) {
 	s.membersMu.RLock()
 	encrypted := s.cfg.Record.Encrypted()
-	admin := s.cfg.Record.IsAdmin(s.cfg.MyPK)
+	admin := s.cfg.Record.AdministeredBy(s.cfg.MyPK)
 	issuedAt := s.cfg.Record.KeyIssuedAt
 	myPK := s.cfg.MyPK
 	s.membersMu.RUnlock()
@@ -164,7 +164,7 @@ func (m *Manager) rotateDueKeys(now time.Time) {
 		return
 	}
 	for _, r := range records {
-		if r.Status != StatusActive || !r.Encrypted() || !r.IsAdmin(m.myPK) {
+		if r.Status != StatusActive || !r.Encrypted() || !r.AdministeredBy(m.myPK) {
 			continue
 		}
 		m.mu.RLock()

@@ -125,7 +125,7 @@ func establishPeer(t *testing.T, pk cipher.PubKey) {
 	if err := ctrl.SendRaw(context.Background(), pk, []byte("warm the conn")); err != nil {
 		t.Fatalf("seeding a cached conn to %s: %v", pk.Hex(), err)
 	}
-	if !ctrl.HasConn(pk) {
+	if !ctrl.Connected(pk) {
 		t.Fatal("expected a cached conn after SendRaw")
 	}
 	t.Cleanup(func() {

@@ -32,12 +32,12 @@ type Schema interface {
 	// Registry by which the Schema created
 	Reference() SchemaRef
 
-	IsReference() bool            // is the schema reference
+	Referential() bool            // is the schema reference
 	ReferenceType() ReferenceType // type of the reference if it is a reference
 
-	// HasReferences returns true if this Schema is a reference or contains
+	// ContainsReferences returns true if this Schema is a reference or contains
 	// references on any level deep
-	HasReferences() bool
+	ContainsReferences() bool
 
 	Kind() reflect.Kind // Kind of the Schema
 	Name() string       // Name of the Schema if named
@@ -48,8 +48,8 @@ type Schema interface {
 	// element is not specified by schema)
 	Elem() (s Schema)
 
-	RawName() []byte    // raw name if named
-	IsRegistered() bool // is registered or not
+	RawName() []byte  // raw name if named
+	Registered() bool // is registered or not
 
 	Encode() (b []byte) // encode the schema
 
@@ -70,7 +70,7 @@ type schema struct {
 	name []byte
 }
 
-func (s *schema) IsReference() bool {
+func (s *schema) Referential() bool {
 	return false
 }
 
@@ -85,7 +85,7 @@ func (s *schema) Reference() SchemaRef {
 	return s.ref
 }
 
-func (s *schema) HasReferences() bool {
+func (s *schema) ContainsReferences() bool {
 	return false
 }
 
@@ -101,7 +101,7 @@ func (s *schema) RawName() []byte {
 	return s.name
 }
 
-func (s *schema) IsRegistered() bool {
+func (s *schema) Registered() bool {
 	return s.kind == reflect.Struct && len(s.name) > 0
 }
 
@@ -172,15 +172,15 @@ type referenceSchema struct {
 	elem Schema
 }
 
-func (r *referenceSchema) HasReferences() bool {
+func (r *referenceSchema) ContainsReferences() bool {
 	return true // by design
 }
 
-func (r *referenceSchema) IsRegistered() bool {
+func (r *referenceSchema) Registered() bool {
 	return false // Ref, Refs and Dynamic are not regsitered
 }
 
-func (r *referenceSchema) IsReference() bool {
+func (r *referenceSchema) Referential() bool {
 	return true
 }
 
@@ -258,8 +258,8 @@ type sliceSchema struct {
 	elem Schema
 }
 
-func (s *sliceSchema) HasReferences() bool {
-	return s.elem.HasReferences()
+func (s *sliceSchema) ContainsReferences() bool {
+	return s.elem.ContainsReferences()
 }
 
 func (s *sliceSchema) Reference() SchemaRef {
@@ -287,7 +287,7 @@ func (s *sliceSchema) Size(p []byte) (n int, err error) {
 
 func (s *sliceSchema) encodedSchema() (x encodedSchema) {
 	x = s.schema.encodedSchema()
-	if el := s.elem; el.IsRegistered() {
+	if el := s.elem; el.Registered() {
 		x.Elem = (&schema{SchemaRef{}, el.Kind(), el.RawName()}).Encode()
 	} else {
 		x.Elem = s.elem.Encode()
@@ -364,9 +364,9 @@ type structSchema struct {
 	fields []Field
 }
 
-func (s *structSchema) HasReferences() (has bool) {
+func (s *structSchema) ContainsReferences() (has bool) {
 	for _, fl := range s.fields {
-		has = has || fl.Schema().HasReferences()
+		has = has || fl.Schema().ContainsReferences()
 	}
 	return
 }

@@ -285,7 +285,7 @@ func (i *Index) receivedRoot(
 // doesn't check feed, e.g. the ReceviedRoot method
 // can returns data.ErrNoSuchFeed error. This method
 // never return this error. And this method never set
-// IsFull fields to true, if this Container already
+// Full fields to true, if this Container already
 // have this Root
 func (i *Index) PreviewRoot(
 	pk cipher.PubKey,
@@ -307,7 +307,7 @@ func (i *Index) PreviewRoot(
 // and signature of the Root. The method also
 // check database, may be DB already has this
 // root. The method changes nothing in DB, it
-// only checks the Root. The method set IsFull
+// only checks the Root. The method set Full
 // field of the Root to true if DB already have
 // this Root
 func (i *Index) ReceivedRoot(
@@ -328,7 +328,7 @@ func (i *Index) ReceivedRoot(
 	}
 
 	if _, err = i.findRoot(r.Pub, r.Nonce, r.Seq); err == nil {
-		r.IsFull = true
+		r.Full = true
 		return
 	} else if err == data.ErrNoSuchHead || err == data.ErrNotFound {
 		err = nil // just not found (e.g. not full)
@@ -340,7 +340,7 @@ func (i *Index) ReceivedRoot(
 
 func (i *Index) addRoot(r *registry.Root) (alreadyHave bool, err error) {
 
-	if r.IsFull == false { //nolint:staticcheck
+	if r.Full == false { //nolint:staticcheck
 		return false, errors.New("can't add non-full Root: " + r.Short())
 	}
 
@@ -606,7 +606,7 @@ func (i *Index) LastRoot(
 	// rootByHash can return (nil, ErrNotFound) when the idx still
 	// references a hash whose CXDS bytes have been swept — a real
 	// inconsistency post-#2676 / #2677 now that the cleanup paths
-	// actually remove entries. Pre-fix the immediate r.IsFull / r.Sig
+	// actually remove entries. Pre-fix the immediate r.Full / r.Sig
 	// assignments below nil-derefed the moment cleanup outran the
 	// idx-update, panicking every Publisher.hydrateFromContainer on
 	// startup and crashlooping the visor. Returning the err lets the
@@ -622,7 +622,7 @@ func (i *Index) LastRoot(
 		return nil, fmt.Errorf("LastRoot: rootByHash returned nil with no error for hash %s (idx-CXDS inconsistency)", lr.Hash.Hex())
 	}
 
-	r.IsFull = true
+	r.Full = true
 	r.Sig = lr.Sig
 	return r, nil
 }
@@ -1062,8 +1062,8 @@ func (i *Index) Feeds() (feeds []cipher.PubKey) {
 
 }
 
-// HasFeed returns true if feed exists
-func (i *Index) HasFeed(pk cipher.PubKey) (yep bool) {
+// ContainsFeed returns true if feed exists
+func (i *Index) ContainsFeed(pk cipher.PubKey) (yep bool) {
 
 	i.mx.Lock()
 	defer i.mx.Unlock()
@@ -1072,9 +1072,9 @@ func (i *Index) HasFeed(pk cipher.PubKey) (yep bool) {
 	return
 }
 
-// HasHead returns true if head exists. It
+// ContainsHead returns true if head exists. It
 // returns false if given feed doesn't exist
-func (i *Index) HasHead(pk cipher.PubKey, nonce uint64) (yep bool) {
+func (i *Index) ContainsHead(pk cipher.PubKey, nonce uint64) (yep bool) {
 
 	i.mx.Lock()
 	defer i.mx.Unlock()
@@ -1220,7 +1220,7 @@ func (i *Index) Root(
 		return
 	}
 
-	r.IsFull = true
+	r.Full = true
 	r.Sig = dr.Sig
 
 	return

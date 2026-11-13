@@ -252,10 +252,10 @@ func TestRecordJoinPoWRequired(t *testing.T) {
 // verdict would strand a legitimate joiner.
 func TestChallengeAndThrottledAreNotDecisions(t *testing.T) {
 	for _, s := range []JoinStatus{JoinStatusChallenge, JoinStatusThrottled} {
-		if s.IsDecision() {
+		if s.Decision() {
 			t.Errorf("%q must not count as a decision about the requester", s)
 		}
-		if s.IsTerminal() {
+		if s.Terminal() {
 			t.Errorf("%q must not be terminal", s)
 		}
 		if errForStatus(s, "x") != nil {

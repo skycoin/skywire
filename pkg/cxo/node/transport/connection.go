@@ -82,13 +82,13 @@ func (c *Connection) GetRemoteAddr() net.Addr {
 	return c.conn.RemoteAddr()
 }
 
-// IsTCP returns true if this is a TCP connection.
-func (c *Connection) IsTCP() bool {
+// TCP returns true if this is a TCP connection.
+func (c *Connection) TCP() bool {
 	return c.tcp
 }
 
-// IsClosed returns true if the connection has been closed.
-func (c *Connection) IsClosed() bool {
+// Closed returns true if the connection has been closed.
+func (c *Connection) Closed() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.closed

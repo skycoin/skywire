@@ -129,7 +129,7 @@ func (t *TCP) Connect(address string) (*Conn, error) {
 		t.addConn(c)
 	} else {
 		t.n.Errorf(err, "[%s] failed to connect", factoryConnStr(fc, false))
-		if !fc.IsClosed() {
+		if !fc.Closed() {
 			t.n.Debugf(CloseConnPin, "[%s] closing connection",
 				factoryConnStr(fc, false))
 			fc.Close() //nolint:errcheck,gosec
@@ -160,7 +160,7 @@ func (t *TCP) acceptConn(fc *transport.Connection) {
 		t.addConn(c)
 	} else {
 		t.n.Errorf(err, "[%s] failed to accept", factoryConnStr(fc, true))
-		if !fc.IsClosed() {
+		if !fc.Closed() {
 			t.n.Debugf(CloseConnPin, "[%s] closing connection",
 				factoryConnStr(fc, true))
 			fc.Close() //nolint:errcheck,gosec
@@ -174,7 +174,7 @@ func (t *TCP) closeConn(addr string) error { //nolint:errcheck,gosec
 	defer t.mx.Unlock()
 
 	if c, ok := t.cs[addr]; ok {
-		if !c.Connection.IsClosed() {
+		if !c.Connection.Closed() {
 			t.n.Debugf(CloseConnPin, "[%s] closing connection", c.String())
 			c.Connection.Close() //nolint:errcheck,gosec
 		}
@@ -309,7 +309,7 @@ func (u *UDP) Connect(address string) (*Conn, error) {
 		u.addConn(c)
 	} else {
 		u.n.Errorf(err, "[%s] failed to connect", factoryConnStr(fc, false))
-		if !fc.IsClosed() {
+		if !fc.Closed() {
 			u.n.Debugf(CloseConnPin, "[%s] closing connection",
 				factoryConnStr(fc, false))
 			fc.Close() //nolint:errcheck,gosec
@@ -340,7 +340,7 @@ func (u *UDP) acceptConn(fc *transport.Connection) {
 		u.addConn(c)
 	} else {
 		u.n.Errorf(err, "[%s] failed to accept", factoryConnStr(fc, true))
-		if !fc.IsClosed() {
+		if !fc.Closed() {
 			u.n.Debugf(CloseConnPin, "[%s] closing connection",
 				factoryConnStr(fc, true))
 			fc.Close() //nolint:errcheck,gosec
@@ -354,7 +354,7 @@ func (u *UDP) closeConn(addr string) error { //nolint:errcheck,gosec
 	defer u.mx.Unlock()
 
 	if c, ok := u.cs[addr]; ok {
-		if !c.Connection.IsClosed() {
+		if !c.Connection.Closed() {
 			u.n.Debugf(CloseConnPin, "[%s] closing connection", c.String())
 			c.Connection.Close() //nolint:errcheck,gosec
 		}
@@ -382,5 +382,5 @@ func (u *UDP) connections() (cs []string) { //nolint:unused
 }
 
 func factoryConnStr(fc *transport.Connection, incoming bool) string {
-	return connString(incoming, fc.IsTCP(), fc.GetRemoteAddr().String())
+	return connString(incoming, fc.TCP(), fc.GetRemoteAddr().String())
 }

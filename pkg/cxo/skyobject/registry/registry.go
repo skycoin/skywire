@@ -140,7 +140,7 @@ func (r *Registry) register(reg *Reg) {
 		r.nt[name] = typ // build r.nt by the reg.tn
 		s := reg.getSchema(typ)
 		// only named structures
-		if !s.IsRegistered() {
+		if !s.Registered() {
 			panic("can't register type: " + typ.Name())
 		}
 		r.reg[name] = s // store: name -> Scehma
@@ -156,7 +156,7 @@ func (r *Registry) fillSchema(s Schema, filled map[Schema]struct{}) {
 	}
 	filled[s] = struct{}{} // filling
 	var err error
-	if s.IsReference() {
+	if s.Referential() {
 		switch s.ReferenceType() {
 		case ReferenceTypeSingle, ReferenceTypeSlice:
 			x := s.(*referenceSchema)
@@ -175,7 +175,7 @@ func (r *Registry) fillSchema(s Schema, filled map[Schema]struct{}) {
 	switch s.Kind() {
 	case reflect.Array:
 		x := s.(*arraySchema)
-		if s.Elem().IsRegistered() {
+		if s.Elem().Registered() {
 			x.elem, err = r.schemaByName(s.Elem().Name())
 			if err != nil {
 				panic(err)
@@ -184,7 +184,7 @@ func (r *Registry) fillSchema(s Schema, filled map[Schema]struct{}) {
 		r.fillSchema(x.elem, filled)
 	case reflect.Slice:
 		x := s.(*sliceSchema)
-		if s.Elem().IsRegistered() {
+		if s.Elem().Registered() {
 			x.elem, err = r.schemaByName(s.Elem().Name())
 			if err != nil {
 				panic(err)
@@ -194,7 +194,7 @@ func (r *Registry) fillSchema(s Schema, filled map[Schema]struct{}) {
 	case reflect.Struct:
 		for i, f := range s.Fields() {
 			x := f.(*field)
-			if fs := f.Schema(); fs.IsRegistered() {
+			if fs := f.Schema(); fs.Registered() {
 				x.schema, err = r.schemaByName(fs.Name())
 				if err != nil {
 					panic(err)

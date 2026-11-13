@@ -414,7 +414,7 @@ func New(cxoNode *node.Node, sk cipher.SecKey, conf Config) (*Publisher, error) 
 	}
 
 	skyPK := skycipher.PubKey(pk)
-	if !cxoNode.IsSharing(skyPK) {
+	if !cxoNode.Sharing(skyPK) {
 		if err := cxoNode.Share(skyPK); err != nil {
 			return nil, err
 		}

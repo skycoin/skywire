@@ -215,10 +215,10 @@ const (
 	StatusRemoved Status = "removed"
 )
 
-// IsTerminal reports whether a status means "this group is over for
+// Terminal reports whether a status means "this group is over for
 // us" — no session should be opened and no reconnect attempted. Used
 // by Resume and by the browser-facing list filter.
-func (s Status) IsTerminal() bool {
+func (s Status) Terminal() bool {
 	return s == StatusLeft || s == StatusRevoked || s == StatusDenied || s == StatusBanned || s == StatusRemoved
 }
 
@@ -272,7 +272,7 @@ type Record struct {
 	// issue invites, change AES key, promote/demote other admins.
 	// OwnerPK is always treated as an admin (the founder is immutable
 	// admin); on-disk this slice may or may not include it explicitly
-	// — IsAdmin handles either case.
+	// — AdministeredBy handles either case.
 	//
 	// Empty/nil on legacy records — the migration path in store.Get
 	// fills it with [OwnerPK] on first read so older groups inherit
@@ -490,14 +490,14 @@ type Record struct {
 	LastMessageAt time.Time `json:"last_message_at,omitempty"`
 }
 
-// IsFounder reports whether pk is the group's founder (the original
+// FoundedBy reports whether pk is the group's founder (the original
 // creator). The founder is implicitly always an admin and cannot be
 // demoted. Equality with OwnerPK is the source of truth.
-func (r Record) IsFounder(pk cipher.PubKey) bool {
+func (r Record) FoundedBy(pk cipher.PubKey) bool {
 	return r.OwnerPK == pk
 }
 
-// IsAdmin reports whether pk has roster authority on this group —
+// AdministeredBy reports whether pk has roster authority on this group —
 // i.e. is the founder OR is explicitly listed in Admins. Used to gate
 // AddMember / BuildInvite / promote-demote / delete operations.
 //
@@ -505,8 +505,8 @@ func (r Record) IsFounder(pk cipher.PubKey) bool {
 // whose Admins slice is nil (pre-migration on-disk shape) still
 // treats the founder as an admin without needing the migration to
 // have run first.
-func (r Record) IsAdmin(pk cipher.PubKey) bool {
-	if r.IsFounder(pk) {
+func (r Record) AdministeredBy(pk cipher.PubKey) bool {
+	if r.FoundedBy(pk) {
 		return true
 	}
 	return slices.Contains(r.Admins, pk)
@@ -582,7 +582,7 @@ func policyForKind(k Kind) JoinPolicy {
 // live toggle, so this is deliberately computed rather than stored.
 // A channel is admins-only by construction, whatever ReadOnly says.
 func (r Record) PostPolicy() PostPolicy {
-	if r.IsChannel() || r.ReadOnly {
+	if r.Channel() || r.ReadOnly {
 		return PostAdminsOnly
 	}
 	return PostAll
@@ -622,7 +622,7 @@ func checkKindStable(id string, prev, next Kind) error {
 	return fmt.Errorf("%w: %s is %q and cannot become %q", ErrKindImmutable, id, prev, next)
 }
 
-// IsChannel reports whether this group is a broadcast channel — open to
+// Channel reports whether this group is a broadcast channel — open to
 // join, admins-only to post.
 //
 // Needs no Mode fallback, unlike JoinPolicy: a record written before Kind
@@ -630,7 +630,7 @@ func checkKindStable(id string, prev, next Kind) error {
 // empty Kind is correctly false. That is also the safe direction — an
 // unnormalized record reads as an ordinary group rather than silently
 // silencing every member of one.
-func (r Record) IsChannel() bool { return r.Kind == KindChannel }
+func (r Record) Channel() bool { return r.Kind == KindChannel }
 
 // JoinPoWRequired returns the difficulty a join request must meet for
 // this group: the admin's setting when one exists, the package default
@@ -654,19 +654,19 @@ func (r Record) JoinPoWRequired() uint8 {
 // channel implies: subscribers read, admins publish and serve. A channel
 // with 10,000 members would otherwise have 10,000 copies of itself.
 func (r Record) PeerBackfillEnabled() bool {
-	if r.IsChannel() {
+	if r.Channel() {
 		return false
 	}
 	return !r.PeerBackfillDisabled
 }
 
-// IsBanned reports whether pk is barred from this group.
-func (r Record) IsBanned(pk cipher.PubKey) bool { return containsPK(r.Banned, pk) }
+// Bans reports whether pk is barred from this group.
+func (r Record) Bans(pk cipher.PubKey) bool { return containsPK(r.Banned, pk) }
 
-// IsMuted reports whether pk is individually restricted from posting.
+// Mutes reports whether pk is individually restricted from posting.
 // Does NOT account for the group-wide ReadOnly flag — use CanPost for
 // the composite answer.
-func (r Record) IsMuted(pk cipher.PubKey) bool { return containsPK(r.Muted, pk) }
+func (r Record) Mutes(pk cipher.PubKey) bool { return containsPK(r.Muted, pk) }
 
 // MuteEffectiveFrom returns when pk's mute began. Zero time for a PK
 // that isn't muted, or for a mute recorded without a timestamp.
@@ -713,15 +713,15 @@ func (r Record) CanPost(pk cipher.PubKey) (bool, string) {
 // honoring it. Banned outranks everything.
 func (r Record) PostBlock(pk cipher.PubKey) string {
 	switch {
-	case r.IsBanned(pk):
+	case r.Bans(pk):
 		return PostBlockBanned
 	case r.Status == StatusRemoved:
 		return PostBlockRemoved
-	case r.IsMuted(pk):
+	case r.Mutes(pk):
 		return PostBlockMuted
-	case r.IsChannel() && !r.IsAdmin(pk):
+	case r.Channel() && !r.AdministeredBy(pk):
 		return PostBlockChannel
-	case r.ReadOnly && !r.IsAdmin(pk):
+	case r.ReadOnly && !r.AdministeredBy(pk):
 		return PostBlockReadOnly
 	default:
 		return ""

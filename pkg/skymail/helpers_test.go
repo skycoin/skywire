@@ -89,7 +89,7 @@ func TestHelperDeliversWhileTheSenderIsAway(t *testing.T) {
 	require.Equal(t, []string{addr("bob", hn.b.pk)}, carried[0].Queue.Pending)
 	raw, err := hn.h.mb.Raw(FolderOutbox, carried[0].ID)
 	require.NoError(t, err)
-	require.True(t, IsSealed(raw))
+	require.True(t, Sealed(raw))
 	require.NotContains(t, string(raw), "carried", "H cannot read it")
 
 	// A goes away, as a closed browser tab does. B comes back.
