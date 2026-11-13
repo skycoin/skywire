@@ -10,7 +10,7 @@ require (
 	github.com/0magnet/bbolt v1.5.1-0.20261004204806-45fff0d5382d
 	github.com/0magnet/bitree v0.0.1-0.20261019212016-c15975be5d89
 	github.com/0magnet/bottle v0.0.1-0.20261028202309-2b922f28f74e
-	github.com/0magnet/calvin v0.0.1-0.20261106130306-95511d0b3e30
+	github.com/0magnet/calvin v0.0.1-0.20261109140133-887794fc87eb
 	github.com/0magnet/coloredcobra v1.0.4-0.20261012213101-faa6bd8f94c5
 	github.com/0magnet/cosmos-go v0.0.1-0.20261106130325-ce8fe4be8ffe
 	github.com/0magnet/desk v0.0.3-0.20261020181434-20cf2197122e
@@ -35,9 +35,9 @@ require (
 	github.com/0magnet/spheregraph v0.0.1-0.20261013221036-b8e448a97be5
 	github.com/0magnet/termanim v0.0.1-0.20261013224625-c801aece6dff
 	github.com/0magnet/webrtc/v4 v4.2.24
-	github.com/0magnet/websh v0.0.1-0.20261106131606-1973f8bee280
+	github.com/0magnet/websh v0.0.1-0.20261113222132-71bc5ae69baf
 	github.com/0magnet/wfdrive v0.3.3-0.20261013224635-8e5aa89d1aa6
-	github.com/0magnet/winbox-go v0.0.1-0.20261106130421-357df562ff6c
+	github.com/0magnet/winbox-go v0.0.1-0.20261109140257-4c5c0e948cd6
 	github.com/0magnet/wisp v0.0.0-20261028112650-b15df570c542
 	github.com/0magnet/yamux v0.1.3-0.20261104192149-fa611686e2cf
 	github.com/ActiveState/termtest/conpty v0.5.0
@@ -115,11 +115,11 @@ require (
 	github.com/yuin/goldmark v1.8.7
 	github.com/zcalusic/sysinfo v1.2.1
 	go.starlark.net v0.0.0-20261021141710-4f4267fb140d
-	golang.org/x/crypto v0.58.0
+	golang.org/x/crypto v0.59.0
 	golang.org/x/net v0.62.0
-	golang.org/x/sync v0.24.0
-	golang.org/x/sys v0.49.0
-	golang.org/x/term v0.47.0
+	golang.org/x/sync v0.25.0
+	golang.org/x/sys v0.50.0
+	golang.org/x/term v0.48.0
 	golang.org/x/time v0.16.0
 	golang.zx2c4.com/wireguard v0.0.0-20261024220952-b3bc704ef0ee
 	google.golang.org/grpc v1.85.0
@@ -135,7 +135,7 @@ require (
 	github.com/0magnet/go-dsp v0.0.1-0.20261013221717-1ec76fa9affb // indirect
 	github.com/0magnet/img2txt-go v0.0.1-0.20261013220954-ae0d760b7d2b // indirect
 	github.com/0magnet/u-root v0.16.1-0.20261003214924-44e47b732754 // indirect
-	github.com/0magnet/xterm-go v0.0.1-0.20261102175652-6023ed24df89 // indirect
+	github.com/0magnet/xterm-go v0.0.1-0.20261113221252-923689a13b7f // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20261013165250-51075c6ea6bc // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/MichaelMure/go-term-text v0.3.1 // indirect
@@ -262,7 +262,7 @@ require (
 	golang.org/x/exp v0.0.0-20261106192419-47ce03d25ef0 // indirect
 	golang.org/x/exp/shiny v0.0.0-20261106192419-47ce03d25ef0 // indirect
 	golang.org/x/image v0.47.0 // indirect
-	golang.org/x/text v0.43.0 // indirect
+	golang.org/x/text v0.44.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20261104224025-d1e00e9f33ab // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
