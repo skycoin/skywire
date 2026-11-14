@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/manager_integration_test.go c4-app-chat
+// Package group pkg/skychat/group/manager_integration_test.go c3-app-chat
 //
 // The dmsg-backed integration lane for group.Manager — the half of manager.go
 // that cannot be reached without a real transport: Create, Join, AddMember,

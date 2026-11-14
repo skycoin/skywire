@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/key_reconcile.go c4-app-chat
+// Package group pkg/skychat/group/key_reconcile.go c3-app-chat
 // the session half of key rotation: emitting a keys/<seq> leaf and
 // applying one. Split from keyrotate.go for the same reason
 // roster_reconcile.go is split from gossip.go — the envelope is testable

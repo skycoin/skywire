@@ -1,4 +1,4 @@
-// Package address pkg/skychat/address/address.go c4-app-chat
+// Package address pkg/skychat/address/address.go c3-app-chat
 // the skychat:// address grammar — one shareable, scannable identifier
 // for the three things a user can open: a person, a group, a channel.
 //

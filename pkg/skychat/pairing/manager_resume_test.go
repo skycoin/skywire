@@ -1,4 +1,4 @@
-// Package pairing pkg/skychat/pairing/manager_resume_test.go c4-app-chat
+// Package pairing pkg/skychat/pairing/manager_resume_test.go c3-app-chat
 //
 // Covers the Manager/Pair surface integration_test.go left untouched: the
 // constructor + Open validation arms, the small accessors, and — the one that

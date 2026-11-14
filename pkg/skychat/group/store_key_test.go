@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/store_key_test.go c4-app-chat
+// Package group pkg/skychat/group/store_key_test.go c3-app-chat
 package group
 
 import "github.com/skycoin/skywire/pkg/cipher"

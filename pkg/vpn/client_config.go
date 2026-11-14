@@ -1,4 +1,4 @@
-// Package vpn pkg/vpn/client_config.go c4-app-vpn
+// Package vpn pkg/vpn/client_config.go c3-app-vpn
 package vpn
 
 import (

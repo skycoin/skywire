@@ -1,4 +1,4 @@
-// Package address pkg/skychat/address/address_test.go c4-app-chat
+// Package address pkg/skychat/address/address_test.go c3-app-chat
 // round-trip and rejection tests for the skychat:// grammar.
 //
 // The rejection half matters more than the happy path: this parser is

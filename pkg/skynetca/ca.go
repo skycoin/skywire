@@ -1,4 +1,4 @@
-// Package skynetca pkg/skynetca/ca.go c4-app-skynet
+// Package skynetca pkg/skynetca/ca.go c3-app-skynet
 // authority used by the skywire resolver to terminate TLS for
 // `*.skynet`, `*.dmsg` and `*.skysocks` hostnames in the visitor's browser.
 //

@@ -1,4 +1,4 @@
-// Package call pkg/skychat/call/voice.go c4-app-chat
+// Package call pkg/skychat/call/voice.go c3-app-chat
 //
 // Real-time 1:1 voice for skychat, per docs/skychat-voice-rfc.md. All media
 // rides an ENCRYPTED skywire transport (dmsg stream or skynet route) — never a

@@ -1,4 +1,4 @@
-// Package dmsgweb pkg/dmsgweb/runtime.go c4-app-web
+// Package dmsgweb pkg/dmsgweb/runtime.go c3-app-web
 // `.dmsg` (and other configurable) domain suffixes. It exposes:
 //
 //   - a SOCKS5 proxy that intercepts hosts ending in the configured

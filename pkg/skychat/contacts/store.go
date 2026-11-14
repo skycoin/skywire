@@ -1,4 +1,4 @@
-// Package contacts pkg/skychat/contacts/store.go c4-app-chat
+// Package contacts pkg/skychat/contacts/store.go c3-app-chat
 // the address book: what THIS visor's operator calls each public key.
 //
 // # Why this is not localStorage any more

@@ -1,6 +1,6 @@
 //go:build !linux && !darwin && !windows
 
-// Package vpn pkg/vpn/os_server.go c4-app-vpn
+// Package vpn pkg/vpn/os_server.go c3-app-vpn
 package vpn
 
 import (

@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/gossip.go c4-app-chat
+// Package group pkg/skychat/group/gossip.go c3-app-chat
 // envelopes for cross-visor admin/roster gossip per the RFC at
 // docs/skychat_group_gossip_rfc.md (#2636 issue, #2656 PR).
 //

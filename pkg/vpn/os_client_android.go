@@ -1,6 +1,6 @@
 //go:build android
 
-// Package vpn pkg/vpn/os_client_android.go c4-app-vpn
+// Package vpn pkg/vpn/os_client_android.go c3-app-vpn
 package vpn
 
 import (

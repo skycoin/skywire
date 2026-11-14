@@ -1,4 +1,4 @@
-// Package vpn pkg/vpn/meshapp.go c4-app-vpn
+// Package vpn pkg/vpn/meshapp.go c3-app-vpn
 //
 // Shared mesh-gateway wiring for the vpn-router and vpn-client apps: build the
 // MeshDial from an app.Client, parse operator-supplied aliases, and load-or-mint

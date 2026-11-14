@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/send_test.go c4-app-chat
+// Package group pkg/skychat/group/send_test.go c3-app-chat
 //
 // Coverage for the outbound write path (Session.Send / publishAs): the
 // owner-side self-echo delivery, the signed leaf that lands on the

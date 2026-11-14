@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/key_policy.go c4-app-chat
+// Package group pkg/skychat/group/key_policy.go c3-app-chat
 // when a group key has covered enough and should be replaced.
 //
 // # Why a group needs this at all

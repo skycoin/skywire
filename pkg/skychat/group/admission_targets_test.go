@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/admission_targets_test.go c4-app-chat
+// Package group pkg/skychat/group/admission_targets_test.go c3-app-chat
 //
 // Unit coverage for the multi-admin admission fan-out's pure half: which
 // PKs a joiner will ask, in what order, and what the invite carries to

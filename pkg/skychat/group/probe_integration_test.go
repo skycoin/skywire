@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/probe_integration_test.go c4-app-chat
+// Package group pkg/skychat/group/probe_integration_test.go c3-app-chat
 //
 // The dmsg-backed lane for the describe port: what a short
 // skychat://<pk>/<group-id> address can be turned into, and what it must

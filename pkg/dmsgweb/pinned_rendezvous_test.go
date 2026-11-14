@@ -1,4 +1,4 @@
-// Package dmsgweb pkg/dmsgweb/pinned_rendezvous_test.go c4-app-web
+// Package dmsgweb pkg/dmsgweb/pinned_rendezvous_test.go c3-app-web
 package dmsgweb
 
 import (

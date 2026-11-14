@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/group.go c4-app-chat
+// Package group pkg/skychat/group/group.go c3-app-chat
 // built on top of skywire's existing CXO TreeStore feeds.
 //
 // Architecture (D1, "owner-centric single feed"):

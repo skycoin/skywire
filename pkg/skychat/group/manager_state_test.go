@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/manager_state_test.go c4-app-chat
+// Package group pkg/skychat/group/manager_state_test.go c3-app-chat
 //
 // Unit coverage for the parts of manager.go that do NOT need a dmsg mesh: the
 // session-level reconnect backoff, the warm-up cadence decision, the

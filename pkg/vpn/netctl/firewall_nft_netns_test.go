@@ -1,6 +1,6 @@
 //go:build nftfw && netctlint && linux
 
-// Package netctl pkg/vpn/netctl/firewall_nft_netns_test.go c4-app-vpn
+// Package netctl pkg/vpn/netctl/firewall_nft_netns_test.go c3-app-vpn
 //
 // Real-nftables validation for the Go firewall backend. Run in a throwaway
 // user+net namespace (no root, no host impact):

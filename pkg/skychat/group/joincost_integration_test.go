@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/joincost_integration_test.go c4-app-chat
+// Package group pkg/skychat/group/joincost_integration_test.go c3-app-chat
 //
 // The dmsg-backed lane for anti-flood: a real join round trip that must
 // pay a proof of work, and a flood of fresh identities that must stop

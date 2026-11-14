@@ -1,4 +1,4 @@
-// Package xfer pkg/skychat/xfer/accessors_test.go c4-app-chat
+// Package xfer pkg/skychat/xfer/accessors_test.go c3-app-chat
 //
 // AddListener — the late-binding hook. Serve takes the listeners available at
 // startup; the skynet one only exists once the visor's networker registers, so

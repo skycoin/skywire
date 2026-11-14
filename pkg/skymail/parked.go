@@ -1,4 +1,4 @@
-// Package skymail pkg/skymail/parked.go c4-app-mail
+// Package skymail pkg/skymail/parked.go c3-app-mail
 //
 // Parking: mail for a visor the Outbox cannot reach is also left, sealed for
 // that visor, on its dmsg-async inbox hosts, so it arrives when that visor

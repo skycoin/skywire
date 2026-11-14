@@ -1,4 +1,4 @@
-// Package profile pkg/skychat/profile/store_test.go c4-app-chat
+// Package profile pkg/skychat/profile/store_test.go c3-app-chat
 package profile
 
 import (

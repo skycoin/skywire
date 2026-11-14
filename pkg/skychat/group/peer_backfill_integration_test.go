@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/peer_backfill_integration_test.go c4-app-chat
+// Package group pkg/skychat/group/peer_backfill_integration_test.go c3-app-chat
 //
 // The dmsg-backed lane for peer backfill: the property that a group stays
 // readable when no admin is online.

@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/moderation_test.go c4-app-chat
+// Package group pkg/skychat/group/moderation_test.go c3-app-chat
 // tests for the moderation gossip envelope and — the reason this file
 // leads with them — the domain separation that keeps the three signed
 // envelope families from being interchangeable.

@@ -1,4 +1,4 @@
-// Package dm pkg/skychat/dm/controller.go c4-app-chat
+// Package dm pkg/skychat/dm/controller.go c3-app-chat
 //
 // Controller is the shared 1:1 (direct-message) skychat core: it owns the
 // per-peer framed connections, the listen/accept + per-conn read loops, the

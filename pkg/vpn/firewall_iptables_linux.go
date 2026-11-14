@@ -1,6 +1,6 @@
 //go:build linux && !nftfw
 
-// Package vpn pkg/vpn/firewall_iptables_linux.go c4-app-vpn
+// Package vpn pkg/vpn/firewall_iptables_linux.go c3-app-vpn
 //
 // The default firewall backend: iptables shell-outs, identical to what the
 // router has always done. Each installed rule's full argv is recorded so

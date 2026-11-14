@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/gossip_seal_test.go c4-app-chat
+// Package group pkg/skychat/group/gossip_seal_test.go c3-app-chat
 //
 // Coverage for governance privacy: the roster/admin/mod leaves of an
 // encrypted group must be sealed on the feed, must still converge, and

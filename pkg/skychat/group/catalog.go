@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/catalog.go c4-app-chat
+// Package group pkg/skychat/group/catalog.go c3-app-chat
 // the discovery catalog: "what does this visor host that it wants found?"
 //
 // # Why this is separate from the probe

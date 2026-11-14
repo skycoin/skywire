@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/join_wire.go c4-app-chat
+// Package group pkg/skychat/group/join_wire.go c3-app-chat
 // the two halves of the join round trip on the relay listener:
 // handleJoinRequest (group side) and RequestJoin (requester side).
 //

@@ -1,4 +1,4 @@
-// Package call pkg/skychat/call/audio_ring.go c4-app-chat
+// Package call pkg/skychat/call/audio_ring.go c3-app-chat
 //
 // sampleRing is the bounded int16 FIFO shared by all audio backends: the pure-Go
 // PulseAudio backend on Linux, the cgo malgo backend on Windows/macOS, the

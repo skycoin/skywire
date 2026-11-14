@@ -1,4 +1,4 @@
-// Package dm pkg/skychat/dm/controller_receipts_test.go c4-app-chat — the delivery-status half of the
+// Package dm pkg/skychat/dm/controller_receipts_test.go c3-app-chat — the delivery-status half of the
 // controller: chat-ack / chat-read receipts reported to the app (OnReceipt),
 // and the non-blocking RequestAck send that backs a UI's "sent → received →
 // read" ticks, including its stale-conn recovery.

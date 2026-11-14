@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/channel_test.go c4-app-chat
+// Package group pkg/skychat/group/channel_test.go c3-app-chat
 //
 // The invariants a broadcast channel rests on, none of which are visible
 // from reading a single function:

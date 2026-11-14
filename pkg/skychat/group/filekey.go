@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/filekey.go c4-app-chat
+// Package group pkg/skychat/group/filekey.go c3-app-chat
 // per-file keys for group attachments.
 //
 // # Why attachments needed their own answer

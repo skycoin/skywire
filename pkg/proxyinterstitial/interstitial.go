@@ -1,4 +1,4 @@
-// Package proxyinterstitial pkg/proxyinterstitial/interstitial.go c4-app-web
+// Package proxyinterstitial pkg/proxyinterstitial/interstitial.go c3-app-web
 //
 // A branded, self-contained "Building a route over skywire…" page that the
 // native mesh proxies (dmsgweb / skynetweb resolving proxies, skysocks-client

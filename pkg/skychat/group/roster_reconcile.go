@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/roster_reconcile.go c4-app-chat
+// Package group pkg/skychat/group/roster_reconcile.go c3-app-chat
 //
 // PublishRosterMutation/PublishAdminMutation write signed roster/<seq> and
 // admin/<seq> leaves onto the issuer's feed, but before this file NOTHING read

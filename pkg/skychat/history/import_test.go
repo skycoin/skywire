@@ -1,6 +1,6 @@
 //go:build !js
 
-// Package history pkg/skychat/history/import_test.go c4-app-chat — Store.Import across both backends.
+// Package history pkg/skychat/history/import_test.go c3-app-chat — Store.Import across both backends.
 //
 // Import is what moves a chat from one device to another, so the properties
 // that matter are the ones a migration depends on: it is not rate limited

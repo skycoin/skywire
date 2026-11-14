@@ -1,6 +1,6 @@
 //go:build linux
 
-// Package call pkg/skychat/call/pulse_linux.go c4-app-chat
+// Package call pkg/skychat/call/pulse_linux.go c3-app-chat
 //
 // PulseAudio/PipeWire capture + playback for skychat voice, via
 // github.com/jfreymuth/pulse — a PURE-GO PulseAudio client (no cgo, no system

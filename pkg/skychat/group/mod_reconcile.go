@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/mod_reconcile.go c4-app-chat
+// Package group pkg/skychat/group/mod_reconcile.go c3-app-chat
 // the emit + apply + enforce sides of moderation state.
 //
 // Mirrors roster_reconcile.go: PublishModMutation writes a signed

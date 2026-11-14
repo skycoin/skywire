@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package vpn pkg/vpn/os_client_js.go c4-app-vpn
+// Package vpn pkg/vpn/os_client_js.go c3-app-vpn
 //
 // js/wasm client environment: no OS routing table, no privileges — but a
 // REAL data plane, because the "TUN" here is a gVisor userspace netstack

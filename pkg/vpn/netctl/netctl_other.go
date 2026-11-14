@@ -1,6 +1,6 @@
 //go:build !linux
 
-// Package netctl pkg/vpn/netctl/netctl_other.go c4-app-vpn
+// Package netctl pkg/vpn/netctl/netctl_other.go c3-app-vpn
 //
 // netctl is Linux-only (netlink); these stubs keep the package building on other
 // platforms (skywire cross-compiles for darwin/windows). Nothing outside the

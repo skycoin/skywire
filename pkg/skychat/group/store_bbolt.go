@@ -1,6 +1,6 @@
 //go:build !js
 
-// Package group pkg/skychat/group/store_bbolt.go c4-app-chat
+// Package group pkg/skychat/group/store_bbolt.go c3-app-chat
 // persistence for chat groups (native builds; bbolt can't compile under
 // js/wasm, so the browser visor uses the in-memory store_memory.go — same API,
 // wire-identical JSON records).

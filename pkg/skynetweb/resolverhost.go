@@ -1,4 +1,4 @@
-// Package skynetweb pkg/skynetweb/resolverhost.go c4-app-skynet
+// Package skynetweb pkg/skynetweb/resolverhost.go c3-app-skynet
 //
 // Shared parser for resolver hostnames used by BOTH the skynet resolving
 // proxy (.skynet) and the dmsg resolving proxy (.dmsg). It generalizes the

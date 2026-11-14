@@ -12,7 +12,7 @@
 // The page's filesystem snapshot persists the file, provided it is not a
 // *.db file and not under local/ (pkg/wasmhv/browseui/exec-worker.js).
 
-// Package group pkg/skychat/group/store_memory.go c4-app-chat
+// Package group pkg/skychat/group/store_memory.go c3-app-chat
 package group
 
 import (

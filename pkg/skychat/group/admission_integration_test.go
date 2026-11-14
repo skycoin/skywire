@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/admission_integration_test.go c4-app-chat
+// Package group pkg/skychat/group/admission_integration_test.go c3-app-chat
 //
 // The dmsg-backed lane for admission control: the join round trip that
 // makes an invite link sufficient on its own, the approval queue, and

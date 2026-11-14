@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/relay_test.go c4-app-chat
+// Package group pkg/skychat/group/relay_test.go c3-app-chat
 //
 // Unit coverage for the owner-side relay path and its member-side ack reader —
 // handleRelay, writeAndReadAck, acceptRelayOn — plus the small Session

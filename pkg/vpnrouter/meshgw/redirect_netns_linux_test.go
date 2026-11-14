@@ -1,6 +1,6 @@
 //go:build meshgwint && linux
 
-// Package meshgw pkg/vpnrouter/meshgw/redirect_netns_linux_test.go c4-app-vpn
+// Package meshgw pkg/vpnrouter/meshgw/redirect_netns_linux_test.go c3-app-vpn
 //
 // Real-netfilter integration test for the one path the unit tests can't cover:
 // iptables REDIRECT → SO_ORIGINAL_DST → transparent proxy → mesh dial. Run it in

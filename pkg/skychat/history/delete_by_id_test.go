@@ -1,6 +1,6 @@
 //go:build !js
 
-// Package history pkg/skychat/history/delete_by_id_test.go c4-app-chat — DeleteByID across both backends.
+// Package history pkg/skychat/history/delete_by_id_test.go c3-app-chat — DeleteByID across both backends.
 //
 // DeleteByID is the durable half of delete-for-everyone: without it a
 // retracted message survives in the store and reappears the next time a

@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/profile.go c4-app-chat
+// Package group pkg/skychat/group/profile.go c3-app-chat
 // "who is the person behind this public key?" — the third question the
 // well-known describe port answers.
 //

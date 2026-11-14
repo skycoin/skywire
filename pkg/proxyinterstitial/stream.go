@@ -1,4 +1,4 @@
-// Package proxyinterstitial pkg/proxyinterstitial/stream.go c4-app-web
+// Package proxyinterstitial pkg/proxyinterstitial/stream.go c3-app-web
 //
 // Streaming (HTTP chunked-transfer) variant of the route interstitial. Instead
 // of the one-shot Content-Length page + client-side meta-refresh (interstitial.go),

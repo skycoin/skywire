@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/probe.go c4-app-chat
+// Package group pkg/skychat/group/probe.go c3-app-chat
 // the describe half of admission: "what is the group with this ID?".
 //
 // # Why this exists

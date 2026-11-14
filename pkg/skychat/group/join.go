@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/join.go c4-app-chat
+// Package group pkg/skychat/group/join.go c3-app-chat
 // the join-request protocol: how a PK holding an invite actually gets
 // an allowlist seat.
 //

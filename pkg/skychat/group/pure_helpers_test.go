@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/pure_helpers_test.go c4-app-chat
+// Package group pkg/skychat/group/pure_helpers_test.go c3-app-chat
 //
 // Unit coverage for the package's pure helpers and record predicates
 // that the CXO-fixture tests only exercise transitively: Mode.IsValid,

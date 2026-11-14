@@ -1,6 +1,6 @@
 //go:build netctlint && linux
 
-// Package netctl pkg/vpn/netctl/netctl_netns_linux_test.go c4-app-vpn
+// Package netctl pkg/vpn/netctl/netctl_netns_linux_test.go c3-app-vpn
 //
 // Real-netlink integration test for the Go-native control plane. Run it in a
 // throwaway user+net namespace so it never touches the host:

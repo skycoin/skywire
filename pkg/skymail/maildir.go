@@ -1,4 +1,4 @@
-// Package skymail pkg/skymail/maildir.go c4-app-mail
+// Package skymail pkg/skymail/maildir.go c3-app-mail
 //
 // Package skymail is a mailbox a visor hosts for its own PK: mail to
 // <anything>@<base32-pk>.skynet (or .dmsg) arrives over plain SMTP on

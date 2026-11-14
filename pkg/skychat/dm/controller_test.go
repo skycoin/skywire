@@ -1,4 +1,4 @@
-// Package dm pkg/skychat/dm/controller_test.go c4-app-chat — exercises the Controller end-to-end over an
+// Package dm pkg/skychat/dm/controller_test.go c3-app-chat — exercises the Controller end-to-end over an
 // in-memory transport pair (no real dmsg/skynet): send/receive, quoted replies,
 // and the peer-receipt ack round-trip.
 package dm

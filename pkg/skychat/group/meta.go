@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/meta.go c4-app-chat
+// Package group pkg/skychat/group/meta.go c3-app-chat
 // display metadata after creation: renaming a group, giving it a picture.
 //
 // # Ownership model — deliberately not gossip

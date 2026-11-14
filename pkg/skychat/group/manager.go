@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/manager.go c4-app-chat
+// Package group pkg/skychat/group/manager.go c3-app-chat
 // this visor's collection of group sessions, parallel to pairing.Manager.
 //
 // The Manager owns the bbolt Store and a map[groupID]*Session of

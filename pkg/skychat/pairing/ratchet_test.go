@@ -1,4 +1,4 @@
-// Package pairing pkg/skychat/pairing/ratchet_test.go c4-app-chat
+// Package pairing pkg/skychat/pairing/ratchet_test.go c3-app-chat
 //
 // The epoch machinery without a transport: derivation symmetry, the
 // announcement envelope, the ring, and the property the whole thing

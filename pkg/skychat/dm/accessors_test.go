@@ -1,4 +1,4 @@
-// Package dm pkg/skychat/dm/accessors_test.go c4-app-chat
+// Package dm pkg/skychat/dm/accessors_test.go c3-app-chat
 //
 // The /status-facing accessors and the network predicate that the controller's
 // send/receive tests never reach directly.

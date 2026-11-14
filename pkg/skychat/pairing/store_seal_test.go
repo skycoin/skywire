@@ -1,4 +1,4 @@
-// Package pairing pkg/skychat/pairing/store_seal_test.go c4-app-chat
+// Package pairing pkg/skychat/pairing/store_seal_test.go c3-app-chat
 //
 // The at-rest half of forward secrecy: the ratchet secrets a pair now
 // keeps must not be readable out of pairs.db, and must survive a reopen

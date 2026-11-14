@@ -1,6 +1,6 @@
 //go:build darwin
 
-// Package vpn pkg/vpn/os_server_darwin.go c4-app-vpn
+// Package vpn pkg/vpn/os_server_darwin.go c3-app-vpn
 package vpn
 
 import (

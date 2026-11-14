@@ -1,6 +1,6 @@
 //go:build !windows
 
-// Package vpn pkg/vpn/client_unix.go c4-app-vpn
+// Package vpn pkg/vpn/client_unix.go c3-app-vpn
 package vpn
 
 func (c *Client) releaseSysPrivileges() { // nolint

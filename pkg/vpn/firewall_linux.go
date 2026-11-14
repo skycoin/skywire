@@ -1,6 +1,6 @@
 //go:build linux
 
-// Package vpn pkg/vpn/firewall_linux.go c4-app-vpn
+// Package vpn pkg/vpn/firewall_linux.go c3-app-vpn
 //
 // firewall abstracts the vpn-router's packet-filter / NAT rules behind a small
 // interface with two build-tagged backends, so the SAME router code runs either

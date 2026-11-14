@@ -1,4 +1,4 @@
-// Package history pkg/skychat/history/store_bolt.go c4-app-chat
+// Package history pkg/skychat/history/store_bolt.go c3-app-chat
 //
 // BoltStore is the durable, BoltDB-backed Store. Under js the 0magnet/bbolt
 // fork reads the file through the host filesystem in place of mmap.

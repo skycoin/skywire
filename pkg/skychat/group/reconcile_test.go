@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/reconcile_test.go c4-app-chat
+// Package group pkg/skychat/group/reconcile_test.go c3-app-chat
 //
 // Coverage for the receive-side roster/admin reconciler (#3426): a
 // subscriber that observes a signed roster/admin mutation leaf must

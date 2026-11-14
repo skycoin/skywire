@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/replay_guard_test.go c4-app-chat
+// Package group pkg/skychat/group/replay_guard_test.go c3-app-chat
 // tests for gossip freshness gating — the guard that stops a superseded
 // mutation being replayed to resurrect state an admin already undid.
 package group

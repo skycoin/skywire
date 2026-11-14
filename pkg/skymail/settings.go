@@ -1,4 +1,4 @@
-// Package skymail pkg/skymail/settings.go c4-app-mail
+// Package skymail pkg/skymail/settings.go c3-app-mail
 package skymail
 
 import (

@@ -1,4 +1,4 @@
-// Package meshgw pkg/vpnrouter/meshgw/meshgw.go c4-app-vpn
+// Package meshgw pkg/vpnrouter/meshgw/meshgw.go c3-app-vpn
 //
 // meshgw is the vpn-router's "mesh gateway": it lets any LAN device behind the
 // router reach dmsg/skynet services by name — e.g. `curl http://<pk>.dmsg` —

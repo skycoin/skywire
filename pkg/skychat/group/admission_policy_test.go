@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/admission_policy_test.go c4-app-chat
+// Package group pkg/skychat/group/admission_policy_test.go c3-app-chat
 // tests for the Record-level admission + moderation predicates: group
 // kind, derived policies, the posting-permission precedence, and the
 // legacy-record migration.

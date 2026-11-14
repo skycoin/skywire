@@ -1,6 +1,6 @@
 //go:build !js
 
-// Package history pkg/skychat/history/store_bolt_test.go c4-app-chat
+// Package history pkg/skychat/history/store_bolt_test.go c3-app-chat
 package history
 
 import (

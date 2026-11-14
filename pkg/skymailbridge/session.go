@@ -1,4 +1,4 @@
-// Package skymailbridge pkg/skymailbridge/session.go c4-app-mail
+// Package skymailbridge pkg/skymailbridge/session.go c3-app-mail
 package skymailbridge
 
 import (

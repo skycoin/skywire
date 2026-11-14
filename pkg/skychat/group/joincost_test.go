@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/joincost_test.go c4-app-chat
+// Package group pkg/skychat/group/joincost_test.go c3-app-chat
 //
 // Unit coverage for the two anti-flood primitives: the proof of work that
 // prices an identity, and the token bucket that bounds what any number of

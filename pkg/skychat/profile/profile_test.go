@@ -1,4 +1,4 @@
-// Package profile pkg/skychat/profile/profile_test.go c4-app-chat
+// Package profile pkg/skychat/profile/profile_test.go c3-app-chat
 //
 // The rules that matter here are the ones a stranger's input has to clear:
 // an avatar is decoded before it is believed, and a name is bounded before

@@ -1,4 +1,4 @@
-// Package profile pkg/skychat/profile/store.go c4-app-chat
+// Package profile pkg/skychat/profile/store.go c3-app-chat
 // where a visor keeps the profile it publishes.
 //
 // One small JSON file, written whole. Not bbolt like the group store and

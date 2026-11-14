@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/promote_recovered_test.go c4-app-chat
+// Package group pkg/skychat/group/promote_recovered_test.go c3-app-chat
 package group
 
 import (

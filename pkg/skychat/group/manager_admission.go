@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/manager_admission.go c4-app-chat
+// Package group pkg/skychat/group/manager_admission.go c3-app-chat
 // the Manager half of admission control: asking to join, ruling on
 // requests, and the moderation commands (kick / ban / mute / read-only).
 //

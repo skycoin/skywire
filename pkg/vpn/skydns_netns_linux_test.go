@@ -1,6 +1,6 @@
 //go:build skydnsint && linux && !android
 
-// Package vpn pkg/vpn/skydns_netns_linux_test.go c4-app-vpn
+// Package vpn pkg/vpn/skydns_netns_linux_test.go c3-app-vpn
 //
 // SkyDNS end to end in a throwaway user, mount and net namespace. Mesh dials go
 // to a SOCKS5 resolving proxy reached over a unix socket, since the namespace

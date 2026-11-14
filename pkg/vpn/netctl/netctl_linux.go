@@ -1,6 +1,6 @@
 //go:build linux
 
-// Package netctl pkg/vpn/netctl/netctl_linux.go c4-app-vpn
+// Package netctl pkg/vpn/netctl/netctl_linux.go c3-app-vpn
 //
 // netctl is a Go-native (netlink + /proc) replacement for the `ip` and `sysctl`
 // shell-outs the VPN router/client used to make via osutil.RunElevated. Talking

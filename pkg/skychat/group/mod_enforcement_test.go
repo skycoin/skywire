@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/mod_enforcement_test.go c4-app-chat
+// Package group pkg/skychat/group/mod_enforcement_test.go c3-app-chat
 // tests for reader-side moderation enforcement and the mod/ reconciler's
 // authority gate.
 package group

@@ -1,6 +1,6 @@
 //go:build !js
 
-// Package history pkg/skychat/history/delete_peer_test.go c4-app-chat — DeletePeer across both backends, and
+// Package history pkg/skychat/history/delete_peer_test.go c3-app-chat — DeletePeer across both backends, and
 // the store no longer naming a conversation it holds nothing of.
 //
 // DeletePeer is the durable half of deleting a conversation: the page re-adds

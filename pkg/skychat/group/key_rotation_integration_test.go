@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/key_rotation_integration_test.go c4-app-chat
+// Package group pkg/skychat/group/key_rotation_integration_test.go c3-app-chat
 //
 // The dmsg-backed lane for key rotation: the property that a ban stops
 // being "loses network access" and becomes "actually cut off".

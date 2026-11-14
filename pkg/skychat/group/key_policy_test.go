@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/key_policy_test.go c4-app-chat
+// Package group pkg/skychat/group/key_policy_test.go c3-app-chat
 //
 // The two halves of bounded key epochs: the ephemeral wrap (a rotation
 // an admin's identity key can no longer open) and the age/volume policy

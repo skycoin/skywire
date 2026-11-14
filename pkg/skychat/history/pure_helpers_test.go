@@ -1,4 +1,4 @@
-// Package history pkg/skychat/history/pure_helpers_test.go c4-app-chat
+// Package history pkg/skychat/history/pure_helpers_test.go c3-app-chat
 //
 // Unit coverage for the pure value helpers (Limits.Validate,
 // DefaultLimits, Message.String, truncate) plus the two group-store

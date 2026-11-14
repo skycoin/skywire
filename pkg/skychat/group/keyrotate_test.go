@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/keyrotate_test.go c4-app-chat
+// Package group pkg/skychat/group/keyrotate_test.go c3-app-chat
 //
 // Unit coverage for the key-rotation envelope and the key ring: sealing
 // to a recipient, the signature's domain separation and tamper

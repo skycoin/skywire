@@ -1,4 +1,4 @@
-// Package skynetweb pkg/skynetweb/publish_test.go c4-app-skynet
+// Package skynetweb pkg/skynetweb/publish_test.go c3-app-skynet
 package skynetweb
 
 import (

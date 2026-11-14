@@ -1,4 +1,4 @@
-// Package skydns pkg/skydns/skydns.go c4-app-vpn
+// Package skydns pkg/skydns/skydns.go c3-app-vpn
 //
 // SkyDNS lets every app on a phone open .dmsg and .skynet names, whatever its
 // proxy support. It sits on a tunnel's packet path and owns [Range]: apps ask

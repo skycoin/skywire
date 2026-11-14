@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/join_test.go c4-app-chat
+// Package group pkg/skychat/group/join_test.go c3-app-chat
 // tests for the join-request codec, the transport-identity rule, and the
 // approval-queue store.
 package group

@@ -1,6 +1,6 @@
 //go:build !js
 
-// Package history pkg/skychat/history/list_group_before_test.go c4-app-chat
+// Package history pkg/skychat/history/list_group_before_test.go c3-app-chat
 // the backward page cursor, across both backends.
 //
 // Paging is the kind of thing that looks right and is off by one: the

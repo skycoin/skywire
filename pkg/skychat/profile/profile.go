@@ -1,4 +1,4 @@
-// Package profile pkg/skychat/profile/profile.go c4-app-chat
+// Package profile pkg/skychat/profile/profile.go c3-app-chat
 // what a visor says about itself: a display name and a tiny avatar.
 //
 // # Why this exists

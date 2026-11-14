@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/store_seal.go c4-app-chat
+// Package group pkg/skychat/group/store_seal.go c3-app-chat
 // encryption at rest for the one part of a group record that is actually
 // a secret: its key material.
 //

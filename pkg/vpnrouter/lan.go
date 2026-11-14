@@ -1,6 +1,6 @@
 //go:build linux
 
-// Package vpnrouter pkg/vpnrouter/lan.go c4-app-vpn
+// Package vpnrouter pkg/vpnrouter/lan.go c3-app-vpn
 //
 // StartLAN runs an embedded, pure-Go DHCPv4 + DNS server for the vpn-router's
 // downstream (LAN/WiFi) interface, replacing the external dnsmasq the app used
