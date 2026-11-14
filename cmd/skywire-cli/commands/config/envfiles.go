@@ -570,10 +570,10 @@ const envfileTemplate = `#
 #	"latest"         = latest tagged release version
 #	"<hash>"         = pin to a specific commit hash
 #	"binary"         = download the prebuilt linux binary for this arch from the
-#	                   rolling <branch>-latest GitHub pre-release, verified against
+#	                   rolling develop-latest GitHub pre-release, verified against
 #	                   SHA256SUMS — no compile, no Go toolchain. Recommended for
 #	                   unattended hosts (avoids all source-build/network fragility).
-#	"binary-develop" / "binary-master" = force the develop / master prebuilt binary
+#	"binary-develop" = the same as "binary"
 #UPDATE_CHANNEL=develop
 
 #--	Go module proxy mode for the source-build channels (develop/latest/<hash>).
