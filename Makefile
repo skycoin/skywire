@@ -10,7 +10,7 @@
 # `mobile-vX.Y.Z` APK tags, and an annotated one of those sitting on HEAD would
 # otherwise become the version every binary in the tree reports. --always still
 # falls back to a bare hash when no release tag is reachable.
-VERSION := $(shell git describe --always --match 'v[0-9]*')
+VERSION := $(shell git describe --tags --always --match 'v[0-9]*')
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 COMMIT := $(shell git rev-list -1 HEAD)
 
