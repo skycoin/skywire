@@ -178,6 +178,10 @@ func TestSkillFlagsExistSomewhere(t *testing.T) {
 		// pty fs mount uses FUSE, so its flags exist only in Linux builds.
 		known["ro"], known["remote-root"] = true, true
 	}
+	if runtime.GOOS == "windows" {
+		// rewards systemd is left out of Windows builds.
+		known["serve"] = true
+	}
 	walk(RootCmd, func(c *cobra.Command) {
 		c.Flags().VisitAll(func(f *pflag.Flag) { known[f.Name] = true })
 		c.PersistentFlags().VisitAll(func(f *pflag.Flag) { known[f.Name] = true })

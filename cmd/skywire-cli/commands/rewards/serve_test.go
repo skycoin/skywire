@@ -11,8 +11,9 @@ import (
 )
 
 func TestCycleOpts(t *testing.T) {
-	o := cycleOpts("/srv/reward", rewardOpts{surveyPath: "log_backups", histDir: "/abs/hist"})
-	if o.surveyPath != "/srv/reward/log_backups" || o.histDir != "/abs/hist" {
+	wd, abs := t.TempDir(), filepath.Join(t.TempDir(), "hist")
+	o := cycleOpts(wd, rewardOpts{surveyPath: "log_backups", histDir: abs})
+	if o.surveyPath != filepath.Join(wd, "log_backups") || o.histDir != abs {
 		t.Fatalf("paths %q %q", o.surveyPath, o.histDir)
 	}
 	if want := time.Now().UTC().AddDate(0, 0, -1).Format("2006-01-02"); o.date != want {
