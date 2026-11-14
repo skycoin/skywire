@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -35,12 +36,7 @@ var (
 		histDir:    "hist",
 		requireBW:  true,
 	}
-	runUTFile      string
-	runSkipCollect bool
-	runFetch       bool
-	runPruneBelow  string
-	runMinVersion  string
-	runProxy       string
+	runFlags cycleConfig
 )
 
 func init() {
@@ -50,12 +46,12 @@ func init() {
 	f.StringVarP(&logLvl, "loglvl", "s", "info", "[ debug | warn | error | fatal | panic | trace ]")
 	addCalcFlags(f, &runOpts)
 	f.StringVarP(&runOpts.histDir, "hist", "H", runOpts.histDir, "history directory, read for bandwidth and written with every output")
-	f.StringVarP(&runUTFile, "utfile", "u", "", "uptime file to calculate from instead of fetching hist/<date>_ut.txt")
-	f.BoolVar(&runSkipCollect, "skip-collect", false, "skip the survey cleanup and bandwidth collection (use data already on disk)")
-	f.StringVar(&runPruneBelow, "prune-below-version", "auto", "remove surveys whose skywire_version is below this (\"auto\" = the 14-day reward floor, \"\" = keep)")
-	f.BoolVar(&runFetch, "fetch", false, "fetch surveys from visors (cli log --survey) instead of only cleaning the surveys visors push")
-	f.StringVar(&runMinVersion, "minv", "", "with --fetch, minimum skywire version to fetch from")
-	f.StringVar(&runProxy, "proxy", "", "with --fetch, collect surveys via a dmsgweb SOCKS5 resolving proxy (host:port, e.g. 127.0.0.1:4443)")
+	f.StringVarP(&runFlags.utFile, "utfile", "u", "", "uptime file to calculate from instead of fetching hist/<date>_ut.txt")
+	f.BoolVar(&runFlags.skipCollect, "skip-collect", false, "skip the survey cleanup and bandwidth collection (use data already on disk)")
+	f.StringVar(&runFlags.pruneBelow, "prune-below-version", "auto", "remove surveys whose skywire_version is below this (\"auto\" = the 14-day reward floor, \"\" = keep)")
+	f.BoolVar(&runFlags.fetch, "fetch", false, "fetch surveys from visors (cli log --survey) instead of only cleaning the surveys visors push")
+	f.StringVar(&runFlags.minVersion, "minv", "", "with --fetch, minimum skywire version to fetch from")
+	f.StringVar(&runFlags.proxy, "proxy", "", "with --fetch, collect surveys via a dmsgweb SOCKS5 resolving proxy (host:port, e.g. 127.0.0.1:4443)")
 	f.StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 	clirpc.RegisterFetchFlags(runCmd)
 }
@@ -87,69 +83,99 @@ The calculation flags default to what the reward script passes (-b -B 0 -p log_b
 				logging.SetLevel(lvl)
 			}
 		}
-		o := runOpts
-		if _, err := time.Parse("2006-01-02", o.date); err != nil {
-			log.Fatal("Invalid --date: ", err)
+		if err := runCycle(cmd.Flags(), runOpts, runFlags); err != nil {
+			log.Fatal(err)
 		}
-		if err := os.MkdirAll(o.histDir, 0750); err != nil {
-			log.Fatal("Failed to create hist dir: ", err)
-		}
-		xpubIndexPath = filepath.Join(filepath.Dir(o.histDir), deprewards.XpubIndexFile)
-
-		// Collection runs even when the date was paid, as in the service: bw-collect fills today's file.
-		if !runSkipCollect {
-			collectAll(o)
-		}
-
-		if _, err := os.Stat(filepath.Join(o.histDir, o.date+".txt")); err == nil {
-			log.Infof("Transaction already broadcasted for %s; nothing to do", o.date)
-			return
-		}
-
-		o.utfile = runUTFile
-		if o.utfile == "" {
-			o.utfile = filepath.Join(o.histDir, o.date+"_ut.txt")
-			if err := fetchAndSaveUT(cmd.Flags(), o.date, o.histDir); err != nil {
-				log.Fatal("UT fetch failed: ", err)
-			}
-		}
-
-		r := calcRewards(o)
-		if err := writeAllOutputs(r, o.histDir); err != nil {
-			log.Fatal("Failed to write outputs: ", err)
-		}
-		if err := writePerPoolFiles(o.histDir, r.date, r.eligible, r.bwSatExp, r.minBW); err != nil {
-			log.Warnf("Failed to write per-pool detail files: %v", err)
-		}
-		log.Infof("Reward cycle complete for %s", r.date)
 	},
+}
+
+// cycleConfig is how a cycle collects and where it reads the uptimes.
+type cycleConfig struct {
+	utFile      string
+	skipCollect bool
+	fetch       bool
+	pruneBelow  string
+	minVersion  string
+	proxy       string
+}
+
+// cycleMu keeps two cycles in one process from sharing the package state.
+var cycleMu sync.Mutex
+
+// runCycle is one hourly cycle for o.date. A step that fails returns an
+// error. Deeper code may still log.Fatal, which a caller that must outlive
+// the cycle contains with cmdutil.Contain.
+func runCycle(flags *pflag.FlagSet, o rewardOpts, c cycleConfig) error {
+	cycleMu.Lock()
+	defer cycleMu.Unlock()
+	if _, err := time.Parse("2006-01-02", o.date); err != nil {
+		return fmt.Errorf("invalid --date: %w", err)
+	}
+	if err := os.MkdirAll(o.histDir, 0750); err != nil {
+		return fmt.Errorf("create hist dir: %w", err)
+	}
+	xpubIndexPath = filepath.Join(filepath.Dir(o.histDir), deprewards.XpubIndexFile)
+	// Read the index and the spent addresses fresh each cycle: a process
+	// that runs many cycles must not pay from a stale view.
+	xpubIndex = nil
+	spentCache.Lock()
+	spentCache.m = map[string]bool{}
+	spentCache.Unlock()
+
+	// Collection runs even when the date was paid, as in the service: bw-collect fills today's file.
+	if !c.skipCollect {
+		collectAll(o, c)
+	}
+
+	if _, err := os.Stat(filepath.Join(o.histDir, o.date+".txt")); err == nil {
+		log.Infof("Transaction already broadcasted for %s; nothing to do", o.date)
+		return nil
+	}
+
+	o.utfile = c.utFile
+	if o.utfile == "" {
+		o.utfile = filepath.Join(o.histDir, o.date+"_ut.txt")
+		if err := fetchAndSaveUT(flags, o.date, o.histDir); err != nil {
+			return fmt.Errorf("UT fetch failed: %w", err)
+		}
+	}
+
+	r := calcRewards(o)
+	if err := writeAllOutputs(r, o.histDir); err != nil {
+		return fmt.Errorf("write outputs: %w", err)
+	}
+	if err := writePerPoolFiles(o.histDir, r.date, r.eligible, r.bwSatExp, r.minBW); err != nil {
+		log.Warnf("Failed to write per-pool detail files: %v", err)
+	}
+	log.Infof("Reward cycle complete for %s", r.date)
+	return nil
 }
 
 // collectAll runs the collection steps of the service. A survey cleanup
 // failure stops the cycle. A bandwidth failure does not.
-func collectAll(o rewardOpts) {
+func collectAll(o rewardOpts, c cycleConfig) {
 	flags := clilog.RootCmd.Flags()
 	set := func(name, value string) {
 		if err := flags.Set(name, value); err != nil {
 			log.Fatalf("set cli log --%s: %v", name, err)
 		}
 	}
-	if runFetch {
+	if c.fetch {
 		log.Info("Collecting surveys (cli log --survey --cleanup)")
 		set("survey", "true")
 		set("cleanup", "true")
-		if runProxy != "" {
-			set("proxy", runProxy)
+		if c.proxy != "" {
+			set("proxy", c.proxy)
 		}
-		if runMinVersion != "" {
-			set("minv", runMinVersion)
+		if c.minVersion != "" {
+			set("minv", c.minVersion)
 		}
 	} else {
 		log.Info("Cleaning pushed surveys (cli log --no-fetch)")
 		set("no-fetch", "true")
 	}
 	set("backup-dir", o.surveyPath)
-	set("prune-below-version", runPruneBelow)
+	set("prune-below-version", c.pruneBelow)
 	clilog.RootCmd.Run(clilog.RootCmd, nil)
 
 	log.Info("Collecting bandwidth (bw-collect)")
