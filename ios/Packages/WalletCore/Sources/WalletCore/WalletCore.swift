@@ -42,6 +42,10 @@ public protocol WalletCore: Sendable {
     /// counts, each ≥ the minimum.
     func scanUsed(seed: KeySource) async throws -> (receive: Int, change: Int)
 
+    /// Grow a wallet past the addresses it holds to the last used one within the gap.
+    /// (receive, change) counts, never below the given ones; nil where a chain has no such scan.
+    func scanPast(seed: KeySource, receiveCount: Int, changeCount: Int) async throws -> (receive: Int, change: Int)?
+
     func balance(_ book: AddressBook) async throws -> WalletBalance
 
     /// The wallet's unspent outputs; empty where a chain has no coin control.
@@ -125,6 +129,8 @@ extension WalletCore {
     public func acceptsLegacySeed(_ mnemonic: String) -> Bool { false }
 
     public func takesAnySeed() -> Bool { false }
+
+    public func scanPast(seed: KeySource, receiveCount: Int, changeCount: Int) async throws -> (receive: Int, change: Int)? { nil }
 
     public func utxos(_ book: AddressBook) async throws -> [UtxoRecord] { [] }
 

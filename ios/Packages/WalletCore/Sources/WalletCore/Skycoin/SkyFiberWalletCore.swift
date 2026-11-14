@@ -7,8 +7,10 @@ import Foundation
 public final class SkyFiberWalletCore: WalletCore {
 
     public static let dropletExponent = 6
-    private static let scanAhead = 10
-    private static let scanCap = 100
+    // skycoin ui2 bw.js scan: batches of 20 until one has none in use, the BIP 44 gap limit.
+    static let scanAhead = 20
+    // Not a wallet size limit: only stops a node that calls every address used.
+    private static let scanLimit = 100_000
 
     private let node: SkycoinNodeClient
 
@@ -61,25 +63,68 @@ public final class SkyFiberWalletCore: WalletCore {
 
     public func validateAddress(_ address: String) -> Bool { SkycoinCrypto.isValidAddress(address) }
 
+    // A BIP 44 wallet's change chain starts empty; its first address may never have been used.
     public func scanUsed(seed: KeySource) async throws -> (receive: Int, change: Int) {
-        let receive = try await scanChain(start: 1) { n in try self.deriveAddresses(seed: seed, receiveCount: n, changeCount: 0).receive }
-        // A BIP 44 wallet's change chain starts empty; its first address may never have been used.
-        if seed.derivation != .bip44 { return (receive, 0) }
-        let change = try await scanChain(start: 0) { n in try self.deriveAddresses(seed: seed, receiveCount: 0, changeCount: n).change }
+        try await scan(seed: seed, receiveCount: 1, changeCount: 0)
+    }
+
+    public func scanPast(seed: KeySource, receiveCount: Int, changeCount: Int) async throws -> (receive: Int, change: Int)? {
+        try await scan(seed: seed, receiveCount: receiveCount, changeCount: changeCount)
+    }
+
+    private func scan(seed: KeySource, receiveCount: Int, changeCount: Int) async throws -> (receive: Int, change: Int) {
+        let chains = ChainDeriver(seed)
+        let receive = try await scanChain(start: receiveCount) { from in
+            try chains.addresses(chain: 0, from: from, count: Self.scanAhead)
+        }
+        if seed.derivation != .bip44 { return (receive, changeCount) }
+        let change = try await scanChain(start: changeCount) { from in
+            try chains.addresses(chain: 1, from: from, count: Self.scanAhead)
+        }
         return (receive, change)
     }
 
     /// How many addresses of one chain are in use, looking scanAhead past
     /// the last used one.
-    private func scanChain(start: Int, derive: (Int) throws -> [String]) async throws -> Int {
+    private func scanChain(start: Int, window: (Int) throws -> [String]) async throws -> Int {
         var count = start
-        while count < Self.scanCap {
-            let window = Array(try derive(count + Self.scanAhead)[count..<(count + Self.scanAhead)])
-            let used = try await usedAddresses(window)
-            guard let lastUsed = window.lastIndex(where: { used.contains($0) }) else { break }
+        while count < Self.scanLimit {
+            let ahead = try window(count)
+            let used = try await usedAddresses(ahead)
+            guard let lastUsed = ahead.lastIndex(where: { used.contains($0) }) else { break }
             count += lastUsed + 1
         }
-        return min(count, Self.scanCap)
+        return min(count, Self.scanLimit)
+    }
+
+    /// Derives each address once per scan: the BIP 44 account key and the
+    /// classic hash chain are both costly to restart.
+    private final class ChainDeriver {
+        private let seed: KeySource
+        private var account: Bip32.ExtKey?
+        private var classic: [String] = []
+        private var classicSeed: [UInt8]
+
+        init(_ seed: KeySource) {
+            self.seed = seed
+            classicSeed = Array(seed.mnemonic.utf8)
+        }
+
+        func addresses(chain: UInt32, from: Int, count n: Int) throws -> [String] {
+            if seed.derivation == .bip44 {
+                let account = try account ?? SkycoinBip44.accountKey(mnemonic: seed.mnemonic, passphrase: seed.passphrase)
+                self.account = account
+                return try (from..<(from + n)).map {
+                    SkycoinCrypto.addressFromPubKey(try SkycoinBip44.key(account, chain: chain, index: UInt32($0)).pubKey())
+                }
+            }
+            while classic.count < from + n {
+                let (next, keyPair) = try SkycoinCrypto.deterministicKeyPairIterator(classicSeed)
+                classicSeed = next
+                classic.append(SkycoinCrypto.addressFromPubKey(keyPair.public))
+            }
+            return Array(classic[from..<(from + n)])
+        }
     }
 
     private func usedAddresses(_ addrs: [String]) async throws -> Set<String> {

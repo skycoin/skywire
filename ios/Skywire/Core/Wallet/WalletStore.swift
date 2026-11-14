@@ -67,9 +67,13 @@ final class WalletStore: ObservableObject {
     private let meshSession: URLSession?
     /// Wallet id → when a failed address scan may be tried again (ms).
     private var scanRetryAfter: [String: Int64] = [:]
+    /// Wallet id → when it last looked past its addresses for used ones (ms).
+    private var discoveredAt: [String: Int64] = [:]
 
     /// Long enough that a scan the link cannot carry is not retried in a loop.
     static let scanRetryBackoffMs: Int64 = 5 * 60 * 1000
+    /// How often a settled fiber wallet looks past its addresses; the first refresh after a start always does.
+    static let discoveryIntervalMs: Int64 = 2 * 60 * 1000
 
     init(directory: URL, seeds: WalletSeedStore, session: URLSession = WalletStore.makeSession(),
          meshSession: URLSession? = WalletMesh.makeSession()) {
@@ -552,9 +556,8 @@ final class WalletStore: ObservableObject {
     func refresh(_ walletId: String) async throws -> WalletSnapshot {
         guard let found = wallet(walletId), let spec = coin(found.coinId) else { throw WalletStoreError("unknown wallet") }
         let core = try core(for: spec)
-        // Ask again, if the question is still open: reading a balance from
-        // half a wallet's addresses is a wrong number, not a stale one.
-        let meta = await settleAddressScan(found, core: core)
+        // A balance read from half a wallet's addresses is a wrong number, not a stale one.
+        let meta = await discoverAddresses(found, core: core)
         let book = AddressBook(receive: meta.receiveAddresses, change: meta.changeAddresses)
         let balance = try await core.balance(book)
         let previous = cachedSnapshot(walletId)
@@ -562,32 +565,63 @@ final class WalletStore: ObservableObject {
         let snapshot = mergeSnapshot(balance: balance, history: history, previous: previous, nowMs: nowMs())
         // The wallet may have been removed while this was in flight.
         if wallet(walletId) != nil { Self.write(snapshot, to: cacheFile(walletId), in: cacheDir) }
+        if spec.kind == .skyFiber && meta.derivation == .bip44 { await keepFreshReceive(meta, core: core, snapshot: snapshot) }
         return snapshot
     }
 
-    /// Finish a restore's address discovery when it could not be done at the
-    /// time, and record that it is done. A failure backs off for five
-    /// minutes rather than retrying on the next 30-second tick (a scan costs
-    /// as much as a history fetch, on what is usually metered data); the
-    /// back-off is in memory only, so a relaunch is a fresh try. The address
-    /// lists only ever grow here (settledAddresses).
-    private func settleAddressScan(_ meta: WalletMeta, core: any WalletCore) async -> WalletMeta {
-        guard meta.addressScanPending else { return meta }
+    /// Grows the wallet to the used addresses past the ones it holds: a pending restore on every
+    /// refresh, a fiber wallet every discoveryIntervalMs as rewards pay an xpub's next address.
+    private func discoverAddresses(_ meta: WalletMeta, core: any WalletCore) async -> WalletMeta {
         let now = nowMs()
         if now < scanRetryAfter[meta.id] ?? 0 { return meta }
+        if !meta.addressScanPending && now - (discoveredAt[meta.id] ?? 0) < Self.discoveryIntervalMs { return meta }
         guard let keys = try? keys(meta) else { return meta }
-        guard let scanned = try? await core.scanUsed(seed: keys) else {
+        let scanned: (receive: Int, change: Int)
+        do {
+            if let past = try await core.scanPast(seed: keys, receiveCount: meta.receiveAddresses.count, changeCount: meta.changeAddresses.count) {
+                scanned = past
+            } else if meta.addressScanPending {
+                scanned = try await core.scanUsed(seed: keys)
+            } else {
+                discoveredAt[meta.id] = now
+                return meta
+            }
+        } catch {
+            // A scan costs as much as a history fetch: no retry on the next 30-second tick.
             scanRetryAfter[meta.id] = now + Self.scanRetryBackoffMs
             return meta
         }
         scanRetryAfter[meta.id] = nil
+        discoveredAt[meta.id] = now
+        let grows = scanned.receive > meta.receiveAddresses.count || scanned.change > meta.changeAddresses.count
+        if !grows && !meta.addressScanPending { return meta }
         let receiveCount = max(scanned.receive, meta.receiveAddresses.count)
         let changeCount = max(scanned.change, meta.changeAddresses.count)
-        guard let book = try? await offMain({ try core.deriveAddresses(seed: keys, receiveCount: receiveCount, changeCount: changeCount) })
+        guard let book = try? await offMain({ try core.deriveAddresses(seed: keys, receiveCount: receiveCount, changeCount: changeCount) }),
+              let held = wallet(meta.id)
         else { return meta }
-        let settled = settledAddresses(meta, scanned: book, nowMs: nowMs())
+        // Folded into the wallet as it is now: an address handed out during the scan stays (settledAddresses).
+        let settled = settledAddresses(held, scanned: book, nowMs: nowMs())
         mutate { reg in reg.wallets = reg.wallets.map { $0.id == settled.id ? settled : $0 } }
         return settled
+    }
+
+    /// A BIP 44 wallet whose last receive address has been paid gets the next one, so there is
+    /// always a fresh one to give out.
+    private func keepFreshReceive(_ meta: WalletMeta, core: any WalletCore, snapshot: WalletSnapshot) async {
+        guard let last = meta.receiveAddresses.last, addressUsed(last, snapshot), let keys = try? keys(meta) else { return }
+        let receiveCount = meta.receiveAddresses.count + 1
+        let changeCount = meta.changeAddresses.count
+        guard let book = try? await offMain({ try core.deriveAddresses(seed: keys, receiveCount: receiveCount, changeCount: changeCount) })
+        else { return }
+        mutate { reg in
+            reg.wallets = reg.wallets.map { w in
+                guard w.id == meta.id, w.receiveAddresses == meta.receiveAddresses else { return w }
+                var grown = w
+                grown.receiveAddresses = book.receive
+                return grown
+            }
+        }
     }
 
     /// The wallet's unspent outputs, for a coin picker or one address's outputs. Fiber chains only.

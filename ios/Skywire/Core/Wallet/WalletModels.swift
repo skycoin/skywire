@@ -410,5 +410,10 @@ func mergeSnapshot(balance: WalletBalance, history: [TxRecord]?, previous: Walle
     )
 }
 
+/// Whether `address` has held coins or been in a transaction, as far as `snapshot` knows.
+func addressUsed(_ address: String, _ snapshot: WalletSnapshot) -> Bool {
+    (snapshot.perAddress[address] ?? 0) > 0 || snapshot.txs.contains { $0.own.contains(address) }
+}
+
 /// Milliseconds since 1970, the unit the stored timestamps use.
 func nowMs() -> Int64 { Int64(Date().timeIntervalSince1970 * 1000) }

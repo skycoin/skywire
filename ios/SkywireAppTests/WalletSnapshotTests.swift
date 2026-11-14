@@ -15,6 +15,13 @@ final class WalletSnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.exposedWithCoins, ["a3"])
     }
 
+    func testAnAddressIsUsedOnceItHeldCoinsOrWasInATransaction() {
+        let snapshot = WalletSnapshot(txs: [tx(true, "b")], perAddress: ["a": 0, "c": 5])
+        XCTAssertFalse(addressUsed("a", snapshot))
+        XCTAssertTrue(addressUsed("b", snapshot))
+        XCTAssertTrue(addressUsed("c", snapshot))
+    }
+
     /// A cache file written before the per-address balances and own addresses still reads.
     func testAnOlderCacheStillReads() throws {
         let old = #"{"confirmed":5,"predicted":5,"spendableOutputs":1,"fetchedAtMs":10,"historyFetchedAtMs":10,"#

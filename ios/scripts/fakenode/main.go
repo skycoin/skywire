@@ -75,7 +75,7 @@ func output(ux coin.UxOut) map[string]any {
 
 func owned(r *http.Request) map[string]bool {
 	out := map[string]bool{}
-	for _, a := range strings.Split(r.URL.Query().Get("addrs"), ",") {
+	for _, a := range strings.Split(r.FormValue("addrs"), ",") {
 		if a != "" {
 			out[a] = true
 		}

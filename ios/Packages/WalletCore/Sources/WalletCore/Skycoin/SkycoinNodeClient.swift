@@ -395,15 +395,15 @@ public struct SkycoinNodeClient: Sendable {
     }
 
     public func outputs(_ addresses: [String]) async throws -> Outputs {
-        try await get("api/v1/outputs", [("addrs", addresses.joined(separator: ","))])
+        try await byAddress("api/v1/outputs", addresses)
     }
 
     public func balance(_ addresses: [String]) async throws -> Balance {
-        try await get("api/v1/balance", [("addrs", addresses.joined(separator: ","))])
+        try await byAddress("api/v1/balance", addresses)
     }
 
     public func transactions(_ addresses: [String]) async throws -> [TxnEntry] {
-        try await get("api/v1/transactions", [("addrs", addresses.joined(separator: ",")), ("verbose", "1")])
+        try await byAddress("api/v1/transactions", addresses, [("verbose", "1")])
     }
 
     public func progress() async throws -> Progress {
@@ -464,8 +464,34 @@ public struct SkycoinNodeClient: Sendable {
         return obj["csrf_token"] as? String
     }
 
+    /// About 100 addresses.
+    static let maxGetAddrsChars = 3600
+
+    /// A query over many addresses goes as a POST form: a long URL is refused by proxies (nginx allows 8 KB).
+    private func byAddress<T: Decodable>(_ path: String, _ addresses: [String], _ params: [(String, String)] = []) async throws -> T {
+        let fields = [("addrs", addresses.joined(separator: ","))] + params
+        if fields[0].1.count <= Self.maxGetAddrsChars { return try await get(path, fields) }
+        let csrf = await fetchCsrf()
+        return try decoded(try await http.post(
+            endpoint(base, path),
+            body: Self.formBody(fields),
+            contentType: "application/x-www-form-urlencoded",
+            headers: csrf.map { ["X-CSRF-Token": $0] } ?? [:]
+        ))
+    }
+
+    /// The fields as a form body, every byte outside RFC 3986 section 2.3's unreserved set escaped.
+    private static func formBody(_ fields: [(String, String)]) -> Data {
+        let unreserved = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+        func escaped(_ text: String) -> String { text.addingPercentEncoding(withAllowedCharacters: unreserved) ?? text }
+        return Data(fields.map { "\(escaped($0.0))=\(escaped($0.1))" }.joined(separator: "&").utf8)
+    }
+
     private func get<T: Decodable>(_ path: String, _ query: [(String, String)] = []) async throws -> T {
-        let resp = try await http.get(endpoint(base, path, query))
+        try decoded(try await http.get(endpoint(base, path, query)))
+    }
+
+    private func decoded<T: Decodable>(_ resp: HttpClient.Response) throws -> T {
         if !resp.isSuccessful { throw NetworkError(Self.errorMessage(resp.body, code: resp.status)) }
         do {
             return try JSONDecoder().decode(T.self, from: Data(resp.body.utf8))
