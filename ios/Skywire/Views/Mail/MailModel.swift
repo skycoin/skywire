@@ -255,7 +255,7 @@ final class MailModel: ObservableObject {
         draft = MailDraft(
             to: to,
             subject: subject,
-            body: "\n\n" + L10n.format("mail_reply_header", message.date, message.from) + "\n" + quoted,
+            body: "\n\n" + L10n.format("mail_reply_header", MailText.localDate(message.date), message.from) + "\n" + quoted,
             inReplyTo: message.messageID,
             skynet: Self.overSkynet(to)
         )

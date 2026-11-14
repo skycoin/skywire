@@ -370,7 +370,7 @@ private struct MailMessageView: View {
         if !message.cc.isEmpty {
             HeaderLine(label: Text("mail_cc"), value: message.cc)
         }
-        HeaderLine(label: Text("mail_date"), value: message.date)
+        HeaderLine(label: Text("mail_date"), value: MailText.localDate(message.date))
         SkyDivider().padding(.vertical, 12)
         if message.fromHTML {
             Text("mail_from_html").skyText(.labelSmall).foregroundStyle(Color.skyOnSurfaceVariant).padding(.bottom, 6)
@@ -888,14 +888,40 @@ enum MailText {
         return "\(local)@\(domain.prefix(8))…\(suffix)"
     }
 
-    /// The day a message was dated, in the app's language; empty for Go's zero time (no Date header).
-    static func shortDate(_ rfc3339: String) -> String {
+    /// The day a message was dated, in the phone's zone and the app's language; empty for Go's
+    /// zero time (no Date header).
+    static func shortDate(_ rfc3339: String, zone: TimeZone = .current, locale: Locale = L10n.locale) -> String {
         guard let date = parse(rfc3339), Calendar(identifier: .gregorian).component(.year, from: date) >= 1970 else { return "" }
         let formatter = DateFormatter()
-        formatter.locale = L10n.locale
+        formatter.locale = locale
+        formatter.timeZone = zone
         formatter.dateStyle = .short
         formatter.timeStyle = .none
         return formatter.string(from: date)
+    }
+
+    /// A Date header in `zone`, or the header as it came when it does not parse.
+    /// Senders write it in their own offset, often UTC (RFC 5322 section 3.3).
+    static func localDate(_ header: String, zone: TimeZone = .current, locale: Locale = L10n.locale) -> String {
+        let text = String(header.prefix { $0 != "(" }).trimmingCharacters(in: .whitespaces)
+        guard let sent = headerDate(text) else { return header }
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = zone
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .medium
+        return formatter.string(from: sent)
+    }
+
+    /// The weekday and the seconds are optional (RFC 5322 section 3.3).
+    private static func headerDate(_ text: String) -> Date? {
+        let parser = DateFormatter()
+        parser.locale = Locale(identifier: "en_US_POSIX")
+        for format in ["EEE, d MMM yyyy HH:mm:ss Z", "d MMM yyyy HH:mm:ss Z", "EEE, d MMM yyyy HH:mm Z", "d MMM yyyy HH:mm Z"] {
+            parser.dateFormat = format
+            if let date = parser.date(from: text) { return date }
+        }
+        return nil
     }
 
     /// `03ab…c9d1`, as a call names a peer.
