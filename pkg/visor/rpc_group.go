@@ -408,6 +408,20 @@ func (r *RPC) GroupPoll(req *visorapi.GroupPollRequest, out *[]visorapi.GroupMes
 	return nil
 }
 
+// GroupWait is GroupPoll that waits up to Wait for a message to arrive.
+func (r *RPC) GroupWait(req *visorapi.GroupWaitRequest, out *[]visorapi.GroupMessage) (err error) {
+	defer rpcutil.LogCall(r.log, "GroupWait", req)(out, &err)
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	msgs, err := r.visor.GroupWait(req.Since, req.Wait)
+	if err != nil {
+		return err
+	}
+	*out = msgs
+	return nil
+}
+
 // GroupDelete tears down an owner-side group.
 func (r *RPC) GroupDelete(id *string, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupDelete", id)(nil, &err)

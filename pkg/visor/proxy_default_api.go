@@ -1005,6 +1005,10 @@ func (proxyDefaultAPI) GroupPoll(_ time.Time) ([]visorapi.GroupMessage, error) {
 	return nil, ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) GroupWait(_ time.Time, _ time.Duration) ([]visorapi.GroupMessage, error) {
+	return nil, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) GroupDelete(_ string) error {
 	return ErrProxyNotSupported
 }
