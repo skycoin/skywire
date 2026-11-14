@@ -78,6 +78,19 @@ func ReadFrame(r io.Reader) ([]byte, error) {
 	return payload, nil
 }
 
+// FirstFrameTimeout bounds the wait for the first frame on a fresh inbound
+// stream, so a peer that opens one and stays silent cannot hold it.
+var FirstFrameTimeout = 30 * time.Second
+
+// ReadFirstFrame reads the first frame of an inbound conn within
+// FirstFrameTimeout and clears the deadline again for the rest of the stream.
+func ReadFirstFrame(c net.Conn) ([]byte, error) {
+	_ = c.SetReadDeadline(time.Now().Add(FirstFrameTimeout)) //nolint:errcheck
+	b, err := ReadFrame(c)
+	_ = c.SetReadDeadline(time.Time{}) //nolint:errcheck
+	return b, err
+}
+
 // Conn wraps a net.Conn with length-prefixed framing and a write mutex. The write
 // mutex is required because two callers can race to write to the same underlying
 // conn (e.g. an outbound message and the ack reply for an inbound one);

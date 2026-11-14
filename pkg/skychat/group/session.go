@@ -2258,7 +2258,7 @@ func (s *Session) bindRelaySkynet(port uint16) {
 // own messages — with sender attribution from the relay envelope
 // instead of the owner's PK.
 func (s *Session) handleRelay(c net.Conn) {
-	payload, err := message.ReadFrame(c)
+	payload, err := message.ReadFirstFrame(c)
 	if err != nil {
 		s.log.WithError(err).Debug("group: relay read")
 		return
