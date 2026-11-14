@@ -99,21 +99,25 @@ func buildRouter() http.Handler {
 			DmsgAddr:    fmt.Sprintf("%s:%d", pk.String(), dmsgPort),
 		}
 
-		// Reward-specific extra fields
-		nextrun, _ := script.Exec(`systemctl status skywire-reward.timer --lines=0`).First(5).Last(1).Replace("    Trigger: ", "").String() //nolint:errcheck,gosec
-		prevDuration, _ := script.Exec(`systemctl status skywire-reward.service --lines=0`).Match("Duration").First(1).String()             //nolint:errcheck,gosec
-		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String()                                                     //nolint:errcheck,gosec
-
-		httputil.WriteJSON(w, r, http.StatusOK, map[string]any{
-			"service_name":                    resp.ServiceName,
-			"build_info":                      resp.BuildInfo,
-			"started_at":                      resp.StartedAt,
-			"dmsg_address":                    resp.DmsgAddr,
-			"reward_system_active":            strings.TrimRight(active, "\n"),
-			"reward_system_next_run":          strings.TrimRight(nextrun, "\n"),
-			"reward_system_prev_run_duration": strings.TrimRight(prevDuration, "\n"),
-			"whitelisted_keys":                wlkeys,
-		})
+		out := map[string]any{
+			"service_name":     resp.ServiceName,
+			"build_info":       resp.BuildInfo,
+			"started_at":       resp.StartedAt,
+			"dmsg_address":     resp.DmsgAddr,
+			"whitelisted_keys": wlkeys,
+		}
+		if s := currentScheduler(); s != nil {
+			out["reward_cycle"] = s.Status()
+		} else {
+			// The cycle runs from the systemd timer.
+			nextrun, _ := script.Exec(`systemctl status skywire-reward.timer --lines=0`).First(5).Last(1).Replace("    Trigger: ", "").String() //nolint:errcheck,gosec
+			prevDuration, _ := script.Exec(`systemctl status skywire-reward.service --lines=0`).Match("Duration").First(1).String()             //nolint:errcheck,gosec
+			active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String()                                                     //nolint:errcheck,gosec
+			out["reward_system_active"] = strings.TrimRight(active, "\n")
+			out["reward_system_next_run"] = strings.TrimRight(nextrun, "\n")
+			out["reward_system_prev_run_duration"] = strings.TrimRight(prevDuration, "\n")
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, out)
 	}
 	r1.HandleFunc("GET /health", healthHandler)
 	r1.HandleFunc("GET /health/health", healthHandler) // accessible when visor's /health takes priority
@@ -298,18 +302,16 @@ func buildRouter() http.Handler {
 			flush(w)
 			w.Write([]byte(navlinks)) //nolint:errcheck,gosec
 			flush(w)
-			tmpFile, err := os.CreateTemp(os.TempDir(), "*.sh")
-			if err != nil {
-				return
+			if txt := cycleStatusText(); txt != "" {
+				w.Write([]byte(txt + "\n")) //nolint:errcheck,gosec
+			} else if tmpFile, err := os.CreateTemp(os.TempDir(), "*.sh"); err == nil {
+				_ = tmpFile.Close()                                                                               //nolint:errcheck,gosec
+				_, _ = script.Exec(`chmod +x ` + tmpFile.Name()).String()                                         //nolint:errcheck,gosec
+				_, _ = script.Echo(nextlogrun).WriteFile(tmpFile.Name())                                          //nolint:errcheck,gosec
+				res, _ := script.Exec(`bash -c 'source ` + tmpFile.Name() + ` ; _nextskywireclilogrun'`).String() //nolint:errcheck,gosec
+				os.Remove(tmpFile.Name())                                                                         //nolint:errcheck,gosec
+				w.Write([]byte(fmt.Sprintf("%s\n", res)))                                                         //nolint:errcheck,gosec,staticcheck
 			}
-			if err := tmpFile.Close(); err != nil {
-				return
-			}
-			_, _ = script.Exec(`chmod +x ` + tmpFile.Name()).String()                                         //nolint:errcheck,gosec
-			_, _ = script.Echo(nextlogrun).WriteFile(tmpFile.Name())                                          //nolint:errcheck,gosec
-			res, _ := script.Exec(`bash -c 'source ` + tmpFile.Name() + ` ; _nextskywireclilogrun'`).String() //nolint:errcheck,gosec
-			os.Remove(tmpFile.Name())                                                                         //nolint:errcheck,gosec
-			w.Write([]byte(fmt.Sprintf("%s\n", res)))                                                         //nolint:errcheck,gosec,staticcheck
 			flush(w)
 
 			// Initial line count
@@ -1091,8 +1093,8 @@ func buildRouter() http.Handler {
 		// builds the transaction from it.
 		handleAuth("GET /skycoin-rewards/payout", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Server", "")
-			active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String() //nolint:errcheck,gosec
-			if strings.TrimRight(active, "\n") == "active" {
+			active := cycleActive()
+			if active == "active" {
 				w.WriteHeader(http.StatusServiceUnavailable)
 				w.Write([]byte("reward calculation running")) //nolint:errcheck,gosec
 				return
@@ -1116,8 +1118,8 @@ func buildRouter() http.Handler {
 		})
 
 		r1.HandleFunc("GET /skycoin-rewards/csv", func(w http.ResponseWriter, r *http.Request) {
-			active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String() //nolint:errcheck,gosec
-			if strings.TrimRight(active, "\n") == "active" {
+			active := cycleActive()
+			if active == "active" {
 				w.Header().Set("Server", "")
 				w.WriteHeader(http.StatusNotFound)
 				return
@@ -1139,13 +1141,13 @@ func buildRouter() http.Handler {
 		})
 		//status of reward system hourly run.
 		r1.HandleFunc("GET /skycoin-rewards/s", func(w http.ResponseWriter, r *http.Request) {
-			active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String() //nolint:errcheck,gosec
-			httputil.WriteJSON(w, r, http.StatusOK, map[string]any{"active": strings.TrimRight(active, "\n")})
+			active := cycleActive()
+			httputil.WriteJSON(w, r, http.StatusOK, map[string]any{"active": active})
 		})
 
 		r1.HandleFunc("GET /skycoin-rewards/csv/plain", func(w http.ResponseWriter, r *http.Request) {
-			active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String() //nolint:errcheck,gosec
-			if strings.TrimRight(active, "\n") == "active" {
+			active := cycleActive()
+			if active == "active" {
 				w.Header().Set("Server", "")
 				w.WriteHeader(http.StatusNotFound)
 				return

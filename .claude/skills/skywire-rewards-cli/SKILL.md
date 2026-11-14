@@ -72,6 +72,15 @@ bytes. See `reward rules` for the human eligibility rules.
   `-p log_backups`), plus `-H/--hist`, `-u/--utfile` (skip the UT fetch), `--skip-collect`,
   `--prune-below-version` (default `auto`), and `--fetch` (fetch surveys with `cli log --survey`
   instead, with `--minv` and `--proxy host:port`). Date defaults to yesterday UTC.
+- **`rewards serve`** → the `ui` server and the hourly `run` cycle in ONE process, no timer. Takes the
+  flags of `ui` and `run` (not `--date`, `--utfile`; the run flags whose shorthand the ui takes are long
+  only: `--loglvl`, `--lpath`, `--a1`). `--lpath`/`--hist` resolve under `-W/--wd`. One cycle at start
+  (catch-up), then hourly; cycles never overlap; a failed cycle (even a `log.Fatal` in the calculation)
+  is logged and retried next hour while the server keeps serving. `/health` shows `reward_cycle`
+  (running, cycles, failures, last_start/end/duration/result/error, next_run), and the payout and csv
+  routes refuse while a cycle runs, as they did while the oneshot unit was active. Runs the telegram
+  bot too when `TG_BOT_TOKEN` and `TG_CHAT_ID` are set (watches `<wd>/transactions0.txt`). Never run it
+  beside the old timer on the same work dir.
 - **`rewards tp-collect`** → fetch per-key transport stats from TPD
   (`/all-transports/per-key-stats`, cached 5min in `/tmp/tpd.json`), append PKs with
   >= `-m/--min` (default 2) p2p transports (dmsg excluded) to `hist/YYYY-MM-DD_transports.txt`.
@@ -98,12 +107,15 @@ bytes. See `reward rules` for the human eligibility rules.
 - **`rewards systemd`** → write `skywire-reward.service` (oneshot `rewards run`) +
   `.timer` (hourly) + `fiberreward.service` (the `ui`) to `-o/--out` (default
   `/etc/systemd/system`; use `-o /dev/stdout` to preview, note it double-prints via `.Tee()`).
-  `-u/--user`, `-p/--path`, `-s/--skyenv` (default `fr.conf`).
+  `-u/--user`, `-p/--path`, `-s/--skyenv` (default `fr.conf`). `--serve` writes only
+  `skywire-reward-serve.service` (`rewards serve -W <path>`, TZ=UTC, Restart=always) with
+  `EnvironmentFile=-<--env-file>` (default `/etc/rewardbot.env`) for the bot.
 - **`rewards script {getlogs|reward}`** → print the legacy bash scripts (getlogs.sh /
   reward.sh) to pipe to bash. `getlogs -m <ver>` / `reward -d <date>` prepend a var. Superseded
   by `rewards run`; kept for reference.
 - **`rewards bot`** → telegram notifier. Watches `-w/--watch` (reward txid file); posts
-  per-day stats on each new broadcast. Needs env `TG_BOT_TOKEN` + `TG_CHAT_ID`.
+  per-day stats on each new broadcast. Needs env `TG_BOT_TOKEN` + `TG_CHAT_ID`. `serve` embeds it.
+  Bot API errors are logged with the token replaced by `<token>`.
 
 ## Gotchas
 - `reward` `Long` help dials the visor RPC to show the current address, now done **lazily**

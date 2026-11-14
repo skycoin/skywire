@@ -80,6 +80,8 @@ var (
 	skyenvConf string
 	outputPath string
 	outPath    string
+	serveUnit  bool
+	envFile    string
 )
 
 func init() {
@@ -107,6 +109,8 @@ func init() {
 	systemdServicesCmd.Flags().StringVarP(&workingDir, "path", "p", currentDir, "reward system data dir path")
 	systemdServicesCmd.Flags().StringVarP(&skyenvConf, "skyenv", "s", "fr.conf", "env config file path")
 	systemdServicesCmd.Flags().StringVarP(&outputPath, "out", "o", "/etc/systemd/system", "path to output systemd services")
+	systemdServicesCmd.Flags().BoolVar(&serveUnit, "serve", false, "write one skywire-reward-serve.service running 'rewards serve' instead of the timer, oneshot and ui units")
+	systemdServicesCmd.Flags().StringVar(&envFile, "env-file", "/etc/rewardbot.env", "with --serve, optional EnvironmentFile (TG_BOT_TOKEN, TG_CHAT_ID for the bot)")
 }
 
 var systemdServicesCmd = &cobra.Command{
@@ -119,9 +123,14 @@ must be run with sufficient permissions to write to output path`,
 
 		// Prepare the data for the template
 		serviceConfig := svcConfig{
-			User: userName,
-			Dir:  workingDir,
-			Conf: skyenvConf,
+			User:    userName,
+			Dir:     workingDir,
+			Conf:    skyenvConf,
+			EnvFile: envFile,
+		}
+		if serveUnit {
+			writeUnit(skywireRewardServeSvcTpl, serviceConfig, "skywire-reward-serve.service")
+			return
 		}
 
 		// Create a new template and parse the service file template into it
@@ -239,7 +248,53 @@ WantedBy=multi-user.target
 `
 
 type svcConfig struct {
-	User string
-	Dir  string
-	Conf string
+	User    string
+	Dir     string
+	Conf    string
+	EnvFile string
+}
+
+// One unit for the UI server and the hourly cycle. Dir holds hist/ and
+// log_backups/. Only one of this and the timer may run.
+const skywireRewardServeSvcTpl = `[Unit]
+Description=skywire reward system (UI and hourly reward cycle)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User={{.User}}
+WorkingDirectory={{.Dir}}
+Environment=TZ=UTC
+Environment='SKYENV={{.Conf}}'
+{{- if .EnvFile}}
+EnvironmentFile=-{{.EnvFile}}
+{{- end}}
+ExecStart=/usr/bin/skywire cli rewards serve -W {{.Dir}}
+Restart=always
+RestartSec=20
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
+`
+
+// writeUnit renders tpl with c to name under the output path.
+func writeUnit(tpl string, c svcConfig, name string) {
+	t, err := template.New(name).Parse(tpl)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var b bytes.Buffer
+	if err := t.Execute(&b, c); err != nil {
+		log.Fatal(err)
+	}
+	out := outputPath
+	if outputPath != "/dev/stdout" {
+		out = outputPath + "/" + name
+	}
+	if _, err := script.Echo(b.String()).Tee().WriteFile(out); err != nil {
+		log.Fatal(err)
+	}
+	cmdutil.Println("Wrote to: " + out)
 }
