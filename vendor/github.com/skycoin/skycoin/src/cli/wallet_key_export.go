@@ -1,3 +1,4 @@
+// Package cli src/cli/wallet_key_export.go c3-coin-cli
 package cli
 
 import (
@@ -155,11 +156,19 @@ func printKey(kt string, k *bip32.PrivateKey) error {
 		if err != nil {
 			return err
 		}
-		fmt.Println(cipher.MustNewPubKey(pub.Key).Hex())
+		pk, err := cipher.NewPubKey(pub.Key)
+		if err != nil {
+			return err
+		}
+		fmt.Println(pk.Hex())
 	case "prv":
-		fmt.Println(cipher.MustNewSecKey(k.Key).Hex())
+		sk, err := cipher.NewSecKey(k.Key)
+		if err != nil {
+			return err
+		}
+		fmt.Println(sk.Hex())
 	default:
-		panic("unhandled key type")
+		return fmt.Errorf("unhandled key type %q", kt)
 	}
 
 	return nil

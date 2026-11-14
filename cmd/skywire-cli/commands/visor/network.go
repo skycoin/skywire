@@ -96,7 +96,7 @@ On a metered network the visor runs in the metered mode, lean unless set:
   lean       no autoconnect, transit, dmsg relaying or new automatic inbound
              transports; dmsg and the transports it has stay
   dmsg-only  lean, and direct transports closed, at most two dmsg sessions
-  offline    dmsg-only, and nothing dialed at all
+  offline    dmsg-only, and dmsg sessions closed, nothing dialed at all
 The Android app reports the system's metered flag, --metered-interfaces
 names links that are metered ("rmnet*", "wwan*"), and --metered overrides
 both until set to auto.

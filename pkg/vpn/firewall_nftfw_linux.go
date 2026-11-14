@@ -1,6 +1,6 @@
 //go:build linux && nftfw
 
-// Package vpn pkg/vpn/firewall_nftfw_linux.go c4-app-vpn
+// Package vpn pkg/vpn/firewall_nftfw_linux.go c3-app-vpn
 //
 // The `nftfw` firewall backend: delegates to netctl.NFTFirewall (pure-Go
 // nftables). Selected only under the `nftfw` build tag — the gokrazy appliance

@@ -1,3 +1,4 @@
+// Package readable src/readable/wallet.go c2-coin-api
 package readable
 
 import (
@@ -99,9 +100,9 @@ func NewWalletResponse(w wallet.Wallet) (*WalletResponse, error) {
 	wr.Meta.Type = w.Type()
 	wr.Meta.Version = w.Version()
 	wr.Meta.CryptoType = w.CryptoType()
-	wr.Meta.Encrypted = w.IsEncrypted()
+	wr.Meta.Encrypted = w.Encrypted()
 	wr.Meta.Timestamp = w.Timestamp()
-	wr.Meta.Temp = w.IsTemp()
+	wr.Meta.Temp = w.Temp()
 
 	var options []wallet.Option
 	switch w.Type() {

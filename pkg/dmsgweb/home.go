@@ -1,4 +1,4 @@
-// Package dmsgweb pkg/dmsgweb/home.go c4-app-web
+// Package dmsgweb pkg/dmsgweb/home.go c3-app-web
 package dmsgweb
 
 import (
@@ -94,10 +94,10 @@ func isHomeHost(host, suffix string) bool {
 	return strings.EqualFold(strings.TrimSuffix(host, suffix), HomeAlias)
 }
 
-// IsHomeHost and RenderHomePage export the home-label check + directory renderer
+// HomeHost and RenderHomePage export the home-label check + directory renderer
 // so the wasm-visor's in-tab resolving fetch (browse overlay) serves the same
 // home.dmsg page + alias directory as the socks5 resolving proxy.
-func IsHomeHost(host, suffix string) bool { return isHomeHost(host, suffix) }
+func HomeHost(host, suffix string) bool { return isHomeHost(host, suffix) }
 
 // RenderHomePage exports renderHomePage (the self-contained alias directory).
 func RenderHomePage(aliases map[string]cipher.PubKey, suffix string, localPK cipher.PubKey) []byte {
@@ -370,8 +370,8 @@ var pathParamRe = regexp.MustCompile(`\{([^/}]+)\}`)
 // the inline JS finds this row's inputs by DOM traversal, so no id is needed.
 func writeEndpoint(b *strings.Builder, base string, ep svcendpoints.Endpoint) {
 	pathParams := pathParamRe.FindAllStringSubmatch(ep.Path, -1)
-	isPost := strings.EqualFold(ep.Method, "POST")
-	simple := !isPost && len(pathParams) == 0 && len(ep.Query) == 0
+	post := strings.EqualFold(ep.Method, "POST")
+	simple := !post && len(pathParams) == 0 && len(ep.Query) == 0
 
 	b.WriteString(`<div class="ep">`)
 
@@ -416,7 +416,7 @@ func writeEndpoint(b *strings.Builder, base string, ep svcendpoints.Endpoint) {
 	dataAttrs := fmt.Sprintf(`data-base="%s" data-path="%s"`,
 		html.EscapeString(base), html.EscapeString(ep.Path))
 
-	if isPost {
+	if post {
 		fmt.Fprintf(b, `<button type="button" onclick="skySend(this)" %s>Send</button>`, dataAttrs)
 		b.WriteString("</div>") // close inputs row
 		body := ep.Body

@@ -1,3 +1,4 @@
+// Package cli src/cli/create_rawtx.go c3-coin-cli
 package cli
 
 import (
@@ -663,7 +664,7 @@ func CreateRawTxnFromWallet(c GetOutputser, walletFile, chgAddr string, toAddrs 
 
 	switch pr.(type) {
 	case nil:
-		if wlt.IsEncrypted() {
+		if wlt.Encrypted() {
 			return nil, wallet.ErrWalletEncrypted
 		}
 	case PasswordFromBytes:
@@ -672,13 +673,13 @@ func CreateRawTxnFromWallet(c GetOutputser, walletFile, chgAddr string, toAddrs 
 			return nil, err
 		}
 
-		if !wlt.IsEncrypted() && len(p) != 0 {
+		if !wlt.Encrypted() && len(p) != 0 {
 			return nil, wallet.ErrWalletNotEncrypted
 		}
 	}
 
 	var password []byte
-	if wlt.IsEncrypted() {
+	if wlt.Encrypted() {
 		var err error
 		password, err = pr.Password()
 		if err != nil {
@@ -726,7 +727,7 @@ func CreateRawTxnFromAddress(c GetOutputser, addr, walletFile, chgAddr string, t
 
 	switch pr.(type) {
 	case nil:
-		if wlt.IsEncrypted() {
+		if wlt.Encrypted() {
 			return nil, wallet.ErrWalletEncrypted
 		}
 	case PasswordFromBytes:
@@ -735,13 +736,13 @@ func CreateRawTxnFromAddress(c GetOutputser, addr, walletFile, chgAddr string, t
 			return nil, err
 		}
 
-		if !wlt.IsEncrypted() && len(p) != 0 {
+		if !wlt.Encrypted() && len(p) != 0 {
 			return nil, wallet.ErrWalletNotEncrypted
 		}
 	}
 
 	var password []byte
-	if wlt.IsEncrypted() {
+	if wlt.Encrypted() {
 		var err error
 		password, err = pr.Password()
 		if err != nil {
@@ -837,7 +838,7 @@ func newChangeAddress(c interface{}, wlt wallet.Wallet, walletFile string, passw
 		return err
 	}
 
-	if wlt.IsEncrypted() && wlt.Type() != wallet.WalletTypeBip44 {
+	if wlt.Encrypted() && wlt.Type() != wallet.WalletTypeBip44 {
 		err = wallet.GuardUpdate(wlt, password, generate)
 	} else {
 		err = generate(wlt)
@@ -937,7 +938,7 @@ func createRawTxn(uxouts *readable.UnspentOutputsSummary, wlt wallet.Wallet, chg
 		return f(wlt)
 	}
 
-	if wlt.IsEncrypted() {
+	if wlt.Encrypted() {
 		makeTxn = func() (*coin.Transaction, error) {
 			var tx *coin.Transaction
 			if err := wallet.GuardView(wlt, password, func(w wallet.Wallet) error {
@@ -1015,7 +1016,10 @@ func makeChangeOut(outs []transaction.UxBalance, chgAddr string, toAddrs []SendA
 
 	haveChange := changeAmount > 0
 	nAddrs := uint64(len(toAddrs))
-	changeHours, addrHours, totalOutHours := transaction.DistributeSpendHours(totalInHours, nAddrs, haveChange)
+	changeHours, addrHours, totalOutHours, err := transaction.DistributeSpendHours(totalInHours, nAddrs, haveChange)
+	if err != nil {
+		return nil, err
+	}
 
 	if err := fee.VerifyTransactionFeeForHours(totalOutHours, totalInHours-totalOutHours, params.UserVerifyTxn.BurnFactor); err != nil {
 		return nil, err
@@ -1043,22 +1047,30 @@ func makeChangeOut(outs []transaction.UxBalance, chgAddr string, toAddrs []SendA
 			}
 		}
 
-		outAddrs = append(outAddrs, mustMakeUtxoOutput(to.Addr, to.Coins, addrHours[i]))
+		uo, err := makeUtxoOutput(to.Addr, to.Coins, addrHours[i])
+		if err != nil {
+			return nil, err
+		}
+		outAddrs = append(outAddrs, uo)
 	}
 
 	if haveChange {
-		outAddrs = append(outAddrs, mustMakeUtxoOutput(chgAddr, changeAmount, changeHours))
+		uo, err := makeUtxoOutput(chgAddr, changeAmount, changeHours)
+		if err != nil {
+			return nil, err
+		}
+		outAddrs = append(outAddrs, uo)
 	}
 
 	return outAddrs, nil
 }
 
-func mustMakeUtxoOutput(addr string, coins, hours uint64) coin.TransactionOutput {
-	uo := coin.TransactionOutput{}
-	uo.Address = cipher.MustDecodeBase58Address(addr)
-	uo.Coins = coins
-	uo.Hours = hours
-	return uo
+func makeUtxoOutput(addr string, coins, hours uint64) (coin.TransactionOutput, error) {
+	a, err := cipher.DecodeBase58Address(addr)
+	if err != nil {
+		return coin.TransactionOutput{}, fmt.Errorf("invalid address %s: %w", addr, err)
+	}
+	return coin.TransactionOutput{Address: a, Coins: coins, Hours: hours}, nil
 }
 
 func getEntries(wlt wallet.Wallet, outs []transaction.UxBalance) ([]wallet.Entry, error) {

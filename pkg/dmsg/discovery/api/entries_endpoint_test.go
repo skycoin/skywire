@@ -1,4 +1,4 @@
-// Package api pkg/discovery/api/entries_endpoint_test.go
+// Package api pkg/dmsg/discovery/api/entries_endpoint_test.go c3-net-discovery
 package api
 
 import (

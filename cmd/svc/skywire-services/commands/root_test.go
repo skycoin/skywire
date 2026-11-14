@@ -1,4 +1,4 @@
-// Package commands cmd/svc/skywire-services/commands/root_test.go: unit tests
+// Package commands cmd/svc/skywire-services/commands/root_test.go unit tests
 // for the skywire-services aggregator root command — that init() wires up the
 // per-service subcommands under their short aliases, the root metadata, and
 // Execute's --help path. The subcommands themselves are covered by their own

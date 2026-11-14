@@ -9,6 +9,7 @@ import com.skycoin.skywire.api.AppState
 import com.skycoin.skywire.api.Overview
 import com.skycoin.skywire.api.SkychatApi
 import com.skycoin.skywire.api.VisorApi
+import com.skycoin.skywire.chat.ChatRepository
 import com.skycoin.skywire.core.AppPreferences
 import com.skycoin.skywire.core.CoreServiceState
 import com.skycoin.skywire.core.CoreState
@@ -127,6 +128,7 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
     private val api = VisorApi.get(app)
     private val prefs = AppPreferences(app)
     private val skychat = SkychatApi.get(app)
+    private val chatRepo = ChatRepository.get(app)
     private val wallet = WalletRepository.get(app)
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -360,7 +362,11 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
      */
     private suspend fun pollBadges() {
         val chat = mutable.value.apps[SkychatProfile.APP]
-        val unread = if (chat?.running == true) {
+        // The chat screens' own count when they are following skychat, so the badge
+        // matches the rows. The server estimate counts every inbound message.
+        val unread = if (chat?.running == true && chatRepo.conn.value.ready) {
+            chatRepo.totalUnread()
+        } else if (chat?.running == true) {
             skychat.unread(SkychatProfile.baseUrl(SkychatProfile.listenPort(chat.args)))
                 ?: mutable.value.unreadMessages
         } else {

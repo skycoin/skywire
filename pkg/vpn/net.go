@@ -1,4 +1,4 @@
-// Package vpn pkg/vpn/net.go c4-app-vpn
+// Package vpn pkg/vpn/net.go c3-app-vpn
 package vpn
 
 import (
@@ -71,7 +71,6 @@ func ReadJSON(conn net.Conn, data any) error {
 	for {
 		n, err := conn.Read(buf)
 		if err != nil {
-			fmt.Printf("error reading data: %v\n", err)
 			return err
 		}
 

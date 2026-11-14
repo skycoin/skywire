@@ -331,7 +331,7 @@ func (f *Filler) Run() (err error) {
 
 	defer func() {
 		if err != nil {
-			f.r.IsFull = false // reset
+			f.r.Full = false // reset
 			f.reject()
 		} else {
 			f.apply()
@@ -361,7 +361,7 @@ func (f *Filler) Run() (err error) {
 	select {
 	case err = <-f.errq:
 	case <-done:
-		f.r.IsFull = true // full!
+		f.r.Full = true // full!
 		_, err = f.c.AddRoot(f.r)
 	}
 

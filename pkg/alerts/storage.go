@@ -1,9 +1,11 @@
+// Package alerts pkg/alerts/storage.go c3-vis-core
 package alerts
 
 import (
 	"bufio"
 	"io"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -60,4 +62,13 @@ func StorageErrors(lines []string, since time.Duration) (n int, last string) {
 		}
 	}
 	return n, last
+}
+
+// DataRoot is the filesystem whose use the visor reports. On Android / is
+// the read-only system image and always nearly full, so it reports /data.
+func DataRoot() string {
+	if runtime.GOOS == "android" {
+		return "/data"
+	}
+	return "/"
 }

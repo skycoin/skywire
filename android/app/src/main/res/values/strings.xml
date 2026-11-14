@@ -98,6 +98,9 @@
     <string name="core_notification_title">Skywire running</string>
     <string name="core_notification_starting">Starting the visor…</string>
     <string name="core_notification_running">Connected to the Skywire network.</string>
+    <string name="core_notification_offline">Waiting for an internet connection.</string>
+    <string name="core_notification_mobile_data">Connected over mobile data.</string>
+    <string name="core_notification_waiting_wifi">Mobile data is off for Skywire. Waiting for Wi-Fi.</string>
     <string name="core_notification_restarting">Visor crashed — restarting (attempt %1$d).</string>
 
     <!-- Voice calls -->
@@ -124,15 +127,31 @@
     <string name="call_unmute">Unmute</string>
     <string name="call_speaker">Speaker</string>
     <string name="call_missed_title">Missed call</string>
+    <string name="chat_notif_join_request">Group join request</string>
+    <string name="chat_notif_message_request">Message request</string>
+    <plurals name="chat_notif_join_waiting">
+        <item quantity="one">%1$d waiting to join %2$s</item>
+        <item quantity="other">%1$d waiting to join %2$s</item>
+    </plurals>
 
     <!-- Home / Connect -->
     <string name="state_disconnected">Disconnected</string>
     <string name="state_starting">Starting…</string>
+    <string name="state_no_internet">No internet connection</string>
+    <string name="state_waiting_wifi">Waiting for Wi-Fi</string>
     <string name="state_connected">Connected</string>
     <string name="state_stopping">Stopping…</string>
     <string name="state_restarting">Restarting (attempt %1$d)…</string>
     <string name="home_hint_disconnected">Connect starts the Skywire core on this phone.</string>
     <string name="home_hint_starting">Joining the Skywire network. The first connection can take a few minutes.</string>
+    <string name="home_hint_no_internet">This phone has no internet connection. Skywire joins the network by itself once the phone is back online.</string>
+    <string name="home_hint_waiting_wifi">Skywire is set to Wi-Fi only. It joins the network by itself once the phone is on Wi-Fi. Settings can allow mobile data.</string>
+    <string name="home_hint_mobile_data">Using mobile data. Skywire carries no traffic for other visors here, and Settings can keep it off mobile data.</string>
+    <string name="home_mobile_data_title">Use mobile data?</string>
+    <string name="home_mobile_data_body">This phone is on mobile data, and Skywire stays off it until you allow it. On mobile data Skywire carries only your own traffic. You can change this later in Settings.</string>
+    <string name="home_mobile_data_deny">Wi-Fi only</string>
+    <string name="home_mobile_data_allowed">Skywire now uses mobile data. You can change this in Settings.</string>
+    <string name="home_mobile_data_denied">Skywire stays on Wi-Fi only. You can change this in Settings.</string>
     <string name="home_error_start">The core did not come up. Check the process log.</string>
     <string name="visor_info_title">Visor</string>
     <string name="visor_public_key">Public key</string>
@@ -596,6 +615,9 @@
     <string name="settings_autoconnect">Connect to public visors</string>
     <string name="settings_autoconnect_hint">Keeps open transports to public visors so the network can route through this phone, and so this phone can route through them. Costs battery and mobile data, which is why it is off. Route lengths above one hop need it.</string>
     <string name="settings_autoconnect_restart">Applies when the core next starts.</string>
+    <string name="settings_mobile_data">Use mobile data</string>
+    <string name="settings_mobile_data_hint">When this is off Skywire stays on Wi-Fi only. It goes offline on mobile data and comes back on Wi-Fi. When it is on Skywire also runs on mobile data and other metered networks, and carries only your own traffic there.</string>
+    <string name="settings_mobile_data_restart">Changing this restarts the core.</string>
     <string name="settings_dns">DNS server</string>
     <string name="settings_dns_hint">SkyVPN and SkyDNS ask this server for every name that is not .dmsg or .skynet, over DNS-over-TLS when the server offers it, as Cloudflare, Google and Quad9 do. Left empty, SkyVPN uses 1.1.1.1 (Cloudflare), because a VPN server has no resolver to share, and SkyDNS on its own uses this phone\'s DNS.</string>
     <string name="settings_dns_invalid">Enter an IPv4 address, such as 9.9.9.9.</string>
@@ -1169,7 +1191,7 @@
     <string name="mail_attachment_failed">Could not save the attachment: %1$s</string>
     <string name="mail_compose_title">New message</string>
     <string name="mail_to_hint">A SkyMail address, or a visor’s public key</string>
-    <string name="mail_via_hint">Every address in To and Cc goes over this network. dmsg needs no route; skynet is faster when one exists.</string>
+    <string name="mail_via_hint">Every address in To and Cc goes over this network. A recipient on your local network gets a direct link instead. dmsg needs no route; skynet is faster when one exists.</string>
     <string name="mail_contacts">Contacts</string>
     <string name="mail_no_contacts">No contacts yet. Add one, or save a sender from a message.</string>
     <string name="mail_contacts_shared">The visor’s contact book. SkyChat names people from it too.</string>
@@ -1187,7 +1209,7 @@
     <string name="mail_body">Message</string>
     <string name="mail_attach">Attach files</string>
     <string name="mail_remove">Remove</string>
-    <string name="mail_send_note">Mail goes out now, over dmsg for a .dmsg address. A recipient whose visor is offline does not get it, and nothing retries.</string>
+    <string name="mail_send_note">Mail goes out now. A recipient whose visor is offline does not get it, and nothing retries.</string>
     <string name="mail_send">Send</string>
     <string name="mail_sending">Sending…</string>
     <string name="mail_sent">Sent</string>
@@ -1195,7 +1217,8 @@
     <string name="mail_send_unknown">Still delivering: the visor has not answered yet. Check Sent in a few minutes before sending it again.</string>
     <string name="mail_bad_address">Not a SkyMail address: %1$s</string>
     <string name="mail_no_recipient">Add a recipient.</string>
-    <string name="mail_attachments_too_big">These attachments become %1$s in transit — a message can be about %2$s.</string>
+    <string name="mail_attachments_too_big">These files add up to %1$s, and a message can carry %2$s.</string>
+    <string name="mail_attachments_size">Attachments: %1$s of %2$s.</string>
     <string name="mail_result_title">Not everyone got it</string>
     <string name="mail_result_delivered">Delivered over %1$s</string>
     <string name="mail_result_failed">Not delivered: %1$s</string>
@@ -1204,6 +1227,7 @@
     <string name="mail_setting_on">Mailbox on</string>
     <string name="mail_setting_on_desc">Receive mail at your address. While it is off, mail to you is refused.</string>
     <string name="mail_usage">%1$s of %2$s used</string>
+    <string name="mail_usage_encoded">Mail is kept as it was sent, so attachments take about a third more than the files.</string>
     <string name="mail_limits">Messages over %1$s are refused, and mail older than %2$d days is deleted.</string>
     <string name="mail_allowed_title">Who can write to you</string>
     <string name="mail_allowed_everyone">Everyone. Add a key to accept mail only from the keys you list.</string>
@@ -1370,6 +1394,7 @@
     <string name="chat_call">Call</string>
     <string name="chat_call_incoming">Incoming call</string>
     <string name="chat_call_outgoing">Outgoing call</string>
+    <string name="chat_call_unanswered">Unanswered call</string>
     <string name="chat_call_name">Call %1$s</string>
     <string name="chat_calls_failed">Could not load the call log.</string>
     <string name="chat_cancel">Cancel</string>

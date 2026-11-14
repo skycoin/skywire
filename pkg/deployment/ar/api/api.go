@@ -1,4 +1,4 @@
-// Package api pkg/deployment/ar/api/api.go c4-net-discovery
+// Package api pkg/deployment/ar/api/api.go c3-net-discovery
 package api
 
 import (
@@ -616,7 +616,7 @@ func (a *API) resolve(w http.ResponseWriter, r *http.Request) {
 
 	if sameIP(receiverVisorData.RemoteAddr, remoteAddr) {
 		a.logger(r).Debugf("Visors have the same remote address: %v, %v", receiverVisorData.RemoteAddr, remoteAddr)
-		receiverVisorData.IsLocal = true
+		receiverVisorData.Local = true
 	} else {
 		a.logger(r).Debugf("Visors have different remote addresses: %v, %v", receiverVisorData.RemoteAddr, remoteAddr)
 	}

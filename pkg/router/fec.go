@@ -1,4 +1,4 @@
-// Package router pkg/router/fec.go — forward-error-correction primitive for the
+// Package router pkg/router/fec.go c2-net-routing — forward-error-correction primitive for the
 // mux data plane (skycoin/skywire #4270). Aggregating one ordered stream across
 // heterogeneous-RTT legs is head-of-line-bound: the no-skip reorder frontier
 // waits for whatever frames were striped onto a slow leg. Retransmit recovery is

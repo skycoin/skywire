@@ -1,4 +1,4 @@
-// Package visor pkg/visor/helpers_test.go: unit tests for the small,
+// Package visor pkg/visor/helpers_test.go unit tests for the small,
 // dependency-free helper functions scattered across the package (CXO
 // feed name mapping, address/port parsing, hop conversion, etc.). The
 // networked runtime/RPC code is exercised by the integration suite.

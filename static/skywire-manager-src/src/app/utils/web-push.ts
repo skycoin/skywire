@@ -73,9 +73,58 @@ export async function pushRegistration(): Promise<ServiceWorkerRegistration> {
   if (existing) {
     return existing;
   }
-  await sw.register('push-sw.js');
+  await sw.register('../push-sw.js');
 
   return sw.ready;
+}
+
+/** Whether this page sits in a frame from another origin, such as a desk's browser. */
+export function crossOriginFrame(w: Window = window): boolean {
+  if (w.parent === w) {
+    return false;
+  }
+  try {
+    return !w.parent.location.href;
+  } catch (e) {
+    return true;
+  }
+}
+
+/** Raised when no desk around the frame answers. */
+class NoDesk extends Error {}
+
+/**
+ * Asks the desk around a cross-origin frame to do op for it. Such a frame cannot
+ * ask for notification permission, so the desk subscribes its own worker with
+ * this hypervisor's key (pkg/wasmhv/browse-transport.js). A frame with no desk
+ * around it gets no ack and fails with NoDesk.
+ */
+export function askDesk(op: 'subscribe' | 'endpoint', key = '', ackMs = 1500): Promise<any> {
+  const id = Math.random().toString(36).slice(2);
+
+  return new Promise((resolve, reject) => {
+    const done = (f: () => void) => {
+      clearTimeout(timer);
+      window.removeEventListener('message', onMessage);
+      f();
+    };
+    const timer = setTimeout(() => done(() => reject(new NoDesk('no desk answered'))), ackMs);
+    const onMessage = (e: MessageEvent) => {
+      const d = e.data || {};
+      if (e.source !== window.parent || d.type !== 'skywire-push-reply' || d.id !== id) {
+        return;
+      }
+      if (d.ack) {
+        clearTimeout(timer);
+      } else if (d.error) {
+        done(() => reject(new Error(d.error)));
+      } else {
+        done(() => resolve(d));
+      }
+    };
+    window.addEventListener('message', onMessage);
+    window.parent.postMessage({ type: 'skywire-push', id: id, op: op, key: key }, '*');
+  });
 }
 
 function sameKey(a: ArrayBuffer | null, b: Uint8Array): boolean {
@@ -87,11 +136,30 @@ function sameKey(a: ArrayBuffer | null, b: Uint8Array): boolean {
   return x.length === b.length && x.every((v, i) => v === b[i]);
 }
 
+/** The desk's answer to op, or null outside a desk. */
+async function viaDesk(op: 'subscribe' | 'endpoint', key = ''): Promise<any> {
+  if (!crossOriginFrame()) {
+    return null;
+  }
+  try {
+    return await askDesk(op, key);
+  } catch (e) {
+    if (e instanceof NoDesk) {
+      return null;
+    }
+    throw e;
+  }
+}
+
 /**
  * Asks for permission and subscribes this browser with key, replacing a
  * subscription made with another key. Returns PushSubscription.toJSON().
  */
 export async function subscribePush(publicKey: string): Promise<any> {
+  const viaD = await viaDesk('subscribe', publicKey);
+  if (viaD) {
+    return viaD.sub;
+  }
   const perm = await Notification.requestPermission();
   if (perm !== 'granted') {
     throw new Error('Notifications are blocked for this page. Allow them in the browser settings and try again.');
@@ -112,6 +180,10 @@ export async function subscribePush(publicKey: string): Promise<any> {
 
 /** This browser's current push endpoint, or '' when it has none. */
 export async function currentPushEndpoint(): Promise<string> {
+  const viaD = await viaDesk('endpoint').catch(() => null);
+  if (viaD) {
+    return viaD.endpoint || '';
+  }
   if (!('serviceWorker' in navigator)) {
     return '';
   }

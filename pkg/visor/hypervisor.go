@@ -435,8 +435,8 @@ func (hv *Hypervisor) AuthEnabled() bool {
 	return hv.c.EnableAuth
 }
 
-// IsUIServing reports whether the web UI HTTP server is currently serving.
-func (hv *Hypervisor) IsUIServing() bool {
+// UIServing reports whether the web UI HTTP server is currently serving.
+func (hv *Hypervisor) UIServing() bool {
 	hv.enableMu.Lock()
 	defer hv.enableMu.Unlock()
 	return hv.uiServing
@@ -472,7 +472,7 @@ func (hv *Hypervisor) Disable() error {
 	hv.logger.Info("Hypervisor disabled")
 	return nil
 }
-func (hv *Hypervisor) IsEnabled() bool {
+func (hv *Hypervisor) Enabled() bool {
 	hv.enableMu.Lock()
 	defer hv.enableMu.Unlock()
 	return hv.enabled
@@ -1374,7 +1374,7 @@ type Health struct {
 
 func makeSummaryResp(online, hyper bool, sum *visorapi.Summary) visorapi.Summary {
 	sum.Online = online
-	sum.IsHypervisor = hyper
+	sum.Hypervisor = hyper
 	return *sum
 }
 
@@ -1413,14 +1413,14 @@ func makeRouteGroupResp(info visorapi.RouteGroupInfo) routeGroupResp {
 }
 
 type isPublicResp struct {
-	IsPublic bool `json:"is_public"`
+	Public bool `json:"is_public"`
 }
 type httpCtx struct {
 	// Hypervisor
 	Conn
 
-	// isRemote is true when the request targets a remote visor (not the local hypervisor).
-	isRemote bool
+	// remote is true when the request targets a remote visor (not the local hypervisor).
+	remote bool
 
 	// App
 	App *appserver.AppState
@@ -1464,9 +1464,9 @@ func (tw *timeoutResponseWriter) copyTo(w http.ResponseWriter) {
 	w.WriteHeader(tw.statusCode)
 	w.Write(tw.body) //nolint:errcheck,gosec
 }
-func pkFromParam(r *http.Request, key string) (cipher.PubKey, error) {
+func pkFromParam(r *http.Request) (cipher.PubKey, error) {
 	pk := cipher.PubKey{}
-	err := pk.UnmarshalText([]byte(r.PathValue(key)))
+	err := pk.UnmarshalText([]byte(r.PathValue("pk")))
 
 	return pk, err
 }

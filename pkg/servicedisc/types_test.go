@@ -1,4 +1,4 @@
-// Package servicedisc pkg/servicedisc/types_test.go
+// Package servicedisc pkg/servicedisc/types_test.go c2-net-discovery
 package servicedisc
 
 import (

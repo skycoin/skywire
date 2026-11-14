@@ -1000,8 +1000,8 @@ func (v *Visor) StopPublicAutoconnect() error {
 	return nil
 }
 
-// IsPublicAutoconnectRunning returns whether public autoconnect is running.
-func (v *Visor) IsPublicAutoconnectRunning() bool {
+// PublicAutoconnectRunning returns whether public autoconnect is running.
+func (v *Visor) PublicAutoconnectRunning() bool {
 	v.autoconnect.mu.Lock()
 	defer v.autoconnect.mu.Unlock()
 	return v.autoconnect.running
@@ -1015,7 +1015,7 @@ func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error { /
 	// ensuring old service discovery entries are cleaned up before re-registering.
 	v.serviceDisc.VisorUpdater(0).Stop()
 
-	if !v.conf.IsPublic {
+	if !v.conf.Public {
 		return nil
 	}
 	logger := v.MasterLogger().PackageLogger("public_visor")
@@ -1254,7 +1254,7 @@ func reconcileTPD(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// Stats.Disabled, or buildStatsPublisher having failed (non-fatal by
 	// design, see init_stats.go). That is a different deployment mode, not a
 	// fallback.
-	if v.tpM != nil && v.tpM.HasTPDLeafPublisher() {
+	if v.tpM != nil && v.tpM.TPDLeafPublisherSet() {
 		return nil
 	}
 
@@ -1460,9 +1460,9 @@ func connectToTpDisc(ctx context.Context, v *Visor, log *logging.Logger) (transp
 		return tpdclient.NewHTTP(tpdURL, v.conf.PK, v.conf.SK, httpC, pIP, v.MasterLogger())
 	}
 
-	// A TPD this visor hosts under its own key mounts after the transport
-	// module, so waiting for it here only delays the boot.
-	if cmdutil.PKFromDmsgURL(tpdURL) == v.conf.PK {
+	// A TPD this visor hosts is reachable only after the transport module, so
+	// waiting for it here only delays the boot.
+	if tpdPK := cmdutil.PKFromDmsgURL(tpdURL); tpdPK == v.conf.PK || v.hostsOwnKeyService(tpdPK) {
 		return transport.NewDeferredDiscoveryClient(v.ctx, log, tpdDeferredRetry, connect), nil
 	}
 

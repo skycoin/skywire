@@ -48,8 +48,8 @@ func TestCollectCharts(t *testing.T) {
 	require.Equal(t, 0.0, v[chartServerFree+srvB.Hex()])
 	require.Equal(t, 1.0, v[chartLANServers])
 	require.Equal(t, 1.0, v[chartLANClients])
-	_, hasLANFree := v[chartServerFree+lanSrv.Hex()]
-	require.False(t, hasLANFree)
+	_, lanFreeFound := v[chartServerFree+lanSrv.Hex()]
+	require.False(t, lanFreeFound)
 }
 
 // Each server and LAN server lists the version from its discovery entry.

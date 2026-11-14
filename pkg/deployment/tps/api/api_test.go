@@ -1,4 +1,4 @@
-// Package api pkg/deployment/tps/api/api_test.go — unit tests for the
+// Package api pkg/deployment/tps/api/api_test.go c2-net-transport — unit tests for the
 // transport-setup HTTP handlers, request validation, error helpers, the pure
 // dmsgServicePKs parser, and the dmsg RPC gateway's non-dial methods. The
 // happy-path handlers dial a visor over dmsg (callVisorRPC) and are exercised by

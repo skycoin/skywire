@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/joincost.go c4-app-chat
+// Package group pkg/skychat/group/joincost.go c3-app-chat
 // what it costs to ask to join, and how fast anyone may ask.
 //
 // # The problem

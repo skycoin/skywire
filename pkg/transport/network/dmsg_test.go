@@ -1,4 +1,4 @@
-// Package network dmsg_test.go: end-to-end coverage for the dmsg
+// Package network pkg/transport/network/dmsg_test.go end-to-end coverage for the dmsg
 // client/listener/transport adapters using an in-memory dmsg env.
 package network
 

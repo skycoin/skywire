@@ -1,4 +1,4 @@
-// Package geoip pkg/services/geoip/geoip.go c2-vis-appsvc
+// Package geoip pkg/services/geoip/geoip.go c3-vis-appsvc
 //
 // The GeoIP lookup API as a pkg/services.Service, so a visor can embed it
 // instead of running `skywire svc ip --api` in a container of its own.

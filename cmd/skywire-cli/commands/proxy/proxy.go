@@ -908,7 +908,7 @@ func init() {
 	listCmd.Flags().StringVar(&minVersion, "minv", "", "filter by minimum version (>=)")
 	listCmd.Flags().StringVar(&maxVersion, "maxv", "", "filter by maximum version (<=)")
 	listCmd.Flags().BoolVar(&showOffline, "offline", false, "show only offline servers (red)")
-	listCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the results")
+	listCmd.Flags().BoolVarP(&stats, "stats", "s", false, "return only a count of the results")
 	listCmd.Flags().BoolVar(&jsonOutput, internal.JSONString, false, "print output in json")
 }
 
@@ -1053,7 +1053,7 @@ var listCmd = &cobra.Command{
 				}
 
 				count++
-				if !isStats {
+				if !stats {
 					countryCode := ""
 					if svc.Geo != nil {
 						countryCode = svc.Geo.Country
@@ -1062,7 +1062,7 @@ var listCmd = &cobra.Command{
 				}
 			}
 
-			if isStats {
+			if stats {
 				cmdutil.Printf("%d\n", count)
 			}
 			return
@@ -1104,7 +1104,7 @@ var listCmd = &cobra.Command{
 					}
 
 					count++
-					if !isStats {
+					if !stats {
 						countryCode := ""
 						if svc.Geo != nil {
 							countryCode = svc.Geo.Country
@@ -1113,7 +1113,7 @@ var listCmd = &cobra.Command{
 					}
 				}
 
-				if isStats {
+				if stats {
 					cmdutil.Printf("%d\n", count)
 				}
 				return
@@ -1128,7 +1128,7 @@ var listCmd = &cobra.Command{
 			}
 			sdJQ += ` | "\(.address | split(":")[0]) \(.geo.country) \(.version)"`
 
-			if isStats {
+			if stats {
 				count, err := script.Echo(sds).JQ(sdJQ).Replace(`"`, "").CountLines()
 				if err != nil {
 					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
@@ -1200,7 +1200,7 @@ var listCmd = &cobra.Command{
 				}
 
 				count++
-				if !isStats {
+				if !stats {
 					countryCode := ""
 					if svc.Geo != nil {
 						countryCode = svc.Geo.Country
@@ -1209,7 +1209,7 @@ var listCmd = &cobra.Command{
 				}
 			}
 
-			if isStats {
+			if stats {
 				cmdutil.Printf("%d\n", count)
 			}
 			return
@@ -1234,7 +1234,7 @@ var listCmd = &cobra.Command{
 		| "\((.address | split(":")[0])) \(.geo.country) \(.version)"
 		`
 
-		if isStats {
+		if stats {
 			count, err := script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, "").CountLines()
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
@@ -1261,7 +1261,7 @@ type ProxyTestResult struct {
 	PublicKey    string  `json:"public_key"`
 	Country      string  `json:"country,omitempty"`
 	Version      string  `json:"version,omitempty"`
-	HasTransport bool    `json:"has_transport"`
+	Direct       bool    `json:"has_transport"`
 	Connected    bool    `json:"connected,omitempty"`
 	Success      bool    `json:"success"`
 	Latency      float64 `json:"latency_ms,omitempty"`
@@ -1447,11 +1447,11 @@ Results show which proxies are reachable and their response latency.`,
 
 		// Collect proxies to test
 		type proxyToTest struct {
-			pk           cipher.PubKey
-			country      string
-			version      string
-			hasTransport bool
-			viaVisor     string
+			pk       cipher.PubKey
+			country  string
+			version  string
+			direct   bool
+			viaVisor string
 		}
 		var proxiesToTest []proxyToTest
 
@@ -1471,13 +1471,13 @@ Results show which proxies are reachable and their response latency.`,
 		if len(viaDestinations) > 0 {
 			for _, destPK := range viaDestinations {
 				// Check if we have a transport to the via visor
-				hasTransport := transportPKs[viaPK.String()]
+				direct := transportPKs[viaPK.String()]
 				proxiesToTest = append(proxiesToTest, proxyToTest{
-					pk:           destPK,
-					country:      "", // Will discover via test
-					version:      "",
-					hasTransport: hasTransport,
-					viaVisor:     viaPK.String(),
+					pk:       destPK,
+					country:  "", // Will discover via test
+					version:  "",
+					direct:   direct,
+					viaVisor: viaPK.String(),
 				})
 			}
 
@@ -1535,15 +1535,15 @@ Results show which proxies are reachable and their response latency.`,
 					continue
 				}
 
-				hasTransport := transportPKs[pkStr]
+				direct := transportPKs[pkStr]
 
 				// In connect-only mode, skip proxies we already have transports to
-				if testConnectOnly && hasTransport {
+				if testConnectOnly && direct {
 					continue
 				}
 
 				// In normal test mode with --transport flag, skip proxies without transport
-				if !testConnectOnly && testOnlyWithTp && !hasTransport {
+				if !testConnectOnly && testOnlyWithTp && !direct {
 					continue
 				}
 
@@ -1553,10 +1553,10 @@ Results show which proxies are reachable and their response latency.`,
 				}
 
 				proxiesToTest = append(proxiesToTest, proxyToTest{
-					pk:           pk,
-					country:      countryCode,
-					version:      svc.Version,
-					hasTransport: hasTransport,
+					pk:      pk,
+					country: countryCode,
+					version: svc.Version,
+					direct:  direct,
 				})
 			}
 		}
@@ -1572,7 +1572,7 @@ Results show which proxies are reachable and their response latency.`,
 			} else {
 				withTp := 0
 				for _, p := range proxiesToTest {
-					if p.hasTransport {
+					if p.direct {
 						withTp++
 					}
 				}
@@ -1607,11 +1607,11 @@ Results show which proxies are reachable and their response latency.`,
 
 			for i, pxy := range proxiesToTest {
 				result := ProxyTestResult{
-					PublicKey:    pxy.pk.String(),
-					Country:      pxy.country,
-					Version:      pxy.version,
-					HasTransport: pxy.hasTransport,
-					ViaVisor:     pxy.viaVisor,
+					PublicKey: pxy.pk.String(),
+					Country:   pxy.country,
+					Version:   pxy.version,
+					Direct:    pxy.direct,
+					ViaVisor:  pxy.viaVisor,
 				}
 
 				// Stop existing client
@@ -1957,11 +1957,11 @@ Results show which proxies are reachable and their response latency.`,
 					defer func() { clientPool <- client }()
 
 					result := ProxyTestResult{
-						PublicKey:    pxy.pk.String(),
-						Country:      pxy.country,
-						Version:      pxy.version,
-						HasTransport: pxy.hasTransport,
-						ViaVisor:     pxy.viaVisor,
+						PublicKey: pxy.pk.String(),
+						Country:   pxy.country,
+						Version:   pxy.version,
+						Direct:    pxy.direct,
+						ViaVisor:  pxy.viaVisor,
 					}
 
 					if testConnectOnly {

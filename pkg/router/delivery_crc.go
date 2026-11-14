@@ -1,3 +1,5 @@
+// Package router pkg/router/delivery_crc.go c2-net-routing
+//
 // Package router delivery_crc.go: the in-mux DELIVERY check (CapDeliveryCRC).
 //
 // Framing. When both edges negotiate CapDeliveryCRC, a sequenced DATA frame's

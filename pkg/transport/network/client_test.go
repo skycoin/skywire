@@ -1,4 +1,4 @@
-// Package network client_test.go: unit tests for the Phase 3 Happy
+// Package network pkg/transport/network/client_test.go unit tests for the Phase 3 Happy
 // Eyeballs dialer helpers — canonicalAddr port-append behavior and
 // happyEyeballsDial's v6-first / v4-fallback branches.
 package network

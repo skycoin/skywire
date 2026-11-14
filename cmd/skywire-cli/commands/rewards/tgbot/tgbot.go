@@ -107,7 +107,7 @@ Requires two environment variables:
 							log.Printf("Error getting date for link: %v", err)
 							continue
 						}
-						msg := fmt.Sprintf("Rewards have been distributed!\n\nhttps://explorer.skycoin.com/app/transaction/%s\n\n%s\n\nhttps://theskywirenetwork.net/skycoin-rewards/hist/%s", lastLine, stats, dateforlink)
+						msg := fmt.Sprintf("Rewards have been distributed!\n\nhttps://explorer.skycoin.com/app/transaction/%s\n\n%s\n\nhttps://reward.skywire.dev/skycoin-rewards/hist/%s", lastLine, stats, dateforlink)
 						// Send the last line to the Telegram chat
 						_, err = b.Send(&tele.Chat{ID: chatID}, msg)
 						if err != nil {

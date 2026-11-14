@@ -1,3 +1,4 @@
+// Package collection src/wallet/collection/wallet.go c1-coin-wallet
 package collection
 
 import (
@@ -93,7 +94,7 @@ func NewWallet(filename, label string, options ...wallet.Option) (*Wallet, error
 	}
 
 	if advOpts.Encrypt {
-		if wlt.IsTemp() {
+		if wlt.Temp() {
 			return nil, wallet.ErrEncryptTempWallet
 		}
 
@@ -165,7 +166,7 @@ func (w *Wallet) Deserialize(data []byte) error {
 
 // Lock encrypts the wallet secrets
 func (w *Wallet) Lock(password []byte) error {
-	if w.IsTemp() {
+	if w.Temp() {
 		return wallet.ErrEncryptTempWallet
 	}
 
@@ -173,7 +174,7 @@ func (w *Wallet) Lock(password []byte) error {
 		return wallet.ErrMissingPassword
 	}
 
-	if w.IsEncrypted() {
+	if w.Encrypted() {
 		return wallet.ErrWalletEncrypted
 	}
 
@@ -217,7 +218,7 @@ func (w *Wallet) Lock(password []byte) error {
 
 // Unlock unlocks the encrypted wallet
 func (w *Wallet) Unlock(password []byte) (wallet.Wallet, error) {
-	if !w.IsEncrypted() {
+	if !w.Encrypted() {
 		return nil, wallet.ErrWalletNotEncrypted
 	}
 
@@ -284,8 +285,8 @@ func (w *Wallet) unpackSecrets(ss wallet.Secrets) error {
 
 // Fingerprint returns an empty string; fingerprints are only defined for
 // wallets with a seed
-func (w *Wallet) Fingerprint() string {
-	return ""
+func (w *Wallet) Fingerprint() (string, error) {
+	return "", nil
 }
 
 // Clone clones the wallet a new wallet object
@@ -391,8 +392,8 @@ func (w *Wallet) GetEntry(a cipher.Addresser, _ ...wallet.Option) (wallet.Entry,
 	return e, nil
 }
 
-// HasEntry returns true if the wallet has an entry.Entry with a given cipher.Address.
-func (w *Wallet) HasEntry(a cipher.Addresser, _ ...wallet.Option) (bool, error) {
+// Contains returns true if the wallet has an entry.Entry with a given cipher.Address.
+func (w *Wallet) Contains(a cipher.Addresser, _ ...wallet.Option) (bool, error) {
 	return w.entries.Has(a), nil
 }
 
@@ -417,7 +418,7 @@ func (w *Wallet) EntriesLen(_ ...wallet.Option) (int, error) {
 
 // AddEntry adds a new entry to the wallet.
 func (w *Wallet) AddEntry(e wallet.Entry) error {
-	if w.IsEncrypted() {
+	if w.Encrypted() {
 		return wallet.ErrWalletEncrypted
 	}
 

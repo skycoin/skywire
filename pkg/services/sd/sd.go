@@ -1,4 +1,4 @@
-// Package sd pkg/services/sd/sd.go c2-vis-appsvc
+// Package sd pkg/services/sd/sd.go c3-vis-appsvc
 //
 // service-discovery as a pkg/services.Service.
 package sd

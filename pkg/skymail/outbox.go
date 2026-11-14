@@ -1,4 +1,4 @@
-// Package skymail pkg/skymail/outbox.go c4-app-mail
+// Package skymail pkg/skymail/outbox.go c3-app-mail
 package skymail
 
 import (
@@ -409,8 +409,8 @@ func (mb *Mailbox) Retry(id string) error {
 	return nil
 }
 
-// HasOutbox reports whether the mailbox was opened with an Outbox.
-func (mb *Mailbox) HasOutbox() bool { return mb.out != nil }
+// OutboxEnabled reports whether the mailbox was opened with an Outbox.
+func (mb *Mailbox) OutboxEnabled() bool { return mb.out != nil }
 
 // Queued is how many messages wait in the Outbox.
 func (mb *Mailbox) Queued() int {

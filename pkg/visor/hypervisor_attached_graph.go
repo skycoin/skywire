@@ -1,4 +1,4 @@
-// Package visor pkg/visor/hypervisor_attached_graph.go c3-vis-api
+// Package visor pkg/visor/hypervisor_attached_graph.go c3-vis-core
 //
 // The hypervisor's attached visors report their transports in the Summary it
 // polls every hypervisorBackgroundPollInterval. AttachedTransportEntries turns
@@ -56,7 +56,7 @@ func attachedEntriesFromSummaries(cache map[cipher.PubKey]cachedSummary, now tim
 			continue
 		}
 		for _, ts := range cs.sum.Overview.Transports {
-			if ts == nil || ts.IsSetup || ts.Remote == (cipher.PubKey{}) || ts.Local == (cipher.PubKey{}) {
+			if ts == nil || ts.Setup || ts.Remote == (cipher.PubKey{}) || ts.Local == (cipher.PubKey{}) {
 				continue
 			}
 			id := ts.ID

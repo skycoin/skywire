@@ -440,11 +440,11 @@ func (rt *meshInterstitialRT) streamingInterstitialResponse(req *http.Request, c
 // interstitial for req, so ReverseProxy streams it to the browser exactly like an
 // upstream response (ModifyResponse's rewriteMeshLocation only touches 3xx, so a
 // 200/502 interstitial passes through untouched).
-func (rt *meshInterstitialRT) interstitialResponse(req *http.Request, detail string, isError bool) *http.Response {
+func (rt *meshInterstitialRT) interstitialResponse(req *http.Request, detail string, failed bool) *http.Response {
 	target := meshInterstitialTarget(req)
-	body := proxyinterstitial.Page(target, detail, meshInterstitialMechanism(target), isError)
+	body := proxyinterstitial.Page(target, detail, meshInterstitialMechanism(target), failed)
 	status := http.StatusOK
-	if isError {
+	if failed {
 		status = http.StatusBadGateway
 	}
 	h := make(http.Header)
@@ -568,18 +568,18 @@ func (v *Visor) newMeshReverseProxy(resolve meshResolveFn) (*httputil.ReversePro
 		// errored gets a plain status so we never inject HTML into it.
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			detail := err.Error()
-			isError := true
+			failed := true
 			if me, _ := r.Context().Value(meshErrKey).(string); me != "" {
 				detail = me
 			} else {
-				isError = !proxyinterstitial.IsTransient(err)
+				failed = !proxyinterstitial.IsTransient(err)
 			}
 			if !interstitialEligible(r) {
 				http.Error(w, "mesh proxy: "+detail, http.StatusBadGateway)
 				return
 			}
 			status := http.StatusOK
-			if isError {
+			if failed {
 				status = http.StatusBadGateway
 			}
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -589,7 +589,7 @@ func (v *Visor) newMeshReverseProxy(resolve meshResolveFn) (*httputil.ReversePro
 			// proxyinterstitial.Page HTML-escapes target and detail, so the rendered
 			// document carries no unescaped request-derived content (no XSS).
 			mt := meshInterstitialTarget(r)
-			_, _ = io.WriteString(w, proxyinterstitial.Page(mt, detail, meshInterstitialMechanism(mt), isError)) //nolint:errcheck,gosec // G705: Page escapes all interpolated values
+			_, _ = io.WriteString(w, proxyinterstitial.Page(mt, detail, meshInterstitialMechanism(mt), failed)) //nolint:errcheck,gosec // G705: Page escapes all interpolated values
 		},
 	}, nil
 }

@@ -1,4 +1,4 @@
-// Package call pkg/skychat/call/tap.go c4-app-chat
+// Package call pkg/skychat/call/tap.go c3-app-chat
 //
 // Per-call audio taps for visualization. When a Manager has Visualize set, each
 // session's Source (sent audio) and Sink (received audio) are wrapped so a copy

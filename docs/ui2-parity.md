@@ -1,0 +1,83 @@
+# ui2 parity with the Angular hypervisor UI
+
+The server rendered UI (templ and htmx, `pkg/visor/ui2` and
+`pkg/visor/hypervisor_handlers_ui2*.go`) is the default at the root of the
+hypervisor. The Angular UI in `static/skywire-manager-src` is served at
+`/angular/`, and the desk windows still open it there. Old `/ui2/...` URLs
+redirect to the same path at the root. The Angular routes below are hash
+routes under `/angular/#`.
+
+Status is **yes** (present), **partial** (some of it), **no** (missing) or
+**n/a** (the Angular feature has no backend to call).
+A missing visor tab renders a link to the same tab in the Angular UI.
+
+## Home and fleet pages
+
+| Angular route | Feature | ui2 | Notes |
+|---|---|---|---|
+| `/` start, `/login` | login, first account creation | yes | `login` |
+| `/nodes/list` | visor list with nested sub-hypervisor visors | yes | `/` |
+| | search, online, offline, outdated and no-reward chips | yes | |
+| | app filter, apps column, compact view | no | |
+| | column sorting | yes | in the browser, since labels live there |
+| | drag to reorder | no | |
+| | edit label, remove visor, remove all offline | yes | labels in the same localStorage entry as Angular |
+| | bulk select: restart, reward address, add, start and stop app | yes | |
+| | update one or all visors | n/a | Angular calls visors/{pk}/update/..., which the hypervisor does not serve |
+| `/nodes/rewards` | reward address and last seven days of rewards per visor | yes | `rewards` |
+| `/nodes/services-health` | deployment service health, /health payload, RSN stats | yes | `services` |
+| `/nodes/network` | network view (SD, TPD and UT), filters, refresh | yes | `network`, paged 100 to a page |
+| `/nodes/visualizer` | network graph | partial | cosmos-go WebGL page, linked as tp-viz and route-viz, not reimplemented |
+| `/nodes/resources` | CPU, memory, disk and traffic of every visor | yes | `resources` |
+| `/nodes/uptime` | uptime of every visor | yes | `uptime` |
+| | version history chart | yes | |
+| `/nodes/transports` | transports across the network: compact and tree views, window, edges, offline | yes | `transports`, paged; seen live only in the "feed still syncing" state |
+| `/settings` | change password | yes | `settings` |
+| | refresh rate, theme, language | yes | the refresh rate sets the visor list poll |
+| | updater config | n/a | only feeds the update action, which has no backend |
+| | auto update, reload worker | n/a | the Angular in-browser visor's service worker |
+| | visor switcher row | n/a | an Angular navigation option |
+| `/settings/labels` | label list, edit, delete | yes | on `settings` |
+| `/app/:name/:key` | full page app host | no | |
+| `/vpn/...` | VPN client UI | no | |
+| `/wallet` | wallet | yes | the wallet tab frames skycoin-web's own pages, forwarded at `wallet/web/` |
+| | language list en, es, de, pt, zh | yes | |
+
+## Visor tabs
+
+| Angular tab | Feature | ui2 | Notes |
+|---|---|---|---|
+| info | overview, network, dmsg and hypervisor sections | yes | |
+| | config view and edit, restart, shut down | yes | |
+| | router settings (min hops, existing transports, local routes) | yes | |
+| | update visor | n/a | no update route on the hypervisor |
+| | label | no | |
+| routing | rules list and delete, route groups, routing policies | yes | |
+| | route find and calc | yes | |
+| | mux route view | partial | links to route-viz |
+| transports | list, search, add, delete, delete all | yes | |
+| | autoconnect, public, persistent | yes | |
+| | transport label, details panel, column sorting | yes | labels share the Angular localStorage entry (type tp) |
+| bandwidth | per transport snapshot and daily history | yes | paged 50 to a page with search; daily history loads when a row opens |
+| uptime | uptime bars and service uptimes | yes | |
+| apps | list, start, stop, autostart, settings, logs, help | yes | |
+| | app catalog, add app, add another instance | yes | `apps/catalog` |
+| | flags form | yes | "Edit flags" in an app's settings |
+| | filter (name, port, state, autostart), multi select start, stop, autostart | yes | |
+| chat | direct messages: peers, history, send, reply, delete | yes | polls every 3 s instead of SSE; read receipts not shown |
+| | rooms: list, messages, send, create, join, invite, add member, pending and declined state, ask again | yes | moderation is CLI only, Angular has none either |
+| | skychat password | yes | |
+| | voice calls: call, ring, answer, decline, hang up, mute, level meter, timer | yes | the visor plays the audio, as for Angular; the spectrogram is not ported |
+| mail | mailbox, compose, settings | yes | |
+| contacts | list, add, edit, delete, import | yes | |
+| rewards | address, history, rules | yes | |
+| dmsg | sessions, clients, connect all, session count | yes | Angular folds it into info |
+| skynet | forwarded ports (add, toggles, whitelist, remove) and reverse proxies | yes | new ui2 keys are English only; the Angular tab has no translations to copy |
+| web-proxy | resolving proxy status, on/off, upstream | yes | |
+| vpn | vpn-client and vpn-server: state, start, stop, settings, flags, server picker | yes | the picker lists the service discovery's VPN servers, 200 at a time with a filter |
+| resources | host stats and resource monitor | yes | history charts kept in the browser for the last 120 samples |
+| terminal | dmsgpty terminal | yes | embeds the hypervisor pty page |
+| wallet | wallet | yes | frames skycoin-web's ui2 when the app runs, else says how to start it |
+| logs | runtime logs with filter and search | yes | |
+| settings | skyenv editor | yes | |
+| | offline alerts: emails, delay, webhook, sender, SMTP relay, test, push devices (add this device, list, remove) | yes | new ui2 keys are English only |

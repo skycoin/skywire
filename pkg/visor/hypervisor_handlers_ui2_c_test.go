@@ -12,8 +12,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skymail"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -33,6 +36,12 @@ type ui2FakeAPI struct {
 	wl       []cipher.PubKey
 	settings *visorapi.MailSettingsUpdate
 }
+
+func (a *ui2FakeAPI) Apps() ([]*appserver.AppState, error) { return nil, nil }
+
+func (a *ui2FakeAPI) SkychatPasswordIsSet() (bool, error) { return false, nil }
+
+func (a *ui2FakeAPI) VoiceActive() ([]string, error) { return nil, ErrVoiceDisabled }
 
 func (a *ui2FakeAPI) RuntimeLogsSince(since int64) (visorapi.RuntimeLogsDelta, error) {
 	var d visorapi.RuntimeLogsDelta
@@ -79,7 +88,7 @@ func (a *ui2FakeAPI) MailSetSettings(u visorapi.MailSettingsUpdate) error {
 	return nil
 }
 
-func newUI2FakeServer(t *testing.T, api *ui2FakeAPI) string {
+func newUI2FakeServer(t *testing.T, api visorapi.API) string {
 	t.Helper()
 	pk, _ := cipher.GenerateKeyPair()
 	hv := &Hypervisor{
@@ -92,7 +101,7 @@ func newUI2FakeServer(t *testing.T, api *ui2FakeAPI) string {
 	hv.ui2Routes(r)
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
-	return srv.URL + "/ui2/visors/" + pk.Hex()
+	return srv.URL + "/visors/" + pk.Hex()
 }
 
 func ui2HX(t *testing.T, method, u, ct, body string) (int, string) {
@@ -226,7 +235,6 @@ func TestUI2Islands(t *testing.T) {
 	base := newUI2FakeServer(t, &ui2FakeAPI{})
 	pk := base[strings.LastIndex(base, "/")+1:]
 	for tab, src := range map[string]string{
-		"chat":     `src="#/nodes/` + pk + `/chat?embed=1"`,
 		"terminal": `src="pty/` + pk + `"`,
 		"wallet":   `src="wallet/config"`,
 	} {
@@ -236,4 +244,71 @@ func TestUI2Islands(t *testing.T) {
 		require.Contains(t, body, `href="route-viz"`)
 		require.NotContains(t, body, `href="tp-viz/"`, "no visualizer without tp-viz")
 	}
+}
+
+func TestUI2CatalogPage(t *testing.T) {
+	srv, _, pk := newUI2Server(t, true)
+	code, body := ui2Do(t, ui2Req(t, http.MethodGet, srv.URL+"/visors/"+pk.Hex()+"/apps/catalog", "", ""))
+	require.Equal(t, http.StatusOK, code, body)
+	require.Contains(t, body, `id="catalog"`)
+	require.Contains(t, body, `hx-get="visors/`+pk.Hex()+`/apps/catalog/body"`)
+}
+
+// TestUI2WalletHostsSkycoinWeb frames skycoin-web's own wallet once the app
+// serves it, and says what to do while it does not.
+func TestUI2WalletHostsSkycoinWeb(t *testing.T) {
+	base := newUI2FakeServer(t, &ui2FakeAPI{})
+	_, body := ui2Do(t, ui2Req(t, http.MethodGet, base+"/wallet", "", ""))
+	require.Contains(t, body, "Skycoin wallet app not configured")
+	require.NotContains(t, body, `src="wallet/web/"`)
+	require.NotContains(t, body, `#/wallet`, "no link to the Angular wallet")
+
+	launcher.RegisterHTTPHandler(skyenv.SkycoinWebName, http.NotFoundHandler())
+	t.Cleanup(func() { launcher.RegisterHTTPHandler(skyenv.SkycoinWebName, nil) })
+	_, body = ui2Do(t, ui2Req(t, http.MethodGet, base+"/wallet", "", ""))
+	require.Contains(t, body, `src="wallet/web/"`)
+}
+
+// TestUI2ChatIsNative renders the chat tab without the Angular UI.
+func TestUI2ChatIsNative(t *testing.T) {
+	base := newUI2FakeServer(t, &ui2FakeAPI{})
+	_, body := ui2Do(t, ui2Req(t, http.MethodGet, base+"/chat", "", ""))
+	require.Contains(t, body, `id="chat-form"`)
+	require.NotContains(t, body, "<iframe")
+}
+
+type ui2ProxyAPI struct {
+	ui2FakeAPI
+	enabled  map[string]bool
+	upstream string
+}
+
+func (a *ui2ProxyAPI) EmbeddedProxies() (*visorapi.EmbeddedProxiesStatus, error) {
+	return &visorapi.EmbeddedProxiesStatus{
+		DmsgWeb:   &visorapi.EmbeddedProxyInfo{Running: a.enabled["dmsg"], SocksAddr: "127.0.0.1:4445"},
+		SkynetWeb: &visorapi.EmbeddedProxyInfo{Running: a.enabled["skynet"], UpstreamSOCKS: a.upstream},
+	}, nil
+}
+
+func (a *ui2ProxyAPI) SetEmbeddedProxyEnabled(kind string, on bool) error {
+	a.enabled[kind] = on
+	return nil
+}
+
+func (a *ui2ProxyAPI) SetEmbeddedProxyUpstream(_, addr string) error {
+	a.upstream = addr
+	return nil
+}
+
+func TestUI2WebProxy(t *testing.T) {
+	api := &ui2ProxyAPI{enabled: map[string]bool{}}
+	base := newUI2FakeServer(t, api)
+	_, body := ui2Do(t, ui2Req(t, http.MethodGet, base+"/web-proxy", "", ""))
+	require.Contains(t, body, "127.0.0.1:4445")
+	form := "application/x-www-form-urlencoded"
+	_, body = ui2HX(t, http.MethodPut, base+"/web-proxy/enabled", form, "on=1")
+	require.True(t, api.enabled["skynet"] && api.enabled["dmsg"], "both resolvers switch together")
+	require.Contains(t, body, `id="wp"`)
+	_, _ = ui2HX(t, http.MethodPut, base+"/web-proxy/upstream", form, "addr=127.0.0.1:1080")
+	require.Equal(t, "127.0.0.1:1080", api.upstream)
 }

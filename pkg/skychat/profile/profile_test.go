@@ -1,4 +1,4 @@
-// Package profile pkg/skychat/profile/profile_test.go c4-app-chat
+// Package profile pkg/skychat/profile/profile_test.go c3-app-chat
 //
 // The rules that matter here are the ones a stranger's input has to clear:
 // an avatar is decoded before it is believed, and a name is bounded before
@@ -280,10 +280,10 @@ func TestIsZeroAndHasAvatar(t *testing.T) {
 	if (Profile{Name: "x"}).IsZero() {
 		t.Fatal("named profile reported as zero")
 	}
-	if (Profile{Avatar: []byte{1}}).HasAvatar() {
+	if (Profile{Avatar: []byte{1}}).AvatarSet() {
 		t.Fatal("avatar with no mime reported as usable")
 	}
-	if !(Profile{Avatar: []byte{1}, AvatarMime: MimePNG}).HasAvatar() {
+	if !(Profile{Avatar: []byte{1}, AvatarMime: MimePNG}).AvatarSet() {
 		t.Fatal("complete avatar reported as absent")
 	}
 }

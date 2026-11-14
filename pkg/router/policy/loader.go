@@ -39,7 +39,7 @@ type Engine interface {
 	Decide(ctx context.Context, rctx RoutingContext, candidates []Candidate) (RouteSpec, error)
 	OnLegChange(ctx context.Context, rctx RoutingContext, legs []LegInfo, change LegChange) (RouteSpec, error)
 	OnTick(ctx context.Context, rctx RoutingContext, legs []LegInfo) (RotationAction, error)
-	IsActive() bool
+	Active() bool
 	Source() string
 	Close() error
 }
@@ -280,7 +280,7 @@ func (l *Loader) OnTick(ctx context.Context, rctx RoutingContext, legs []LegInfo
 // or "<inline>" or "<noop>"). Used by callers for logging.
 func (l *Loader) Source() string { return l.source }
 
-// IsActive reports whether the loader has an evaluator loaded
+// Active reports whether the loader has an evaluator loaded
 // (i.e. not noop mode). Useful for the router to skip the call
 // path entirely when no policy is configured.
-func (l *Loader) IsActive() bool { return l.current.Load() != nil }
+func (l *Loader) Active() bool { return l.current.Load() != nil }

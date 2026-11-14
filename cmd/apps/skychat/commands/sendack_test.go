@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/sendack_test.go
+// Package commands cmd/apps/skychat/commands/sendack_test.go c4-app-chat
 //
 // What remains of the ack surface in the app: the /message wait_ms clamp. The
 // envelope codec, the ack-waiter map and the inbound-envelope decode moved into

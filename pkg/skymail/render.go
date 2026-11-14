@@ -1,4 +1,4 @@
-// Package skymail pkg/skymail/render.go c4-app-mail
+// Package skymail pkg/skymail/render.go c3-app-mail
 package skymail
 
 import (
@@ -13,9 +13,6 @@ import (
 	"regexp"
 	"strings"
 )
-
-// maxRenderedPart bounds how much of one decoded body part is kept.
-const maxRenderedPart = 4 << 20
 
 var wordDecoder = &mime.WordDecoder{
 	// Only UTF-8 and ASCII-compatible charsets decode; anything else is
@@ -157,7 +154,8 @@ func walkPart(ctHeader, cte, disp string, body io.Reader, depth int, visit func(
 	case "quoted-printable":
 		body = quotedprintable.NewReader(body)
 	}
-	data, _ := io.ReadAll(io.LimitReader(body, maxRenderedPart)) //nolint:errcheck // a truncated part still renders
+	// The raw message is in memory already, and decoding only shrinks it.
+	data, _ := io.ReadAll(body) //nolint:errcheck // a part cut short by a bad encoding still renders
 	name := params["name"]
 	if _, dp, err := mime.ParseMediaType(disp); err == nil && dp["filename"] != "" {
 		name = dp["filename"]

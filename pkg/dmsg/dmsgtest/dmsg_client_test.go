@@ -1,4 +1,4 @@
-// Package dmsgtest pkg/dmsgtest/dmsg_client_test.go
+// Package dmsgtest pkg/dmsg/dmsgtest/dmsg_client_test.go c1-net-dmsg
 package dmsgtest
 
 import (

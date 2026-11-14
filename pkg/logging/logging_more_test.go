@@ -1,6 +1,6 @@
 //go:build !js
 
-// Package logging pkg/logging/logging_more_test.go: unit tests for the level
+// Package logging pkg/logging/logging_more_test.go unit tests for the level
 // parser, master/package loggers, the write hook, the broadcaster, and the text
 // formatter.
 package logging

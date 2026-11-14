@@ -1,4 +1,4 @@
-// Package dmsgtest pkg/dmsgtest/mesh_test.go
+// Package dmsgtest pkg/dmsg/dmsgtest/mesh_test.go c1-net-dmsg
 //
 //nolint:errcheck,gosec
 package dmsgtest
@@ -354,8 +354,8 @@ func TestNonPublicServer_ReverseDial(t *testing.T) {
 	// this test's OWN 40s ctx on the accept + the data transfer so a stall fails
 	// fast, on THIS test, with a clear message — turning a package-wide hang into
 	// an isolated, diagnosable failure.
-	deadline, hasDeadline := ctx.Deadline()
-	require.True(t, hasDeadline)
+	deadline, deadlineSet := ctx.Deadline()
+	require.True(t, deadlineSet)
 
 	type acceptResult struct {
 		stream *dmsg.Stream

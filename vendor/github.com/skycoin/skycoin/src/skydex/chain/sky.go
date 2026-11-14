@@ -1,4 +1,6 @@
-// Package chain sky.go implements the Skycoin fullnode client used for SKY
+// Package chain src/skydex/chain/sky.go c3-app-dex
+//
+// Package chain implements the Skycoin fullnode client used for SKY
 // deposit verification and for spending SKY out of the market's escrow wallet.
 //
 // Spending is done with LOCAL signing: the node we talk to has its wallet API
@@ -71,7 +73,10 @@ type skySigner struct {
 // equal the seed-derived address (a guard against a seed/wallet_sky mismatch that
 // would otherwise silently spend from the wrong wallet).
 func newSigner(seed, wantAddr string) (*skySigner, error) {
-	_, seckeys := cipher.MustGenerateDeterministicKeyPairsSeed([]byte(seed), 1)
+	_, seckeys, err := cipher.GenerateDeterministicKeyPairsSeed([]byte(seed), 1)
+	if err != nil {
+		return nil, fmt.Errorf("derive escrow key: %w", err)
+	}
 	sk := seckeys[0]
 	addr, err := cipher.AddressFromSecKey(sk)
 	if err != nil {
@@ -375,11 +380,13 @@ func (s *SkyNode) buildSignedTxn(dst cipher.Address, coins uint64, spendable rea
 		}
 		keys[i] = s.signer.secKey
 	}
-	txn.SignInputs(keys)
+	if err := txn.SignInputs(keys); err != nil {
+		return nil, fmt.Errorf("sky spend: sign txn: %w", err)
+	}
 	if err := txn.UpdateHeader(); err != nil {
 		return nil, fmt.Errorf("sky spend: finalize txn: %w", err)
 	}
-	if !txn.IsFullySigned() {
+	if !txn.FullySigned() {
 		return nil, errors.New("sky spend: transaction is not fully signed")
 	}
 	return txn, nil

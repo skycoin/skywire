@@ -1,4 +1,4 @@
-// Package visor pkg/visor/ar_resolve_cxo.go
+// Package visor pkg/visor/ar_resolve_cxo.go c3-vis-core
 //
 // Address lookups from the address resolver's bindings feed. The visor holds
 // the feed (about 100 KB for the whole network) and answers stcpr, squicr and

@@ -1,6 +1,6 @@
 //go:build darwin && !ios
 
-// Package vpn pkg/vpn/os_server_darwin.go c4-app-vpn
+// Package vpn pkg/vpn/os_server_darwin.go c3-app-vpn
 package vpn
 
 import (
@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/util/osutil"
 )
 
@@ -66,13 +67,15 @@ func GetIPv4ForwardingValue() (string, error) { return getSysctl(sysctlIPv4Forwa
 func GetIPv6ForwardingValue() (string, error) { return getSysctl(sysctlIPv6Forwarding) }
 
 // SetIPv4ForwardingValue sets `val` value of IPv4 forwarding.
-func SetIPv4ForwardingValue(val string) error { return setSysctl(sysctlIPv4Forwarding, val) }
+func SetIPv4ForwardingValue(_ logging.FieldLogger, val string) error {
+	return setSysctl(sysctlIPv4Forwarding, val)
+}
 
 // SetIPv6ForwardingValue sets `val` value of IPv6 forwarding.
 func SetIPv6ForwardingValue(val string) error { return setSysctl(sysctlIPv6Forwarding, val) }
 
 // EnableIPv4Forwarding enables IPv4 forwarding.
-func EnableIPv4Forwarding() error { return SetIPv4ForwardingValue("1") }
+func EnableIPv4Forwarding(log logging.FieldLogger) error { return SetIPv4ForwardingValue(log, "1") }
 
 // EnableIPv6Forwarding enables IPv6 forwarding.
 func EnableIPv6Forwarding() error { return SetIPv6ForwardingValue("1") }
@@ -91,7 +94,7 @@ func setSysctl(key, val string) error {
 
 // EnableIPMasquerading enables IP masquerading for outgoing traffic on `ifcName`
 // by loading a pf nat ruleset and enabling pf.
-func EnableIPMasquerading(ifcName string) error {
+func EnableIPMasquerading(log logging.FieldLogger, ifcName string) error {
 	pfMu.Lock()
 	defer pfMu.Unlock()
 
@@ -99,7 +102,7 @@ func EnableIPMasquerading(ifcName string) error {
 
 	// Prefer the full ruleset (keeps Apple's anchors); fall back to nat-only.
 	if err := loadPFRuleset(fmt.Sprintf(pfRulesetFmt, ifcName)); err != nil {
-		fmt.Printf("pf full ruleset load failed (%v); trying minimal nat-only ruleset\n", err)
+		log.WithError(err).Warn("pf full ruleset load failed, trying minimal nat-only ruleset")
 		if err := loadPFRuleset(fmt.Sprintf(pfRulesetMinimalFmt, ifcName)); err != nil {
 			return fmt.Errorf("loading pf nat ruleset: %w", err)
 		}
@@ -115,7 +118,7 @@ func EnableIPMasquerading(ifcName string) error {
 
 // DisableIPMasquerading restores the default pf ruleset and, if pf was not
 // enabled before we started, turns it back off.
-func DisableIPMasquerading(_ string) error {
+func DisableIPMasquerading(_ logging.FieldLogger, _ string) error {
 	pfMu.Lock()
 	defer pfMu.Unlock()
 

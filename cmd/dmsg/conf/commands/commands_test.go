@@ -1,4 +1,4 @@
-// Package commands cmd/dmsg/conf/commands/commands_test.go
+// Package commands cmd/dmsg/conf/commands/commands_test.go c1-net-dmsg
 //
 // These tests cover the package's pure, deterministic logic: parsing a dmsg URL
 // to a public key, formatting discovery entries into the services-config

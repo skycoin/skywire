@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/group_handlers_test.go
+// Package commands cmd/apps/skychat/commands/group_handlers_test.go c4-app-chat
 //
 // Unit coverage for the browser-facing /group HTTP proxy: each handler
 // relays to the visor's GroupX RPC (a fake here) and shapes the response.

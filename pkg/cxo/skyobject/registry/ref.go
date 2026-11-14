@@ -18,8 +18,8 @@ type Ref struct {
 	Hash cipher.SHA256 // Hash of CX object
 }
 
-// IsBlank returns true if the Ref is blank
-func (r *Ref) IsBlank() bool {
+// Blank returns true if the Ref is blank
+func (r *Ref) Blank() bool {
 	return r.Hash == (cipher.SHA256{})
 }
 
@@ -36,7 +36,7 @@ func (r *Ref) String() string {
 // Value of the Ref
 func (r *Ref) Value(pack Pack, obj any) (err error) {
 
-	if true == r.IsBlank() { //nolint:staticcheck
+	if true == r.Blank() { //nolint:staticcheck
 		return ErrReferenceRepresentsNil
 	}
 

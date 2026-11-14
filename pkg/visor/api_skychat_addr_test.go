@@ -8,6 +8,7 @@
 package visor
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -88,5 +89,18 @@ func TestSetAppAddressRejectsNonsense(t *testing.T) {
 		if err := validateAppAddress(addr); err == nil {
 			t.Errorf("validateAppAddress(%q) accepted, want rejection", addr)
 		}
+	}
+}
+
+// After a restart the visor must send the token skychat was started with, or
+// the hypervisor's chat page hits skychat's password prompt.
+func TestSkychatInternalTokenReusesSavedArg(t *testing.T) {
+	skychatTokenOnce = sync.Once{}
+	skychatToken = ""
+	t.Cleanup(func() { skychatTokenOnce = sync.Once{}; skychatToken = "" })
+
+	v := visorWithSkychatArgs([]string{"--internal-token", "saved-token", "--password-file", "x"})
+	if got := v.skychatInternalToken(); got != "saved-token" {
+		t.Fatalf("skychatInternalToken() = %q, want the saved token", got)
 	}
 }

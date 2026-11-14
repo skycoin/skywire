@@ -1,4 +1,4 @@
-// Package dmsgdisc rundmsg_test.go: integration coverage for runDMSG, driven
+// Package dmsgdisc pkg/services/dmsgdisc/rundmsg_test.go integration coverage for runDMSG, driven
 // against an in-memory dmsg server with a mock discovery store (so no redis
 // is needed). runDMSG takes the *api.API as a parameter, letting us bypass
 // Run's redis-backed openStore entirely.

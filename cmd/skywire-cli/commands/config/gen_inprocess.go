@@ -86,7 +86,7 @@ func resetFlags(fs *pflag.FlagSet) {
 func resetGenRunState() {
 	conf = new(visorconfig.V1)
 	oldConfCache = nil
-	isOutUnset = false
+	outUnset = false
 	confPath = ""
 	configName = ""
 }

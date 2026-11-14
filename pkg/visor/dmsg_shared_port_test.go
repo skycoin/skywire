@@ -1,4 +1,4 @@
-// Package visor pkg/visor/dmsg_shared_port_test.go c3-visor-core
+// Package visor pkg/visor/dmsg_shared_port_test.go c3-vis-core
 package visor
 
 import (

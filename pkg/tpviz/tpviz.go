@@ -1,4 +1,4 @@
-// Package tpviz pkg/tpviz/tpviz.go c4-app-rewards
+// Package tpviz pkg/tpviz/tpviz.go c3-app-rewards
 package tpviz
 
 import (
@@ -226,13 +226,13 @@ type VisorOverview struct {
 // TransportSummary contains transport summary data.
 // This mirrors visor.TransportSummary but is defined locally.
 type TransportSummary struct {
-	ID      uuid.UUID           `json:"id"`
-	Local   cipher.PubKey       `json:"local_pk"`
-	Remote  cipher.PubKey       `json:"remote_pk"`
-	Type    tptypes.Type        `json:"type"`
-	Log     *transport.LogEntry `json:"log,omitempty"`
-	IsSetup bool                `json:"is_setup"`
-	Label   transport.Label     `json:"label"`
+	ID     uuid.UUID           `json:"id"`
+	Local  cipher.PubKey       `json:"local_pk"`
+	Remote cipher.PubKey       `json:"remote_pk"`
+	Type   tptypes.Type        `json:"type"`
+	Log    *transport.LogEntry `json:"log,omitempty"`
+	Setup  bool                `json:"is_setup"`
+	Label  transport.Label     `json:"label"`
 }
 
 // TPSAPI defines the interface for the embedded Transport Setup Node.
@@ -394,7 +394,7 @@ type LocalTransport struct {
 	RemotePK  string `json:"remote_pk"`
 	Type      string `json:"type"`
 	Label     string `json:"label,omitempty"`
-	IsSetup   bool   `json:"is_setup"`
+	Setup     bool   `json:"is_setup"`
 	SentBytes uint64 `json:"sent_bytes"`
 	RecvBytes uint64 `json:"recv_bytes"`
 	// Bandwidth deltas for animation
@@ -1538,7 +1538,7 @@ func (s *Server) refreshVisorData() {
 			RemotePK: tp.Remote.String(),
 			Type:     string(tp.Type),
 			Label:    string(tp.Label),
-			IsSetup:  tp.IsSetup,
+			Setup:    tp.Setup,
 		}
 		if tp.Log != nil {
 			if tp.Log.RecvBytes != nil {
@@ -1653,10 +1653,10 @@ func (s *Server) handleLocalVisor(w http.ResponseWriter, r *http.Request) {
 
 	// Refresh data on each request (only when visor API is set via SetVisorAPI - embedded mode)
 	s.visorMu.RLock()
-	hasAPI := s.visorAPI != nil
+	withAPI := s.visorAPI != nil
 	s.visorMu.RUnlock()
 
-	if hasAPI {
+	if withAPI {
 		s.refreshVisorData()
 	}
 
@@ -1696,10 +1696,10 @@ func (s *Server) handleLocalVisorWS(w http.ResponseWriter, r *http.Request) {
 
 	// Send initial data immediately
 	s.visorMu.RLock()
-	hasAPI := s.visorAPI != nil
+	withAPI := s.visorAPI != nil
 	s.visorMu.RUnlock()
 
-	if hasAPI {
+	if withAPI {
 		s.refreshVisorData()
 	}
 
@@ -2048,18 +2048,18 @@ func (s *Server) startLocalVisorBroadcast() {
 		case <-ticker.C:
 			// Only broadcast if there are connected clients and visor API is available
 			s.wsClientsMu.RLock()
-			hasClients := len(s.wsClients) > 0
+			connected := len(s.wsClients) > 0
 			s.wsClientsMu.RUnlock()
 
-			if !hasClients {
+			if !connected {
 				continue
 			}
 
 			s.visorMu.RLock()
-			hasAPI := s.visorAPI != nil
+			withAPI := s.visorAPI != nil
 			s.visorMu.RUnlock()
 
-			if hasAPI {
+			if withAPI {
 				s.refreshVisorData()
 				s.broadcastLocalVisorData()
 			}

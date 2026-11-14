@@ -425,7 +425,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
     if (this.boundVpnPk === this.node.localPk) {
       return;
     }
-    const url = '/#/vpn/' + this.node.localPk + '/status';
+    const url = '/angular/#/vpn/' + this.node.localPk + '/status';
     this.vpnIframeUrl = this.sanitizer.bypassSecurityTrustResourceUrl(url);
     this.vpnFullWindowUrl = window.location.origin + url;
     this.boundVpnPk = this.node.localPk;

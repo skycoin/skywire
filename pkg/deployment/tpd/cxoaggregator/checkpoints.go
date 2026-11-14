@@ -1,4 +1,4 @@
-// Package cxoaggregator pkg/deployment/tpd/cxoaggregator/checkpoints.go c4-net-discovery
+// Package cxoaggregator pkg/deployment/tpd/cxoaggregator/checkpoints.go c3-net-discovery
 //
 // Checkpoint rows are applied in short open phases on a wall-clock cycle,
 // not on every Root. Unpaced they were ~3.2k match scripts a minute and

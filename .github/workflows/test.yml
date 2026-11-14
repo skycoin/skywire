@@ -39,21 +39,19 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: 'stable'
-          cache: true
-          cache-dependency-path: go.sum
+          go-version-file: go.mod
+          cache: false
 
       # Persist the Go build/test cache ($GOCACHE) across runs so unchanged
       # packages return cached test results ("ok ... (cached)") on incremental
-      # pushes. setup-go's own cache keys GOCACHE on go.sum only (too coarse for
-      # the test cache); the per-sha key below saves a fresh entry each run and
-      # restore-keys pull the most recent prior cache.
+      # pushes. setup-go's own cache is off: it stores the same directory again
+      # under a key that never changes, and -mod=vendor needs no module cache.
       - name: Locate Go build cache
         id: gocache
         run: echo "dir=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
 
-      - name: Cache Go build/test cache
-        uses: actions/cache@v4
+      - name: Restore Go build/test cache
+        uses: actions/cache/restore@v4
         with:
           path: ${{ steps.gocache.outputs.dir }}
           key: ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}-${{ github.sha }}
@@ -63,7 +61,7 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          version: v2.15.0
 
       - name: Install Dependencies
         shell: bash
@@ -81,6 +79,20 @@ jobs:
         if: always()
         run: make check-ci
 
+      # Go marks a cache entry it uses, so what is still old was not needed by
+      # this run. Without this the cache grows on every push.
+      - name: Drop cache entries this run did not use
+        if: github.event_name == 'push'
+        run: find "$(go env GOCACHE)" -type f -mmin +120 -delete
+
+      # Only develop pushes save the cache, and PRs restore develop's copy.
+      - name: Save Go build/test cache
+        if: github.event_name == 'push'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.gocache.outputs.dir }}
+          key: ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}-${{ github.sha }}
+
   # The mux emulator: the router scenarios and the stream bench, which reproduce
   # the live rig's weaknesses in-process. Its own job so a mux regression is a
   # red lane with the cell name in it, not a line buried in the linux suite.
@@ -94,7 +106,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: 'stable'
+          go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
 
@@ -119,9 +131,44 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: 'stable'
-          cache: true
-          cache-dependency-path: go.sum
+          go-version-file: go.mod
+          cache: false
+
+      - name: Locate Go build cache
+        id: gocache
+        run: echo "dir=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Go build cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.gocache.outputs.dir }}
+          key: ${{ runner.os }}-e2e-gobuild-${{ hashFiles('**/go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-e2e-gobuild-${{ hashFiles('**/go.sum') }}-
+            ${{ runner.os }}-e2e-gobuild-
+
+      # Compiled here, where the build cache is, and not in the image build
+      # or the test container, which both start from nothing on every run.
+      - name: Build the visor and the test binary
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          mkdir -p _e2e
+          go build -mod=vendor -ldflags="-w -s" -o _e2e/skywire .
+          go test -mod=vendor -c -o _e2e/integration.test ./internal/integration
+          echo "E2E_PREBUILT=_e2e/skywire" >> "$GITHUB_ENV"
+          echo "E2E_TEST_BIN=_e2e/integration.test" >> "$GITHUB_ENV"
+
+      - name: Drop cache entries this run did not use
+        if: github.event_name == 'push'
+        run: find "$(go env GOCACHE)" -type f -mmin +120 -delete
+
+      - name: Save Go build cache
+        if: github.event_name == 'push'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.gocache.outputs.dir }}
+          key: ${{ runner.os }}-e2e-gobuild-${{ hashFiles('**/go.sum') }}-${{ github.sha }}
 
       - name: Setup SSH Key, Build and Run E2E
         shell: bash
@@ -154,9 +201,8 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: 'stable'
-          cache: true
-          cache-dependency-path: go.sum
+          go-version-file: go.mod
+          cache: false
 
       # Persist the Go build/test cache ($GOCACHE) across runs so unchanged
       # packages return cached test results on incremental pushes (see linux job).
@@ -164,8 +210,8 @@ jobs:
         id: gocache
         run: echo "dir=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
 
-      - name: Cache Go build/test cache
-        uses: actions/cache@v4
+      - name: Restore Go build/test cache
+        uses: actions/cache/restore@v4
         with:
           path: ${{ steps.gocache.outputs.dir }}
           key: ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}-${{ github.sha }}
@@ -173,9 +219,13 @@ jobs:
             ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}-
             ${{ runner.os }}-gobuild-
 
+      # /bin/bash is bash 3.2 on macOS, which the script must keep working with.
+      - name: Check descriptors
+        run: /bin/bash scripts/check-descriptors.sh
+
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          version: v2.15.0
 
       # golangci-lint already ran via the action above; don't re-run it inside the
       # test step, where its exit code would abort before `go test` and hide any
@@ -191,6 +241,17 @@ jobs:
         if: always()
         run: GO111MODULE=on go test -cover -timeout=25m -mod=vendor -tags 'no_ci' ./internal/... ./pkg/... ./cmd/skywire-cli/commands/config/...
 
+      - name: Drop cache entries this run did not use
+        if: github.event_name == 'push'
+        run: find "$(go env GOCACHE)" -type f -mmin +120 -delete
+
+      - name: Save Go build/test cache
+        if: github.event_name == 'push'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.gocache.outputs.dir }}
+          key: ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}-${{ github.sha }}
+
   windows:
     if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == '0magnet/skywire') }}
     runs-on: windows-latest
@@ -201,7 +262,7 @@ jobs:
       # never reads the module cache.
       - uses: actions/setup-go@v7
         with:
-          go-version: 'stable'
+          go-version-file: go.mod
           cache: false
 
       # Persist the Go build/test cache ($GOCACHE) across runs so unchanged
@@ -220,12 +281,16 @@ jobs:
             ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}-
             ${{ runner.os }}-gobuild-
 
+      - name: Check descriptors
+        shell: bash
+        run: bash scripts/check-descriptors.sh
+
       # The lint make lint-windows runs, so the make step below only tests.
       - uses: golangci/golangci-lint-action@v9
         env:
           CGO_ENABLED: '0'
         with:
-          version: latest
+          version: v2.15.0
           args: -c .golangci.yml --build-tags=withoutsystray,withoutgotop
 
       - name: Install Requirements
@@ -240,6 +305,11 @@ jobs:
           $env:GO111MODULE='on'
           make test-windows
         shell: powershell
+
+      - name: Drop cache entries this run did not use
+        if: github.event_name == 'push'
+        shell: bash
+        run: find "$(go env GOCACHE)" -type f -mmin +120 -delete
 
       # Only develop pushes save the cache. Uploading it took 7 min on every
       # PR run, and PRs restore develop's copy.
@@ -264,7 +334,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: 'stable'
+          go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
 
@@ -293,7 +363,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: 'stable'
+          go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
 
@@ -340,7 +410,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: 'stable'
+          go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
 
@@ -365,7 +435,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: 'stable'
+          go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
 
@@ -398,7 +468,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: 'stable'
+          go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
 
@@ -421,7 +491,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: 'stable'
+          go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
 
@@ -469,7 +539,7 @@ jobs:
       # requires (scripts/sync-skycoin-wallet.sh), so building it needs Go.
       - uses: actions/setup-go@v7
         with:
-          go-version: 'stable'
+          go-version-file: go.mod
           cache: false
 
       - uses: browser-actions/setup-chrome@v2
@@ -527,7 +597,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: 'stable'
+          go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
 

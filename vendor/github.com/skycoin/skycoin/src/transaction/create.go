@@ -1,3 +1,5 @@
+// Package transaction src/transaction/create.go c1-coin-chain
+//
 /*
 Package transaction provides methods for creating transactions
 
@@ -164,8 +166,7 @@ func create(p Params, auxs coin.AddressUxOuts, headTime uint64, callCount int) (
 			}
 		default:
 			// This should have been caught by params.Validate()
-			logger.Panic("Invalid HoursSelection.Mode")
-			return nil, nil, errors.New("Invalid HoursSelection.Type")
+			return nil, nil, errors.New("Invalid HoursSelection.Mode")
 		}
 
 		for i, out := range p.To {
@@ -178,7 +179,6 @@ func create(p Params, auxs coin.AddressUxOuts, headTime uint64, callCount int) (
 
 	default:
 		// This should have been caught by params.Validate()
-		logger.Panic("Invalid HoursSelection.Type")
 		return nil, nil, errors.New("Invalid HoursSelection.Type")
 	}
 
@@ -397,7 +397,7 @@ func create(p Params, auxs coin.AddressUxOuts, headTime uint64, callCount int) (
 }
 
 func verifyCreatedUnignedInvariants(p Params, txn *coin.Transaction, inputs []UxBalance) error {
-	if !txn.IsFullyUnsigned() {
+	if !txn.FullyUnsigned() {
 		return errors.New("Transaction is not fully unsigned")
 	}
 

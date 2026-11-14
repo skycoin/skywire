@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package cmdutil pkg/cmdutil/signal_js.go c0-com-util
+// Package cmdutil pkg/cmdutil/signal_js.go c1-com-util
 //
 // js/wasm: the browser has no POSIX signals; os.Interrupt is the only
 // os.Signal value the runtime defines, and nothing ever delivers it. Kept so

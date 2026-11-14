@@ -1,6 +1,6 @@
 //go:build !windows
 
-// Package doc cmd/skywire/commands/doc/doc_runcapture_unix_test.go: tests for
+// Package doc cmd/skywire/commands/doc/doc_runcapture_unix_test.go tests for
 // the runCapture exec wrapper. These are Unix-only: the stub "skywire" binary
 // is a /bin/sh script (shebang + mode 0755), which Windows cannot exec — it has
 // no portable shell-script equivalent, so the runCapture path is exercised on

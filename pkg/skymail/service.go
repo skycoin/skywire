@@ -1,3 +1,4 @@
+// Package skymail pkg/skymail/service.go c3-app-mail
 package skymail
 
 import (
@@ -30,6 +31,8 @@ type Host struct {
 	Listen func(network string) (net.Listener, error)
 	// Dialers reach a peer's Port, keyed by address suffix.
 	Dialers map[string]skymailbridge.Dialer
+	// Local reaches a peer on the local network over a direct link.
+	Local skymailbridge.Dialer
 	// PeerPK names the authenticated remote PK of an inbound connection.
 	PeerPK func(net.Conn) (cipher.PubKey, bool)
 	// Sealer seals and opens envelopes as PK. Nil turns sealed mail off.
@@ -85,6 +88,7 @@ func StartService(ctx context.Context, cfg ServiceConfig) (*Service, error) {
 		PK:        cfg.PK,
 		PeerPK:    cfg.PeerPK,
 		Dialers:   cfg.Dialers,
+		Local:     cfg.Local,
 		Limits:    saved.Over(cfg.Base),
 		Outbox:    cfg.Outbox,
 		OnDeliver: cfg.OnDeliver,
@@ -160,7 +164,7 @@ func (s *Service) Reload() error {
 	}
 	s.mb.SetLimits(saved.Over(s.cfg.Base))
 	s.relay.Store(&saved.Relay)
-	if s.mb.HasOutbox() {
+	if s.mb.OutboxEnabled() {
 		return s.mb.Retry("")
 	}
 	return nil
@@ -199,17 +203,17 @@ func (s *Service) RelayFor() ([]cipher.PubKey, bool) {
 
 // Status is the state of a running mailbox.
 type Status struct {
-	Address     string          `json:"address"`
-	AddressDmsg string          `json:"address_dmsg"`
-	Dir         string          `json:"dir"`
-	Limits      Limits          `json:"limits"`
-	Usage       int64           `json:"usage"`
-	Whitelist   []cipher.PubKey `json:"whitelist"`
-	Unread      int             `json:"unread"`
-	Total       int             `json:"total"`
-	HasOutbox   bool            `json:"has_outbox"`
-	Outbox      int             `json:"outbox"`
-	Sealing     bool            `json:"sealing"`
+	Address       string          `json:"address"`
+	AddressDmsg   string          `json:"address_dmsg"`
+	Dir           string          `json:"dir"`
+	Limits        Limits          `json:"limits"`
+	Usage         int64           `json:"usage"`
+	Whitelist     []cipher.PubKey `json:"whitelist"`
+	Unread        int             `json:"unread"`
+	Total         int             `json:"total"`
+	OutboxEnabled bool            `json:"has_outbox"`
+	Outbox        int             `json:"outbox"`
+	Sealing       bool            `json:"sealing"`
 
 	Helpers         []cipher.PubKey `json:"helpers"`
 	HelpersDefault  bool            `json:"helpers_default"`
@@ -221,17 +225,17 @@ type Status struct {
 func (s *Service) Status() Status {
 	mb := s.mb
 	st := Status{
-		Address:     mb.Address("", Suffixes[0]),
-		AddressDmsg: mb.Address("", Suffixes[1]),
-		Dir:         s.cfg.Dir,
-		Limits:      mb.Limits(),
-		Whitelist:   mb.Whitelist(),
-		HasOutbox:   mb.HasOutbox(),
-		Outbox:      mb.Queued(),
-		Sealing:     mb.sealing(),
+		Address:       mb.Address("", Suffixes[0]),
+		AddressDmsg:   mb.Address("", Suffixes[1]),
+		Dir:           s.cfg.Dir,
+		Limits:        mb.Limits(),
+		Whitelist:     mb.Whitelist(),
+		OutboxEnabled: mb.OutboxEnabled(),
+		Outbox:        mb.Queued(),
+		Sealing:       mb.sealing(),
 	}
 	st.Usage, _ = mb.Usage() //nolint:errcheck // a status line, not a decision
-	if st.HasOutbox {
+	if st.OutboxEnabled {
 		st.Helpers, st.HelpersDefault = s.helpers()
 		st.RelayFor, st.RelayForDefault = s.RelayFor()
 	}

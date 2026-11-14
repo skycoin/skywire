@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package deskhost pkg/wasmhv/deskhost/desk_tour_js.go c4-wasm-desk
+// Package deskhost pkg/wasmhv/deskhost/desk_tour_js.go c3-vis-wasm
 //
 // The desk tour: a guided walk through the DESKTOP a visor serves — the
 // launcher, the mesh browser, the shell, the shared filesystem, mail, the
@@ -31,7 +31,7 @@ const tourAppName = "tour"
 
 // dashboardTourURL opens the dashboard with its own tour running, which is
 // where this one hands off.
-const dashboardTourURL = "http://vnet:8001/?embed=1&tour=1#/?embed=1"
+const dashboardTourURL = "http://vnet:8001/angular/?embed=1&tour=1#/?embed=1"
 
 // deskPanel is the taskbar, so the launcher step can open its menu.
 var deskPanel *desk.Panel

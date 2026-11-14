@@ -7,9 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"runtime"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -155,7 +153,7 @@ func (p *Proc) Logs() appcommon.LogStore {
 
 // StartTime returns app start time.
 func (p *Proc) StartTime() (time.Time, bool) {
-	if !p.IsRunning() {
+	if !p.Running() {
 		return time.Time{}, false
 	}
 
@@ -238,12 +236,7 @@ func (p *Proc) startInProcess() error {
 	configReadDone := appcommon.AcquireInternalAppStart(p.conf.ProcKey)
 
 	envs := p.conf.Envs()
-	for _, env := range envs {
-		parts := strings.SplitN(env, "=", 2)
-		if len(parts) == 2 {
-			_ = os.Setenv(parts[0], parts[1]) //nolint:errcheck
-		}
-	}
+	appcommon.SetInternalAppEnv(p.conf.ProcKey, envs)
 
 	runDone := make(chan struct{})
 	go func() {
@@ -260,7 +253,7 @@ func (p *Proc) startInProcess() error {
 				p.log.Errorf("App %s panicked: %v", p.conf.AppName, r)
 			}
 
-			appcommon.UnsetInternalAppEnv(envs)
+			appcommon.UnsetInternalAppEnv(p.conf.ProcKey, envs)
 
 			// An in-process app exiting on its own (RunFunc returned or
 			// panicked) is the equivalent of an external app's process
@@ -445,8 +438,8 @@ func (p *Proc) Wait() error {
 	return p.waitErr
 }
 
-// IsRunning checks whether application cmd is running.
-func (p *Proc) IsRunning() bool {
+// Running checks whether application cmd is running.
+func (p *Proc) Running() bool {
 	return p.isRunning.Load() == 1
 }
 
@@ -588,7 +581,7 @@ func (p *Proc) Error() string {
 
 // ConnectionSummary sums up the connection stats.
 type ConnectionSummary struct {
-	IsAlive            bool          `json:"is_alive"`
+	Alive              bool          `json:"is_alive"`
 	Latency            time.Duration `json:"latency"`
 	UploadSpeed        uint32        `json:"upload_speed"`
 	DownloadSpeed      uint32        `json:"download_speed"`
@@ -622,15 +615,15 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 
 		wrappedConn := conn.(*appnet.WrappedConn)
 
-		skywireConn, isSkywireConn := wrappedConn.Conn.(*appnet.SkywireConn)
-		if !isSkywireConn {
+		skywireConn, skywireOK := wrappedConn.Conn.(*appnet.SkywireConn)
+		if !skywireOK {
 			summaries = append(summaries, ConnectionSummary{
 				Error: "Can't get such info from this conn",
 			})
 			return true
 		}
 		summaries = append(summaries, ConnectionSummary{
-			IsAlive: skywireConn.IsAlive(),
+			Alive: skywireConn.Alive(),
 			// Latency in summary is expected to be in ms and not ns so we change the base to ms
 			Latency:            time.Duration(skywireConn.Latency().Milliseconds()),
 			UploadSpeed:        skywireConn.UploadSpeed(),

@@ -1,6 +1,6 @@
 //go:build !js
 
-// Package cmdutil pkg/cmdutil/signal_platform_native.go c0-com-util
+// Package cmdutil pkg/cmdutil/signal_platform_native.go c1-com-util
 package cmdutil
 
 import "os"

@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/history_wiring_test.go
+// Package commands cmd/apps/skychat/commands/history_wiring_test.go c4-app-chat
 //
 // Unit coverage for the persistence wiring that doesn't need a running visor:
 // opening the bolt history store from CLI flags, loading a PK whitelist,

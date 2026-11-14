@@ -197,7 +197,7 @@ func (m *routeMux) unidirFlipTick() (flipped, changed bool) {
 	var up, down float64      // ABSOLUTE upload / download bytes/sec
 	m.legMu.RLock()
 	for i, s := range stats {
-		if i < len(m.standby) && m.standby[i] {
+		if i < len(m.legs) && m.legs[i].standby {
 			continue // active legs only
 		}
 		if initiator {
@@ -439,7 +439,7 @@ func (m *routeMux) forwardFanoutLegs(legs []groupLeg, cur int) []int {
 			continue
 		}
 		tp := legs[idx].tp
-		if tp == nil || tp.IsClosed() || !m.legReadyAt(idx) {
+		if tp == nil || tp.Closed() || !m.legReadyAt(idx) {
 			continue
 		}
 		cand = append(cand, idx)
@@ -583,7 +583,7 @@ func (m *routeMux) selectByDirection(legs []groupLeg, wantDirect bool, dst, src 
 	// end's send direction. The tiers below layer readiness/standby on top.
 	classOK := func(idx int) bool {
 		tp := legs[idx].tp
-		return tp != nil && !tp.IsClosed() &&
+		return tp != nil && !tp.Closed() &&
 			legIsDirect(tp, dst, src) == wantDirect
 	}
 	start := int(m.tpIndex.Add(1) - 1)

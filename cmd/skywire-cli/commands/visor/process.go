@@ -135,7 +135,7 @@ severed call.`,
 		// re-init, so don't treat that as fatal — the state is polled below.
 		go func() { _ = rpcClient.Resume() }() //nolint:errcheck
 
-		// Poll IsSuspended on fresh connections until it clears (resume
+		// Poll Suspended on fresh connections until it clears (resume
 		// finished flipping state) or we give up waiting.
 		deadline := time.Now().Add(45 * time.Second)
 		for time.Now().Before(deadline) {
@@ -144,7 +144,7 @@ severed call.`,
 			if e != nil {
 				continue
 			}
-			suspended, e := rc.IsSuspended()
+			suspended, e := rc.Suspended()
 			if e == nil && !suspended {
 				internal.PrintOutput(cmd.Flags(), "Visor resumed", fmt.Sprintln("Visor resumed"))
 				return
@@ -163,7 +163,7 @@ var isSuspendedCmd = &cobra.Command{
 		if err != nil {
 			cmdutil.Exit(1)
 		}
-		suspended, err := rpcClient.IsSuspended()
+		suspended, err := rpcClient.Suspended()
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error querying suspend state: %v", err))
 		}

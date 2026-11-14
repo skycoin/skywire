@@ -120,3 +120,37 @@ func (rg *RouteGroup) setLegGroupsFor(shown []uuid.UUID, groups []int) {
 	}
 	rg.mux.SetLegGroups(groups)
 }
+
+// syncMuxLegsLocked gives the mux a record for every leg, named by its
+// transport ID. Call it after every append to rg.legs. Caller holds rg.mu.
+func (rg *RouteGroup) syncMuxLegsLocked() {
+	if rg.mux != nil {
+		rg.mux.syncLegs(rg.legIDsLocked())
+	}
+}
+
+// compactMuxLocked drops indices from the mux after rg.legs lost the same legs.
+// A parked leg left in the primary slot goes active, so the peer is told.
+func (rg *RouteGroup) compactMuxLocked(indices ...int) {
+	if rg.mux == nil || !rg.mux.removeLegs(indices...) || len(rg.legs) == 0 {
+		return
+	}
+	tp := rg.legs[0].tp
+	id := tpEntryID(tp)
+	rg.forgetPeerPark(id)
+	rg.noteLegEvent(MuxEventLegPromoted, "parked leg took the primary slot", MuxByAdaptive,
+		0, len(rg.legs), tp, nil)
+	go rg.sendLegStateByID(id, false)
+}
+
+// forgetLeg drops what the group keeps by transport ID for a leg that has left
+// it, so a later leg on the same transport starts clean. Caller may hold rg.mu.
+func (rg *RouteGroup) forgetLeg(id uuid.UUID) {
+	rg.forgetPeerPark(id)
+	rg.adaptiveParkMu.Lock()
+	delete(rg.adaptiveParks, id)
+	rg.adaptiveParkMu.Unlock()
+	if rg.mux != nil {
+		rg.mux.forgetLeg(id)
+	}
+}

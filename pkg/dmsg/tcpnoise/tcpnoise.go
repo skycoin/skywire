@@ -1,4 +1,4 @@
-// Package tcpnoise pkg/dmsg/tcpnoise/tcpnoise.go c4-vis-cli
+// Package tcpnoise pkg/dmsg/tcpnoise/tcpnoise.go c1-net-dmsg
 // pkg/dmsg/dmsgpty so apps other than dmsgpty (skychat first, then
 // app skynet / app skysocks etc. per #2706) can build TCP-direct
 // transports on the same primitive without dragging in a dmsgpty

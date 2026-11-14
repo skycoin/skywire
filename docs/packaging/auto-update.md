@@ -142,8 +142,8 @@ Persistent=true
 1. Sources `/etc/skywire.conf` for its settings (`SKYENV`).
 2. Resolves the target from `UPDATE_CHANNEL` (default `develop` = the tip of
    the `develop` branch). Also accepts `latest` (the latest tagged release),
-   an explicit `<commit-hash>`, or `binary` / `binary-develop` / `binary-master`
-   (download a prebuilt linux binary from the rolling `<branch>-latest` GitHub
+   an explicit `<commit-hash>`, or `binary` / `binary-develop`
+   (download a prebuilt linux binary from the rolling `develop-latest` GitHub
    pre-release, verified against `SHA256SUMS`, instead of building from source).
 3. Compares that target to the running binary (`skywire -b`) and exits early
    if nothing changed.
@@ -259,9 +259,9 @@ and a container recreate can each clobber the others' binary.
 ## How the prebuilt binaries are produced
 
 `.github/workflows/publish-binary.yml` builds a compressed linux binary
-(amd64, arm64, armv7) on every merge to `develop` and `master` and publishes it
-to a single rolling GitHub **pre-release** tagged `<branch>-latest` (e.g.
-`develop-latest`), replaced in place on each merge. Each release ships a
+(amd64, arm64, armv7) on every merge to `develop` and publishes it
+to a single rolling GitHub **pre-release** tagged `develop-latest`,
+replaced in place on each merge. Each release ships a
 `SHA256SUMS` file; the `binary*` channels download the matching-arch archive and
 verify it against those checksums before installing.
 

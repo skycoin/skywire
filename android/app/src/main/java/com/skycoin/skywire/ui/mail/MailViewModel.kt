@@ -26,6 +26,7 @@ import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.DeepLinks
 import com.skycoin.skywire.core.MailContact
 import com.skycoin.skywire.core.MailContacts
+import com.skycoin.skywire.core.NotificationBridge
 import com.skycoin.skywire.core.PhoneContacts
 import com.skycoin.skywire.core.SkymailAddress
 import com.skycoin.skywire.core.SkywirePaths
@@ -42,7 +43,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InterruptedIOException
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import java.util.Base64
+import java.util.Locale
 
 /** A file picked for the draft, read in full: a Skymail message is 1 MiB by default. */
 class DraftAttachment(val name: String, val mime: String, val bytes: ByteArray)
@@ -95,6 +101,9 @@ data class MailUiState(
 
     /** The address to hand out: dmsg needs no route, which a phone rarely has. */
     val myAddress: String? get() = status?.addressDmsg?.takeIf { it.isNotEmpty() } ?: status?.address
+
+    /** The largest message the mailbox takes, counting each file at its size. */
+    val messageLimit: Long get() = status?.limits?.maxMessageSize?.takeIf { it > 0 } ?: DEFAULT_MAX_MESSAGE
 }
 
 /**
@@ -154,6 +163,10 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { api.mailList(folder) }
             .onSuccess { list ->
                 mutable.update { if (folder == MailFolder.SENT) it.copy(sent = list) else it.copy(inbox = list) }
+                if (folder != MailFolder.SENT) {
+                    val read = list.filter { it.seen }.mapTo(HashSet()) { it.id }
+                    NotificationBridge.clearMail(getApplication<Application>()) { it in read }
+                }
             }
             .onFailure { e -> mutable.update { it.copy(error = e.message) } }
     }
@@ -165,6 +178,7 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             runCatching { api.mailRead(folder, summary.id) }
                 .onSuccess { m ->
+                    NotificationBridge.clearMail(getApplication<Application>()) { it == summary.id }
                     mutable.update { s ->
                         s.copy(
                             open = s.open?.takeIf { it.summary.id == summary.id }?.copy(message = m),
@@ -189,6 +203,7 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             runCatching { api.mailDelete(open.folder, open.summary.id) }
                 .onSuccess {
+                    NotificationBridge.clearMail(getApplication<Application>()) { it == open.summary.id }
                     mutable.update { s ->
                         s.copy(
                             busy = false,
@@ -241,7 +256,7 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
                     to = to,
                     skynet = to.trimEnd().trimEnd('>').endsWith(SkymailAddress.SKYNET, ignoreCase = true),
                     subject = subject,
-                    body = "\n\n" + string(R.string.mail_reply_header, m.date, m.from) + "\n" + quoted,
+                    body = "\n\n" + string(R.string.mail_reply_header, localDate(m.date), m.from) + "\n" + quoted,
                     inReplyTo = m.messageId,
                 ),
             )
@@ -266,18 +281,16 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
         if (uris.isEmpty()) return
         viewModelScope.launch {
             val picked = withContext(Dispatchers.IO) { uris.mapNotNull(::readAttachment) }
-            val limit = mutable.value.status?.limits?.maxMessageSize?.takeIf { it > 0 } ?: DEFAULT_MAX_MESSAGE
+            val limit = mutable.value.messageLimit
             mutable.update { s ->
                 val draft = s.draft ?: return@update s
                 val all = draft.attachments + picked
-                // The wire size is what the receiver enforces. The text and
-                // headers ride along in the envelope allowance.
-                val encoded = all.sumOf { attachmentWireSize(it.bytes.size.toLong()) } + ENVELOPE_BYTES
-                if (encoded > limit) {
+                val total = draftFilesSize(all)
+                if (total > limit) {
                     // Whole KB on both sides: in MB a mail just over 1 MB and the
                     // 1 MB limit both read "1.0 MB".
                     val kb = { n: Long -> "%,d KB".format((n + 1023) / 1024) }
-                    s.copy(notice = string(R.string.mail_attachments_too_big, kb(encoded), kb(limit)))
+                    s.copy(notice = string(R.string.mail_attachments_too_big, kb(total), kb(limit)))
                 } else {
                     s.copy(draft = draft.copy(attachments = all))
                 }
@@ -579,26 +592,38 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun string(id: Int, vararg args: Any): String = getApplication<Application>().getString(id, *args)
 
+    private fun localDate(header: String): String =
+        localMailDate(header, ZoneId.systemDefault(), getApplication<Application>().resources.configuration.locales[0])
+
     private companion object {
         const val PING_INTERVAL_MS = 1_000L
         const val POLL_INTERVAL_MS = 15_000L
-        const val DEFAULT_MAX_MESSAGE = 10L shl 20
-        const val ENVELOPE_BYTES = 16 * 1024L
     }
 }
 
+private const val DEFAULT_MAX_MESSAGE = 10L shl 20
+
 /**
- * The bytes an attachment of [n] bytes takes in the sent mail: base64 in
- * 76-column lines, each ending CRLF, as compose in pkg/skymail/send.go writes it.
+ * What the message limit counts: the files as picked. The receiver allows for
+ * their base64 growth on top (WireSize in pkg/skymail/limits.go).
  */
-fun attachmentWireSize(n: Long): Long {
-    val encoded = (n + 2) / 3 * 4
-    return encoded + 2 * maxOf(1L, (encoded + 75) / 76)
-}
+fun draftFilesSize(attachments: List<DraftAttachment>): Long = attachments.sumOf { it.bytes.size.toLong() }
 
 /** A byte count as a person reads it. */
 fun formatBytes(n: Long): String = when {
     n >= 1L shl 20 -> "%.1f MB".format(n / (1024.0 * 1024.0))
     n >= 1L shl 10 -> "%.0f KB".format(n / 1024.0)
     else -> "$n B"
+}
+
+/**
+ * A Date header in [zone], or the header as it came when it does not parse.
+ * Senders write it in their own offset, often UTC (RFC 5322 section 3.3).
+ */
+fun localMailDate(header: String, zone: ZoneId, locale: Locale): String {
+    val text = header.substringBefore('(').trim()
+    val sent = runCatching { ZonedDateTime.parse(text, DateTimeFormatter.RFC_1123_DATE_TIME) }
+        .getOrNull() ?: return header
+    return sent.withZoneSameInstant(zone)
+        .format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).withLocale(locale))
 }

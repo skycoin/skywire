@@ -839,7 +839,7 @@ func (c *Cache) get(
 	return val, rc, err
 }
 
-// IsCached returns true if items with given key is cached.
+// Cached returns true if items with given key is cached.
 // The item is not value and a cached item may not exist
 // in the cache and in DB too. If an item is cached, then
 // it should not be removed from DB. Because of write-behind
@@ -851,11 +851,11 @@ func (c *Cache) get(
 //
 // CAUTION: callers must not be holding any lock that Cache.Set's
 // critical section can transitively reach. In particular, never
-// call IsCached from inside a bbolt.DB.Update callback — Cache.Set
-// takes c.mx then opens a bbolt RWTx, so calling IsCached from
+// call Cached from inside a bbolt.DB.Update callback — Cache.Set
+// takes c.mx then opens a bbolt RWTx, so calling Cached from
 // within a bbolt RWTx inverts that ordering and deadlocks. For
 // iteration patterns, use CachedKeys to snapshot once up front.
-func (c *Cache) IsCached(key cipher.SHA256) (yep bool) {
+func (c *Cache) Cached(key cipher.SHA256) (yep bool) {
 
 	c.mx.Lock()
 	defer c.mx.Unlock()
@@ -868,7 +868,7 @@ func (c *Cache) IsCached(key cipher.SHA256) (yep bool) {
 // by the cache. The returned set has no ties to the live map — once
 // the lock is released the cache can mutate freely, and callers can
 // hold the set while doing IO (e.g. bbolt iteration) without risking
-// the IsCached lock-ordering deadlock.
+// the Cached lock-ordering deadlock.
 //
 // The snapshot can race with Set: a key that's about to enter the
 // cache may be missing, and a key that just left may still appear.

@@ -1,6 +1,6 @@
 //go:build !tinygo && !(js && wasm)
 
-// Package network webrtc_transport_test.go: transport-level end-to-end test for
+// Package network pkg/transport/network/webrtc_transport_test.go transport-level end-to-end test for
 // the WEBRTC (webrtc) skywire transport. Unlike webrtc_native_test.go (which
 // drives only the raw pion carrier over a net.Pipe standing in for signaling)
 // this exercises the full webrtcClient path: dmsg signaling stream (dialSignaling

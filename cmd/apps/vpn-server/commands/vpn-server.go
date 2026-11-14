@@ -154,6 +154,7 @@ func RunVPNServer(ctx context.Context, args []string) error {
 		Whitelist:        whitelistPKs,
 		Secure:           secure,
 		NetworkInterface: networkIfc,
+		Log:              logger,
 	}
 	srv, err := vpn.NewServer(srvCfg, appCl)
 	if err != nil {

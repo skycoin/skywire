@@ -1,3 +1,4 @@
+// Package daemon src/daemon/pq_witnesses.go c2-coin-daemon
 package daemon
 
 import (
@@ -196,7 +197,7 @@ func (dm *Daemon) broadcastPQWitnesses(txns []coin.Transaction) error {
 	}
 	var addrs []string
 	for _, c := range dm.connections.all() {
-		if c.HasIntroduced() && c.ProtocolVersion >= pqWitnessProtocolVersion {
+		if c.Introduced() && c.ProtocolVersion >= pqWitnessProtocolVersion {
 			addrs = append(addrs, c.Addr)
 		}
 	}

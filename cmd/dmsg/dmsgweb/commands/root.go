@@ -1,4 +1,4 @@
-// Package commands cmd/dmsg/dmsgweb/commands/root.go c1-net-dmsg
+// Package commands cmd/dmsg/dmsgweb/commands/root.go c3-net-dmsg
 package commands
 
 import (
@@ -38,7 +38,7 @@ var (
 	proxyPort          uint
 	addProxy           string
 	resolveDmsgAddr    []string
-	isEnvs             bool
+	envs               bool
 	dmsgPort           []uint
 	wl                 []string
 	wlkeys             []cipher.PubKey

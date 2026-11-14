@@ -1,6 +1,6 @@
 //go:build windows
 
-// Package vpn pkg/vpn/os_windows.go c4-app-vpn
+// Package vpn pkg/vpn/os_windows.go c3-app-vpn
 package vpn
 
 import (
@@ -44,9 +44,9 @@ func (c *Client) SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 func (c *Client) SetupDNS() {
 	dnsSetupCmd := fmt.Sprintf(tunDNSCMDFmt, c.tun.Name(), c.cfg.DNSAddr)
 	if _, err := osutil.RunWithResult("cmd", "/C", dnsSetupCmd); err != nil {
-		fmt.Printf("Failed to setup DNS. Continue with machine default DNS setting: %s\n", err)
+		c.logger().WithError(err).Warn("Failed to setup DNS. Continue with machine default DNS setting")
 	} else {
-		fmt.Printf("DNS setup successful: %s\n", c.cfg.DNSAddr)
+		c.logger().Infof("DNS setup successful: %s", c.cfg.DNSAddr)
 	}
 }
 

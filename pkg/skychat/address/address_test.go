@@ -1,4 +1,4 @@
-// Package address pkg/skychat/address/address_test.go c4-app-chat
+// Package address pkg/skychat/address/address_test.go c3-app-chat
 // round-trip and rejection tests for the skychat:// grammar.
 //
 // The rejection half matters more than the happy path: this parser is
@@ -57,8 +57,8 @@ func TestParseDM(t *testing.T) {
 		if got.Kind() != KindDM {
 			t.Errorf("Parse(%q): kind = %q, want %q", in, got.Kind(), KindDM)
 		}
-		if got.IsGroup() {
-			t.Errorf("Parse(%q): IsGroup() = true, want false", in)
+		if got.TargetsGroup() {
+			t.Errorf("Parse(%q): TargetsGroup() = true, want false", in)
 		}
 	}
 }
@@ -83,8 +83,8 @@ func TestParseGroup(t *testing.T) {
 		if got.Kind() != KindGroup {
 			t.Errorf("Parse(%q): kind = %q, want %q", in, got.Kind(), KindGroup)
 		}
-		if !got.IsGroup() {
-			t.Errorf("Parse(%q): IsGroup() = false, want true", in)
+		if !got.TargetsGroup() {
+			t.Errorf("Parse(%q): TargetsGroup() = false, want true", in)
 		}
 	}
 }
@@ -124,12 +124,12 @@ func TestParseRejectsInviteWithSentinel(t *testing.T) {
 		if !errors.Is(err, ErrIsInvite) {
 			t.Errorf("Parse(%q): err = %v, want ErrIsInvite", in, err)
 		}
-		if !IsInvite(in) {
-			t.Errorf("IsInvite(%q) = false, want true", in)
+		if !LooksLikeInvite(in) {
+			t.Errorf("LooksLikeInvite(%q) = false, want true", in)
 		}
 	}
-	if IsInvite(Scheme + testPK) {
-		t.Error("IsInvite reported true for a plain address")
+	if LooksLikeInvite(Scheme + testPK) {
+		t.Error("LooksLikeInvite reported true for a plain address")
 	}
 }
 

@@ -1,4 +1,4 @@
-// Package appserver pkg/app/appserver/app_settings.go
+// Package appserver pkg/app/appserver/app_settings.go c2-vis-appsvc
 //
 // Per-app live tuning settings — the one visor→app value channel the mux bench
 // needs, built the only way the existing app RPC allows.
@@ -29,9 +29,10 @@
 // sequence, so a missed tick delays an op but never loses or repeats it.
 package appserver
 
-import "maps"
-
-import "sync"
+import (
+	"maps"
+	"sync"
+)
 
 // appSettings is the visor's per-app knob store. Values are the int64 payloads
 // of pkg/skysocks/skysettings and text the rendered list ones — the gateway

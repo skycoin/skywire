@@ -104,7 +104,7 @@ func shapeChainBudget(rigs []*emuRig) (int, map[uuid.UUID]struct{}) {
 	for _, rg := range append(append([]*RouteGroup(nil), active...), pool...) {
 		rg.mu.Lock()
 		for _, tp := range legTransports(rg.legs) {
-			if tp != nil && !tp.IsClosed() {
+			if tp != nil && !tp.Closed() {
 				tps[tp.Entry.ID] = struct{}{}
 				n++
 			}

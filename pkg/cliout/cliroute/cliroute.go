@@ -1,3 +1,5 @@
+// Package cliroute pkg/cliout/cliroute/cliroute.go c4-vis-cli
+//
 // Package cliroute is the output shape of the `skywire cli route` commands.
 //
 // It lives here rather than in a function body so callers, and the e2e suite,
@@ -75,9 +77,9 @@ type TraceHop struct {
 	Index int           `json:"hop"`
 	PK    cipher.PubKey `json:"pk"`
 	// RTT is nanoseconds for scripting; the human path renders milliseconds.
-	RTT           time.Duration `json:"rtt_ns,omitempty"`
-	IsDestination bool          `json:"destination"`
-	Error         string        `json:"error,omitempty"`
+	RTT         time.Duration `json:"rtt_ns,omitempty"`
+	Destination bool          `json:"destination"`
+	Error       string        `json:"error,omitempty"`
 }
 
 // Trace is the whole path `route trace` measured. It was an anonymous struct

@@ -21,7 +21,7 @@ type Reward struct {
 // Accepts either a skycoin base58 address or a bip32 xpub key.
 // Returns the canonical string form of the address/xpub, whether it is an xpub,
 // and any validation error.
-func ValidateRewardAddress(addr string) (canonical string, isXpub bool, err error) {
+func ValidateRewardAddress(addr string) (canonical string, xpub bool, err error) {
 	addr = strings.TrimSpace(addr)
 	// Try xpub first (starts with "xpub")
 	if strings.HasPrefix(addr, "xpub") {
@@ -60,12 +60,12 @@ const SingleAddressRisk = "A single reward address stops earning rewards from th
 // ValidateRewardSetting validates a reward address being set. An account
 // xpub is always accepted. A single address needs acceptRisk, and the caller
 // must then refuse it if it has sent coins (see AddressExposure).
-func ValidateRewardSetting(addr string, acceptRisk bool) (canonical string, isXpub bool, err error) {
-	canonical, isXpub, err = ValidateRewardAddress(addr)
+func ValidateRewardSetting(addr string, acceptRisk bool) (canonical string, xpub bool, err error) {
+	canonical, xpub, err = ValidateRewardAddress(addr)
 	if err != nil {
 		return "", false, err
 	}
-	if !isXpub {
+	if !xpub {
 		if !acceptRisk {
 			return "", false, ErrSingleAddress
 		}

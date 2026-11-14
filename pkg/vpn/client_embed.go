@@ -1,4 +1,4 @@
-// Package vpn pkg/vpn/client_embed.go c2-app-vpn
+// Package vpn pkg/vpn/client_embed.go c3-app-vpn
 //
 // In-process embedding entry for the VPN client. The standard construction
 // path (NewClient + Serve) is an APP: it reads the appserver environment for
@@ -20,6 +20,7 @@ import "net"
 func NewClientEmbedded(cfg ClientConfig) *Client {
 	c := &Client{
 		cfg:    cfg,
+		log:    cfg.Log,
 		closeC: make(chan struct{}),
 	}
 	c.initDirectRoutes()

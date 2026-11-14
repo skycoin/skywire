@@ -1,9 +1,11 @@
+// Package visor src/visor/wallet.go c2-coin-visor
 package visor
 
 // This file contains Visor method that require wallet access
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/skycoin/skycoin/src/cipher"
 	"github.com/skycoin/skycoin/src/coin"
@@ -160,7 +162,7 @@ func (vs *Visor) WalletSignTransaction(wltID string, password []byte, txn *coin.
 	var inputs []TransactionInput
 	var signedTxn *coin.Transaction
 
-	if txn.IsFullySigned() {
+	if txn.FullySigned() {
 		return nil, nil, ErrTransactionAlreadySigned
 	}
 
@@ -197,7 +199,7 @@ func (vs *Visor) WalletSignTransaction(wltID string, password []byte, txn *coin.
 			}
 
 			signed := transaction.TxnSigned
-			if !signedTxn.IsFullySigned() {
+			if !signedTxn.FullySigned() {
 				signed = transaction.TxnUnsigned
 			}
 
@@ -287,7 +289,7 @@ func (vs *Visor) WalletCreateTransactionSigned(wltID string, password []byte, p 
 			return err
 		}
 		var err error
-		if w.IsEncrypted() && w.Type() != wallet.WalletTypeBip44 {
+		if w.Encrypted() && w.Type() != wallet.WalletTypeBip44 {
 			err = vs.wallets.UpdateSecrets(wltID, password, update)
 		} else {
 			err = vs.wallets.Update(wltID, update)
@@ -325,7 +327,7 @@ func (vs *Visor) newChangeAddress(w wallet.Wallet) (*cipher.Address, error) {
 			return nil, err
 		}
 		addr = a
-	case w.IsEncrypted():
+	case w.Encrypted():
 		return nil, ErrChangeAddressRequired
 	default:
 		addrs, err := w.GenerateAddresses(wallet.OptionGenerateN(1))
@@ -420,7 +422,10 @@ func (vs *Visor) walletCreateTransaction(methodName string, w wallet.Wallet, p t
 		return nil, nil, err
 	}
 
-	inputs := NewTransactionInputsFromUxBalance(uxb)
+	inputs, err := NewTransactionInputsFromUxBalance(uxb)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	return txn, inputs, nil
 }
@@ -469,7 +474,7 @@ func (vs *Visor) walletCreateTransactionTx(tx *dbutil.Tx, methodName string,
 	case transaction.TxnUnsigned:
 		txn, uxb, err = wallet.CreateTransaction(w, p, auxs, head.Time())
 	default:
-		logger.Panic("Invalid TxnSignedFlag")
+		err = fmt.Errorf("invalid TxnSignedFlag %d", signed)
 	}
 	if err != nil {
 		logger.Critical().WithError(err).Errorf("%s failed", methodName)
@@ -517,7 +522,10 @@ func (vs *Visor) CreateTransaction(p transaction.Params, wp CreateTransactionPar
 		return nil, nil, err
 	}
 
-	inputs := NewTransactionInputsFromUxBalance(uxb)
+	inputs, err := NewTransactionInputsFromUxBalance(uxb)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	return txn, inputs, nil
 }
@@ -590,7 +598,7 @@ func (vs *Visor) getCreateTransactionAuxsUxOut(tx *dbutil.Tx, uxOutHashes []ciph
 	}
 
 	if !ignoreUnconfirmed && len(unconfirmedHashesMap) != 0 {
-		logger.Panic("ignoreUnconfirmed is false but unconfirmedHashesMap is not empty")
+		return nil, errors.New("ignoreUnconfirmed is false but unconfirmedHashesMap is not empty")
 	}
 
 	// Filter unconfirmed spends

@@ -14,8 +14,10 @@ package visor
 import (
 	"fmt"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgc"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
@@ -43,3 +45,9 @@ func (*Visor) statusBoard() *charts.Board { return nil }
 func (*Visor) EmbeddedServiceControl(name, _ string) error {
 	return fmt.Errorf("no embedded service named %q", name)
 }
+
+// hostsOwnKeyService is false: a phone hosts no service under a key of its own.
+func (*Visor) hostsOwnKeyService(cipher.PubKey) bool { return false }
+
+// ownFileServerOnly is false: a phone runs no dmsg server (init_dmsg_server.go).
+func ownFileServerOnly(*dmsgc.DmsgConfig) bool { return false }

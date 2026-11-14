@@ -1,4 +1,4 @@
-// Package emu pkg/router/emu/netem.go
+// Package emu pkg/router/emu/netem.go c2-net-routing
 //
 // Package emu is an in-process network emulator for the router's multipath
 // legs. It provides a pair of connected endpoints that satisfy
@@ -241,8 +241,8 @@ func (l *link) Cut() { l.cut.Store(true) }
 // Restore lifts a Cut.
 func (l *link) Restore() { l.cut.Store(false) }
 
-// IsCut reports whether the direction is cut.
-func (l *link) IsCut() bool { return l.cut.Load() }
+// Severed reports whether the direction is cut.
+func (l *link) Severed() bool { return l.cut.Load() }
 
 func (l *link) stats() LinkStats {
 	return LinkStats{

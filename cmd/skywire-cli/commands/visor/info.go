@@ -175,7 +175,7 @@ var summaryCmd = &cobra.Command{
 		outputJSON := struct {
 			PublicKey            string                       `json:"public_key"`
 			Hostname             string                       `json:"hostname,omitempty"`
-			IsSymmetricNAT       bool                         `json:"symmetric_nat"`
+			SymmetricNAT         bool                         `json:"symmetric_nat"`
 			LocalIP              string                       `json:"local_ip"`
 			PublicIP             string                       `json:"public_ip"`
 			CountryCode          string                       `json:"country_code,omitempty"`
@@ -189,14 +189,14 @@ var summaryCmd = &cobra.Command{
 			TimeOnline           float64                      `json:"time_online"`
 			BuildTag             string                       `json:"build_tag"`
 			ARRegistration       *visorapi.ARSelfRegistration `json:"ar_registration,omitempty"`
-			IsHypervisor         bool                         `json:"is_hypervisor"`
+			Hypervisor           bool                         `json:"is_hypervisor"`
 			HypervisorAddr       string                       `json:"hypervisor_addr,omitempty"`
 			Hypervisors          []string                     `json:"hypervisors,omitempty"`
 			ConnectedHypervisors []string                     `json:"connected_hypervisors,omitempty"`
 		}{
 			PublicKey:            summary.Overview.PubKey.String(),
 			Hostname:             summary.Overview.Hostname,
-			IsSymmetricNAT:       summary.Overview.IsSymmetricNAT,
+			SymmetricNAT:         summary.Overview.SymmetricNAT,
 			LocalIP:              summary.Overview.LocalIP,
 			PublicIP:             summary.Overview.PublicIP,
 			CountryCode:          summary.Overview.CountryCode,
@@ -210,7 +210,7 @@ var summaryCmd = &cobra.Command{
 			TimeOnline:           summary.Uptime,
 			BuildTag:             summary.BuildTag,
 			ARRegistration:       arSelf,
-			IsHypervisor:         summary.IsHypervisor,
+			Hypervisor:           summary.Hypervisor,
 			HypervisorAddr:       summary.HypervisorAddr,
 			Hypervisors:          hvPKs,
 			ConnectedHypervisors: connectedHvPKs,
@@ -232,7 +232,7 @@ var readyCmd = &cobra.Command{
 				time.Sleep(2 * time.Second)
 				continue
 			}
-			if rpcClient.IsStartupComplete() {
+			if rpcClient.StartupComplete() {
 				internal.PrintOutput(cmd.Flags(), "ready\n", "ready\n")
 				return
 			}
@@ -781,7 +781,7 @@ func buildSummaryMessageWithData(rpcClient visorapi.API) (string, *visorapi.Summ
 		msg += fmt.Sprintf("Hostname: %s\n", summary.Overview.Hostname)
 	}
 	msg += fmt.Sprintf("Symmetric NAT: %t\nLocal IP: %s\nPublic IP: %s\n",
-		summary.Overview.IsSymmetricNAT, summary.Overview.LocalIP, summary.Overview.PublicIP)
+		summary.Overview.SymmetricNAT, summary.Overview.LocalIP, summary.Overview.PublicIP)
 
 	if geoStr != "" {
 		msg += fmt.Sprintf("Location: %s\n", geoStr)
@@ -841,7 +841,7 @@ func buildSummaryMessageWithData(rpcClient visorapi.API) (string, *visorapi.Summ
 	// hypervisors from the static config, (c) the runtime-connected
 	// subset. Renders all three so the operator can see both the
 	// declared intent and the live state in one place.
-	if summary.IsHypervisor {
+	if summary.Hypervisor {
 		if summary.HypervisorAddr != "" {
 			msg += fmt.Sprintf("Hypervisor UI: enabled at %s\n", summary.HypervisorAddr)
 		} else {
@@ -875,8 +875,8 @@ func buildSummaryMessageWithData(rpcClient visorapi.API) (string, *visorapi.Summ
 	if uptimeBars, uptimePcts, ok := localUptime24h(rpcClient); ok && len(uptimeBars) > 0 {
 		msg += "Local uptime (last 24h, hour blocks):\n"
 		for _, name := range []string{"process", "dmsg", "skynet"} {
-			bar, hasBar := uptimeBars[name]
-			if !hasBar {
+			bar, found := uptimeBars[name]
+			if !found {
 				continue
 			}
 			pct := uptimePcts[name]

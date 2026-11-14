@@ -1,4 +1,4 @@
-// Package coins pkg/wallet/coins/coins.go c4-app-wallet
+// Package coins pkg/wallet/coins/coins.go c3-app-wallet
 // wallet. skycoin-web is already multicoin: its coin.service fetches the coin
 // list from GET /api/v1/coins and its api.service routes each coin's requests to
 // that coin's NodeURL. The visor serves this registry at /api/v1/coins with each
@@ -27,9 +27,9 @@ type Coin struct {
 	ServerWallets     bool   `json:"serverWallets"`
 }
 
-// IsBitcoin reports whether the coin is routed to the BTC electrum gateway
+// Bitcoin reports whether the coin is routed to the BTC electrum gateway
 // rather than a skycoin-style node. Mirrors BaseCoin.isBitcoin().
-func (c Coin) IsBitcoin() bool {
+func (c Coin) Bitcoin() bool {
 	return c.CoinType == "bitcoin" || c.CoinType == "bitcoin-segwit"
 }
 

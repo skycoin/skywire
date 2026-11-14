@@ -40,10 +40,10 @@ const dialSetupCeiling = 90 * time.Second
 // disassemble error on the server side and reassemble it back on the
 // client side.
 type RPCIOErr struct {
-	Text           string
-	IsNetErr       bool
-	IsTimeoutErr   bool
-	IsTemporaryErr bool
+	Text      string
+	NetErr    bool
+	Timeout   bool
+	Temporary bool
 }
 
 // ToError converts `*RPCIOErr` to `error`.
@@ -52,7 +52,7 @@ func (e *RPCIOErr) ToError() error {
 		return nil
 	}
 
-	if !e.IsNetErr {
+	if !e.NetErr {
 		switch e.Text {
 		case io.EOF.Error():
 			return io.EOF
@@ -67,8 +67,8 @@ func (e *RPCIOErr) ToError() error {
 
 	return &netErr{
 		err:       errors.New(e.Text),
-		timeout:   e.IsTimeoutErr,
-		temporary: e.IsTemporaryErr,
+		timeout:   e.Timeout,
+		temporary: e.Temporary,
 	}
 }
 
@@ -361,12 +361,12 @@ func (r *RPCIngressGateway) ownsLocalPort(localPort routing.Port) bool {
 		return true
 	}
 	r.cm.DoRange(func(_ uint16, v any) bool {
-		conn, isConn := v.(net.Conn)
-		if !isConn || conn == nil {
+		conn, connOK := v.(net.Conn)
+		if !connOK || conn == nil {
 			return true
 		}
-		addr, isAddr := conn.LocalAddr().(appnet.Addr)
-		if isAddr && addr.Port == localPort {
+		addr, addrOK := conn.LocalAddr().(appnet.Addr)
+		if addrOK && addr.Port == localPort {
 			ok = true
 			return false
 		}
@@ -531,6 +531,9 @@ type DialOptionsReq struct {
 	// 1-hop over it, bypassing the route-finder. The `--direct` skynet flag
 	// sets this. In spirit mutually exclusive with MinHops >= 2.
 	Direct bool
+	// Local, when true, dials only over a direct link to a peer on this
+	// visor's local network, made on demand, and fails otherwise. Skynet only.
+	Local bool
 	// DiversifyTransports opts this dial into visor-side auto-diversification
 	// for multi-tunnel bandwidth aggregation (docs/mux_aggregation_rfc.md
 	// step 3). Set by the skysocks-client for its extra tunnels (2..N): the
@@ -573,7 +576,7 @@ type DialOptionsReq struct {
 // (MuxRoutes=1 / MinHops=1 lets an app force a single / direct route out from
 // under a visor-global min_hops or mux_routes > 1).
 func (r DialOptionsReq) Explicit() bool {
-	return r.Direct || r.DiversifyTransports || r.RequireDisjointFirstHop ||
+	return r.Direct || r.Local || r.DiversifyTransports || r.RequireDisjointFirstHop ||
 		len(r.ExcludeFirstHopPKs) > 0 ||
 		r.MuxRoutes != 0 || r.MinHops != 0 ||
 		r.ForwardMinHops != 0 || r.ReverseMinHops != 0 ||
@@ -623,7 +626,7 @@ func (r *RPCIngressGateway) dialInternal(remote appnet.Addr, req *DialOptionsReq
 	// can hand them a .skynet / .dmsg name over the data plane it already
 	// holds instead of through a second SOCKS hop on localhost. See
 	// pkg/app/appnet/local_service.go.
-	if appnet.HasLocalService(remote) {
+	if appnet.LocalServiceRegistered(remote) {
 		conn, lErr := appnet.DialLocalService(remote)
 		if lErr != nil {
 			free()
@@ -741,6 +744,9 @@ func dialWithMuxRoutes(ctx context.Context, remote appnet.Addr, req *DialOptions
 		return nil, err
 	}
 	sw, ok := nw.(*appnet.SkywireNetworker)
+	if !ok && req.Local {
+		return nil, appnet.ErrNoLocalLink
+	}
 	if !ok {
 		// Non-skynet networker (e.g. dmsg) — per-call opts are no-op
 		// concepts at this layer. Fall through to the default dial.
@@ -764,6 +770,7 @@ func dialWithMuxRoutes(ctx context.Context, remote appnet.Addr, req *DialOptions
 		opts.ExcludeFirstHopPeers = append(opts.ExcludeFirstHopPeers, excl...)
 		opts.ExcludeIntermediatePKs = append(opts.ExcludeIntermediatePKs, excl...)
 	}
+	opts.LocalOnly = req.Local
 	if req.Direct {
 		// Force a 1-hop direct dial that creates the transport on demand and
 		// bypasses the route-finder. Mirrors the policy-layer Fallback="direct"
@@ -1049,8 +1056,8 @@ func ioErrToRPCIOErr(err error) *RPCIOErr {
 	}
 
 	if netErr, ok := err.(net.Error); ok {
-		rpcIOErr.IsNetErr = true
-		rpcIOErr.IsTimeoutErr = netErr.Timeout()
+		rpcIOErr.NetErr = true
+		rpcIOErr.Timeout = netErr.Timeout()
 	}
 
 	return rpcIOErr

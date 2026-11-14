@@ -1,3 +1,5 @@
+// Package pex src/daemon/pex/pex.go c1-coin-daemon
+//
 // Package pex is a toolkit for implementing a peer exchange system
 package pex
 
@@ -98,12 +100,12 @@ func validateAddress(ipPort string, allowLocalhost bool) (string, error) {
 
 // Peer represents a known peer
 type Peer struct {
-	Addr            string         // An address of the form ip:port
-	LastSeen        int64          // Unix timestamp when this peer was last seen
-	Trusted         bool           // Whether this peer is trusted
-	HasIncomingPort bool           // Whether this peer has accessible public port
-	UserAgent       useragent.Data // Peer's last reported user agent
-	RetryTimes      int            `json:"-"` // records the retry times
+	Addr             string         // An address of the form ip:port
+	LastSeen         int64          // Unix timestamp when this peer was last seen
+	Trusted          bool           // Whether this peer is trusted
+	IncomingPortOpen bool           `json:"HasIncomingPort"` // Whether this peer has accessible public port
+	UserAgent        useragent.Data // Peer's last reported user agent
+	RetryTimes       int            `json:"-"` // records the retry times
 }
 
 // NewPeer returns a *Peer initialized by an address string of the form ip:port
@@ -523,7 +525,7 @@ func (px *Pex) setAllUntrusted() {
 }
 
 // SetHasIncomingPort sets if the peer has public port
-func (px *Pex) SetHasIncomingPort(addr string, hasPublicPort bool) error {
+func (px *Pex) SetHasIncomingPort(addr string, portOpen bool) error {
 	px.Lock()
 	defer px.Unlock()
 
@@ -533,7 +535,7 @@ func (px *Pex) SetHasIncomingPort(addr string, hasPublicPort bool) error {
 		return ErrInvalidAddress
 	}
 
-	return px.peerlist.setHasIncomingPort(cleanAddr, hasPublicPort)
+	return px.peerlist.setHasIncomingPort(cleanAddr, portOpen)
 }
 
 // SetUserAgent sets the peer's user agent
@@ -621,8 +623,8 @@ func (px *Pex) ResetAllRetryTimes() {
 	px.peerlist.resetAllRetryTimes()
 }
 
-// IsFull returns whether the peer list is full
-func (px *Pex) IsFull() bool {
+// Full returns whether the peer list is full
+func (px *Pex) Full() bool {
 	px.RLock()
 	defer px.RUnlock()
 	return px.isFull()

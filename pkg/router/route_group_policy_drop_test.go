@@ -35,7 +35,7 @@ func TestPolicyDropKeepsTransportOpen(t *testing.T) {
 
 	rg.dropLegs([]uuid.UUID{mts[1].Entry.ID})
 
-	require.False(t, dropped.IsClosed(), "a policy drop must not close the transport")
+	require.False(t, dropped.Closed(), "a policy drop must not close the transport")
 	select {
 	case <-retired:
 	case <-time.After(5 * time.Second):
@@ -70,7 +70,7 @@ func TestPolicyDropClosesTransportForOldPeer(t *testing.T) {
 
 	rg.dropLegs([]uuid.UUID{mts[1].Entry.ID})
 
-	require.True(t, mts[1].IsClosed(), "without the signal the peer learns of the drop from the close")
+	require.True(t, mts[1].Closed(), "without the signal the peer learns of the drop from the close")
 	rg.mu.Lock()
 	require.Len(t, rg.legs, 2)
 	rg.mu.Unlock()

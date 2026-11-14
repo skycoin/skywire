@@ -1,4 +1,4 @@
-// Package router pkg/router/router_route_source.go c3-rtr-core
+// Package router pkg/router/router_route_source.go c2-net-routing
 //
 // Where multi-hop routes came from, for `visor state --select diag`: the
 // route finder, the local graph (a hypervisor's attached visors, #4750), or

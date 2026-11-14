@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package tui cmd/skywire/tui/tui_js.go c5-cli-tui
+// Package tui cmd/skywire/tui/tui_js.go c4-vis-cli
 //
 // js/wasm stand-in for the interactive console. Install (install.go) already
 // degrades gracefully: when Run errors it prints the note to stderr and falls

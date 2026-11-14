@@ -1,4 +1,4 @@
-// Package flags pkg/flags/flags.go c0-com-util
+// Package flags pkg/flags/flags.go c1-com-util
 package flags
 
 import (

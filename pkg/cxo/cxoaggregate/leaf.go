@@ -1,4 +1,4 @@
-// Package cxoaggregate pkg/cxo/cxoaggregate/leaf.go c4-net-discovery
+// Package cxoaggregate pkg/cxo/cxoaggregate/leaf.go c3-net-discovery
 //
 // Tree-walk helpers shared by the fan-in aggregators. Both are tolerant
 // of a PARTIAL fill: an object the fill never fetched simply reads as

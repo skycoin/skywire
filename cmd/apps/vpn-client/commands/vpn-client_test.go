@@ -1,4 +1,4 @@
-// Package commands cmd/apps/vpn-client/commands/vpn-client_test.go
+// Package commands cmd/apps/vpn-client/commands/vpn-client_test.go c4-app-vpn
 //
 // Covers the package's one pure, self-contained helper, envInt. The rest of the
 // package (RunVPNClient and the set* helpers) is the app runtime: it calls

@@ -1,4 +1,4 @@
-// Package api pkg/deployment/tpd/api/metrics_parts_test.go c4-net-discovery
+// Package api pkg/deployment/tpd/api/metrics_parts_test.go c3-net-discovery
 package api
 
 import "testing"

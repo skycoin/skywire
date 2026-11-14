@@ -1,6 +1,6 @@
 //go:build mobile
 
-// Package tpviz pkg/tpviz/tpviz_legacy_off.go c4-app-rewards
+// Package tpviz pkg/tpviz/tpviz_legacy_off.go c3-app-rewards
 package tpviz
 
 import "embed"

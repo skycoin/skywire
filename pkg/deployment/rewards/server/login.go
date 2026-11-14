@@ -1,0 +1,746 @@
+// Package rewardsserver pkg/deployment/rewards/server/login.go c3-app-rewards
+package rewardsserver
+
+import (
+	"cmp"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/bitfield/script"
+	skycoincipher "github.com/skycoin/skycoin/src/cipher"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
+	deprewards "github.com/skycoin/skywire/pkg/deployment/rewards"
+	"github.com/skycoin/skywire/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
+)
+
+// session represents an authenticated user session
+type session struct {
+	Address   string    `json:"address"`
+	Visors    []string  `json:"visors"`
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// pendingLogin tracks a login challenge waiting for transaction confirmation
+type pendingLogin struct {
+	Address       string    `json:"address"`        // original reward address or xpub
+	LoginAddress  string    `json:"login_address"`  // derived address for verification (change chain for xpub)
+	VerifyAddress string    `json:"verify_address"` // unique per-challenge receive address
+	Visors        []string  `json:"visors"`
+	Challenge     string    `json:"challenge"`   // random challenge string
+	FundedTxID    string    `json:"funded_txid"` // txid of coins sent to user
+	Xpub          bool      `json:"is_xpub"`
+	CreatedAt     time.Time `json:"created_at"`
+	ExpiresAt     time.Time `json:"expires_at"`
+}
+
+var (
+	sessions        = make(map[string]*session)
+	sessionsMu      sync.RWMutex
+	pendingLogins   = make(map[string]*pendingLogin) // challenge -> pending login
+	pendingLoginsMu sync.RWMutex
+	// Genesis wallet seed for deriving verify addresses.
+	// Loaded from login_genesis.json on first use.
+	genesisSeed     []byte
+	genesisSeedOnce sync.Once
+	verifyAddrIndex atomic.Uint32 // atomic counter for next verify address index
+)
+
+func generateSessionID() string {
+	b := make([]byte, 32)
+	rand.Read(b) //nolint:errcheck,gosec
+	return hex.EncodeToString(b)
+}
+
+func generateChallenge() string {
+	b := make([]byte, 16)
+	rand.Read(b) //nolint:errcheck,gosec
+	return hex.EncodeToString(b)
+}
+
+// loadGenesisSeed reads the genesis wallet seed from login_genesis.json.
+func loadGenesisSeed() {
+	genesisPath := filepath.Join(wd, "login_genesis.json")
+	data, err := os.ReadFile(genesisPath) //nolint:gosec
+	if err != nil {
+		cmdutil.Printf("Warning: could not read genesis wallet for verify addresses: %v\n", err)
+		return
+	}
+	var wallet struct {
+		Meta struct {
+			Seed string `json:"seed"`
+		} `json:"meta"`
+	}
+	if err := json.Unmarshal(data, &wallet); err != nil || wallet.Meta.Seed == "" {
+		cmdutil.Printf("Warning: could not parse genesis wallet seed: %v\n", err)
+		return
+	}
+	genesisSeed = []byte(wallet.Meta.Seed)
+	// Start at index 1 — index 0 is the genesis address
+	verifyAddrIndex.Store(1)
+	cmdutil.Printf("Login chain: loaded genesis seed for verify address derivation\n")
+}
+
+// generateVerifyAddress derives a unique skycoin address from the genesis wallet
+// for a login challenge. Uses an incrementing index so each challenge gets a
+// different address, all derived from the same deterministic wallet.
+func generateVerifyAddress() string {
+	genesisSeedOnce.Do(loadGenesisSeed)
+
+	if genesisSeed == nil {
+		// Fallback to random address if seed not available
+		pk, _ := skycoincipher.GenerateKeyPair()
+		return skycoincipher.AddressFromPubKey(pk).String()
+	}
+
+	idx := verifyAddrIndex.Add(1)
+	// Derive address at this index from the genesis seed
+	seckeys, err := skycoincipher.GenerateDeterministicKeyPairs(genesisSeed, int(idx))
+	if err != nil || len(seckeys) < int(idx) {
+		// Fallback
+		pk, _ := skycoincipher.GenerateKeyPair()
+		return skycoincipher.AddressFromPubKey(pk).String()
+	}
+	pk, err := skycoincipher.PubKeyFromSecKey(seckeys[idx-1])
+	if err != nil {
+		pk2, _ := skycoincipher.GenerateKeyPair()
+		return skycoincipher.AddressFromPubKey(pk2).String()
+	}
+	return skycoincipher.AddressFromPubKey(pk).String()
+}
+
+// rewardHistoryEntry represents one reward payment for a date.
+type rewardHistoryEntry struct {
+	Date   string
+	Amount string
+}
+
+// findRewardHistory scans hist/*_rewardtxn0.csv files for reward payments
+// to the given address. For xpub keys, derives external chain addresses
+// (m/account'/0/0 through m/account'/0/19) to match against.
+func findRewardHistory(histDir, address string) []rewardHistoryEntry {
+	// Build set of addresses to match against
+	matchAddrs := make(map[string]bool)
+	_, xpub, vaErr := rewardconfig.ValidateRewardAddress(address)
+	if vaErr != nil {
+		return nil
+	}
+	if xpub {
+		// Match the xpub itself (in case it appears in the CSV)
+		matchAddrs[address] = true
+		// Derive the first 20 external chain addresses, or up to the highest index paid.
+		n := uint32(20)
+		if x, err := deprewards.LoadXpubIndex(filepath.Join(filepath.Dir(histDir), deprewards.XpubIndexFile)); err == nil {
+			if maxIdx, ok := x.MaxIndex(address); ok && maxIdx+1 > n {
+				n = maxIdx + 1
+			}
+		}
+		for i := uint32(0); i < n; i++ {
+			derived, err := rewardconfig.DeriveExternalAddressFromXpub(address, i)
+			if errors.Is(err, rewardconfig.ErrNoAddressAtIndex) {
+				continue
+			}
+			if err != nil {
+				break
+			}
+			matchAddrs[derived] = true
+		}
+	} else {
+		matchAddrs[address] = true
+	}
+
+	entries, err := os.ReadDir(histDir)
+	if err != nil {
+		return nil
+	}
+
+	var history []rewardHistoryEntry
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasSuffix(name, "_rewardtxn0.csv") {
+			continue
+		}
+		// Extract date from filename: YYYY-MM-DD_rewardtxn0.csv
+		date := strings.TrimSuffix(name, "_rewardtxn0.csv")
+
+		data, err := os.ReadFile(filepath.Join(histDir, name)) //nolint:gosec
+		if err != nil {
+			continue
+		}
+		for line := range strings.SplitSeq(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "Skycoin Address") {
+				continue // skip header and empty lines
+			}
+			parts := strings.SplitN(line, ",", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			csvAddr := strings.TrimSpace(parts[0])
+			csvAmount := strings.TrimSpace(parts[1])
+			if matchAddrs[csvAddr] {
+				history = append(history, rewardHistoryEntry{
+					Date:   date,
+					Amount: csvAmount,
+				})
+			}
+		}
+	}
+
+	// Sort by date descending (newest first)
+	slices.SortFunc(history, func(a, b rewardHistoryEntry) int {
+		return cmp.Compare(b.Date, a.Date)
+	})
+
+	return history
+}
+
+// findVisorsByRewardAddress searches log_backups for surveys matching the given
+// reward address or xpub key. Returns matching visor public keys.
+func findVisorsByRewardAddress(backupsDir, address string) []string {
+	var visors []string
+	entries, err := os.ReadDir(backupsDir)
+	if err != nil {
+		return nil
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		surveyPath := filepath.Join(backupsDir, entry.Name(), "node-info.json")
+		data, err := os.ReadFile(surveyPath) //nolint:gosec
+		if err != nil {
+			continue
+		}
+		var survey struct {
+			SkycoinAddress string `json:"skycoin_address"`
+		}
+		if err := json.Unmarshal(data, &survey); err != nil {
+			continue
+		}
+		if survey.SkycoinAddress == address {
+			visors = append(visors, entry.Name())
+		}
+	}
+	return visors
+}
+
+// checkBalanceOnLoginChain checks the balance of an address on the login chain.
+func checkBalanceOnLoginChain(nodeURL, address string) (coins uint64, err error) {
+	resp, err := http.Get(fmt.Sprintf("%s/api/v1/balance?addrs=%s", nodeURL, address)) //nolint:gosec
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close() //nolint:errcheck,gosec
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, err
+	}
+
+	var result struct {
+		Confirmed struct {
+			Coins uint64 `json:"coins"`
+		} `json:"confirmed"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return 0, err
+	}
+
+	return result.Confirmed.Coins, nil
+}
+
+// sendCoinsOnLoginChain sends coins from the genesis wallet to the target address
+// using the skycoin CLI (createRawTransaction + injectTransaction).
+// The CLI loads the genesis wallet file directly for signing.
+func sendCoinsOnLoginChain(nodeURL, destAddress string, coins string) (string, error) {
+	genesisPath := filepath.Join(wd, "login_genesis.json")
+	fiberTOMLPath := filepath.Join(wd, "login_fiber.toml")
+
+	skywireBin, err := os.Executable()
+	if err != nil {
+		skywireBin = "skywire"
+	}
+
+	// Create raw transaction using the genesis wallet
+	createRawTxCmd := fmt.Sprintf(`bash -c 'FIBER_TOML="%s" RPC_ADDR="%s" "%s" skycoin cli createRawTransaction "%s" "%s" "%s" 2>&1'`,
+		fiberTOMLPath, nodeURL, skywireBin, genesisPath, destAddress, coins)
+	cmdutil.Printf("Login chain: running: %s\n", createRawTxCmd)
+	rawTxStr, err := script.Exec(createRawTxCmd).String()
+	if err != nil {
+		return "", fmt.Errorf("createRawTransaction failed: %s: %w", rawTxStr, err)
+	}
+	rawTxStr = strings.TrimSpace(rawTxStr)
+	if rawTxStr == "" {
+		return "", fmt.Errorf("createRawTransaction returned empty output")
+	}
+
+	// Inject transaction with no_broadcast
+	cmdutil.Printf("Login chain: injecting tx to %s (%d bytes)\n", nodeURL, len(rawTxStr))
+	injectBody := fmt.Sprintf(`{"rawtx":"%s","no_broadcast":true}`, rawTxStr)
+	injectReq, err := http.NewRequest("POST", nodeURL+"/api/v1/injectTransaction", strings.NewReader(injectBody))
+	if err != nil {
+		return "", fmt.Errorf("inject request: %w", err)
+	}
+	injectReq.Header.Set("Content-Type", "application/json")
+	injectResp, err := http.DefaultClient.Do(injectReq) //nolint:gosec // nodeURL is the operator-set login node
+	if err != nil {
+		return "", fmt.Errorf("inject failed: %w", err)
+	}
+	defer injectResp.Body.Close()               //nolint:errcheck,gosec
+	injectOut, _ := io.ReadAll(injectResp.Body) //nolint:errcheck,gosec
+	if injectResp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("inject failed (%d): %s", injectResp.StatusCode, string(injectOut))
+	}
+
+	txID := strings.Trim(strings.TrimSpace(string(injectOut)), `"`)
+	return txID, nil
+}
+
+// registerLoginRoutes adds login-related routes to the mux.
+// When loginEnabled is false, the login page shows a "not available" message.
+func registerLoginRoutes(mux *http.ServeMux, wd string, loginEnabled bool) {
+	backupsDir := filepath.Join(wd, "log_backups")
+
+	// Periodically clean up expired challenges and sessions
+	go func() {
+		for {
+			time.Sleep(5 * time.Minute)
+			now := time.Now()
+
+			pendingLoginsMu.Lock()
+			for k, p := range pendingLogins {
+				if now.After(p.ExpiresAt) {
+					delete(pendingLogins, k)
+				}
+			}
+			pendingLoginsMu.Unlock()
+
+			sessionsMu.Lock()
+			for k, s := range sessions {
+				if now.After(s.ExpiresAt) {
+					delete(sessions, k)
+				}
+			}
+			sessionsMu.Unlock()
+		}
+	}()
+
+	// Login page
+	mux.HandleFunc("GET /login", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+
+		l := loginPageHeader("Login")
+		l += navlinks
+
+		if !loginEnabled {
+			l += "<h1>Login</h1>"
+			l += "<p class='info'>Login is not currently available on this instance.</p>"
+			l += "</body></html>"
+			w.Write([]byte(l)) //nolint:errcheck,gosec
+			return
+		}
+
+		l += "<h1>Login</h1>"
+		l += "<p>Enter your reward address to prove wallet ownership and view your visor data.</p>"
+		l += "<form method='POST' action='/login'>"
+		l += "<input type='text' name='address' placeholder='Skycoin reward address' required>"
+		l += "<br><button type='submit'>Start verification</button>"
+		l += "</form>"
+
+		if msg := r.URL.Query().Get("msg"); msg != "" {
+			l += "<p class='error'>" + strings.ReplaceAll(msg, "<", "&lt;") + "</p>"
+		}
+		if msg := r.URL.Query().Get("info"); msg != "" {
+			l += "<p class='info'>" + strings.ReplaceAll(msg, "<", "&lt;") + "</p>"
+		}
+
+		l += "</body></html>"
+		w.Write([]byte(l)) //nolint:errcheck,gosec
+	})
+
+	// Login POST — look up address, create verification challenge
+	mux.HandleFunc("POST /login", func(w http.ResponseWriter, r *http.Request) {
+		if !loginEnabled {
+			http.Redirect(w, r, "/login?msg=Login+is+not+currently+available", http.StatusFound)
+			return
+		}
+		address := strings.TrimSpace(r.PostFormValue("address"))
+		if address == "" {
+			http.Redirect(w, r, "/login?msg=Please+enter+a+reward+address", http.StatusFound)
+			return
+		}
+
+		visors := findVisorsByRewardAddress(backupsDir, address)
+		if len(visors) == 0 {
+			http.Redirect(w, r, "/login?msg=No+visors+found+for+this+address", http.StatusFound)
+			return
+		}
+
+		// Determine the login verification address.
+		// For xpub keys: derive change chain address (m/account'/1/0)
+		// For single addresses: use the address directly
+		_, xpub, vaErr := rewardconfig.ValidateRewardAddress(address)
+		if vaErr != nil {
+			http.Redirect(w, r, "/login?msg="+url.QueryEscape("Invalid address: "+vaErr.Error()), http.StatusFound)
+			return
+		}
+		loginAddress := address
+		if xpub {
+			// Check xpub depth before attempting derivation
+			if warning := rewardconfig.CheckXpubDepth(address); warning != "" {
+				cmdutil.Printf("Login chain: xpub depth error for %s...\n", address[:20])
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.WriteHeader(http.StatusBadRequest)
+				l := loginPageHeader("Login Error")
+				l += navlinks
+				l += "<h1>Wrong xpub key level</h1>"
+				l += "<p class='error'>The xpub key you provided is not at the account level (depth 3), "
+				l += "which login verification and reward payouts need.</p>"
+				l += "<p>In the Skycoin desktop wallet or skycoin-web, copy the <strong>Account xPub</strong>, "
+				l += "not the xPub under External Chain (<code>m/44'/8000'/0'/0</code>). The login system needs the "
+				l += "<strong>account-level</strong> xpub (<code>m/44'/8000'/0'</code>) to derive "
+				l += "change chain addresses for verification.</p>"
+				l += "<h3>How to get the correct xpub</h3>"
+				l += "<p>Export the account-level xpub from your wallet using the CLI:</p>"
+				l += "<pre>skywire skycoin cli walletKeyExport WALLET_FILE -k xpub --path=0</pre>"
+				l += "<p>The default <code>--path=0/0</code> gives the external chain xpub (wrong).<br>"
+				l += "Use <code>--path=0</code> for the account-level xpub (correct).</p>"
+				l += "<p>Then update your visor's reward address:</p>"
+				l += "<pre>skywire reward ACCOUNT_XPUB</pre>"
+				l += "<p><a href='/login'>Back to login</a></p>"
+				l += "</body></html>"
+				w.Write([]byte(l)) //nolint:errcheck,gosec
+				return
+			}
+			var derived string
+			var err error
+			for i := uint32(0); ; i++ {
+				if derived, err = rewardconfig.DeriveLoginAddressFromXpub(address, i); !errors.Is(err, rewardconfig.ErrNoAddressAtIndex) {
+					break
+				}
+			}
+			if err != nil {
+				http.Redirect(w, r, "/login?msg="+url.QueryEscape("Failed to derive login address from xpub: "+err.Error()), http.StatusFound)
+				return
+			}
+			loginAddress = derived
+			cmdutil.Printf("Login chain: derived change chain address %s from xpub\n", loginAddress)
+		}
+
+		// Fund the login address on the login chain if needed
+		var fundedTxID string
+		if loginNodeAddr != "" {
+			coins, err := checkBalanceOnLoginChain(loginNodeAddr, loginAddress)
+			if err != nil {
+				cmdutil.Printf("Warning: failed to check login chain balance: %v\n", err)
+			}
+			if coins == 0 {
+				// Send minimum coins (1 coin) to the login address
+				txID, err := sendCoinsOnLoginChain(loginNodeAddr, loginAddress, "1.000000")
+				if err != nil {
+					cmdutil.Printf("Warning: failed to fund login address: %v\n", err)
+					http.Redirect(w, r, "/login?msg=Failed+to+prepare+login+verification.+Please+try+again.", http.StatusFound)
+					return
+				}
+				fundedTxID = txID
+				cmdutil.Printf("Login chain: funded %s with 1 coin (tx: %s)\n", loginAddress, txID)
+			}
+		}
+
+		// Create pending login challenge with a unique verify address.
+		// Each challenge gets its own receive address so transactions from
+		// different challenges can't be confused or piggybacked.
+		challenge := generateChallenge()
+		verifyAddr := generateVerifyAddress()
+		pendingLoginsMu.Lock()
+		pendingLogins[challenge] = &pendingLogin{
+			Address:       address,
+			LoginAddress:  loginAddress,
+			VerifyAddress: verifyAddr,
+			Visors:        visors,
+			Challenge:     challenge,
+			FundedTxID:    fundedTxID,
+			Xpub:          xpub,
+			CreatedAt:     time.Now(),
+			ExpiresAt:     time.Now().Add(10 * time.Minute),
+		}
+		pendingLoginsMu.Unlock()
+		cmdutil.Printf("Login chain: challenge %s → verify address %s\n", challenge[:8], verifyAddr)
+
+		http.Redirect(w, r, "/login/verify?challenge="+challenge, http.StatusFound)
+	})
+
+	// Verification page — instructs user to send coins back
+	mux.HandleFunc("GET /login/verify", func(w http.ResponseWriter, r *http.Request) {
+		challenge := r.URL.Query().Get("challenge")
+		if challenge == "" {
+			http.Redirect(w, r, "/login?msg=Invalid+verification+link", http.StatusFound)
+			return
+		}
+
+		pendingLoginsMu.RLock()
+		pending, ok := pendingLogins[challenge]
+		pendingLoginsMu.RUnlock()
+
+		if !ok || time.Now().After(pending.ExpiresAt) {
+			http.Redirect(w, r, "/login?msg=Verification+expired", http.StatusFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+
+		l := loginPageHeader("Verify Wallet Ownership")
+		l += navlinks
+		l += "<h1>Verify Wallet Ownership</h1>"
+
+		// Use the current request's host as the node URL for the wallet
+		scheme := "https"
+		if r.TLS == nil {
+			scheme = "http"
+		}
+		if fwdProto := r.Header.Get("X-Forwarded-Proto"); fwdProto != "" {
+			scheme = fwdProto
+		}
+		nodeURL := scheme + "://" + r.Host
+
+		l += "<h3>Step 1: Open the Skycoin Web Wallet</h3>"
+		l += "<p>Start the wallet connected to the login chain:</p>"
+		l += "<pre>skywire skycoin web -n " + nodeURL + " -p 8006</pre>"
+		l += "<p>Then open <a href='http://127.0.0.1:8006' target='_blank'>http://127.0.0.1:8006</a></p>"
+
+		l += "<h3>Step 2: Send coins to the verification address</h3>"
+		if pending.Xpub {
+			l += "<p>From the <strong>change chain</strong> address in your wallet:</p>"
+			l += "<p><strong>From:</strong> <code>" + pending.LoginAddress + "</code></p>"
+		} else {
+			l += "<p>From your reward address:</p>"
+			l += "<p><strong>From:</strong> <code>" + pending.Address + "</code></p>"
+		}
+		l += "<p><strong>Send any amount to:</strong> <code>" + pending.VerifyAddress + "</code></p>"
+
+		l += "<p class='info'>This proves you control the private key for your reward wallet. "
+		l += "The login chain is ephemeral — coins have no real value.</p>"
+		l += "<hr>"
+		l += "<p>Waiting for transaction confirmation...</p>"
+		l += "<script>"
+		l += "setInterval(function() {"
+		l += "  fetch('/login/check?challenge=" + challenge + "')"
+		l += "    .then(r => r.json())"
+		l += "    .then(d => { if(d.confirmed) window.location='/account'; });"
+		l += "}, 3000);"
+		l += "</script>"
+		l += "<noscript><p>JavaScript is required for auto-detection. "
+		l += "<a href='/login/check?challenge=" + challenge + "&redirect=1'>Click here to check manually</a></p></noscript>"
+		l += "</body></html>"
+		w.Write([]byte(l)) //nolint:errcheck,gosec
+	})
+
+	// Check if verification transaction is confirmed
+	mux.HandleFunc("GET /login/check", func(w http.ResponseWriter, r *http.Request) {
+		challenge := r.URL.Query().Get("challenge")
+
+		pendingLoginsMu.RLock()
+		pending, ok := pendingLogins[challenge]
+		pendingLoginsMu.RUnlock()
+
+		if !ok || time.Now().After(pending.ExpiresAt) {
+			if r.URL.Query().Get("redirect") == "1" {
+				http.Redirect(w, r, "/login?msg=Verification+expired", http.StatusFound)
+				return
+			}
+			httputil.WriteJSON(w, r, http.StatusOK, map[string]any{"confirmed": false, "error": "expired"})
+			return
+		}
+
+		// Check if user sent coins FROM their login address TO the genesis address
+		// Only accepts transactions created after this challenge was issued
+		// Check if the unique verify address received coins.
+		// Each challenge has a unique address, so any balance means this challenge was satisfied.
+		verifyCoins, verifyErr := checkBalanceOnLoginChain(loginNodeAddr, pending.VerifyAddress)
+		verifyTxID := ""
+		if verifyErr == nil && verifyCoins > 0 {
+			verifyTxID = "verified" // unique address has balance
+		}
+
+		if verifyTxID != "" {
+			// Create session
+			sessionID := generateSessionID()
+			sessionsMu.Lock()
+			sessions[sessionID] = &session{
+				Address:   pending.Address,
+				Visors:    pending.Visors,
+				CreatedAt: time.Now(),
+				ExpiresAt: time.Now().Add(24 * time.Hour),
+			}
+			sessionsMu.Unlock()
+
+			// Clean up pending login
+			pendingLoginsMu.Lock()
+			delete(pendingLogins, challenge)
+			pendingLoginsMu.Unlock()
+
+			// Set session cookie
+			http.SetCookie(w, &http.Cookie{Name: "session", Value: sessionID, MaxAge: 86400, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode}) //nolint:gosec // also served as plain http over dmsg, so no Secure
+
+			if r.URL.Query().Get("redirect") == "1" {
+				http.Redirect(w, r, "/account", http.StatusFound)
+				return
+			}
+			httputil.WriteJSON(w, r, http.StatusOK, map[string]any{"confirmed": true})
+			return
+		}
+
+		if r.URL.Query().Get("redirect") == "1" {
+			http.Redirect(w, r, "/login/verify?challenge="+url.QueryEscape(challenge)+"&msg=Transaction+not+yet+confirmed", http.StatusFound)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, map[string]any{"confirmed": false})
+	})
+
+	// Account page — shows visor data for logged-in user
+	mux.HandleFunc("GET /account", func(w http.ResponseWriter, r *http.Request) {
+		if !loginEnabled {
+			http.Redirect(w, r, "/login?msg=Login+is+not+currently+available", http.StatusFound)
+			return
+		}
+		sessionCookie, err := r.Cookie("session")
+		if err != nil {
+			http.Redirect(w, r, "/login?msg=Please+log+in", http.StatusFound)
+			return
+		}
+
+		sessionsMu.RLock()
+		sess, ok := sessions[sessionCookie.Value]
+		sessionsMu.RUnlock()
+
+		if !ok || time.Now().After(sess.ExpiresAt) {
+			if ok {
+				sessionsMu.Lock()
+				delete(sessions, sessionCookie.Value)
+				sessionsMu.Unlock()
+			}
+			http.Redirect(w, r, "/login?msg=Session+expired", http.StatusFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+
+		l := loginPageHeader("Account")
+		l += "<style>table.rewards { border-collapse: collapse; width: 100%; } table.rewards th, table.rewards td { border: 1px solid #444; padding: 6px 10px; text-align: left; } table.rewards th { background: #222; }</style>"
+		l += navlinks
+		l += "<h1>Account</h1>"
+		l += "<p>Logged in as: <code>" + sess.Address + "</code></p>"
+		l += fmt.Sprintf("<p>Visors: %d</p>", len(sess.Visors))
+		l += "<ul>"
+		for _, v := range sess.Visors {
+			l += "<li><a href='/account/survey/" + v + "'><code>" + v + "</code></a></li>"
+		}
+		l += "</ul>"
+
+		// Reward history
+		histDir := filepath.Join(wd, "hist")
+		rewardHistory := findRewardHistory(histDir, sess.Address)
+		if len(rewardHistory) > 0 {
+			l += "<h2>Reward History</h2>"
+			l += "<table class='rewards'><tr><th>Date</th><th>Reward (SKY)</th></tr>"
+			totalReward := 0.0
+			for _, rh := range rewardHistory {
+				l += fmt.Sprintf("<tr><td>%s</td><td>%s</td></tr>", rh.Date, rh.Amount)
+				if v, err := strconv.ParseFloat(strings.TrimSpace(rh.Amount), 64); err == nil {
+					totalReward += v
+				}
+			}
+			l += fmt.Sprintf("<tr><th>Total</th><th>%.6f</th></tr>", totalReward)
+			l += "</table>"
+		} else {
+			l += "<p class='info'>No reward history found.</p>"
+		}
+
+		l += "<p><a href='/logout'>Logout</a></p>"
+		l += "</body></html>"
+		w.Write([]byte(l)) //nolint:errcheck,gosec
+	})
+
+	// Authenticated survey endpoint — only serves surveys for visors in the user's session
+	mux.HandleFunc("GET /account/survey/{pk}", func(w http.ResponseWriter, r *http.Request) {
+		sessionCookie, err := r.Cookie("session")
+		if err != nil {
+			http.Redirect(w, r, "/login?msg=Please+log+in", http.StatusFound)
+			return
+		}
+
+		sessionsMu.RLock()
+		sess, ok := sessions[sessionCookie.Value]
+		sessionsMu.RUnlock()
+
+		if !ok || time.Now().After(sess.ExpiresAt) {
+			http.Redirect(w, r, "/login?msg=Session+expired", http.StatusFound)
+			return
+		}
+
+		pk := r.PathValue("pk")
+
+		// Verify this PK belongs to the logged-in user's visors
+		authorized := slices.Contains(sess.Visors, pk)
+		if !authorized {
+			httputil.WriteJSON(w, r, http.StatusForbidden, map[string]any{"error": "not authorized for this visor"})
+			return
+		}
+
+		surveyPath := filepath.Join(backupsDir, pk, "node-info.json")
+		surveyData, err := os.ReadFile(surveyPath) //nolint:gosec
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusNotFound, map[string]any{"error": "survey not available"})
+			return
+		}
+
+		// Serve as JSON
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(surveyData) //nolint:errcheck,gosec
+	})
+
+	// Logout
+	mux.HandleFunc("GET /logout", func(w http.ResponseWriter, r *http.Request) {
+		sessionCookie, err := r.Cookie("session")
+		if err == nil {
+			sessionsMu.Lock()
+			delete(sessions, sessionCookie.Value)
+			sessionsMu.Unlock()
+		}
+		http.SetCookie(w, &http.Cookie{Name: "session", MaxAge: -1, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode}) //nolint:gosec // also served as plain http over dmsg, so no Secure
+		http.Redirect(w, r, "/login?info=Logged+out", http.StatusFound)
+	})
+}
+
+func loginPageHeader(title string) string {
+	return "<html><head><title>" + title + " - Skywire Rewards</title>" +
+		"<style type='text/css'>a { color: #3399FF; } a:visited { color: #FF00FF; }" +
+		"body { background-color: black; color: white; font-family: monospace; max-width: 600px; margin: 40px auto; padding: 0 20px; }" +
+		"input[type=text] { width: 100%; padding: 8px; font-family: monospace; font-size: 14px; background: #222; color: white; border: 1px solid #444; margin: 10px 0; }" +
+		"button { padding: 8px 20px; font-family: monospace; font-size: 14px; background: #36A2EB; color: white; border: none; cursor: pointer; }" +
+		"button:hover { background: #2888CC; }" +
+		"code { background: #222; padding: 2px 6px; }" +
+		".error { color: #FF6384; }" +
+		".info { color: #4BC0C0; }" +
+		"</style></head><body>"
+}

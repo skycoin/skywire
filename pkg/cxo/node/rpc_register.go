@@ -63,16 +63,6 @@ func registerNodeRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 			return rpcReply, rpcRcvr.Feeds(rpcArg, rpcReply)
 		}, nil
 	})
-	rpcSrv.HandleCall(rpcName+".IsSharing", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
-		var rpcArg cipher.PubKey
-		if err := rpcDec.Decode(&rpcArg); err != nil {
-			return nil, err
-		}
-		return func() (any, error) {
-			rpcReply := new(bool)
-			return rpcReply, rpcRcvr.IsSharing(rpcArg, rpcReply)
-		}, nil
-	})
 	rpcSrv.HandleCall(rpcName+".Share", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		var rpcArg cipher.PubKey
 		if err := rpcDec.Decode(&rpcArg); err != nil {
@@ -81,6 +71,16 @@ func registerNodeRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 		return func() (any, error) {
 			rpcReply := new(struct{})
 			return rpcReply, rpcRcvr.Share(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".Sharing", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		var rpcArg cipher.PubKey
+		if err := rpcDec.Decode(&rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.Sharing(rpcArg, rpcReply)
 		}, nil
 	})
 	rpcSrv.HandleCall(rpcName+".Shutdown", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {

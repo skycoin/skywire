@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/sse_hub_test.go
+// Package commands cmd/apps/skychat/commands/sse_hub_test.go c4-app-chat
 //
 // Unit coverage for the legacy /sse hub surface — the string replay
 // ring, live fan-out, the no-subscribers drop-count regression guard,

@@ -162,10 +162,11 @@ func (s *Stream) writeRequest(rAddr Addr) (req StreamRequest, err error) {
 		return req, err
 	}
 	req = StreamRequest{
-		Timestamp: time.Now().UnixNano(),
-		SrcAddr:   s.lAddr,
-		DstAddr:   s.rAddr,
-		NoiseMsg:  nsMsg,
+		Timestamp:            time.Now().UnixNano(),
+		SrcAddr:              s.lAddr,
+		DstAddr:              s.rAddr,
+		NoiseMsg:             nsMsg,
+		AcceptsServerRefusal: true,
 	}
 	obj, err := MakeSignedStreamRequest(&req, s.ses.localSK())
 	if err != nil {
@@ -244,12 +245,10 @@ func (s *Stream) readRequest() (req StreamRequest, err error) {
 
 func (s *Stream) writeResponse(reqHash cipher.SHA256) error {
 	// Obtain associated local listener.
-	pVal, ok := s.ses.porter.PortValue(s.lAddr.Port)
-	if !ok {
-		return ErrReqNoListener
-	}
+	pVal, _ := s.ses.porter.PortValue(s.lAddr.Port)
 	lis, ok := pVal.(*Listener)
 	if !ok {
+		s.writeRefusal(reqHash, ErrReqNoListener)
 		return ErrReqNoListener
 	}
 
@@ -277,6 +276,17 @@ func (s *Stream) writeResponse(reqHash cipher.SHA256) error {
 	return lis.introduceStream(s)
 }
 
+// writeRefusal answers a request with the dmsg error that refused it, signed
+// by this client. The caller must hold a request that readRequest verified.
+func (s *Stream) writeRefusal(reqHash cipher.SHA256, dErr Error) {
+	resp := StreamResponse{ReqHash: reqHash, ErrCode: dErr.code}
+	obj, err := MakeSignedStreamResponse(&resp, s.ses.localSK())
+	if err != nil {
+		return
+	}
+	_ = s.ses.writeObject(s.muxStream(), obj) //nolint:errcheck,gosec
+}
+
 func (s *Stream) readResponse(req StreamRequest) error {
 	obj, err := s.ses.readObject(s.muxStream())
 	if err != nil {
@@ -285,6 +295,11 @@ func (s *Stream) readResponse(req StreamRequest) error {
 	resp, err := obj.ObtainStreamResponse()
 	if err != nil {
 		return err
+	}
+	// A refusal may be signed by the session's remote, which never reached
+	// the destination. An acceptance is only ever the destination's.
+	if !resp.Accepted && verifySig(s.ses.RemotePK(), obj.Sig(), obj.Object()) == nil {
+		return resp.verify(req, false)
 	}
 	if err := resp.Verify(req); err != nil {
 		return err

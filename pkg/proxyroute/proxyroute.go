@@ -1,4 +1,4 @@
-// Package proxyroute pkg/proxyroute/proxyroute.go
+// Package proxyroute pkg/proxyroute/proxyroute.go c2-app-proxy
 //
 // Per-domain upstream selection for the resolving proxies. A resolver forwards
 // every host it does not resolve itself to one upstream SOCKS5 proxy (normally

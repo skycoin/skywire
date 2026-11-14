@@ -260,6 +260,9 @@ var (
 	// configReadDones tracks channels for signaling when config has been read
 	configReadDones   = make(map[ProcKey]chan struct{})
 	configReadDonesMu sync.Mutex
+	// internalAppEnvOwners maps an env var to the internal app that last set it.
+	internalAppEnvOwners   = make(map[string]ProcKey)
+	internalAppEnvOwnersMu sync.Mutex
 )
 
 // RegisterInProcessConn registers a net.Conn for an in-process app by its ProcKey.
@@ -354,15 +357,32 @@ func signalConfigRead(key ProcKey) {
 	}
 }
 
+// SetInternalAppEnv sets a starting internal app's env vars and records it as
+// their owner. Call it while holding the start lock.
+func SetInternalAppEnv(key ProcKey, envs []string) {
+	internalAppEnvOwnersMu.Lock()
+	defer internalAppEnvOwnersMu.Unlock()
+	for _, env := range envs {
+		if k, v, ok := strings.Cut(env, "="); ok {
+			_ = os.Setenv(k, v) //nolint:errcheck
+			internalAppEnvOwners[k] = key
+		}
+	}
+}
+
 // UnsetInternalAppEnv removes an exiting internal app's env vars under the
 // start lock. Unlocked, a restart's new instance could lose its PROC_CONFIG
 // between being given it and reading it, and NewClient then exits the visor.
-func UnsetInternalAppEnv(envs []string) {
+// A var a newer instance has set since is its own and is left alone.
+func UnsetInternalAppEnv(key ProcKey, envs []string) {
 	internalAppStartMu.Lock()
 	defer internalAppStartMu.Unlock()
+	internalAppEnvOwnersMu.Lock()
+	defer internalAppEnvOwnersMu.Unlock()
 	for _, env := range envs {
-		if k, _, ok := strings.Cut(env, "="); ok {
+		if k, _, ok := strings.Cut(env, "="); ok && internalAppEnvOwners[k] == key {
 			_ = os.Unsetenv(k) //nolint:errcheck
+			delete(internalAppEnvOwners, k)
 		}
 	}
 }

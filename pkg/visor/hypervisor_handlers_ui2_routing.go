@@ -15,17 +15,17 @@ import (
 // through the JSON routing handlers.
 
 func (hv *Hypervisor) ui2RoutingRoutes(r *httputil.Router) {
-	r.Get("/ui2/visors/{pk}/routing", hv.ui2Routing())
-	r.Get("/ui2/visors/{pk}/routing/min-hops", hv.ui2MinHops())
-	r.Post("/ui2/visors/{pk}/routing/min-hops", hv.ui2MinHopsSave())
-	r.Get("/ui2/visors/{pk}/routing/rules", hv.ui2Rules())
-	r.Delete("/ui2/visors/{pk}/routing/rules/{rid}", hv.ui2RuleDelete())
-	r.Get("/ui2/visors/{pk}/routing/groups", hv.ui2RouteGroups())
-	r.Get("/ui2/visors/{pk}/routing/policies", hv.ui2RoutingPolicies())
-	r.Get("/ui2/visors/{pk}/routing/find", hv.ui2PathForm(false))
-	r.Get("/ui2/visors/{pk}/routing/calc", hv.ui2PathForm(true))
-	r.Post("/ui2/visors/{pk}/routing/find", hv.ui2PathRun(false))
-	r.Post("/ui2/visors/{pk}/routing/calc", hv.ui2PathRun(true))
+	r.Get("/visors/{pk}/routing", hv.ui2Routing())
+	r.Get("/visors/{pk}/routing/min-hops", hv.ui2MinHops())
+	r.Post("/visors/{pk}/routing/min-hops", hv.ui2MinHopsSave())
+	r.Get("/visors/{pk}/routing/rules", hv.ui2Rules())
+	r.Delete("/visors/{pk}/routing/rules/{rid}", hv.ui2RuleDelete())
+	r.Get("/visors/{pk}/routing/groups", hv.ui2RouteGroups())
+	r.Get("/visors/{pk}/routing/policies", hv.ui2RoutingPolicies())
+	r.Get("/visors/{pk}/routing/find", hv.ui2PathForm(false))
+	r.Get("/visors/{pk}/routing/calc", hv.ui2PathForm(true))
+	r.Post("/visors/{pk}/routing/find", hv.ui2PathRun(false))
+	r.Post("/visors/{pk}/routing/calc", hv.ui2PathRun(true))
 }
 
 func ui2MinHopsOf(ctx *httpCtx) (string, string) {

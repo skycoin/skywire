@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/moderation.go c4-app-chat
+// Package group pkg/skychat/group/moderation.go c3-app-chat
 // signed envelopes for the moderation half of admission control:
 // ban / unban, mute / unmute, and the group-wide read-only toggle.
 //

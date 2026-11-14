@@ -54,6 +54,12 @@ const contextMenuCSS = `
 .xterm-menu button:disabled { color: #5b626e; }
 .xterm-menu button span { color: #6b7280; }
 .xterm-menu hr { margin: 4px 2px; border: 0; border-top: 1px solid #2c333f; }
+.xterm-pastebox { padding: 8px; color: #d3d7cf; user-select: auto; }
+.xterm-pastebox textarea {
+  display: block; width: 280px; margin-top: 6px; resize: none;
+  border: 1px solid #3a4150; border-radius: 4px; background: #11141a;
+  color: #d3d7cf; font: inherit;
+}
 `
 
 // wireContextMenu attaches the right-click handler.
@@ -209,14 +215,18 @@ func (m *contextMenu) hide() {
 //
 // Ctrl+Shift+V and the browser's own paste arrive as a paste event with the
 // data attached, which needs no permission. Asking for the clipboard rather
-// than being handed it does, so this may prompt, and does nothing if refused.
+// than being handed it does, so this may prompt. Where the page may not read
+// the clipboard (plain http on a LAN address is not a secure context) or the
+// read is refused, a paste box opens instead.
 func (t *Terminal) PasteFromClipboard() {
 	clipboard := window.Get("navigator").Get("clipboard")
 	if !clipboard.Truthy() || clipboard.Get("readText").Type() != js.TypeFunction {
+		t.showPasteBox()
 		return
 	}
 	promise := clipboard.Call("readText")
 	if !promise.Truthy() || promise.Get("then").Type() != js.TypeFunction {
+		t.showPasteBox()
 		return
 	}
 	var ok, failed js.Func
@@ -233,7 +243,78 @@ func (t *Terminal) PasteFromClipboard() {
 	})
 	failed = js.FuncOf(func(js.Value, []js.Value) any {
 		release()
+		t.showPasteBox()
 		return nil
 	})
 	promise.Call("then", ok, failed)
+}
+
+// showPasteBox opens a small box for the browser's own paste, which carries the
+// data with the event and needs no permission. What lands in it goes to the
+// terminal. Escape, Enter or leaving the box closes it.
+func (t *Terminal) showPasteBox() {
+	ensureStylesheet()
+	box := document.Call("createElement", "div")
+	box.Set("className", "xterm-menu xterm-pastebox")
+	hint := document.Call("createElement", "div")
+	hint.Set("textContent", "Press Ctrl+V (or long-press, Paste) to paste here")
+	ta := document.Call("createElement", "textarea")
+	ta.Set("rows", 2)
+	box.Call("appendChild", hint)
+	box.Call("appendChild", ta)
+
+	var onPaste, onInput, onKey, onBlur js.Func
+	closed := false
+	closeBox := func() {
+		if closed {
+			return
+		}
+		closed = true
+		box.Call("remove")
+		onPaste.Release()
+		onInput.Release()
+		onKey.Release()
+		onBlur.Release()
+		t.Focus()
+	}
+	send := func(s string) {
+		closeBox()
+		if s != "" {
+			t.Paste(s)
+		}
+	}
+	onPaste = js.FuncOf(func(_ js.Value, args []js.Value) any {
+		ev := args[0]
+		if cd := ev.Get("clipboardData"); cd.Truthy() {
+			ev.Call("preventDefault")
+			send(cd.Call("getData", "text/plain").String())
+		}
+		return nil
+	})
+	// A touch keyboard's paste may only show up as input.
+	onInput = js.FuncOf(func(js.Value, []js.Value) any {
+		send(ta.Get("value").String())
+		return nil
+	})
+	onKey = js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if k := args[0].Get("key").String(); k == "Escape" || k == "Enter" {
+			args[0].Call("preventDefault")
+			send(ta.Get("value").String())
+		}
+		return nil
+	})
+	onBlur = js.FuncOf(func(js.Value, []js.Value) any {
+		closeBox()
+		return nil
+	})
+	ta.Call("addEventListener", "paste", onPaste)
+	ta.Call("addEventListener", "input", onInput)
+	ta.Call("addEventListener", "keydown", onKey)
+	ta.Call("addEventListener", "blur", onBlur)
+
+	rect := t.element.Call("getBoundingClientRect")
+	box.Get("style").Set("left", jsPx(rect.Get("left").Float()+16))
+	box.Get("style").Set("top", jsPx(rect.Get("top").Float()+16))
+	document.Get("body").Call("appendChild", box)
+	ta.Call("focus")
 }

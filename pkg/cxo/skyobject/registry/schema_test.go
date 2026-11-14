@@ -57,7 +57,7 @@ func TestSchema_Reference(t *testing.T) {
 }
 
 func TestSchema_IsReference(t *testing.T) {
-	// IsReference() bool
+	// Referential() bool
 
 	var (
 		reg = testRegistry()
@@ -75,15 +75,15 @@ func TestSchema_IsReference(t *testing.T) {
 			continue
 		}
 
-		if true == ts.IsReference() {
-			t.Error("IsReference() returns true for non-reference type")
+		if true == ts.Referential() {
+			t.Error("Referential() returns true for non-reference type")
 			// keep going on
 		}
 
 		for _, fl := range ts.Fields() {
 			t.Log(tt.Name, ">", fl.Name())
 
-			if fs := fl.Schema(); true == fs.IsReference() {
+			if fs := fl.Schema(); true == fs.Referential() {
 
 				if tt.Name != "test.Group" {
 					t.Error("unexpected reference")
@@ -92,7 +92,7 @@ func TestSchema_IsReference(t *testing.T) {
 
 				switch typ := fs.ReferenceType(); typ {
 				case ReferenceTypeNone:
-					t.Error("IsReference() returns true but ReferenceType is " +
+					t.Error("Referential() returns true but ReferenceType is " +
 						"ReferenceTypeNone")
 				case ReferenceTypeSingle:
 					if fl.Name() != "Curator" {
@@ -110,7 +110,7 @@ func TestSchema_IsReference(t *testing.T) {
 					}
 					continue
 				default:
-					t.Errorf("IsReference() returns true but ReferenceType is "+
+					t.Errorf("Referential() returns true but ReferenceType is "+
 						"undefined %d", typ)
 					continue
 				}
@@ -150,7 +150,7 @@ func TestSchema_ReferenceType(t *testing.T) {
 
 		var fs = fl.Schema()
 
-		if true == fs.IsReference() {
+		if true == fs.Referential() {
 			switch fs.ReferenceType() {
 			case ReferenceTypeSingle, ReferenceTypeSlice, ReferenceTypeDynamic:
 			default:
@@ -168,7 +168,7 @@ func TestSchema_ReferenceType(t *testing.T) {
 }
 
 func TestSchema_HasReferences(t *testing.T) {
-	// HasReferences() bool
+	// ContainsReferences() bool
 
 	var (
 		reg = testRegistry()
@@ -187,7 +187,7 @@ func TestSchema_HasReferences(t *testing.T) {
 			continue
 		}
 
-		if true == s.HasReferences() {
+		if true == s.ContainsReferences() {
 			if s.Name() == "test.Group" {
 				continue // ok
 			} else {
@@ -231,7 +231,7 @@ func TestSchema_HasReferences(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if false == s.HasReferences() {
+	if false == s.ContainsReferences() {
 		t.Error("has not references (deep)")
 	}
 
@@ -485,7 +485,7 @@ func TestSchema_RawName(t *testing.T) {
 }
 
 func TestSchema_IsRegistered(t *testing.T) {
-	// IsRegistered() bool
+	// Registered() bool
 
 	var (
 		reg = testRegistry()
@@ -503,8 +503,8 @@ func TestSchema_IsRegistered(t *testing.T) {
 			continue
 		}
 
-		if false == s.IsRegistered() {
-			t.Error("IsRegistered returns false for registered schema")
+		if false == s.Registered() {
+			t.Error("Registered returns false for registered schema")
 			// keep going on
 		}
 
@@ -519,8 +519,8 @@ func TestSchema_IsRegistered(t *testing.T) {
 				continue
 			}
 
-			if true == fs.IsRegistered() {
-				t.Error("IsRegistered of non-struct returns true")
+			if true == fs.Registered() {
+				t.Error("Registered of non-struct returns true")
 			}
 
 		}

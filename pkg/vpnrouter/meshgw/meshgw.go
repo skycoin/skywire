@@ -1,4 +1,4 @@
-// Package meshgw pkg/vpnrouter/meshgw/meshgw.go c4-app-vpn
+// Package meshgw pkg/vpnrouter/meshgw/meshgw.go c3-app-vpn
 //
 // meshgw is the vpn-router's "mesh gateway": it lets any LAN device behind the
 // router reach dmsg/skynet services by name — e.g. `curl http://<pk>.dmsg` —
@@ -192,7 +192,7 @@ func (g *Gateway) parse(scheme, name string) (cipher.PubKey, []skynetweb.RouteLa
 func routeKey(route []skynetweb.RouteLabel) string {
 	var b strings.Builder
 	for _, rl := range route {
-		if rl.IsTpID {
+		if rl.ByTpID {
 			b.WriteString(rl.TpID.String())
 		} else {
 			b.WriteString(rl.PK.Hex())

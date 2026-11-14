@@ -1,3 +1,4 @@
+// Package skymail pkg/skymail/settings.go c3-app-mail
 package skymail
 
 import (

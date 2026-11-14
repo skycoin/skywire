@@ -44,30 +44,37 @@ func (hv *Hypervisor) getRSNRemoteStats() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusServiceUnavailable, []RSNRemoteStat{})
 			return
 		}
-		pks := hv.visor.conf.EffectiveRouteSetupNodes()
-		out := make([]RSNRemoteStat, len(pks))
-
-		var wg sync.WaitGroup
-		for i, pk := range pks {
-			wg.Add(1)
-			go func(i int, pk cipher.PubKey) {
-				defer wg.Done()
-				out[i] = hv.fetchOneRSNStat(pk)
-			}(i, pk)
-		}
-
-		// Bound the parallel fan-out by the per-RSN timeout — the
-		// goroutines don't share a context so the wait is just an
-		// upper bound on the slowest fetch.
-		done := make(chan struct{})
-		go func() { wg.Wait(); close(done) }()
-		select {
-		case <-done:
-		case <-time.After(rsnRemoteStatsTimeout + 2*time.Second):
-		}
-
-		httputil.WriteJSON(w, r, http.StatusOK, out)
+		httputil.WriteJSON(w, r, http.StatusOK, hv.rsnRemoteStats())
 	}
+}
+
+// rsnRemoteStats fetches every configured route setup node's /stats in
+// parallel. A node that has not answered by the deadline keeps an empty entry.
+func (hv *Hypervisor) rsnRemoteStats() []RSNRemoteStat {
+	pks := hv.visor.conf.EffectiveRouteSetupNodes()
+	out := make([]RSNRemoteStat, len(pks))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for i, pk := range pks {
+		out[i].PK = pk
+		wg.Add(1)
+		go func(i int, pk cipher.PubKey) {
+			defer wg.Done()
+			s := hv.fetchOneRSNStat(pk)
+			mu.Lock()
+			out[i] = s
+			mu.Unlock()
+		}(i, pk)
+	}
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(rsnRemoteStatsTimeout + 2*time.Second):
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	return append([]RSNRemoteStat(nil), out...)
 }
 
 func (hv *Hypervisor) fetchOneRSNStat(pk cipher.PubKey) RSNRemoteStat {

@@ -1,6 +1,6 @@
 //go:build wasm || (js && wasm)
 
-// Package visorconfig pkg/visor/visorconfig/walletconfig_wasm.go c3-app-wallet
+// Package visorconfig pkg/visor/visorconfig/walletconfig_wasm.go c3-vis-core
 package visorconfig
 
 // walletCustodyDiskCapable: a browser visor runs the skycoin-web app in-process

@@ -45,15 +45,15 @@ func TestGenerate_PinnedIdentity(t *testing.T) {
 }
 
 func TestGenerate_Hypervisor(t *testing.T) {
-	v, err := Generate(Options{IsHypervisor: true})
+	v, err := Generate(Options{Hypervisor: true})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
 	if v.Hypervisor == nil {
-		t.Fatal("Hypervisor stanza should be populated when IsHypervisor=true")
+		t.Fatal("Hypervisor stanza should be populated when Hypervisor=true")
 	}
 	if !v.Hypervisor.Enable {
-		t.Error("Hypervisor.Enable should be true when IsHypervisor=true")
+		t.Error("Hypervisor.Enable should be true when Hypervisor=true")
 	}
 }
 
@@ -84,12 +84,12 @@ func TestGenerate_RewardAddress(t *testing.T) {
 }
 
 func TestGenerate_IsPublic(t *testing.T) {
-	v, err := Generate(Options{IsPublic: true})
+	v, err := Generate(Options{Public: true})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
-	if !v.IsPublic {
-		t.Error("V1.IsPublic = false; want true")
+	if !v.Public {
+		t.Error("V1.Public = false; want true")
 	}
 }
 
@@ -101,10 +101,10 @@ func TestGenerate_IsPublic(t *testing.T) {
 func TestGenerate_JSONRoundTrip(t *testing.T) {
 	pk1, _ := cipher.GenerateKeyPair()
 	original, err := Generate(Options{
-		IsHypervisor:  true,
+		Hypervisor:    true,
 		HypervisorPKs: []cipher.PubKey{pk1},
 		RewardAddress: "2jnZqqJsCMB1v4VUKk6f1PDN9EuLZQxqoqp",
-		IsPublic:      true,
+		Public:        true,
 	})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
@@ -123,7 +123,7 @@ func TestGenerate_JSONRoundTrip(t *testing.T) {
 	if roundTripped.RewardAddress != original.RewardAddress {
 		t.Errorf("RewardAddress drift: %q vs %q", roundTripped.RewardAddress, original.RewardAddress)
 	}
-	if !roundTripped.IsPublic {
+	if !roundTripped.Public {
 		t.Error("IsPublic dropped through round-trip")
 	}
 	if len(roundTripped.Hypervisors) != 1 || roundTripped.Hypervisors[0] != pk1 {

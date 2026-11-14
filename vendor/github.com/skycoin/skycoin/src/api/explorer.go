@@ -1,3 +1,4 @@
+// Package api src/api/explorer.go c3-coin-api
 package api
 
 import (
@@ -58,7 +59,11 @@ func coinSupplyHandler(gateway Gatewayer) http.HandlerFunc {
 
 		dist := gateway.VisorConfig().Distribution
 
-		unlockedAddrs := dist.UnlockedAddressesDecoded()
+		unlockedAddrs, err := dist.UnlockedAddressesDecoded()
+		if err != nil {
+			wh.Error500(w, fmt.Sprintf("unlocked distribution addresses: %v", err))
+			return
+		}
 		// Search map of unlocked addresses, used to filter unspents
 		unlockedAddrSet := newAddrSet(unlockedAddrs)
 
@@ -107,7 +112,16 @@ func coinSupplyHandler(gateway Gatewayer) http.HandlerFunc {
 		}
 
 		// locked distribution addresses
-		lockedAddrs := dist.LockedAddressesDecoded()
+		lockedAddrs, err := dist.LockedAddressesDecoded()
+		if err != nil {
+			wh.Error500(w, fmt.Sprintf("locked distribution addresses: %v", err))
+			return
+		}
+		lockedStrs, err := dist.LockedAddresses()
+		if err != nil {
+			wh.Error500(w, fmt.Sprintf("locked distribution addresses: %v", err))
+			return
+		}
 		lockedAddrSet := newAddrSet(lockedAddrs)
 
 		// get total coins hours which excludes locked distribution addresses
@@ -149,7 +163,7 @@ func coinSupplyHandler(gateway Gatewayer) http.HandlerFunc {
 			CurrentCoinHourSupply: strconv.FormatUint(currentCoinHours, 10),
 			TotalCoinHourSupply:   strconv.FormatUint(totalCoinHours, 10),
 			UnlockedAddresses:     dist.UnlockedAddresses(),
-			LockedAddresses:       dist.LockedAddresses(),
+			LockedAddresses:       lockedStrs,
 		}
 
 		wh.SendJSONOr500(logger, w, cs)
@@ -159,14 +173,17 @@ func coinSupplyHandler(gateway Gatewayer) http.HandlerFunc {
 // Richlist contains top address balances
 type Richlist struct {
 	Richlist []readable.RichlistBalance `json:"richlist"`
+	// Total is how many addresses the whole richlist has, before offset and n.
+	Total int `json:"total"`
 }
 
 // richlistHandler returns the top skycoin holders
 // Method: GET
-// URI: /richlist?n=${number}&include-distribution=${bool}
+// URI: /richlist?n=${number}&offset=${number}&include-distribution=${bool}
 // Args:
 //
 //		n [int, number of results to include]
+//		offset [int, number of top results to skip, for paging]
 //	 include-distribution [bool, include the distribution addresses in the richlist]
 func richlistHandler(gateway Gatewayer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -184,6 +201,16 @@ func richlistHandler(gateway Gatewayer) http.HandlerFunc {
 			topn, err = strconv.Atoi(topnStr)
 			if err != nil {
 				wh.Error400(w, "invalid n")
+				return
+			}
+		}
+
+		var offset int
+		if offsetStr := r.FormValue("offset"); offsetStr != "" {
+			var err error
+			offset, err = strconv.Atoi(offsetStr)
+			if err != nil || offset < 0 {
+				wh.Error400(w, "invalid offset")
 				return
 			}
 		}
@@ -207,6 +234,8 @@ func richlistHandler(gateway Gatewayer) http.HandlerFunc {
 			return
 		}
 
+		total := len(richlist)
+		richlist = richlist[min(offset, total):]
 		if topn > 0 && topn < len(richlist) {
 			richlist = richlist[:topn]
 		}
@@ -219,6 +248,7 @@ func richlistHandler(gateway Gatewayer) http.HandlerFunc {
 
 		wh.SendJSONOr500(logger, w, Richlist{
 			Richlist: readableRichlist,
+			Total:    total,
 		})
 	}
 }

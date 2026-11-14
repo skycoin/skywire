@@ -1,11 +1,13 @@
 //go:build (!linux && !darwin && !windows) || ios
 
-// Package vpn pkg/vpn/os_server.go c4-app-vpn
+// Package vpn pkg/vpn/os_server.go c3-app-vpn
 package vpn
 
 import (
 	"errors"
 	"net/netip"
+
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 var (
@@ -50,7 +52,7 @@ func GetIPv6ForwardingValue() (string, error) {
 }
 
 // SetIPv4ForwardingValue sets `val` value of IPv4 forwarding.
-func SetIPv4ForwardingValue(_ string) error {
+func SetIPv4ForwardingValue(_ logging.FieldLogger, _ string) error {
 	return errServerMethodsNotSupported
 }
 
@@ -60,7 +62,7 @@ func SetIPv6ForwardingValue(_ string) error {
 }
 
 // EnableIPv4Forwarding enables IPv4 forwarding.
-func EnableIPv4Forwarding() error {
+func EnableIPv4Forwarding(_ logging.FieldLogger) error {
 	return errServerMethodsNotSupported
 }
 
@@ -70,11 +72,11 @@ func EnableIPv6Forwarding() error {
 }
 
 // EnableIPMasquerading enables IP masquerading for the interface with name `ifcName`.
-func EnableIPMasquerading(_ string) error {
+func EnableIPMasquerading(_ logging.FieldLogger, _ string) error {
 	return errServerMethodsNotSupported
 }
 
 // DisableIPMasquerading disables IP masquerading for the interface with name `ifcName`.
-func DisableIPMasquerading(_ string) error {
+func DisableIPMasquerading(_ logging.FieldLogger, _ string) error {
 	return errServerMethodsNotSupported
 }

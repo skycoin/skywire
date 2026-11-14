@@ -1,4 +1,4 @@
-// Package router pkg/router/fec_mux.go — wiring the systematic Cauchy-RS erasure
+// Package router pkg/router/fec_mux.go c2-net-routing — wiring the systematic Cauchy-RS erasure
 // core (fec.go, #4270) into the packet-mux striping / reorder data plane.
 //
 // The aggregation wall is head-of-line blocking: the no-skip reorder frontier
@@ -444,7 +444,7 @@ func (m *routeMux) fecStripeReassign(legs []groupLeg, idx int) (int, bool) {
 			continue
 		}
 		tp := legs[j].tp
-		if tp == nil || tp.IsClosed() || !m.legReadyAt(j) {
+		if tp == nil || tp.Closed() || !m.legReadyAt(j) {
 			continue
 		}
 		if m.fecStripeUsed[j] < m.knInt(routersettings.FECR) {

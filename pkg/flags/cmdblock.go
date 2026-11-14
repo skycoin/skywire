@@ -1,4 +1,4 @@
-// Package flags pkg/flags/cmdblock.go c0-com-util
+// Package flags pkg/flags/cmdblock.go c1-com-util
 //
 // The subcommand listing, rendered here for the same reason the flag block is
 // — cobra pads the name into a column and then appends the Short description

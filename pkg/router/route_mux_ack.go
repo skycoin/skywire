@@ -333,11 +333,11 @@ func (m *routeMux) maxActiveLegRTTms() float64 {
 	m.legMu.RLock()
 	defer m.legMu.RUnlock()
 	maxRtt := 0.0
-	for i, lc := range m.legs {
+	for _, lc := range m.legs {
 		if lc == nil {
 			continue
 		}
-		if i < len(m.standby) && m.standby[i] {
+		if lc.standby {
 			continue // active legs only
 		}
 		if lc.ecfRttMs > maxRtt {
@@ -392,4 +392,16 @@ func (m *routeMux) retxSetTp(seq uint32, tpID uuid.UUID) {
 		return
 	}
 	m.retxBuf.SetTpID(seq, tpID)
+}
+
+// forgetLeg drops the per-transport delay and latency estimates of a leg that
+// has left the group.
+func (m *routeMux) forgetLeg(tpID uuid.UUID) {
+	m.ackDelayByTpMu.Lock()
+	delete(m.ackDelayByTp, tpID)
+	delete(m.sbdFoldNano, tpID)
+	m.ackDelayByTpMu.Unlock()
+	m.legE2EMu.Lock()
+	delete(m.legE2EByTp, tpID)
+	m.legE2EMu.Unlock()
 }

@@ -12,7 +12,7 @@
 // The page's filesystem snapshot persists the file, provided it is not a
 // *.db file and not under local/ (pkg/wasmhv/browseui/exec-worker.js).
 
-// Package group cmd/apps/skychat/group/store_memory.go c4-app-chat
+// Package group pkg/skychat/group/store_memory.go c3-app-chat
 package group
 
 import (
@@ -179,7 +179,7 @@ func (s *Store) Get(id string) (Record, bool, error) {
 	if err := s.decodeRecord(raw, &r); err != nil {
 		return r, true, err
 	}
-	// Match store_bbolt.Get: normalize legacy records (nil Admins) so IsAdmin
+	// Match store_bbolt.Get: normalize legacy records (nil Admins) so AdministeredBy
 	// and admin-gated ops see a consistent shape.
 	r.EnsureFounderInAdmins()
 	r.EnsureKind()

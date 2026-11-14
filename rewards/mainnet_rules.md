@@ -23,7 +23,7 @@ Please join [@SkywirePSA](https://t.me/SkywirePSA) for public service announceme
 
 Reward distribution notifications are on telegram [@skywire_reward](https://t.me/skywire_reward).
 
-Information about reward distribution as well as other metrics for the skywire network can be found at [theskywirenetwork.net](https://theskywirenetwork.net)
+Information about reward distribution as well as other metrics for the skywire network can be found at [reward.skywire.dev](https://reward.skywire.dev)
 
 # Reward Pools
 
@@ -37,7 +37,7 @@ A total of up to ~1114.754  Skycoin __per pool__ are distributed daily in leap-y
 
 The presence pool reward for a day is evenly divided among all eligible visors on the basis of having met uptime and other requirements for the previous day, with IP and MAC address deduplication applied. All architectures are eligible for the presence pool.
 
-Regional saturation scaling is applied to the presence pool to promote geographic diversity. See [Regional Saturation Scaling](#Regional-Saturation-Scaling) for details.
+Regional saturation scaling is applied to the presence pool to promote geographic diversity. See [Regional Saturation Scaling](#regional-saturation-scaling) for details.
 
 ## Pool 2: Bandwidth
 
@@ -68,31 +68,31 @@ The bandwidth considered for this pool excludes same-LAN transports (where both 
 To receive Skycoin rewards for running skywire, the following requirements must be met:
 
 
-* [1)](#Version) **Minimum skywire [version](#Version)** — the newest release published at least two weeks ago, see the [Version](#Version) section
+* [1)](#1-version) **Minimum skywire [version](#1-version)** — the newest release published at least two weeks ago, see the [Version](#1-version) section
 
-* [2)](#Uptime) **75% [uptime](#Uptime) per day** minimum is required to be eligible to receive rewards
+* [2)](#uptime) **75% [uptime](#uptime) per day** minimum is required to be eligible to receive rewards
 
-* [3)](#Deployment) Visors must be running on **[the skywire production deployment](#Deployment)** with a config that is updated on every version. No default keys or addresses of this configuration may be removed - but you can add keys where applicable.
+* [3)](#deployment) Visors must be running on **[the skywire production deployment](#deployment)** with a config that is updated on every version. No default keys or addresses of this configuration may be removed - but you can add keys where applicable.
 
-* [4)](#Per-Machine-Limit) **Only 1 (one) visor per machine** - virtual machines are ineligible
+* [4)](#per-machine-limit) **Only 1 (one) visor per machine** - virtual machines are ineligible
 
-* [5)](#Per-IP-Limit) **Up to 8 (eight) visors may each receive 1 (one) reward share per location (ip address)** - with 8 shares divided between all visors at that ip address which achieved the minimum uptime.
+* [5)](#per-ip-limit) **Up to 8 (eight) visors may each receive 1 (one) reward share per location (ip address)** - with 8 shares divided between all visors at that ip address which achieved the minimum uptime.
 
-* [6)](#Skycoin-Address) **A valid [reward account xpub](#Skycoin-Address)** must be set for the visor. A single address is accepted only with an explicit opt-in, and from November 15, 2026 only while it has never sent coins
+* [6)](#skycoin-address) **A valid [reward account xpub](#skycoin-address)** must be set for the visor. A single address is accepted only with an explicit opt-in, and from November 15, 2026 only while it has never sent coins
 
-* [7)](#Connection-To-DMSG-Network) The visor must be **[connected to the DMSG network](#Connection-To-DMSG-Network)**
+* [7)](#connection-to-dmsg-network) The visor must be **[connected to the DMSG network](#connection-to-dmsg-network)**
 
-* [8)](#Transportable) **[Transports](#Transportable) can be established to the visor**
+* [8)](#transportable) **[Transports](#transportable) can be established to the visor**
 
-* [9)](#Transports) **The visor has at least 2 [Transports](#Transports)** observed at some point during the same period as uptime (checked hourly)
+* [9)](#transports) **The visor has at least 2 [Transports](#transports)** observed at some point during the same period as uptime (checked hourly)
 
-* [10)](#Transport-Setup-Node) **The visor responds to [Transport Setup-Node requests](#Transport-Setup-Node)**
+* [10)](#transport-setup-node) **The visor responds to [Transport Setup-Node requests](#transport-setup-node)**
 
-* [11)](#Routability-Ping-Latency-Metric) **The visor can have routes established to it & responds to [pings](#Ping-Latency-Metric) over routes**
+* [11)](#routability-and-ping-latency) **The visor can have routes established to it & responds to [pings](#routability-and-ping-latency) over routes**
 
-* [12)](#Transport-Bandwidth-and-Metrics) **The visor reports [transport bandwidth](#Transport-Bandwidth-and-Metrics) to the transport discovery** on transport re-registration - the basis for bandwidth-based rewards
+* [12)](#transport-bandwidth-and-metrics) **The visor reports [transport bandwidth](#transport-bandwidth-and-metrics) to the transport discovery** on transport re-registration - the basis for bandwidth-based rewards
 
-* [13)](#Survey) **The visor produces a [survey](#Survey)** when queried over dmsg by any keys in the survey_whitelist array by default
+* [13)](#survey) **The visor produces a [survey](#survey)** when queried over dmsg by any keys in the survey_whitelist array by default
 
 
 ### Deployment Changes and the dmsghttp-config
@@ -102,14 +102,14 @@ The dmsghttp-config is the default — and currently the only supported — viso
 skywire cli config gen -b --bestproto
 ```
 
-In order to bootstrap the visor's connection to the dmsg network (via TCP connection to an individual dmsg server), the [dmsghttp-config.json](/dmsghttp-config.json) is provided with the skywire binary release. All production deployment services are then reached by the visor over the dmsg network.
+In order to bootstrap the visor's connection to the dmsg network (via TCP connection to an individual dmsg server), the dmsghttp-config.json is provided with the skywire binary release. All production deployment services are then reached by the visor over the dmsg network.
 
 In the instance that the skywire production deployment changes — specifically the dmsg servers:
 * it will be necessary to update to the next version or package release which ships an updated dmsghttp-config.json,
 
   OR
 
-* it will be necessary to manually update the [dmsghttp-config.json](/dmsghttp-config.json) provided by your skywire installation.
+* it will be necessary to manually update the dmsghttp-config.json provided by your skywire installation.
 
 Currently, **there is no mechanism for updating the dmsghttp-config.json which does not require an http request** — a request which may be blocked depending on region.
 
@@ -277,7 +277,7 @@ All computer hardware and architectures are eligible for both reward pools.
 
 ### Deployment
 
-The deployment your visor is running on can be verified by comparing the services configured in the visor's .json config against [conf.skywire.skycoin.com](https://conf.skywire.skycoin.com)
+The deployment your visor is running on can be verified by comparing the services configured in the visor's .json config against [deployment/services-config.json](https://github.com/skycoin/skywire/blob/develop/deployment/services-config.json) in the skywire repository
 
 ```
 cat /opt/skywire/skywire.json
@@ -287,7 +287,7 @@ The service configuration will be automatically updated any time a config is gen
 
 Compare the dmsghttp-config of your current installation with the dmsghttp-config on the develop branch of [github.com/skycoin/skywire](https://github.com/skycoin/skywire) — the dmsghttp-config is the default config and is used by every visor on the production deployment.
 
-The same data in a different format should be displayed in the [dmsg-discovery all_servers](https://dmsgd.skywire.skycoin.com/dmsg-discovery/all_servers) page. Ensure that the dmsghttp-config.json in your installation has the same ip addresses and ports for the dmsg server keys.
+The same data in a different format is listed by `skywire cli svc dmsgd all-servers`, which queries the dmsg discovery over dmsg. Ensure that the dmsghttp-config.json in your installation has the same ip addresses and ports for the dmsg server keys.
 
 The data from the dmsg discovery should be considered authoritative or current.
 
@@ -381,11 +381,11 @@ This can be verified by examining the visor's logging:
 [DMSGHTTP] 2024/10/09 - 22:31:46 | 200 |     193.325µs |                 | 03714c8bdaee0fb48f47babbc47c33e1880752b6620317c9d56b30f3b0ff58a9c3:51457 | GET      /node-info
 ```
 
-Bandwidth data is reported separately by each visor to the transport discovery on transport re-registration — it is no longer collected from the visor over dmsg as a per-day CSV. See [Transport Bandwidth and Metrics](#Transport-Bandwidth-and-Metrics).
+Bandwidth data is reported separately by each visor to the transport discovery on transport re-registration — it is no longer collected from the visor over dmsg as a per-day CSV. See [Transport Bandwidth and Metrics](#transport-bandwidth-and-metrics).
 
 The collected surveys should be visible in the survey index here:
 
-[theskywirenetwork.net/log-collection/tree](https://theskywirenetwork.net/log-collection/tree)
+[reward.skywire.dev/log-collection/tree](https://reward.skywire.dev/log-collection/tree)
 
 An example of one such entry:
 ```
@@ -479,7 +479,7 @@ The system survey ('local/node-info.json') is fetched hourly by the reward syste
 skywire cli log
 ```
 
-The index of the collected files may be viewed at [theskywirenetwork.net/log-collection/tree](https://theskywirenetwork.net/log-collection/tree)
+The index of the collected files may be viewed at [reward.skywire.dev/log-collection/tree](https://reward.skywire.dev/log-collection/tree)
 
 Once collected from the nodes, the surveys for those visors which met uptime are checked to verify hardware and other requirements, etc.
 

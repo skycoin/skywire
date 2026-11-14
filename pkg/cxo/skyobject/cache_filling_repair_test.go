@@ -46,7 +46,7 @@ func TestCacheSetRepairsFillingItemWithMissingBacking(t *testing.T) {
 	if _, err := c.Inc(key, -1<<20); err != nil {
 		t.Fatalf("Inc down: %v", err)
 	}
-	if !c.IsCached(key) {
+	if !c.Cached(key) {
 		t.Fatalf("expected a filling placeholder retained in the cache")
 	}
 	// Delete the backing object from the CXDS — the invariant violation.

@@ -1,4 +1,4 @@
-// Package visor pkg/visor/pairing_hv.go c3-vis-api
+// Package visor pkg/visor/pairing_hv.go c3-vis-core
 //
 // Hypervisor pairing (#4484 stage 5). A peer that holds a same-origin
 // transport to this visor (a desk tab the hypervisor serves) or that tried the
@@ -259,7 +259,7 @@ func (v *Visor) scanPendingPairs() {
 		return
 	}
 	v.tpM.WalkTransports(func(mt *transport.ManagedTransport) bool {
-		if mt.Type() == tptypes.WS && mt.Attached() && !mt.IsClosed() {
+		if mt.Type() == tptypes.WS && mt.Attached() && !mt.Closed() {
 			v.notePendingHypervisor(mt.Remote(), "transport")
 		}
 		return true

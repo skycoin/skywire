@@ -80,24 +80,50 @@ class SkyFiberWalletCore(
 
     override fun validateAddress(address: String): Boolean = SkycoinCrypto.isValidAddress(address)
 
-    override suspend fun scanUsed(seed: KeySource): Pair<Int, Int> {
-        val receive = scanChain(1) { n -> deriveAddresses(seed, n, 0).receive }
-        // A BIP 44 wallet's change chain starts empty; its first address may never have been used.
-        val change = if (seed.derivation == Derivation.BIP44) scanChain(0) { n -> deriveAddresses(seed, 0, n).change } else 0
+    // A BIP 44 wallet's change chain starts empty; its first address may never have been used.
+    override suspend fun scanUsed(seed: KeySource): Pair<Int, Int> = scanPast(seed, 1, 0)
+
+    override suspend fun scanPast(seed: KeySource, receiveCount: Int, changeCount: Int): Pair<Int, Int> {
+        val chains = ChainDeriver(seed)
+        val receive = scanChain(receiveCount) { from -> chains.addresses(0, from, SCAN_AHEAD) }
+        val change = if (seed.derivation == Derivation.BIP44) {
+            scanChain(changeCount) { from -> chains.addresses(1, from, SCAN_AHEAD) }
+        } else {
+            changeCount
+        }
         return receive to change
     }
 
     /** How many addresses of one chain are in use, looking [SCAN_AHEAD] past the last used one. */
-    private suspend fun scanChain(start: Int, derive: (Int) -> List<String>): Int {
+    private suspend fun scanChain(start: Int, window: (Int) -> List<String>): Int {
         var count = start
-        while (count < SCAN_CAP) {
-            val window = derive(count + SCAN_AHEAD).subList(count, count + SCAN_AHEAD)
-            val used = usedAddresses(window)
-            val lastUsed = window.indexOfLast { it in used }
+        while (count < SCAN_LIMIT) {
+            val ahead = window(count)
+            val used = usedAddresses(ahead)
+            val lastUsed = ahead.indexOfLast { it in used }
             if (lastUsed < 0) break
             count += lastUsed + 1
         }
-        return count.coerceAtMost(SCAN_CAP)
+        return count.coerceAtMost(SCAN_LIMIT)
+    }
+
+    /** Derives each address once per scan: the BIP 44 account key and the classic hash chain are both costly to restart. */
+    private class ChainDeriver(private val seed: KeySource) {
+        private val account by lazy { SkycoinBip44.accountKey(seed.mnemonic, seed.passphrase) }
+        private val classic = ArrayList<String>()
+        private var classicSeed = seed.mnemonic.toByteArray(Charsets.UTF_8)
+
+        fun addresses(chain: Int, from: Int, n: Int): List<String> {
+            if (seed.derivation == Derivation.BIP44) {
+                return List(n) { SkycoinCrypto.addressFromPubKey(SkycoinBip44.key(account, chain, from + it).pubKey()) }
+            }
+            while (classic.size < from + n) {
+                val (next, kp) = SkycoinCrypto.deterministicKeyPairIterator(classicSeed)
+                classicSeed = next
+                classic.add(SkycoinCrypto.addressFromPubKey(kp.public))
+            }
+            return classic.subList(from, from + n).toList()
+        }
     }
 
     private suspend fun usedAddresses(addrs: List<String>): Set<String> {
@@ -431,8 +457,10 @@ class SkyFiberWalletCore(
         }
 
         const val DROPLET_EXPONENT = 6
-        private const val SCAN_AHEAD = 10
-        private const val SCAN_CAP = 100
+        // skycoin ui2 bw.js scan: batches of 20 until one has none in use, the BIP 44 gap limit.
+        internal const val SCAN_AHEAD = 20
+        // Not a wallet size limit: only stops a node that calls every address used.
+        private const val SCAN_LIMIT = 100_000
     }
 }
 

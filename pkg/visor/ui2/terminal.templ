@@ -7,3 +7,15 @@ templ TerminalPage(pk string) {
 		<iframe class="island" src={ "pty/" + pk } title={ T(ctx, "node.tabs.terminal") } allowfullscreen></iframe>
 	}
 }
+
+// islandHead is the title row of a tab that hosts a page of its own.
+templ islandHead(title, help, href, open string) {
+	<div class="head">
+		<h1>{ title }</h1>
+		<span class="spacer"></span>
+		<a class="btn sm" href={ templ.URL(href) } target="_blank" rel="noreferrer"><span class="mi">open_in_new</span>{ open }</a>
+	</div>
+	if help != "" {
+		<p class="small dim">{ help }</p>
+	}
+}

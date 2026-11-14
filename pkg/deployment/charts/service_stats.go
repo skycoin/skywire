@@ -1,4 +1,4 @@
-// Package charts pkg/deployment/charts/service_stats.go c4-net-discovery
+// Package charts pkg/deployment/charts/service_stats.go c3-net-discovery
 package charts
 
 import (

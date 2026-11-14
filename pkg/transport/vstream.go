@@ -28,6 +28,7 @@ package transport
 import (
 	"bytes"
 	"cmp"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -333,7 +334,7 @@ func (m *VStreamMux) Dial(remotePK cipher.PubKey, appName string) (*VStream, err
 	var targetTp *ManagedTransport
 	bestRank := math.MaxInt
 	m.tm.WalkTransports(func(tp *ManagedTransport) bool {
-		if tp.Remote() != remotePK || tp.IsClosed() || tp.Type() == "dmsg" {
+		if tp.Remote() != remotePK || tp.Closed() || tp.Type() == "dmsg" {
 			return true
 		}
 		if rank := types.TypePreference(tp.Type()); rank < bestRank {
@@ -367,6 +368,12 @@ func (m *VStreamMux) Dial(remotePK cipher.PubKey, appName string) (*VStream, err
 	return m.DialOnTransportAs(targetTp, appName)
 }
 
+// EnsureLocalTransport makes a transport Dial can use to a peer on the local
+// network, as Manager.EnsureLocalTransport does.
+func (m *VStreamMux) EnsureLocalTransport(ctx context.Context, remotePK cipher.PubKey) error {
+	return m.tm.EnsureLocalTransport(ctx, remotePK)
+}
+
 // DialByTransportID opens a virtual stream to remotePK pinned to a
 // specific transport (looked up by ID). Use this when the caller
 // has a specific transport in mind — e.g. ping-tree measuring the
@@ -377,7 +384,7 @@ func (m *VStreamMux) Dial(remotePK cipher.PubKey, appName string) (*VStream, err
 func (m *VStreamMux) DialByTransportID(remotePK cipher.PubKey, tpID uuid.UUID) (*VStream, error) {
 	var targetTp *ManagedTransport
 	m.tm.WalkTransports(func(tp *ManagedTransport) bool {
-		if tp.Entry.ID == tpID && tp.Remote() == remotePK && !tp.IsClosed() && tp.Type() != "dmsg" {
+		if tp.Entry.ID == tpID && tp.Remote() == remotePK && !tp.Closed() && tp.Type() != "dmsg" {
 			targetTp = tp
 			return false
 		}

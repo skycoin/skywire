@@ -1,4 +1,4 @@
-// Package proxystatus pkg/proxystatus/tunnelrole_test.go c4-app-web
+// Package proxystatus pkg/proxystatus/tunnelrole_test.go c2-app-web
 package proxystatus
 
 import (

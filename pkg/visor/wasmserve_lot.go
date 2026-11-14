@@ -1,3 +1,4 @@
+// Package visor pkg/visor/wasmserve_lot.go c3-vis-core
 package visor
 
 import (

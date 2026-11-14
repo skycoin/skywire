@@ -1,4 +1,4 @@
-// Package visor pkg/visor/api_routing_rg_selector_test.go
+// Package visor pkg/visor/api_routing_rg_selector_test.go c3-vis-core
 package visor
 
 import (

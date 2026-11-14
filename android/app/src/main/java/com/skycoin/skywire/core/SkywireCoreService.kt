@@ -22,7 +22,12 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Mutex
@@ -30,6 +35,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
@@ -64,11 +70,13 @@ class SkywireCoreService : Service() {
     private lateinit var configManager: ConfigManager
     private lateinit var vault: ConfigVault
     private lateinit var prefs: AppPreferences
+    private lateinit var metered: StateFlow<Boolean?>
     private var runner: Job? = null
     private var callWatcher: Job? = null
     private var notifyBridge: Job? = null
     private var networkWatcher: Job? = null
     private var contactsCopy: Job? = null
+    private var internetWatch: Job? = null
 
     @Volatile private var child: Process? = null
 
@@ -80,6 +88,7 @@ class SkywireCoreService : Service() {
         configManager = ConfigManager(paths, SecretStore(this), this)
         vault = ConfigVault(paths, this)
         prefs = AppPreferences(this)
+        metered = MobileData.metered(this).stateIn(scope, SharingStarted.Eagerly, null)
         createChannel()
         scope.launch {
             AppLocale.changes.collect {
@@ -146,6 +155,7 @@ class SkywireCoreService : Service() {
                     skyDnsStandalone = prefs.boolean(SkyDns.PREF_STANDALONE, SkyDns.DEFAULT_STANDALONE).first(),
                     skyDnsInVpn = prefs.boolean(SkyDns.PREF_IN_VPN, SkyDns.DEFAULT_IN_VPN).first(),
                     dnsServer = DnsServer.sanitize(prefs.string(DnsServer.PREF_KEY).first()),
+                    useMobileData = prefs.boolean(MobileData.PREF_KEY, MobileData.DEFAULT).first(),
                 ).getOrElse { err ->
                     log.line("=== config generation failed ===")
                     log.line(err.message ?: "unknown error")
@@ -161,6 +171,12 @@ class SkywireCoreService : Service() {
                 var attempt = 0
                 var backoffMs = INITIAL_BACKOFF_MS
                 while (!stopRequested) {
+                    if (!networkAllowed()) {
+                        notify { it.getString(R.string.core_notification_waiting_wifi) }
+                        while (!stopRequested && !networkAllowed()) delay(BACKOFF_SLICE_MS)
+                        if (stopRequested) break
+                        notify { it.getString(R.string.core_notification_starting) }
+                    }
                     attempt++
                     val startedAt = SystemClock.elapsedRealtime()
                     log.line("=== starting visor (attempt $attempt) ===")
@@ -176,7 +192,21 @@ class SkywireCoreService : Service() {
                     child = process
                     CoreServiceState.mutableState.value =
                         CoreState.Running(System.currentTimeMillis(), attempt)
-                    notify { it.getString(R.string.core_notification_running) }
+                    internetWatch?.cancel()
+                    internetWatch = launch {
+                        combine(
+                            Internet.online(this@SkywireCoreService),
+                            metered,
+                            prefs.boolean(MobileData.PREF_KEY, MobileData.DEFAULT),
+                        ) { online, metered, allowed ->
+                            when {
+                                !online -> R.string.core_notification_offline
+                                metered != true -> R.string.core_notification_running
+                                allowed -> R.string.core_notification_mobile_data
+                                else -> R.string.core_notification_waiting_wifi
+                            }
+                        }.distinctUntilChanged().collect { text -> notify { it.getString(text) } }
+                    }
                     // The skydns app autostarts with the visor and dials the
                     // VPN service for its tunnel, so the service must listen.
                     if (prefs.boolean(SkyDns.PREF_STANDALONE, SkyDns.DEFAULT_STANDALONE).first()) {
@@ -206,7 +236,12 @@ class SkywireCoreService : Service() {
                     }
 
                     val pump = launch(Dispatchers.IO) {
-                        process.inputStream.bufferedReader().forEachLine { log.line(it) }
+                        // A forced stop closes the stream under the read. Thrown
+                        // from this child, that would crash the app.
+                        try {
+                            process.inputStream.bufferedReader().forEachLine { log.line(it) }
+                        } catch (_: IOException) {
+                        }
                     }
                     val exit = runInterruptible(Dispatchers.IO) { process.waitFor() }
                     pump.join()
@@ -219,6 +254,8 @@ class SkywireCoreService : Service() {
                     networkWatcher = null
                     contactsCopy?.cancel()
                     contactsCopy = null
+                    internetWatch?.cancel()
+                    internetWatch = null
 
                     val ranMs = SystemClock.elapsedRealtime() - startedAt
                     log.line("=== visor exited with code $exit after ${ranMs / 1000}s ===")
@@ -263,6 +300,10 @@ class SkywireCoreService : Service() {
             }
         }
     }
+
+    /** With mobile data off, the visor starts only on an unmetered network. */
+    private suspend fun networkAllowed(): Boolean =
+        metered.value == false || prefs.boolean(MobileData.PREF_KEY, MobileData.DEFAULT).first()
 
     private fun stopCore() {
         if (runner?.isActive != true) {

@@ -455,7 +455,7 @@ func wireFromCtx(r policy.RoutingContext) RoutingContextWire {
 		LocalPort:         r.LocalPort,
 		NowUnixNano:       r.Now.UnixNano(),
 		CLIOverrides:      r.CLIOverrides,
-		IsDirectDial:      r.IsDirectDial,
+		DirectDial:        r.DirectDial,
 		TransportKind:     r.TransportKind,
 		ReverseCandidates: wireFromCandidates(r.ReverseCandidates),
 	}

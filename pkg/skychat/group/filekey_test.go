@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/filekey_test.go c4-app-chat
+// Package group pkg/skychat/group/filekey_test.go c3-app-chat
 //
 // Attachment keys: that they are scoped to one file in one group, that the
 // group key never has to leave to produce one, and that the ring is offered

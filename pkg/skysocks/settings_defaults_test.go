@@ -1,4 +1,4 @@
-// Package skysocks pkg/skysocks/settings_defaults_test.go
+// Package skysocks pkg/skysocks/settings_defaults_test.go c4-app-proxy
 package skysocks
 
 import (

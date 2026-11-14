@@ -1,4 +1,4 @@
-// Package skysocks pkg/skysocks/rangesplit.go — transparent HTTP range-splitting.
+// Package skysocks pkg/skysocks/rangesplit.go c4-app-proxy — transparent HTTP range-splitting.
 //
 // A browser or plain HTTP client pointed at the skysocks SOCKS5 proxy issues an
 // ordinary GET. When the origin is reachable over plaintext HTTP (port 80) and
@@ -183,13 +183,13 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 	// 2. Classify + read the browser's request head. Non-HTTP traffic on :80 (raw
 	//    tunnels, server-speaks-first protocols) is detected the instant the bytes
 	//    stop matching an HTTP method prefix and spliced with no meaningful delay.
-	reqHead, isHTTP, late := peekRequestHead(conn, rsHeadLimit)
+	reqHead, httpReq, late := peekRequestHead(conn, rsHeadLimit)
 	clearDeadlines(conn)
 	var (
 		req *http.Request
 		up  *uploadCandidate
 	)
-	if isHTTP {
+	if httpReq {
 		if r, perr := http.ReadRequest(bufio.NewReader(bytes.NewReader(reqHead))); perr == nil {
 			h := r.Host
 			if hh, _, e := net.SplitHostPort(h); e == nil {
@@ -244,7 +244,7 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 			// reason, which looks exactly like an empty reply.
 			reqHead, _, _ = continueRequestHead(conn, reqHead, rsHeadLimit)
 		}
-		if isHTTP || looksHTTP(reqHead) {
+		if httpReq || looksHTTP(reqHead) {
 			writeBadGateway(conn, connectFailure(host, reply, err, injectErr))
 		}
 		conn.Close()   //nolint:errcheck,gosec
@@ -827,7 +827,7 @@ func (c *Client) rescueTail(conn net.Conn, start, total int64, rescue func(w net
 func (c *Client) fetchChunkRetry(req *http.Request, host, validator string, start, end int64, prog rsProgress, p chunkPlacement) ([]byte, error) {
 	buf := make([]byte, end-start+1)
 	var got int64
-	return retryWithBudget(func() ([]byte, error) {
+	return retryCounted(func() ([]byte, error) {
 		// An endgame duplicate whose twin already delivered the chunk stops
 		// here rather than opening another stream for bytes that have arrived.
 		if p.raceLost() {
@@ -843,7 +843,7 @@ func (c *Client) fetchChunkRetry(req *http.Request, host, validator string, star
 			return nil, err
 		}
 		return buf, nil
-	}, setChunkRetryBudget(), rsChunkRetryBackoff, rsChunkRetryBackoffMax)
+	}, setChunkRetryBudget(), rsChunkRetryBackoff, rsChunkRetryBackoffMax, &c.rsBackoffs)
 }
 
 // retryWithBudget calls fetch until it succeeds, or until at least rsChunkRetries
@@ -852,6 +852,12 @@ func (c *Client) fetchChunkRetry(req *http.Request, host, validator string, star
 // policy is unit-testable with small durations. On persistent failure it returns
 // the last error.
 func retryWithBudget(fetch func() ([]byte, error), budget, backoff, backoffMax time.Duration) ([]byte, error) {
+	return retryCounted(fetch, budget, backoff, backoffMax, nil)
+}
+
+// retryCounted is retryWithBudget adding one to slept (nil to skip) for every
+// backoff it sleeps.
+func retryCounted(fetch func() ([]byte, error), budget, backoff, backoffMax time.Duration, slept *atomic.Uint64) ([]byte, error) {
 	deadline := time.Now().Add(budget)
 	var err error
 	free := 0
@@ -878,6 +884,9 @@ func retryWithBudget(fetch func() ([]byte, error), budget, backoff, backoffMax t
 		}
 		if attempt >= rsChunkRetries && time.Now().After(deadline) {
 			return nil, err
+		}
+		if slept != nil {
+			slept.Add(1)
 		}
 		time.Sleep(backoff)
 		if backoff < backoffMax {
@@ -1004,19 +1013,66 @@ func (c *Client) openChunkStreamFor(p chunkPlacement, size int64, kind pickKind)
 		p.pl.uncharge(sess, size)
 		return nil, nil, fmt.Errorf("%w: closed between the pick and the open", errSessionClosed)
 	}
-	st, err := sess.Open()
+	st, err := sess.OpenStream()
 	if err != nil {
 		// Nothing went out: the reservation must not steer the rest of the
 		// object away from a tunnel that carried no bytes for it.
 		p.pl.uncharge(sess, size)
-		if sess.IsClosed() {
+		if sess.IsClosed() || tunnelConnErr(err) {
 			return nil, nil, fmt.Errorf("%w: %v", errSessionClosed, err)
 		}
 
 		return nil, nil, err
 	}
 
-	return sess, st, nil
+	return sess, tunnelStream{st}, nil
+}
+
+// yamuxVerdicts are the errors yamux itself returns from OpenStream and from a
+// stream's Read and Write. None of them says the tunnel conn failed.
+var yamuxVerdicts = []error{
+	io.EOF,
+	yamux.ErrSessionShutdown,
+	yamux.ErrRemoteGoAway,
+	yamux.ErrStreamsExhausted,
+	yamux.ErrStreamClosed,
+	yamux.ErrConnectionReset,
+	yamux.ErrConnectionWriteTimeout,
+	yamux.ErrTimeout,
+}
+
+// tunnelConnErr reports whether err, from OpenStream or a stream's Read or
+// Write, is the tunnel conn's own write error. yamux closes the session on it.
+func tunnelConnErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	for _, v := range yamuxVerdicts {
+		if errors.Is(err, v) {
+			return false
+		}
+	}
+	return true
+}
+
+// tunnelStream labels the tunnel conn's write error errSessionClosed. yamux
+// hands that error to the caller before IsClosed reports the session closed.
+type tunnelStream struct{ *yamux.Stream }
+
+func (s tunnelStream) Read(p []byte) (int, error) {
+	n, err := s.Stream.Read(p)
+	if tunnelConnErr(err) {
+		err = fmt.Errorf("%w: %v", errSessionClosed, err)
+	}
+	return n, err
+}
+
+func (s tunnelStream) Write(p []byte) (int, error) {
+	n, err := s.Stream.Write(p)
+	if tunnelConnErr(err) {
+		err = fmt.Errorf("%w: %v", errSessionClosed, err)
+	}
+	return n, err
 }
 
 // lostWatcher closes an in-flight chunk stream the moment ANOTHER attempt wins
@@ -1233,7 +1289,9 @@ func (g *tunnelGuard) err(err error) error {
 	if g.snubbed.Load() || (g.m != nil && g.m.isSnubbed()) {
 		return fmt.Errorf("%w: %v", errTunnelSnubbed, err)
 	}
-	if !g.fired.Load() && !g.sess.IsClosed() {
+	// A tunnelStream may have seen the conn fail before the session says so.
+	connFailed := errors.Is(err, errSessionClosed)
+	if !g.fired.Load() && !g.sess.IsClosed() && !connFailed {
 		return err
 	}
 	// Retire here too, not only in the watcher: stop() and the close can race in
@@ -1242,6 +1300,9 @@ func (g *tunnelGuard) err(err error) error {
 	// once-only per tunnel, so the two callers cannot double-promote.
 	if g.c != nil {
 		g.c.retireTunnel(g.sess, "tunnel closed under a range fetch")
+	}
+	if connFailed {
+		return err
 	}
 
 	return fmt.Errorf("%w: %v", errSessionClosed, err)
@@ -1774,7 +1835,7 @@ var httpMethodTokens = []string{"GET ", "POST ", "PUT ", "HEAD ", "DELETE ", "OP
 // classifyHTTP reports whether buf is the start of an HTTP request. decided=false
 // means buf is still a strict prefix of some method token — read more before
 // deciding. An empty buf is always undecided.
-func classifyHTTP(buf []byte) (decided, isHTTP bool) {
+func classifyHTTP(buf []byte) (decided, httpReq bool) {
 	s := string(buf)
 	prefixOfSome := false
 	for _, m := range httpMethodTokens {
@@ -1793,17 +1854,17 @@ func classifyHTTP(buf []byte) (decided, isHTTP bool) {
 
 // peekRequestHead reads from conn just far enough to decide whether it carries an
 // HTTP request and, if so, to capture the whole header block (up to limit). It
-// returns isHTTP=false — with everything it read, for verbatim replay — the instant
+// returns httpReq=false — with everything it read, for verbatim replay — the instant
 // the bytes cannot be an HTTP method, when the head exceeds the cap, when extra
 // bytes trail the header terminator (pipelining we won't split), or on any error.
 // late reports the one undecided outcome: the client had not sent enough to name
 // a method by the range.classify_timeout deadline, so it may still be HTTP.
-func peekRequestHead(conn net.Conn, limit int) (head []byte, isHTTP, late bool) {
+func peekRequestHead(conn net.Conn, limit int) (head []byte, httpReq, late bool) {
 	return continueRequestHead(conn, nil, limit)
 }
 
 // continueRequestHead is peekRequestHead resumed over bytes already read.
-func continueRequestHead(conn net.Conn, prefix []byte, limit int) (head []byte, isHTTP, late bool) {
+func continueRequestHead(conn net.Conn, prefix []byte, limit int) (head []byte, httpReq, late bool) {
 	buf := append(make([]byte, 0, 1024), prefix...)
 	tmp := make([]byte, 1024)
 

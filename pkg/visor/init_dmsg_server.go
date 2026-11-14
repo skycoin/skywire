@@ -310,7 +310,7 @@ func foldedWSSSuffix(srvCfg *dmsgc.DmsgServerConfig, pk cipher.PubKey) (suffix s
 	if s := strings.TrimPrefix(srvCfg.WSSDomainSuffix, "."); s != "" {
 		return s, false
 	}
-	if s := strings.TrimPrefix(deployment.Prod.WSSDomainSuffix, "."); s != "" && deployment.Prod.IsKnownDmsgServer(pk) {
+	if s := strings.TrimPrefix(deployment.Prod.WSSDomainSuffix, "."); s != "" && deployment.Prod.KnownDmsgServer(pk) {
 		return s, true
 	}
 	return "", false
@@ -329,4 +329,14 @@ func dmsgQUICAdvertisedAddr(publicAddr string, udpAddr net.Addr) string {
 		return ""
 	}
 	return net.JoinHostPort(host, strconv.Itoa(ua.Port))
+}
+
+// ownFileServerOnly reports whether the only dmsg server conf lists is the one
+// this visor runs from a config file, under that file's key.
+func ownFileServerOnly(conf *dmsgc.DmsgConfig) bool {
+	if conf.Server == nil || !conf.Server.Enabled || conf.Server.ConfigPath == "" {
+		return false
+	}
+	cfg, err := dmsgsrv.LoadFile(conf.Server.ConfigPath)
+	return err == nil && conf.OnlySelfServer(cfg.PubKey)
 }

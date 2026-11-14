@@ -1,4 +1,4 @@
-// Package visor pkg/visor/ping_adapter_route_index_test.go
+// Package visor pkg/visor/ping_adapter_route_index_test.go c3-vis-core
 //
 // Pins the visorPingAdapter contract that conf.RouteIndex (and
 // conf.MinHops) cross the rpcgrpc.PingConf → visor.PingConfig

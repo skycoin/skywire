@@ -1,4 +1,4 @@
-// Package store pkg/deployment/tpd/store/today_metrics.go c4-net-discovery
+// Package store pkg/deployment/tpd/store/today_metrics.go c3-net-discovery
 //
 // Today's per-transport metrics, kept current by what changed.
 //

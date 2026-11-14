@@ -1,6 +1,6 @@
 //go:build !android
 
-// Package vpn pkg/vpn/share_other.go c4-app-vpn
+// Package vpn pkg/vpn/share_other.go c3-app-vpn
 package vpn
 
 // startSharing is a no-op off Android: nothing hands this client other

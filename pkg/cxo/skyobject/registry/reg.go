@@ -89,7 +89,7 @@ func (r *Reg) getSchema(typ reflect.Type) Schema {
 
 		el := r.getSchema(typ.Elem())
 
-		if el.IsRegistered() {
+		if el.Registered() {
 			ss.elem = &schema{SchemaRef{}, el.Kind(), el.RawName()}
 			return ss
 		}
@@ -107,7 +107,7 @@ func (r *Reg) getSchema(typ reflect.Type) Schema {
 
 		el := r.getSchema(typ.Elem())
 
-		if el.IsRegistered() {
+		if el.Registered() {
 			as.elem = &schema{SchemaRef{}, el.Kind(), el.RawName()}
 			return as
 		}
@@ -185,7 +185,7 @@ func (r *Reg) getField(sf reflect.StructField) Field {
 	default:
 	}
 
-	if s := r.getSchema(sf.Type); s.IsRegistered() {
+	if s := r.getSchema(sf.Type); s.Registered() {
 		f.schema = &schema{SchemaRef{}, s.Kind(), s.RawName()}
 	} else {
 		f.schema = s

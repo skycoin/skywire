@@ -235,5 +235,5 @@ func FilterLogs(raws []string, f LogFilter) (out []LogEntry, more bool) {
 }
 
 func (l Logs) url(rest string, extra ...string) string {
-	return "ui2/visors/" + l.PK + "/logs" + rest + "?" + l.Filter.Query(extra...)
+	return "visors/" + l.PK + "/logs" + rest + "?" + l.Filter.Query(extra...)
 }

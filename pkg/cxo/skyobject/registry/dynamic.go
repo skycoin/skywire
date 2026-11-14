@@ -22,7 +22,7 @@ type Dynamic struct {
 // it has reference to object but deosn't have reference to
 // shcema
 func (d *Dynamic) IsValid() bool {
-	if d.Schema.IsBlank() {
+	if d.Schema.Blank() {
 		return d.Hash == (cipher.SHA256{})
 	}
 	return true
@@ -38,8 +38,8 @@ func (d *Dynamic) String() string {
 	return "{" + d.Schema.String() + ", " + d.Hash.Hex() + "}"
 }
 
-// IsBlank returns true if the Dynamic is blank
-func (d *Dynamic) IsBlank() bool {
+// Blank returns true if the Dynamic is blank
+func (d *Dynamic) Blank() bool {
 	return *d == Dynamic{}
 }
 
@@ -56,7 +56,7 @@ func (d *Dynamic) Value(
 		return ErrInvalidDynamicReference
 	}
 
-	if true == d.IsBlank() { //nolint:staticcheck
+	if true == d.Blank() { //nolint:staticcheck
 		return ErrReferenceRepresentsNil
 	}
 
@@ -158,7 +158,7 @@ func (d *Dynamic) Split(s Splitter) {
 		return
 	}
 
-	if d.IsBlank() == true { //nolint:staticcheck
+	if d.Blank() == true { //nolint:staticcheck
 		return // nothing to split
 	}
 

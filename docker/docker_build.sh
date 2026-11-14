@@ -96,6 +96,12 @@ if [[ "$image_tag" == "prod" ]] || [[ "$image_tag" == "test" ]] || [[ "$image_ta
 else
   echo "Using local source build"
 fi
+# E2E_PREBUILT names a static skywire binary inside the repository to put in
+# the e2e image as is, in place of compiling one in the image build.
+if [[ "$image_tag" == "e2e" ]] && [[ -n "$E2E_PREBUILT" ]]; then
+  echo "Using prebuilt binary: $E2E_PREBUILT"
+  commit_arg="--build-arg prebuilt=$E2E_PREBUILT"
+fi
 DOCKER_BUILDKIT="$bldkit" docker build -f docker/images/skywire/Dockerfile \
   --build-arg base_image="$base_image" \
   --build-arg image_tag="$image_tag" \

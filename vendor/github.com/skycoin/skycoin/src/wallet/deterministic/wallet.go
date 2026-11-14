@@ -1,3 +1,4 @@
+// Package deterministic src/wallet/deterministic/wallet.go c1-coin-wallet
 package deterministic
 
 import (
@@ -101,7 +102,7 @@ func NewWallet(filename, label, seed string, options ...wallet.Option) (*Wallet,
 
 	// encrypts wallet if options.Encrypt is true
 	if advOpts.Encrypt {
-		if wlt.IsTemp() {
+		if wlt.Temp() {
 			return nil, wallet.ErrEncryptTempWallet
 		}
 
@@ -175,7 +176,7 @@ func (w *Wallet) Deserialize(data []byte) error {
 
 // Lock encrypts the sensitive data of the wallet
 func (w *Wallet) Lock(password []byte) error {
-	if w.IsTemp() {
+	if w.Temp() {
 		return wallet.ErrEncryptTempWallet
 	}
 
@@ -183,7 +184,7 @@ func (w *Wallet) Lock(password []byte) error {
 		return wallet.ErrMissingPassword
 	}
 
-	if w.IsEncrypted() {
+	if w.Encrypted() {
 		return wallet.ErrWalletEncrypted
 	}
 
@@ -229,7 +230,7 @@ func (w *Wallet) Lock(password []byte) error {
 
 // Unlock unlock the encrypted wallet
 func (w *Wallet) Unlock(password []byte) (wallet.Wallet, error) {
-	if !w.IsEncrypted() {
+	if !w.Encrypted() {
 		return nil, wallet.ErrWalletNotEncrypted
 	}
 
@@ -308,17 +309,28 @@ func (w *Wallet) unpackSecrets(ss wallet.Secrets) error {
 
 // Fingerprint returns a unique ID fingerprint for this wallet, composed of its initial address
 // and wallet type
-func (w *Wallet) Fingerprint() string {
+func (w *Wallet) Fingerprint() (string, error) {
 	addr := ""
 	if len(w.entries) == 0 {
-		if !w.IsEncrypted() {
-			_, pk, _ := cipher.MustDeterministicKeyPairIterator([]byte(w.Meta.Seed()))
-			addr = wallet.AddressConstructor(w.Meta)(pk).String()
+		if !w.Encrypted() {
+			_, pk, _, err := cipher.DeterministicKeyPairIterator([]byte(w.Meta.Seed()))
+			if err != nil {
+				return "", fmt.Errorf("fingerprint key pair: %w", err)
+			}
+			makeAddress, err := wallet.AddressConstructor(w.Meta)
+			if err != nil {
+				return "", err
+			}
+			a, err := makeAddress(pk)
+			if err != nil {
+				return "", err
+			}
+			addr = a.String()
 		}
 	} else {
 		addr = w.entries[0].Address.String()
 	}
-	return fmt.Sprintf("%s-%s", w.Type(), addr)
+	return fmt.Sprintf("%s-%s", w.Type(), addr), nil
 }
 
 // Clone clones the wallet a new wallet object
@@ -364,7 +376,7 @@ func (w *Wallet) Validate() error {
 		return wallet.ErrInvalidWalletType
 	}
 
-	if !w.IsEncrypted() {
+	if !w.Encrypted() {
 		if s := w.Seed(); s == "" {
 			return errors.New("seed missing in unencrypted deterministic wallet")
 		}
@@ -378,7 +390,7 @@ func (w *Wallet) Validate() error {
 
 // ScanAddresses scans ahead N addresses, truncating up to the highest address with any transaction history.
 func (w *Wallet) ScanAddresses(scanN uint64, tf wallet.TransactionsFinder) ([]cipher.Addresser, error) {
-	if w.IsEncrypted() {
+	if w.Encrypted() {
 		return nil, wallet.ErrWalletEncrypted
 	}
 
@@ -429,7 +441,7 @@ func (w *Wallet) ScanAddresses(scanN uint64, tf wallet.TransactionsFinder) ([]ci
 
 // GenerateAddresses generates N addresses
 func (w *Wallet) GenerateAddresses(options ...wallet.Option) ([]cipher.Addresser, error) {
-	if w.Meta.IsEncrypted() {
+	if w.Meta.Encrypted() {
 		return nil, wallet.ErrWalletEncrypted
 	}
 
@@ -438,32 +450,44 @@ func (w *Wallet) GenerateAddresses(options ...wallet.Option) ([]cipher.Addresser
 		return nil, nil
 	}
 
-	var seckeys []cipher.SecKey
-	var seed []byte
-	if len(w.entries) == 0 {
-		seed, seckeys = cipher.MustGenerateDeterministicKeyPairsSeed([]byte(w.Meta.Seed()), int(num)) //nolint:gosec
-	} else {
-		sd, err := hex.DecodeString(w.Meta.LastSeed())
+	sd := []byte(w.Meta.Seed())
+	if len(w.entries) != 0 {
+		var err error
+		sd, err = hex.DecodeString(w.Meta.LastSeed())
 		if err != nil {
 			return nil, fmt.Errorf("decode hex seed failed: %v", err)
 		}
-		seed, seckeys = cipher.MustGenerateDeterministicKeyPairsSeed(sd, int(num)) //nolint:gosec
+	}
+	seed, seckeys, err := cipher.GenerateDeterministicKeyPairsSeed(sd, int(num)) //nolint:gosec
+	if err != nil {
+		return nil, fmt.Errorf("generate key pairs: %w", err)
 	}
 
-	w.Meta.SetLastSeed(hex.EncodeToString(seed))
-
+	makeAddress, err := wallet.AddressConstructor(w.Meta)
+	if err != nil {
+		return nil, err
+	}
 	addrs := make([]cipher.Addresser, len(seckeys))
-	makeAddress := wallet.AddressConstructor(w.Meta)
+	entries := make(wallet.Entries, len(seckeys))
 	for i, s := range seckeys {
-		p := cipher.MustPubKeyFromSecKey(s)
-		a := makeAddress(p)
+		p, err := cipher.PubKeyFromSecKey(s)
+		if err != nil {
+			return nil, fmt.Errorf("pubkey from seckey: %w", err)
+		}
+		a, err := makeAddress(p)
+		if err != nil {
+			return nil, err
+		}
 		addrs[i] = a
-		w.entries = append(w.entries, wallet.Entry{
+		entries[i] = wallet.Entry{
 			Address: a,
 			Secret:  s,
 			Public:  p,
-		})
+		}
 	}
+
+	w.Meta.SetLastSeed(hex.EncodeToString(seed))
+	w.entries = append(w.entries, entries...)
 	return addrs, nil
 }
 
@@ -495,8 +519,8 @@ func (w *Wallet) GetEntry(a cipher.Addresser, _ ...wallet.Option) (wallet.Entry,
 	return e, nil
 }
 
-// HasEntry returns true if the wallet has an Entry with a given cipher.Address.
-func (w *Wallet) HasEntry(a cipher.Addresser, _ ...wallet.Option) (bool, error) {
+// Contains returns true if the wallet has an Entry with a given cipher.Address.
+func (w *Wallet) Contains(a cipher.Addresser, _ ...wallet.Option) (bool, error) {
 	return w.entries.Has(a), nil
 }
 

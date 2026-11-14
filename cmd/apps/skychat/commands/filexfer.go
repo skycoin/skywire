@@ -72,7 +72,7 @@ func downloadsDir() (string, error) {
 // live conn exists) — the "already established a chat" half of the auto-accept
 // policy. Group membership is handled by the group path (filexfer_group.go).
 func isEstablishedPeer(pk cipher.PubKey) bool {
-	return chatCtrl != nil && chatCtrl.HasConn(pk)
+	return chatCtrl != nil && chatCtrl.Connected(pk)
 }
 
 // fileDialFunc opens a fresh transfer stream to peer on the file port, trying

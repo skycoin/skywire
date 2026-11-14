@@ -52,12 +52,12 @@ func testPong() routing.Packet { return routing.MakeTransportPongPacket(time.Now
 func TestManagedTransport_HalfOpenClosesAfterMissedPongs(t *testing.T) {
 	mt := NewManagedTransportForTest(&okTransport{})
 	mt.handleTransportPong(testPong()) // arm: pongSeen=true, missedPongs=0
-	require.False(t, mt.IsClosed())
+	require.False(t, mt.Closed())
 
 	closed := false
 	for range pongMissThreshold + 3 {
 		mt.tickPing()
-		if mt.IsClosed() {
+		if mt.Closed() {
 			closed = true
 			break
 		}
@@ -76,7 +76,7 @@ func TestManagedTransport_NeverPongedButReceivingStaysOpen(t *testing.T) {
 		mt.lastRecvNanos.Store(time.Now().UnixNano()) // still receiving something
 		mt.tickPing()
 	}
-	assert.False(t, mt.IsClosed(), "a still-receiving peer that never pongs (old visor) must NOT be reaped")
+	assert.False(t, mt.Closed(), "a still-receiving peer that never pongs (old visor) must NOT be reaped")
 }
 
 // TestManagedTransport_UnarmedSilenceCloses: an unarmed transport (never ponged)
@@ -88,7 +88,7 @@ func TestManagedTransport_UnarmedSilenceCloses(t *testing.T) {
 	mt.lastRecvNanos.Store(time.Now().Add(-unarmedSilenceThreshold - time.Minute).UnixNano())
 	require.False(t, mt.pongSeen.Load(), "precondition: unarmed")
 	mt.tickPing()
-	assert.True(t, mt.IsClosed(), "unarmed transport silent past the threshold must be closed")
+	assert.True(t, mt.Closed(), "unarmed transport silent past the threshold must be closed")
 }
 
 // TestManagedTransport_HealthyPeerStaysOpen: a peer that keeps answering pings
@@ -99,7 +99,7 @@ func TestManagedTransport_HealthyPeerStaysOpen(t *testing.T) {
 		mt.tickPing()
 		mt.handleTransportPong(testPong())
 	}
-	assert.False(t, mt.IsClosed(), "a peer that keeps answering pings must stay open")
+	assert.False(t, mt.Closed(), "a peer that keeps answering pings must stay open")
 }
 
 // TestManagedTransport_UnwritableClosesAfterFailedPings: a transport whose
@@ -117,7 +117,7 @@ func TestManagedTransport_UnwritableClosesAfterFailedPings(t *testing.T) {
 	for range pongMissThreshold + 3 {
 		mt.lastRecvNanos.Store(time.Now().UnixNano()) // still receiving — unarmed-silence must NOT be the reason
 		mt.tickPing()
-		if mt.IsClosed() {
+		if mt.Closed() {
 			closed = true
 			break
 		}
@@ -134,5 +134,5 @@ func TestManagedTransport_TransientWriteFailureRecovers(t *testing.T) {
 	mt.pingWriteFails.Store(pongMissThreshold - 1)
 	mt.tickPing() // okTransport.Write succeeds → pingWriteFails resets to 0
 	assert.Equal(t, int64(0), mt.pingWriteFails.Load(), "a successful write must reset the failure counter")
-	assert.False(t, mt.IsClosed(), "a recovered transport must stay open")
+	assert.False(t, mt.Closed(), "a recovered transport must stay open")
 }

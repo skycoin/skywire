@@ -1,4 +1,4 @@
-// Package privacy pkg/skychat/privacy/store.go c4-app-chat
+// Package privacy pkg/skychat/privacy/store.go c3-app-chat
 //
 // Package privacy keeps who may message this visor: a block list, and, when
 // approval is on, the people already let in. Local, never sent to a peer.

@@ -18,7 +18,7 @@ templ bwUnlock() {
 			{ T(ctx, "bw.app-password") }
 			<input type="password" id="bw-app-password" autocomplete="current-password"/>
 		</label>
-		<div class="bar"><button class="btn primary" type="submit">{ T(ctx, "bw.unlock") }</button></div>
+		<div class="bar"><button class="btn primary" type="submit">{ T(ctx, "bw.unlock") }</button><button class="btn" type="button" data-bw-erase={ T(ctx, "bw.erase-confirm") }>{ T(ctx, "bw.erase") }</button></div>
 		<p class="error" id="bw-unlock-error" role="alert"></p>
 	</form>
 }
@@ -26,7 +26,7 @@ templ bwUnlock() {
 // BrowserWalletsPage lists the wallets kept in this browser.
 templ BrowserWalletsPage() {
 	@Layout(T(ctx, "nav.wallets"), "wallets") {
-		<section class="card" data-bw-page="list" data-bw-root={ From(ctx).Classic } data-msg-error={ T(ctx, "bw.err-storage") }>
+		<section class="card" data-bw-page="list" data-bw-root={ From(ctx).Root } data-msg-error={ T(ctx, "bw.err-storage") }>
 			<div class="head">
 				<h1>{ T(ctx, "bw.title") }</h1>
 			</div>
@@ -34,6 +34,7 @@ templ BrowserWalletsPage() {
 			<div class="bar">
 				<a class="btn primary" href="bw/new"><span class="mi">add</span>{ T(ctx, "create.new-title") }</a>
 				<a class="btn" href="bw/load"><span class="mi">file_download</span>{ T(ctx, "create.load-title") }</a>
+				<a class="btn" href="hw"><span class="mi">memory</span>{ T(ctx, "hw.title") }</a>
 			</div>
 			@bwUnlock()
 			@bwData("wallets")
@@ -48,7 +49,7 @@ templ BrowserWalletsPage() {
 templ BrowserList(w Wallets) {
 	@ErrorBox(w.Err)
 	if w.Err == "" && len(w.Rows) == 0 {
-		<p class="dim">{ T(ctx, "bw.none") }</p>
+		@onboarding(true)
 	}
 	if len(w.Rows) > 0 {
 		<div class="head">
@@ -60,9 +61,11 @@ templ BrowserList(w Wallets) {
 }
 
 // BrowserWalletPage is one browser wallet. id is its first address.
-templ BrowserWalletPage(id string) {
+templ BrowserWalletPage(id string, n Notice) {
 	@Layout(T(ctx, "nav.wallets"), "wallets") {
-		<div data-bw-page="wallet" data-bw-root={ From(ctx).Classic } data-bw-id={ id } data-msg-missing={ T(ctx, "bw.missing") } data-msg-error={ T(ctx, "bw.err-storage") }>
+		<script src={ From(ctx).Root + "assets/scripts/wasm_exec.js" }></script>
+		@noticeBox(n)
+		<div data-bw-page="wallet" data-bw-root={ From(ctx).Root } data-bw-id={ id } data-msg-missing={ T(ctx, "bw.missing") } data-msg-error={ T(ctx, "bw.err-storage") } data-msg-password={ T(ctx, "wallet.err-password") } data-msg-new-password={ T(ctx, "bw.err-password") } data-msg-wrong-password={ T(ctx, "bw.err-wrong-password") } data-msg-password-confirm={ T(ctx, "create.err-password-confirm") } data-msg-mismatch={ T(ctx, "bw.err-mismatch") } data-msg-label={ T(ctx, "wallet.err-name") } data-msg-num={ T(ctx, "wallet.err-num") } data-msg-unsupported={ T(ctx, "bw.err-unsupported") } data-msg-wrong-seed={ T(ctx, "bw.err-wrong-seed") } data-msg-delete={ T(ctx, "bw.delete-confirm") } data-msg-wrong-device={ T(ctx, "hw.err-wrong-device") }>
 			@bwUnlock()
 			@bwData("wallet")
 			<div id="bw-wallet" hx-post="bw/wallet/view" hx-trigger="bw-ready from:body" hx-include="#bw-data" hx-swap="innerHTML">
@@ -78,7 +81,11 @@ templ BrowserWalletView(w Wallet) {
 	<div class="page-head">
 		<a class="icon-btn" href="./" aria-label={ T(ctx, "nav.wallets") }><span class="mi">arrow_back</span></a>
 		<h1>{ walletTitle(w) }</h1>
-		<span class="badge">{ w.Meta.Type }</span>
+		if w.Meta.Type == "skywallet" {
+			<span class="badge on"><span class="mi small-icon">memory</span>{ T(ctx, "hw.badge") }</span>
+		} else {
+			<span class="badge">{ w.Meta.Type }</span>
+		}
 		if w.Meta.Encrypted {
 			<span class="badge on"><span class="mi small-icon">lock</span>{ T(ctx, "wallet.encrypted") }</span>
 		}
@@ -86,6 +93,7 @@ templ BrowserWalletView(w Wallet) {
 		<span class="spacer"></span>
 		<a class="btn primary" href={ templ.URL(bwSendURL(w.ID, "")) }><span class="mi">send</span>{ T(ctx, "send.title") }</a>
 	</div>
+	@ExposedBanner(w.Exposed)
 	<section class="card">
 		@ErrorBox(w.Err)
 		<div class="ov">
@@ -121,8 +129,16 @@ templ BrowserWalletView(w Wallet) {
 			@addrTable(w)
 		}
 	</section>
+	if w.Meta.Type == "skywallet" {
+		@hwOptions(w)
+	} else {
+		@bwOptions(w)
+	}
 	<section class="card">
-		<h2>{ T(ctx, "wallet.history") }</h2>
+		<div class="bar">
+			<h2>{ T(ctx, "wallet.history") }</h2>
+			<a class="btn sm" href={ templ.URL(historyURL(walletFilter(w.ID))) }>{ T(ctx, "history.open") }</a>
+		</div>
 		<div id="txns" hx-post="bw/txns" hx-trigger="load" hx-include="#bw-data" hx-swap="outerHTML">
 			<p class="dim">{ T(ctx, "ui2.loading") }</p>
 		</div>
@@ -134,7 +150,7 @@ templ BrowserWalletView(w Wallet) {
 // has a name, so nothing in this form can be sent anywhere.
 templ BrowserCreatePage(load bool) {
 	@Layout(createTitle(ctx, load), "wallets") {
-		<script src={ From(ctx).Classic + "assets/scripts/wasm_exec.js" }></script>
+		<script src={ From(ctx).Root + "assets/scripts/wasm_exec.js" }></script>
 		<div class="page-head">
 			<a class="icon-btn" href="./" aria-label={ T(ctx, "nav.wallets") }><span class="mi">arrow_back</span></a>
 			<h1>{ createTitle(ctx, load) }</h1>
@@ -143,7 +159,7 @@ templ BrowserCreatePage(load bool) {
 		<section
 			class="card"
 			data-bw-page={ bwCreateMode(load) }
-			data-bw-root={ From(ctx).Classic }
+			data-bw-root={ From(ctx).Root }
 			data-msg-label={ T(ctx, "create.err-label") }
 			data-msg-seed={ T(ctx, "create.err-seed") }
 			data-msg-seed-confirm={ T(ctx, "create.err-seed-confirm") }
@@ -161,26 +177,33 @@ templ BrowserCreatePage(load bool) {
 					{ T(ctx, "create.label") }
 					<input id="bw-label" maxlength="100"/>
 				</label>
+				<label>
+					{ T(ctx, "create.type") }
+					<select id="bw-type">
+						<option value="bip44" selected>{ T(ctx, "create.type-bip44") }</option>
+						<option value="deterministic">{ T(ctx, "create.type-deterministic") }</option>
+						<option value="pq">{ T(ctx, "create.type-pq") }</option>
+					</select>
+				</label>
+				<p class="small dim">{ T(ctx, "create.type-pq-info") }</p>
+				<label>
+					{ T(ctx, "create.passphrase") }
+					<input type="password" id="bw-passphrase" autocomplete="off"/>
+				</label>
 				if load {
-					<label>
-						{ T(ctx, "create.type") }
-						<select id="bw-type">
-							<option value="bip44" selected>{ T(ctx, "create.type-bip44") }</option>
-							<option value="deterministic">{ T(ctx, "create.type-deterministic") }</option>
-						</select>
-					</label>
 					<label>
 						{ T(ctx, "create.seed") }
 						<textarea id="bw-seed" rows="3" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
-					</label>
-					<label>
-						{ T(ctx, "bw.passphrase") }
-						<input type="password" id="bw-passphrase" autocomplete="off"/>
 					</label>
 					<label class="check">
 						<input type="checkbox" id="bw-nonstandard"/>
 						{ T(ctx, "create.nonstandard") }
 					</label>
+					<label class="check">
+						<input type="checkbox" id="bw-temp"/>
+						{ T(ctx, "create.temp") }
+					</label>
+					<p class="small dim">{ T(ctx, "bw.temp-help") }</p>
 				} else {
 					<label>
 						{ T(ctx, "create.words") }

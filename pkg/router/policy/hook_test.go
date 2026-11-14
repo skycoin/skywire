@@ -1,4 +1,4 @@
-// Package policy pkg/router/policy/hook_test.go — pins the
+// Package policy pkg/router/policy/hook_test.go c2-net-routing — pins the
 // Loader → DialHook adapter. Tests the loader-side semantics
 // (script defines decide_route returning mux/min_hops/fallback)
 // translate cleanly into the router-facing DialAdjustment shape.
@@ -700,7 +700,7 @@ def decide_route(ctx, candidates):
 	adj, err := h.BeforeDial(context.Background(), router.DialInfo{
 		AppName:       "vpn-client",
 		PeerPK:        pk,
-		IsDirectDial:  true,
+		DirectDial:    true,
 		TransportKind: "dmsg",
 	})
 	if err != nil {
@@ -714,7 +714,7 @@ def decide_route(ctx, candidates):
 	adj, err = h.BeforeDial(context.Background(), router.DialInfo{
 		AppName:       "vpn-client",
 		PeerPK:        pk,
-		IsDirectDial:  true,
+		DirectDial:    true,
 		TransportKind: "stcpr",
 	})
 	if err != nil {
@@ -728,7 +728,7 @@ def decide_route(ctx, candidates):
 	adj, err = h.BeforeDial(context.Background(), router.DialInfo{
 		AppName:       "vpn-client",
 		PeerPK:        pk,
-		IsDirectDial:  false,
+		DirectDial:    false,
 		TransportKind: "dmsg",
 	})
 	if err != nil {
@@ -852,7 +852,7 @@ def decide_route(ctx, candidates):
 			h := NewHook(loader)
 			pk := cipher.PubKey{}
 			pk[0] = 0x02
-			info := router.DialInfo{AppName: "x", PeerPK: pk, IsDirectDial: true}
+			info := router.DialInfo{AppName: "x", PeerPK: pk, DirectDial: true}
 			adj, err := h.BeforeDial(context.Background(), info)
 			if err != nil {
 				t.Fatalf("BeforeDial: %v", err)
@@ -881,7 +881,7 @@ def decide_route(ctx, candidates):
 	h := NewHook(loader)
 	pk := cipher.PubKey{}
 	pk[0] = 0x02
-	info := router.DialInfo{AppName: "x", PeerPK: pk, IsDirectDial: true}
+	info := router.DialInfo{AppName: "x", PeerPK: pk, DirectDial: true}
 	adj, err := h.BeforeDial(context.Background(), info)
 	if err != nil {
 		t.Fatalf("BeforeDial: %v", err)
@@ -924,7 +924,7 @@ def decide_route(ctx, candidates):
 			h := NewHook(loader)
 			pk := cipher.PubKey{}
 			pk[0] = 0x02
-			info := router.DialInfo{AppName: "x", PeerPK: pk, IsDirectDial: true}
+			info := router.DialInfo{AppName: "x", PeerPK: pk, DirectDial: true}
 			adj, err := h.BeforeDial(context.Background(), info)
 			if err != nil {
 				t.Fatalf("BeforeDial: %v", err)

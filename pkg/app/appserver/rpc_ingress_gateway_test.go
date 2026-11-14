@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package appserver pkg/app/appserver/rpc_ingress_gateway_test.go
+// Package appserver pkg/app/appserver/rpc_ingress_gateway_test.go c2-vis-appsvc
 package appserver
 
 import (
@@ -600,10 +600,10 @@ func testRPCIngressGatewayWriteError(t *testing.T, l *logging.Logger, writeBuff 
 	wantResp := WriteResp{
 		N: len(writeBuff) / 2,
 		Err: &RPCIOErr{
-			Text:           writeErr.Error(),
-			IsNetErr:       false,
-			IsTimeoutErr:   false,
-			IsTemporaryErr: false,
+			Text:      writeErr.Error(),
+			NetErr:    false,
+			Timeout:   false,
+			Temporary: false,
 		},
 	}
 
@@ -713,10 +713,10 @@ func testRPCIngressGatewayReadError(t *testing.T, l *logging.Logger, readBuf []b
 		B: make([]byte, readN),
 		N: readN,
 		Err: &RPCIOErr{
-			Text:           readErr.Error(),
-			IsNetErr:       false,
-			IsTimeoutErr:   false,
-			IsTemporaryErr: false,
+			Text:      readErr.Error(),
+			NetErr:    false,
+			Timeout:   false,
+			Temporary: false,
 		},
 	}
 

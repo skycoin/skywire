@@ -1,4 +1,4 @@
-// Package api pkg/deployment/tpd/api/cxo_metrics_publisher.go c4-net-discovery
+// Package api pkg/deployment/tpd/api/cxo_metrics_publisher.go c3-net-discovery
 //
 // CXO publisher for the network-wide transport-metrics aggregate.
 // The publisher writes ONE GZIPPED JSON LEAF PER CALENDAR DAY

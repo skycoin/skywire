@@ -1,6 +1,6 @@
 //go:build !js
 
-// Package group pkg/skychat/group/store_bbolt.go c4-app-chat
+// Package group pkg/skychat/group/store_bbolt.go c3-app-chat
 // persistence for chat groups (native builds; bbolt can't compile under
 // js/wasm, so the browser visor uses the in-memory store_memory.go — same API,
 // wire-identical JSON records).
@@ -228,7 +228,7 @@ func (s *Store) Get(id string) (Record, bool, error) {
 		return s.decodeRecord(raw, &r)
 	})
 	// Legacy records persisted before the Admins field existed have
-	// Admins == nil. Normalize on every read so IsAdmin and admin-
+	// Admins == nil. Normalize on every read so AdministeredBy and admin-
 	// gated manager ops see a consistent shape. Idempotent for new
 	// records that already have the founder explicit.
 	r.EnsureFounderInAdmins()

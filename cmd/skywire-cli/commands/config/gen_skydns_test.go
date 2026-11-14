@@ -14,25 +14,25 @@ import (
 // TestSkyDNSKnobs: SKYDNS and RESOLVERCA have to reach a config that already
 // has a skydns entry, since a regen otherwise keeps the old autostart and args.
 func TestSkyDNSKnobs(t *testing.T) {
-	restoreRegen, restoreOld, restoreConf := isRegen, oldConfCache, conf
-	restoreOn, restoreCA := isSkyDNSEnable, resolverCA
+	restoreRegen, restoreOld, restoreConf := regenerate, oldConfCache, conf
+	restoreOn, restoreCA := skyDNSEnable, resolverCA
 	t.Cleanup(func() {
-		isRegen, oldConfCache, conf = restoreRegen, restoreOld, restoreConf
-		isSkyDNSEnable, resolverCA = restoreOn, restoreCA
+		regenerate, oldConfCache, conf = restoreRegen, restoreOld, restoreConf
+		skyDNSEnable, resolverCA = restoreOn, restoreCA
 	})
-	isSkyDNSEnable, resolverCA = true, "/root/.skywire/resolver"
+	skyDNSEnable, resolverCA = true, "/root/.skywire/resolver"
 
 	if got := skydnsArgs([]string{"app", "skydns"}); !reflect.DeepEqual(got, []string{"app", "skydns", "--ca", "/root/.skywire/resolver"}) {
 		t.Errorf("fresh skydns args = %v", got)
 	}
 
-	isRegen = true
+	regenerate = true
 	oldConfCache = &visorconfig.V1{Launcher: &visorconfig.Launcher{Apps: []appserver.AppConfig{
 		{Name: skyenv.SkyDNSName, AutoStart: false, Args: []string{"app", "skydns", "--dns", "9.9.9.9"}},
 	}}}
 	conf = new(visorconfig.V1)
 	conf.Launcher = &visorconfig.Launcher{Apps: []appserver.AppConfig{
-		{Name: skyenv.SkyDNSName, AutoStart: isSkyDNSEnable, Args: skydnsArgs([]string{"app", "skydns"})},
+		{Name: skyenv.SkyDNSName, AutoStart: skyDNSEnable, Args: skydnsArgs([]string{"app", "skydns"})},
 	}}
 	mergeExistingApps(logging.MustGetLogger("test"))
 

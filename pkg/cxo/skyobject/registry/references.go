@@ -18,8 +18,8 @@ func (r RegistryRef) String() string {
 	return cipher.SHA256(r).Hex()
 }
 
-// IsBlank returns true if the RegistryRef is blank
-func (r RegistryRef) IsBlank() bool {
+// Blank returns true if the RegistryRef is blank
+func (r RegistryRef) Blank() bool {
 	return r == (RegistryRef{})
 }
 
@@ -36,7 +36,7 @@ func (s SchemaRef) String() string {
 	return cipher.SHA256(s).Hex()
 }
 
-// IsBlank returns true if the SchemaRef is blank
-func (s SchemaRef) IsBlank() bool {
+// Blank returns true if the SchemaRef is blank
+func (s SchemaRef) Blank() bool {
 	return s == (SchemaRef{})
 }

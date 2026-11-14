@@ -85,7 +85,7 @@ func (rg *RouteGroup) MuxStats() MuxInfo {
 			// directly — orientation-independent. A relayed leg's first hop lands
 			// on an intermediate (neither Src nor Dst), so this stays false.
 			leg.Direct = tp.Remote() == dstPK || tp.Remote() == rg.desc.SrcPK()
-			leg.Alive = !tp.IsClosed()
+			leg.Alive = !tp.Closed()
 			// Full forward route for this leg (all hops, full PKs, per-hop
 			// transport type). Per-hop latency: hop 0 is the owned transport
 			// RTT; a single-intermediate leg's far hop is derived from

@@ -1,5 +1,6 @@
 //go:build linux
 
+// Package gcmon pkg/gcmon/proc_linux.go c0-com-util
 package gcmon
 
 import (

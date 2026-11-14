@@ -1,5 +1,7 @@
 //go:build js && wasm
 
+// Package main cmd/netview/main.go c4-app-rewards
+//
 // Command netview is the WebGL graph view (pkg/tpviz/wasmgl) as a module of
 // its own, so a page that only draws a graph does not load the skywire module.
 // `make netview-wasm` builds it into pkg/tpviz/netview.

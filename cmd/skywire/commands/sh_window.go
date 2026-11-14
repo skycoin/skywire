@@ -1,5 +1,6 @@
 //go:build unix && !ios && !tinygo && !(android && !cgo)
 
+// Package commands cmd/skywire/commands/sh_window.go c4-vis-cli
 package commands
 
 import (

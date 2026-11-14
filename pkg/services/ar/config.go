@@ -1,4 +1,4 @@
-// Package ar pkg/services/ar/config.go c2-vis-appsvc
+// Package ar pkg/services/ar/config.go c3-vis-appsvc
 package ar
 
 import (

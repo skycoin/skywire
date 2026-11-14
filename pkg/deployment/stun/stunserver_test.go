@@ -1,4 +1,4 @@
-// Package stunserver pkg/deployment/stun/stunserver_test.go
+// Package stunserver pkg/deployment/stun/stunserver_test.go c2-net-transport
 package stunserver
 
 import (
@@ -9,9 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 func testLogger() *logging.Logger { return logging.MustGetLogger("stunserver_test") }

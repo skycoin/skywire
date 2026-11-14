@@ -34,12 +34,12 @@ type Root struct {
 	// means the Root is first in chain
 	Prev cipher.SHA256
 
-	// IsFull means that this Root object
+	// Full means that this Root object
 	// has been successfully colelcted by this
 	// machine. E.g. this field is not part
 	// of a Root, and this field is machine
 	// local
-	IsFull bool `enc:"-"`
+	Full bool `enc:"-"`
 }
 
 // Encode the Root

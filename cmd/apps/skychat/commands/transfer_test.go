@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/transfer_test.go
+// Package commands cmd/apps/skychat/commands/transfer_test.go c4-app-chat
 //
 // The export/import surface: what an archive carries, what it refuses, and
 // the round trip that is the whole point — a file written by one visor read

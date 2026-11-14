@@ -1,4 +1,4 @@
-// Package visorapi pkg/visor/visorapi/services.go
+// Package visorapi pkg/visor/visorapi/services.go c3-vis-core
 package visorapi
 
 import "github.com/skycoin/skywire/pkg/services"

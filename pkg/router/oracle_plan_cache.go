@@ -333,7 +333,7 @@ func (r *router) disjointRouteBound(dst cipher.PubKey) int {
 	r.refreshRouteBound(dst)
 	self := r.conf.PubKey
 	r.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
-		if tp != nil && !tp.IsClosed() && tp.Entry.Label != transport.LabelSetup && tp.Entry.RemoteEdge(self) == dst {
+		if tp != nil && !tp.Closed() && tp.Entry.Label != transport.LabelSetup && tp.Entry.RemoteEdge(self) == dst {
 			n++
 		}
 		return true

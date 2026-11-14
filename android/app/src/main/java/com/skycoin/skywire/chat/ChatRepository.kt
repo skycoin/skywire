@@ -118,7 +118,6 @@ class ChatRepository private constructor(internal val app: Context) {
 
     private var started = false
     private var session: Job? = null
-    private var postedUnread = -1
 
     fun note(@StringRes res: Int, vararg args: Any, error: Boolean = false) {
         notesFlow.tryEmit(ChatNote(res, args.toList(), error))
@@ -343,7 +342,8 @@ class ChatRepository private constructor(internal val app: Context) {
         }
     }
 
-    fun totalUnread(): Int = summaries.value.filterKeys { isPk(it) }.values.sumOf { it.unread }
+    /** What the conversation rows show as unread, groups and channels included. */
+    fun totalUnread(): Int = summaries.value.values.sumOf { it.unread }
 
     // --- the open conversation ---
 
@@ -563,12 +563,12 @@ class ChatRepository private constructor(internal val app: Context) {
         }
     }
 
-    /** The hub card's badge reads this total back from skychat. */
+    /**
+     * The total skychat keeps for when these screens are not following it. Sent on
+     * every change: skychat bumps it for each inbound message, read ones too.
+     */
     private suspend fun unreadLoop() {
-        summaries.collectLatest {
-            val total = totalUnread()
-            if (total != postedUnread && runCatching { api.reportUnread(total) }.isSuccess) postedUnread = total
-        }
+        summaries.collectLatest { runCatching { api.reportUnread(totalUnread()) } }
     }
 
     // --- syncs ---

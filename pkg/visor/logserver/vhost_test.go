@@ -1,4 +1,4 @@
-// Package logserver pkg/visor/logserver/vhost_test.go
+// Package logserver pkg/visor/logserver/vhost_test.go c3-vis-core
 package logserver
 
 import (

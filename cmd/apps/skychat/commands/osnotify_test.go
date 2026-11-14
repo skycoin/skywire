@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/osnotify_test.go
+// Package commands cmd/apps/skychat/commands/osnotify_test.go c4-app-chat
 //
 // Unit coverage for the host-OS notification plumbing that doesn't touch the OS:
 // the capability lease + uiCanNotify gate, the /notify-capable handler, and the

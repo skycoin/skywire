@@ -1,4 +1,4 @@
-// Package dmsg pkg/dmsg/dmsg/relay_inproc.go
+// Package dmsg pkg/dmsg/dmsg/relay_inproc.go c1-net-dmsg
 //
 // The IN-PROCESS attach: a second dmsg client in the same process as the first,
 // riding the first one's sessions. It is the third and cheapest pipe into the

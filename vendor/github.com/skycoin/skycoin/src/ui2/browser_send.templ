@@ -8,7 +8,8 @@ import "strings"
 // the fresh address fields, then asks for the review.
 templ BrowserSendPage(id, from string) {
 	@Layout(T(ctx, "send.title"), "wallets") {
-		<script src={ From(ctx).Classic + "assets/scripts/wasm_exec.js" }></script>
+		<script src={ From(ctx).Root + "assets/scripts/wasm_exec.js" }></script>
+		@hwDialog()
 		<div class="page-head">
 			<a class="icon-btn" href={ templ.URL(bwWalletURL(id)) } aria-label={ T(ctx, "nav.wallets") }><span class="mi">arrow_back</span></a>
 			if from != "" {
@@ -21,7 +22,7 @@ templ BrowserSendPage(id, from string) {
 		<section
 			class="card"
 			data-bw-page="send"
-			data-bw-root={ From(ctx).Classic }
+			data-bw-root={ From(ctx).Root }
 			data-bw-id={ id }
 			data-msg-missing={ T(ctx, "bw.missing") }
 			data-msg-error={ T(ctx, "bw.err-storage") }
@@ -43,29 +44,21 @@ templ BrowserSendPage(id, from string) {
 						<p class="mono">{ from }</p>
 					</div>
 				} else {
-					<label>
-						{ T(ctx, "send.to") }
-						<input name="to" class="mono" required spellcheck="false" autocapitalize="off"/>
-					</label>
-					<label>
-						{ T(ctx, "send.coins") }
-						<input name="coins" inputmode="decimal" required/>
-					</label>
-					<details class="fold">
-						<summary>{ T(ctx, "send.advanced") }</summary>
-						<label>
-							{ T(ctx, "send.change") }
-							<input name="change" class="mono" spellcheck="false" autocapitalize="off" placeholder={ T(ctx, "send.change-default") }/>
-						</label>
-						<p class="small dim">{ T(ctx, "send.change-help") }</p>
-					</details>
+					@sendDests("")
+					@sendAdvanced() {
+						<div id="bw-sources" hx-post="bw/send/sources" hx-trigger="bw-ready from:body" hx-include="#bw-data" hx-target="this" hx-swap="innerHTML"></div>
+					}
 				}
+				<input type="hidden" name="unsigned" id="bw-unsigned"/>
 				<label>
 					{ T(ctx, "send.password") }
 					<input type="password" id="bw-send-password" autocomplete="current-password"/>
 				</label>
 				<div class="bar">
 					<button class="btn primary" type="submit">{ T(ctx, "send.review") }</button>
+					if from == "" {
+						<button class="btn" type="button" data-bw-unsigned title={ T(ctx, "send.unsigned-help") }>{ T(ctx, "send.unsigned") }</button>
+					}
 					<span class="busy dim small">{ T(ctx, "ui2.working") }</span>
 					<span class="dim small" id="bw-status"></span>
 				</div>
@@ -92,12 +85,7 @@ templ BrowserReview(r Review, s SignRequest) {
 				<div class="alert warn"><p>{ T(ctx, w) }</p></div>
 			}
 			<dl class="kv">
-				<dt>{ T(ctx, "send.to") }</dt>
-				<dd class="mono">{ r.To }</dd>
-				<dt>{ T(ctx, "send.coins") }</dt>
-				<dd><strong>{ r.Coins }</strong></dd>
-				<dt>{ T(ctx, "send.hours-sent") }</dt>
-				<dd>{ r.Hours }</dd>
+				@reviewDests(r)
 				for _, c := range r.Change {
 					<dt>{ T(ctx, "send.change-output") }</dt>
 					<dd><span class="mono">{ c.Address }</span> <span class="nowrap">{ c.Coins } · { c.Hours } { T(ctx, "balance.hours") }</span></dd>
@@ -109,6 +97,31 @@ templ BrowserReview(r Review, s SignRequest) {
 				<button class="btn primary" type="button" id="bw-sign-send"><span class="mi">send</span>{ T(ctx, "send.send") }</button>
 				<button class="btn" type="button" data-clear="#review">{ T(ctx, "send.cancel") }</button>
 			</div>
+		</div>
+	}
+}
+
+// BrowserSendSources is the balance and the sources of a browser wallet,
+// loaded once bw.js has read the wallet.
+templ BrowserSendSources(s Send) {
+	@ErrorBox(s.Err)
+	if s.Err == "" {
+		<p class="small">
+			{ T(ctx, "send.available") } <strong>@Money(s.Balance)</strong> { T(ctx, "balance.coins") }
+			@sendAll(s.Available)
+		</p>
+		@sendSources(s)
+	}
+}
+
+// BrowserUnsigned is a browser wallet's transaction left unsigned. bw.js
+// stores the fresh change address it pays before showing it.
+templ BrowserUnsigned(r Review, s SignRequest) {
+	if r.Err != "" {
+		@ErrorBox(T(ctx, r.Err))
+	} else {
+		<div data-bw-unsigned-tx={ s.JSON() }>
+			@UnsignedView(r)
 		</div>
 	}
 }

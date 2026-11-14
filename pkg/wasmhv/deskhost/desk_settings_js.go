@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package deskhost pkg/wasmhv/deskhost/desk_settings_js.go c4-wasm-desk
+// Package deskhost pkg/wasmhv/deskhost/desk_settings_js.go c3-vis-wasm
 //
 // The ☰ settings app: the tab visor's skywire.conf as a form. That file is
 // what the desk regenerates skywire.json from on every load, so it is where

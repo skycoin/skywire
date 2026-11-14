@@ -1,4 +1,4 @@
-// Package api pkg/deployment/tpd/api/cxo_stats_daily_test.go c4-net-discovery
+// Package api pkg/deployment/tpd/api/cxo_stats_daily_test.go c3-net-discovery
 //
 // Tests for the stats/daily leaf. The claim under test is that a
 // consumer can unmarshal the published body into

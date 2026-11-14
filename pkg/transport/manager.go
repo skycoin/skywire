@@ -110,6 +110,9 @@ type Manager struct {
 	// builds). Typed `any` so addrresolver — which pulls net/http — stays out of
 	// the TinyGo graph; recover it via the build-tagged ARClient() getter.
 	arClient any
+	// localMiss holds, per peer, until when EnsureLocalTransport answers
+	// ErrNotLocal without asking again.
+	localMiss sync.Map
 	// ebc is the app-event broadcaster (*appevent.Broadcaster on native builds).
 	// Typed `any` so appevent (net/rpc) stays out of the TinyGo graph; it is only
 	// stored and forwarded, never method-called here.
@@ -600,7 +603,7 @@ func (tm *Manager) reRegisterTransports(ctx context.Context) {
 	tm.mx.RLock()
 	bareEntries := make([]*Entry, 0, len(tm.tps))
 	for _, tp := range tm.tps {
-		if tp.IsClosed() {
+		if tp.Closed() {
 			continue
 		}
 		// Skip self-loop transports. They are diagnostic-only — both
@@ -681,7 +684,7 @@ func (tm *Manager) tpdLeafPublisher() TPDLeafPublisher {
 	return tm.tpdLeafPub
 }
 
-// HasTPDLeafPublisher reports whether CXO mirroring is installed.
+// TPDLeafPublisherSet reports whether CXO mirroring is installed.
 //
 // When it is, this visor publishes its FULL transport list as one snapshot leaf
 // and TPD's aggregator reconciles against it — absence means deletion, and a
@@ -690,7 +693,7 @@ func (tm *Manager) tpdLeafPublisher() TPDLeafPublisher {
 // stale TPD entry disappears because it is not in the next snapshot, and a
 // dropped registration is re-asserted by it. Callers use this to skip that work
 // and keep it only for visors where CXO publishing is off or unavailable.
-func (tm *Manager) HasTPDLeafPublisher() bool { return tm.tpdLeafPublisher() != nil }
+func (tm *Manager) TPDLeafPublisherSet() bool { return tm.tpdLeafPublisher() != nil }
 
 // currentBareEntries returns this visor's live, non-self-loop transport entries —
 // the authoritative set it publishes to TPD. Closed transports are excluded even if
@@ -701,7 +704,7 @@ func (tm *Manager) currentBareEntries() []*Entry {
 	defer tm.mx.RUnlock()
 	out := make([]*Entry, 0, len(tm.tps))
 	for _, tp := range tm.tps {
-		if tp.IsClosed() {
+		if tp.Closed() {
 			continue
 		}
 		// Self-loop transports (both edges the same PK) are diagnostic-only and must
@@ -1071,7 +1074,7 @@ func (tm *Manager) cleanupTransports(ctx context.Context) {
 			tm.mx.Lock()
 			var toDelete []*ManagedTransport
 			for _, tp := range tm.tps {
-				if tp.IsClosed() {
+				if tp.Closed() {
 					toDelete = append(toDelete, tp)
 				}
 			}
@@ -1135,7 +1138,7 @@ func (tm *Manager) PreferredDirectCreateOrder() []types.Type {
 func preferredDirectOrder(have map[types.Type]bool) []types.Type {
 	var out []types.Type
 	for _, t := range types.PreferenceOrder() {
-		if t != types.DMSG && types.IsDirect(t) && have[t] {
+		if t != types.DMSG && types.Direct(t) && have[t] {
 			out = append(out, t)
 		}
 	}
@@ -1242,7 +1245,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 
 	tm.Logger.Debugf("recv transport request: type(%s) remote(%s)", lis.Network(), transport.RemotePK())
 
-	mTp, isNew, err := tm.prepareAccept(transport)
+	mTp, created, err := tm.prepareAccept(transport)
 	if err != nil {
 		return err
 	}
@@ -1256,7 +1259,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 	// prod01 (2026-09-28): three such dialers back to back held the lock 59s,
 	// and every transport on the relay stopped reading for that long.
 	var gate InboundGate
-	if g := tm.inboundGate.Load(); isNew && g != nil {
+	if g := tm.inboundGate.Load(); created && g != nil {
 		gate = *g
 	}
 	if err := mTp.accept(ctx, transport, gate); err != nil {
@@ -1275,7 +1278,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 		return err
 	}
 
-	tm.Logger.Debugf("accepted tp: type(%s) remote(%s) tpID(%s) new(%v)", lis.Network(), transport.RemotePK(), mTp.Entry.ID, isNew)
+	tm.Logger.Debugf("accepted tp: type(%s) remote(%s) tpID(%s) new(%v)", lis.Network(), transport.RemotePK(), mTp.Entry.ID, created)
 	tm.lastInbound.note(lis.Network(), time.Now())
 
 	// Nudge the re-registration loop to batch-register this transport with TPD soon.
@@ -1334,7 +1337,7 @@ func (tm *Manager) prepareAccept(transport network.Transport) (*ManagedTransport
 			ebc:            tm.ebc,
 			mlog:           tm.factory.MLogger,
 			QueueDeletion:  tm.queueDeletion,
-			IsInitiator:    false, // remote dialed us — incoming transport
+			Initiator:      false, // remote dialed us — incoming transport
 		})
 		tm.applyHandlers(mTp)
 
@@ -1385,7 +1388,7 @@ var ErrUnknownNetwork = errors.New("unknown network type")
 // are unaffected.
 var ErrTransportCreateDisabled = errors.New("transport creation disabled for this type by policy")
 
-// IsKnownNetwork returns true when netName is a known
+// KnownNetwork returns true when netName is a known
 // network type that we are able to operate in.
 //
 // Wrapper around the lockless helper for external callers. Methods
@@ -1395,11 +1398,11 @@ var ErrTransportCreateDisabled = errors.New("transport creation disabled for thi
 // writer (Go's RWMutex prioritizes pending writers to prevent
 // writer starvation, so a recursive RLock attempt blocks when a
 // writer is waiting). Production case that bit us: GetTransport
-// previously called IsKnownNetwork from inside its own RLock; with
+// previously called KnownNetwork from inside its own RLock; with
 // cleanupTransports or acceptTransport pending the write lock, the
 // recursive read attempt deadlocked, freezing every subsequent
 // transport operation including ServeRPCClient's redial attempts.
-func (tm *Manager) IsKnownNetwork(netName types.Type) bool {
+func (tm *Manager) KnownNetwork(netName types.Type) bool {
 	tm.mx.RLock()
 	defer tm.mx.RUnlock()
 	return tm.isKnownNetworkLocked(netName)
@@ -1521,11 +1524,11 @@ func (tm *Manager) transportCreateDenied(netType types.Type) bool {
 	case RestrictAll:
 		return true
 	case RestrictDirect:
-		if types.IsDirect(nt) {
+		if types.Direct(nt) {
 			return true
 		}
 	}
-	if tm.Conf.NoDirectTransports && types.IsDirect(nt) {
+	if tm.Conf.NoDirectTransports && types.Direct(nt) {
 		return true
 	}
 	for _, d := range tm.Conf.TransportCreateDeny {
@@ -1546,7 +1549,7 @@ func (tm *Manager) CanCreateTransport(netType types.Type) bool {
 }
 
 func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubKey, netType types.Type, label Label, opts SaveTransportOptions) (*ManagedTransport, error) {
-	if !tm.IsKnownNetwork(netType) {
+	if !tm.KnownNetwork(netType) {
 		return nil, ErrUnknownNetwork
 	}
 	if tm.transportCreateDenied(netType) {
@@ -1558,7 +1561,7 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 	tm.Logger.Debugf("Initializing TP with ID %s", tpID)
 
 	oldMTp, err := tm.GetTransportByID(tpID)
-	if err == nil && !oldMTp.IsClosed() {
+	if err == nil && !oldMTp.Closed() {
 		tm.Logger.Debug("Found an old mTp from internal map.")
 		return oldMTp, nil
 	}
@@ -1610,7 +1613,7 @@ func (tm *Manager) dialAndSave(ctx context.Context, remote cipher.PubKey, netTyp
 		TransportLabel: label,
 		mlog:           tm.factory.MLogger,
 		QueueDeletion:  tm.queueDeletion,
-		IsInitiator:    true, // we are dialing out — outgoing transport
+		Initiator:      true, // we are dialing out — outgoing transport
 	})
 
 	tm.Logger.Debugf("Dialing transport to %v via %v", mTp.Remote(), mTp.client.Type())
@@ -1632,7 +1635,7 @@ func (tm *Manager) dialAndSave(ctx context.Context, remote cipher.PubKey, netTyp
 	// installed a live transport meanwhile. Don't clobber it: discard the one
 	// we just dialed (its TPD entry is shared with the survivor under the same
 	// tpID, so close WITHOUT deregistering) and return the winner.
-	if existing, ok := tm.tps[tpID]; ok && !existing.IsClosed() {
+	if existing, ok := tm.tps[tpID]; ok && !existing.Closed() {
 		tm.mx.Unlock()
 		mTp.closeWithoutDeregister()
 		return existing, nil
@@ -1986,7 +1989,7 @@ func (tm *Manager) closeLocked() {
 	var tpIDs []uuid.UUID
 	for _, tr := range tm.tps {
 		// Skip transports with noop discovery client (self-transports)
-		if _, isNoop := tr.dc.(*noopDiscoveryClient); !isNoop {
+		if _, ok := tr.dc.(*noopDiscoveryClient); !ok {
 			tpIDs = append(tpIDs, tr.Entry.ID)
 		}
 	}

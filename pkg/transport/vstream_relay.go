@@ -242,7 +242,7 @@ func (m *VStreamMux) writePayload(tp *ManagedTransport, payload []byte) error {
 func (m *VStreamMux) findDirectTransport(pk cipher.PubKey) *ManagedTransport {
 	var target *ManagedTransport
 	m.tm.WalkTransports(func(tp *ManagedTransport) bool {
-		if tp.Remote() == pk && !tp.IsClosed() && tp.Type() != "dmsg" {
+		if tp.Remote() == pk && !tp.Closed() && tp.Type() != "dmsg" {
 			target = tp
 			return false
 		}

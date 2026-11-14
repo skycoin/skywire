@@ -1,4 +1,4 @@
-// Package dmsgweb pkg/dmsgweb/runtime.go c4-app-web
+// Package dmsgweb pkg/dmsgweb/runtime.go c3-app-web
 // `.dmsg` (and other configurable) domain suffixes. It exposes:
 //
 //   - a SOCKS5 proxy that intercepts hosts ending in the configured
@@ -537,9 +537,9 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 
 				dstAddr := dmsg.Addr{PK: dest, Port: dialPort}
 				var stream net.Conn
-				_, isDirectServer := cfg.DirectServerPKs[dest]
+				_, ok := cfg.DirectServerPKs[dest]
 				switch {
-				case isDirectServer && cfg.DirectClient != nil && len(route) == 0:
+				case ok && cfg.DirectClient != nil && len(route) == 0:
 					// Non-discovery dmsg SERVER: dial it through the direct
 					// client by self-rendezvous — connect to the server (the
 					// direct client knows its address) and dial the server's
@@ -565,7 +565,7 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 					// precede it). A .dmsg address carries a single routing PK (the
 					// server); if more are present the one nearest the dest wins.
 					rl := route[len(route)-1]
-					if rl.IsTpID {
+					if rl.ByTpID {
 						return nil, fmt.Errorf("dmsg address %q: routing label must be a dmsg server PK, not a transport ID", origHost)
 					}
 					serverPK := rl.PK

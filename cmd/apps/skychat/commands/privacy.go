@@ -1,3 +1,4 @@
+// Package commands cmd/apps/skychat/commands/privacy.go c4-app-chat
 package commands
 
 import (

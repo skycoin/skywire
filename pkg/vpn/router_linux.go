@@ -1,6 +1,6 @@
 //go:build linux
 
-// Package vpn pkg/vpn/router_linux.go c4-app-vpn
+// Package vpn pkg/vpn/router_linux.go c3-app-vpn
 package vpn
 
 import (
@@ -253,7 +253,7 @@ func (r *Router) setupNAT() error {
 	if err == nil {
 		r.prevForwarding = prev
 	}
-	if err := EnableIPv4Forwarding(); err != nil {
+	if err := EnableIPv4Forwarding(r.log); err != nil {
 		return fmt.Errorf("enable IPv4 forwarding: %w", err)
 	}
 	if err := r.fw.masquerade(r.tunIfc); err != nil {
@@ -383,7 +383,7 @@ func (r *Router) teardown() {
 		}
 	}
 	if r.prevForwarding != "" && r.prevForwarding != "1" {
-		if err := SetIPv4ForwardingValue(r.prevForwarding); err != nil {
+		if err := SetIPv4ForwardingValue(r.log, r.prevForwarding); err != nil {
 			r.log.WithError(err).Warn("teardown: restore IPv4 forwarding")
 		}
 	}

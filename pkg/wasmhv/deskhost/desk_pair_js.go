@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package deskhost pkg/wasmhv/deskhost/desk_pair_js.go c4-wasm-desk
+// Package deskhost pkg/wasmhv/deskhost/desk_pair_js.go c3-vis-wasm
 //
 // Two ☰ apps for a desk a visor serves (#4484 stage 5):
 //

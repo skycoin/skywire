@@ -1,3 +1,5 @@
+// Package wallet src/wallet/wallet.go c1-coin-wallet
+//
 /*
 Package wallet implements wallets and the wallet database service
 
@@ -202,7 +204,7 @@ type Wallet interface {
 	SetLabel(string)
 	Filename() string
 	SetFilename(string)
-	IsEncrypted() bool
+	Encrypted() bool
 	// CryptoType returns the crypto type for encrypting/decrypting the wallet
 	CryptoType() crypto.CryptoType
 	SetCryptoType(ct crypto.CryptoType)
@@ -226,7 +228,7 @@ type Wallet interface {
 	// CopyFrom(src Wallet)
 	// CopyFromRef copies the src wallet with a pointer dereference
 	CopyFromRef(src Wallet)
-	Fingerprint() string
+	Fingerprint() (string, error)
 	// ScanAddresses scans ahead given number of addresses
 	ScanAddresses(scanN uint64, tf TransactionsFinder) ([]cipher.Addresser, error)
 	// GetAddresses returns all addresses.
@@ -249,10 +251,10 @@ type Wallet interface {
 	// for bip44 wallet, if no options are specified, it will search the external chain of account
 	// of index 0.
 	GetEntry(addr cipher.Addresser, options ...Option) (Entry, error)
-	// HasEntry returns whether the entry exists in the wallet
+	// Contains returns whether the entry exists in the wallet
 	// for bip44 wallet, if no options are specified, it will check the external chain of account
 	// of index 0.
-	HasEntry(addr cipher.Addresser, options ...Option) (bool, error)
+	Contains(addr cipher.Addresser, options ...Option) (bool, error)
 	// EntriesLen returns the entries length
 	// for bip44 wallet, if no options are specified, the length of the entries on external chain of account
 	// with index 0 will be returned.
@@ -263,8 +265,8 @@ type Wallet interface {
 	Serialize() ([]byte, error)
 	// Deserialize deserialize the data to a Wallet, and error if any
 	Deserialize(data []byte) error
-	// IsTemp returns whether the wallet is a temporary wallet
-	IsTemp() bool
+	// Temp returns whether the wallet is a temporary wallet
+	Temp() bool
 	// SetTemp sets wallet temporary flag
 	SetTemp(temp bool)
 }
@@ -299,7 +301,7 @@ type Bip44Account struct {
 // GuardUpdate executes a function within the context of a read-write managed decrypted wallet.
 // Returns ErrWalletNotEncrypted if wallet is not encrypted.
 func GuardUpdate(w Wallet, password []byte, fn func(w Wallet) error) error {
-	if !w.IsEncrypted() {
+	if !w.Encrypted() {
 		return ErrWalletNotEncrypted
 	}
 
@@ -332,7 +334,7 @@ func GuardUpdate(w Wallet, password []byte, fn func(w Wallet) error) error {
 // GuardView executes a function within the context of a read-only managed decrypted wallet.
 // Returns ErrWalletNotEncrypted if wallet is not encrypted.
 func GuardView(w Wallet, password []byte, f func(w Wallet) error) error {
-	if !w.IsEncrypted() {
+	if !w.Encrypted() {
 		return ErrWalletNotEncrypted
 	}
 
@@ -362,7 +364,7 @@ type walletLoadMeta struct {
 
 // Save saves the wallet to a directory. The wallet's filename is read from its metadata.
 func Save(w Wallet, dir string) error {
-	if w.IsTemp() {
+	if w.Temp() {
 		return nil
 	}
 
@@ -491,27 +493,18 @@ func IsValidWalletType(t string) bool {
 }
 
 // AddressConstructor returns a function to create a cipher.Addresser from a cipher.PubKey
-func AddressConstructor(m Meta) func(cipher.PubKey) cipher.Addresser {
+func AddressConstructor(m Meta) (func(cipher.PubKey) (cipher.Addresser, error), error) {
 	switch m.Coin() {
 	case CoinTypeSkycoin:
-		return func(pk cipher.PubKey) cipher.Addresser {
-			return cipher.AddressFromPubKey(pk)
-		}
+		return skycoinDecoder{}.AddressFromPubKey, nil
 	case CoinTypeBitcoin:
-		return func(pk cipher.PubKey) cipher.Addresser {
-			return cipher.BitcoinAddressFromPubKey(pk)
-		}
+		return bitcoinDecoder{}.AddressFromPubKey, nil
 	case CoinTypeBitcoinSegwit:
-		return func(pk cipher.PubKey) cipher.Addresser {
-			return cipher.BitcoinSegwitAddressFromPubKey(pk)
-		}
+		return bitcoinSegwitDecoder{}.AddressFromPubKey, nil
 	case CoinTypeEthereum:
-		return func(pk cipher.PubKey) cipher.Addresser {
-			return ethereumDecoder{}.AddressFromPubKey(pk)
-		}
+		return ethereumDecoder{}.AddressFromPubKey, nil
 	default:
-		logger.Panicf("Invalid wallet coin type %q", m.Coin())
-		return nil
+		return nil, fmt.Errorf("invalid wallet coin type %q", m.Coin())
 	}
 }
 
@@ -536,17 +529,17 @@ func ValidateMeta(m Meta) error {
 		return errors.New("coin field not set")
 	}
 
-	var isEncrypted bool
+	var encrypted bool
 	if encStr, ok := m[MetaEncrypted]; ok {
 		// validate the encrypted value
 		var err error
-		isEncrypted, err = strconv.ParseBool(encStr)
+		encrypted, err = strconv.ParseBool(encStr)
 		if err != nil {
 			return errors.New("encrypted field is not a valid bool")
 		}
 	}
 
-	if isEncrypted {
+	if encrypted {
 		if s := m[MetaSecrets]; s == "" {
 			return errors.New("wallet is encrypted, but secrets field not set")
 		}
@@ -575,7 +568,7 @@ func ValidateMetaCryptoType(m Meta) error {
 
 // ValidateMetaSeed validate meta seed
 func ValidateMetaSeed(m Meta) error {
-	if m.IsEncrypted() {
+	if m.Encrypted() {
 		if s := m[MetaSeed]; s != "" {
 			return errors.New("seed should not be visible in encrypted wallets")
 		}

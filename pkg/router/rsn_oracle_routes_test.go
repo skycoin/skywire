@@ -202,7 +202,7 @@ func TestReconstructDstEntries(t *testing.T) {
 	if len(entries) != 1 {
 		t.Fatalf("want 1 entry, got %d", len(entries))
 	}
-	if !entries[0].HasEdge(dst) || !entries[0].HasEdge(peer) {
+	if !entries[0].ContainsEdge(dst) || !entries[0].ContainsEdge(peer) {
 		t.Fatalf("reconstructed entry missing edges: %v", entries[0].Edges)
 	}
 	if entries[0].ID != transport.MakeTransportID(dst, peer, tptypes.STCPR) {

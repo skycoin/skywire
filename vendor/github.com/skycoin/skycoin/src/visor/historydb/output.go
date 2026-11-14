@@ -1,3 +1,4 @@
+// Package historydb src/visor/historydb/output.go c1-coin-visor
 package historydb
 
 import (
@@ -93,7 +94,7 @@ func (ux *uxOuts) getArray(tx *dbutil.Tx, uxIDs []cipher.SHA256) ([]UxOut, error
 
 // isEmpty checks if the uxout bucekt is empty
 func (ux *uxOuts) isEmpty(tx *dbutil.Tx) (bool, error) {
-	return dbutil.IsEmpty(tx, UxOutsBkt)
+	return dbutil.Empty(tx, UxOutsBkt)
 }
 
 // reset resets the bucket

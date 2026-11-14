@@ -1,4 +1,4 @@
-// Package visorconfig pkg/visor/visorconfig/config_compat_mirror_test.go
+// Package visorconfig pkg/visor/visorconfig/config_compat_mirror_test.go c3-vis-core
 // — holds the v1JSON unmarshal mirror to V1's JSON-tagged field set.
 package visorconfig
 

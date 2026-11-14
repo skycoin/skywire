@@ -1,4 +1,4 @@
-// Package pairing pkg/skychat/pairing/ports.go c4-app-chat
+// Package pairing pkg/skychat/pairing/ports.go c3-app-chat
 // DMSG port allocation for chat-pair feeds.
 //
 // Each unordered pair of visor public keys (Alice, Bob) maps to a
@@ -85,7 +85,7 @@ func pairPort(a, b cipher.PubKey, reserved map[uint16]struct{}) (uint16, error) 
 
 	for offset := range PortSpan {
 		port := PortBase + ((candidate-PortBase)+offset)%PortSpan
-		if _, isReserved := reserved[port]; !isReserved {
+		if _, ok := reserved[port]; !ok {
 			return port, nil
 		}
 	}

@@ -610,8 +610,41 @@
 				return a;
 			}
 
+			// Short strings are mostly property and method names, the same few
+			// at the same addresses on every call, and decoding each one again
+			// was a TextDecoder call and a new DataView per Get, Set and Call.
+			// They are kept by address and length with their bytes, and a
+			// string is reused only while the bytes there are still the same:
+			// memory under a stack or the heap is reused for other strings.
+			const shortStrings = new Map(); // ptr*128+len -> [bytes, string]
+			let mem8 = null;
 			const loadString = (ptr, len) => {
-				return decoder.decode(new DataView(this._inst.exports.memory.buffer, ptr, len));
+				const buf = this._inst.exports.memory.buffer;
+				if (len > 64) {
+					return decoder.decode(new DataView(buf, ptr, len));
+				}
+				if (mem8 === null || mem8.buffer !== buf) {
+					mem8 = new Uint8Array(buf);
+				}
+				const key = ptr * 128 + len;
+				const kept = shortStrings.get(key);
+				if (kept !== undefined) {
+					const b = kept[0];
+					let i = 0;
+					while (i < len && mem8[ptr + i] === b[i]) {
+						i++;
+					}
+					if (i === len) {
+						return kept[1];
+					}
+				}
+				const b = mem8.slice(ptr, ptr + len);
+				const s = decoder.decode(b);
+				if (shortStrings.size >= 4096) {
+					shortStrings.clear();
+				}
+				shortStrings.set(key, [b, s]);
+				return s;
 			}
 
 			const timeOrigin = Date.now() - performance.now();
@@ -698,7 +731,11 @@
 					"runtime.sleepTicks": (timeout) => {
 						// Do not sleep, only reactivate the scheduler after the given
 						// timeout, keeping exactly one pending wakeup.
-						const ms = Number(timeout) / 1e6;
+						// Round up to a whole millisecond. Some hosts (Cloudflare
+						// Workers) only advance the clock by a timer's delay rounded
+						// down to a millisecond, so a fractional remainder would be
+						// slept again and again without the clock ever moving.
+						const ms = Math.ceil(Number(timeout) / 1e6);
 						const due = Date.now() + ms;
 						if (this._scheduledWakeup !== undefined) {
 							if (this._scheduledWakeupDue <= due) return;

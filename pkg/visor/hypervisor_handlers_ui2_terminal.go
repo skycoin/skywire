@@ -11,7 +11,7 @@ import (
 )
 
 func (hv *Hypervisor) ui2TerminalRoutes(r *httputil.Router) {
-	r.Get("/ui2/visors/{pk}/terminal", hv.withCtx(hv.ui2VisorCtx, func(w http.ResponseWriter, r *http.Request, _ *httpCtx) {
+	r.Get("/visors/{pk}/terminal", hv.withCtx(hv.ui2VisorCtx, func(w http.ResponseWriter, r *http.Request, _ *httpCtx) {
 		hv.render(w, r, ui2.TerminalPage(r.PathValue("pk")))
 	}))
 }

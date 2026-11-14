@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/keyrotate.go c4-app-chat
+// Package group pkg/skychat/group/keyrotate.go c3-app-chat
 // distributing a new group key to the members who are still entitled to
 // it — the fourth signed-gossip family, alongside roster/, admin/ and
 // mod/.

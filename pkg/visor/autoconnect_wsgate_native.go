@@ -1,5 +1,6 @@
 //go:build !js
 
+// Package visor pkg/visor/autoconnect_wsgate_native.go c3-vis-core
 package visor
 
 // wsPageAllowed reports whether plain-ws dials are usable from this runtime.

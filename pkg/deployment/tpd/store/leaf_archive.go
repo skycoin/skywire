@@ -1,4 +1,4 @@
-// Package store pkg/deployment/tpd/store/leaf_archive.go c4-net-discovery
+// Package store pkg/deployment/tpd/store/leaf_archive.go c3-net-discovery
 //
 // Settled metrics days on disk. A settled day's leaf (the gzipped
 // per-transport records the metrics feed publishes) is the only copy of that

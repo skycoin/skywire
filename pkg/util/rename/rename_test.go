@@ -1,4 +1,4 @@
-// Package rename pkg/util/rename/rename_test.go: unit tests for the cross-device
+// Package rename pkg/util/rename/rename_test.go unit tests for the cross-device
 // aware file rename helper.
 package rename
 

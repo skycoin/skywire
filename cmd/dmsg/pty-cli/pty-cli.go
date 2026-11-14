@@ -1,4 +1,4 @@
-// Package main cmd/dmsg/pty-cli/pty-cli.go c1-net-dmsg
+// Package main cmd/dmsg/pty-cli/pty-cli.go c3-net-dmsg
 // package main cmd/dmsgpty-cli/dmsgpty-cli.go
 package main
 

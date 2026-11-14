@@ -41,7 +41,7 @@ func TestRefs_Walk(t *testing.T) {
 
 				t.Run("blank", func(t *testing.T) {
 
-					var isInitialized = isRefsInitialized(&r)
+					var initialized = isRefsInitialized(&r)
 					var called int
 
 					err = r.Walk(pack,
@@ -68,7 +68,7 @@ func TestRefs_Walk(t *testing.T) {
 						t.Error(err)
 					} else if called != 1 {
 						t.Errorf("wrong times called %d, want 1", called)
-					} else if isInitialized == true {
+					} else if initialized == true {
 						if isRefsInitialized(&r) == false {
 							t.Error("uninitialized")
 						}

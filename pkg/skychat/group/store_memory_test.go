@@ -1,6 +1,6 @@
 //go:build js
 
-// Package group pkg/skychat/group/store_memory_test.go c4-app-chat
+// Package group pkg/skychat/group/store_memory_test.go c3-app-chat
 package group
 
 import (

@@ -15,14 +15,14 @@ import (
 // The contacts tab of the server rendered UI.
 
 func (hv *Hypervisor) ui2ContactsRoutes(r *httputil.Router) {
-	r.Get("/ui2/visors/{pk}/contacts", hv.ui2Contacts(false))
-	r.Get("/ui2/visors/{pk}/contacts/panel", hv.ui2Contacts(true))
-	r.Get("/ui2/visors/{pk}/contacts/rows", hv.ui2ContactRows())
-	r.Get("/ui2/visors/{pk}/contacts/new", hv.ui2ContactForm())
-	r.Get("/ui2/visors/{pk}/contacts/{uid}/edit", hv.ui2ContactForm())
-	r.Post("/ui2/visors/{pk}/contacts", hv.ui2ContactSave())
-	r.Post("/ui2/visors/{pk}/contacts/import", hv.ui2ContactsImport())
-	r.Delete("/ui2/visors/{pk}/contacts/{uid}", hv.ui2ContactDelete())
+	r.Get("/visors/{pk}/contacts", hv.ui2Contacts(false))
+	r.Get("/visors/{pk}/contacts/panel", hv.ui2Contacts(true))
+	r.Get("/visors/{pk}/contacts/rows", hv.ui2ContactRows())
+	r.Get("/visors/{pk}/contacts/new", hv.ui2ContactForm())
+	r.Get("/visors/{pk}/contacts/{uid}/edit", hv.ui2ContactForm())
+	r.Post("/visors/{pk}/contacts", hv.ui2ContactSave())
+	r.Post("/visors/{pk}/contacts/import", hv.ui2ContactsImport())
+	r.Delete("/visors/{pk}/contacts/{uid}", hv.ui2ContactDelete())
 }
 
 // ui2List loads the book into a list view. A load error is shown in the view.

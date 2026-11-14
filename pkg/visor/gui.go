@@ -212,7 +212,7 @@ func appStatusBtn(t *appTray, rpcClient visorapi.API) {
 		t.mx.Lock()
 		stats, _ := rpcClient.GetAppConnectionsSummary(t.name) //nolint:errcheck
 		if len(stats) == 1 {
-			if stats[0].IsAlive {
+			if stats[0].Alive {
 				if t.lastStatus != 1 {
 					t.status.SetTitle("Status: Connected")
 					t.button.SetTitle("Disconnect")
@@ -301,7 +301,7 @@ func initVisorControlBtns(conf *visorconfig.V1) {
 func visorControlPoll(rpcClient visorapi.API) {
 	for {
 		if rpcClient != nil {
-			if suspended, err := rpcClient.IsSuspended(); err == nil {
+			if suspended, err := rpcClient.Suspended(); err == nil {
 				if suspended {
 					mSuspend.SetTitle("Resume visor")
 				} else {
@@ -318,7 +318,7 @@ func handleSuspendButton(rpcClient visorapi.API) {
 	if rpcClient == nil {
 		return
 	}
-	suspended, err := rpcClient.IsSuspended()
+	suspended, err := rpcClient.Suspended()
 	if err != nil {
 		mLog.WithError(err).Error("failed to query suspend state")
 		return
@@ -578,7 +578,7 @@ func getVPNAddr(conf *visorconfig.V1) string {
 		return ""
 	}
 
-	return hvAddr + "/#/vpn/" + conf.PK.Hex() + "/status"
+	return hvAddr + "/angular/#/vpn/" + conf.PK.Hex() + "/status"
 }
 
 func rpcClientSystray(conf *visorconfig.V1, logger *logging.Logger) visorapi.API {

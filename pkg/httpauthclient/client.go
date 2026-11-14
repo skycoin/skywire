@@ -163,12 +163,12 @@ func (c *Client) do(client *http.Client, req *http.Request) (*http.Response, err
 		return nil, err
 	}
 
-	resp, isNonceValid, err := isNonceValid(resp)
+	resp, nonceValid, err := isNonceValid(resp)
 	if err != nil {
 		return nil, err
 	}
 
-	if !isNonceValid {
+	if !nonceValid {
 		// Under the request's own context, so its deadline holds across the retry.
 		nonce, err := c.Nonce(req.Context(), c.key)
 		if err != nil {
@@ -292,10 +292,10 @@ func isNonceValid(res *http.Response) (*http.Response, bool, error) {
 		return &auxResp, true, nil
 	}
 
-	isAuthorized := serverResponse.Error.Code != http.StatusUnauthorized
-	hasValidNonce := serverResponse.Error.Message != invalidNonceErrorMessage
+	authorized := serverResponse.Error.Code != http.StatusUnauthorized
+	validNonce := serverResponse.Error.Message != invalidNonceErrorMessage
 
-	return &auxResp, isAuthorized && hasValidNonce, nil
+	return &auxResp, authorized && validNonce, nil
 }
 
 func sanitizedAddr(addr string) string {

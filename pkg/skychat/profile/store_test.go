@@ -1,4 +1,4 @@
-// Package profile pkg/skychat/profile/store_test.go c4-app-chat
+// Package profile pkg/skychat/profile/store_test.go c3-app-chat
 package profile
 
 import (
@@ -149,7 +149,7 @@ func TestOpenStoreSalvagesNameFromBadAvatar(t *testing.T) {
 	if p.Name != "Alice" {
 		t.Fatalf("name lost: %+v", p)
 	}
-	if p.HasAvatar() {
+	if p.AvatarSet() {
 		t.Fatalf("an undecodable avatar was kept: %+v", p)
 	}
 }

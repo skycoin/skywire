@@ -44,13 +44,13 @@ type RecentAppLogRequest struct {
 }
 
 type TransportSummary struct {
-	ID      uuid.UUID           `json:"id"`
-	Local   cipher.PubKey       `json:"local_pk"`
-	Remote  cipher.PubKey       `json:"remote_pk"`
-	Type    types.Type          `json:"type"`
-	Log     *transport.LogEntry `json:"log,omitempty"`
-	IsSetup bool                `json:"is_setup"`
-	Label   transport.Label     `json:"label"`
+	ID     uuid.UUID           `json:"id"`
+	Local  cipher.PubKey       `json:"local_pk"`
+	Remote cipher.PubKey       `json:"remote_pk"`
+	Type   types.Type          `json:"type"`
+	Log    *transport.LogEntry `json:"log,omitempty"`
+	Setup  bool                `json:"is_setup"`
+	Label  transport.Label     `json:"label"`
 	// LatencyMS is the smoothed average inter-visor RTT for this
 	// transport in milliseconds, measured by transport-level
 	// ping/pong (or RSN-fallback for old peers). Zero means no

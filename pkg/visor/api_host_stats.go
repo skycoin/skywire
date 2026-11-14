@@ -50,7 +50,7 @@ func collectLoadStats() *visorapi.LoadStats {
 	if vm, err := mem.VirtualMemory(); err == nil && vm != nil {
 		ls.MemUsedPercent = vm.UsedPercent
 	}
-	if du, err := disk.Usage("/"); err == nil && du != nil {
+	if du, err := disk.Usage(alerts.DataRoot()); err == nil && du != nil {
 		ls.DiskUsedPercent = du.UsedPercent
 	}
 	if up, err := host.Uptime(); err == nil {
@@ -103,8 +103,8 @@ func (v *Visor) HostStats() (*visorapi.HostStatsInfo, error) {
 		out.SwapPercent = sm.UsedPercent
 	}
 
-	// Disk (root)
-	if du, err := disk.Usage("/"); err == nil && du != nil {
+	// Disk (where the visor keeps its data)
+	if du, err := disk.Usage(alerts.DataRoot()); err == nil && du != nil {
 		out.DiskTotal = du.Total
 		out.DiskUsed = du.Used
 		out.DiskFree = du.Free

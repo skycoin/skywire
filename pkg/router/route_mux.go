@@ -86,6 +86,26 @@ const (
 	capacityColdFloorFrac = 0.15
 )
 
+// muxLeg is the mux's whole record of one leg. A pointer to it names the leg
+// across a removal or a primary swap, which an index does not.
+type muxLeg struct {
+	legCounters
+	// id is the leg's first-hop transport ID, uuid.Nil when the mux was not told.
+	id uuid.UUID
+	// ready is set once the peer is known to have the leg's rule. Leg 0 is
+	// always ready. Guarded by legMu.
+	ready bool
+	// standby keeps the leg installed but out of the send set. Leg 0 is never
+	// standby. Guarded by legMu.
+	standby bool
+	// group is the shared-bottleneck group id (RFC 8382), a leg index, or
+	// noLegGroup when the leg is its own group. Guarded by legMu.
+	group int
+}
+
+// noLegGroup marks a leg with no recorded shared-bottleneck group.
+const noLegGroup = -1
+
 type legCounters struct {
 	sentBytes   atomic.Uint64 // atomic
 	sentPackets atomic.Uint64 // atomic
@@ -426,44 +446,15 @@ type routeMux struct {
 	fecRepairBytesRecv atomic.Uint64
 	fecReconstructs    atomic.Uint64
 
-	// Per-leg traffic counters parallel to the rg's legs slice.
-	// Mutated atomically. Read via Snapshot().
-	// legMu guards the slice itself (extended on AppendRoute), not
-	// the individual counters.
+	// legs holds one record per leg, in the rg's legs order. legMu guards the
+	// slice and each record's ready, standby and group. See muxLeg.
 	legMu sync.RWMutex
-	legs  []*legCounters
-	// ready[i] reports whether leg i may be SELECTED for sending. The
-	// primary leg (0) is ready from the start; an aux leg only becomes
-	// ready once we have received a packet (data or handshake) on it,
-	// which proves the peer finished registering its rule. Without this,
-	// the selector could steer the first writes onto an aux leg the peer
-	// has not set up yet — those packets are dropped, the reorder buffer
-	// stalls on the missing sequence, and the stream hangs until it is
-	// closed (the mux>=2 "0 bytes / close code 0" bug). Guarded by legMu.
-	ready []bool
-	// standby[i] marks leg i as a WARM STANDBY: its rules stay installed and
-	// the keepalive/liveness loops keep it alive, but it is never SELECTED for
-	// sending (folded into legReadyAt). A demoted leg still receives on its
-	// reverse rule — standby is a send-side decision. Promoting a standby leg
-	// is instant (clear the flag) with no route setup, vs the drop→re-dial
-	// tear-and-rebuild. Parallel to ready[]; grown/compacted in lockstep.
-	// Guarded by legMu. See docs/warm_standby_legs_rfc.md.
-	standby []bool
+	legs  []*muxLeg
 
 	// ecfLastRebuildNano is the wall-clock (UnixNano) of the previous ECF-state
 	// refresh, used to turn each leg's sent-byte delta into a bytes/sec rate.
 	// Touched only under legMu in rebuildWeights' ECF branch.
 	ecfLastRebuildNano int64
-
-	// legGroups holds each leg's SHARED-BOTTLENECK group id (RFC 8382; see
-	// bottleneck.go), parallel to legs[]. Legs with the same id are judged to
-	// funnel through one physical pipe, so rebuildWeights counts the group as ONE
-	// unit of capacity instead of N competing pipes. Recomputed each data-progress
-	// tick by the route group and pushed via SetLegGroups; a leg with no entry (or
-	// a value equal to its own index) is its own singleton group — the default, so
-	// a mux with no bottleneck detection behaves exactly as before. Guarded by
-	// legMu.
-	legGroups []int
 
 	// standbyNewLegs makes every NEWLY-grown aux leg (index > 0) enter the
 	// warm-standby pool instead of going straight into the active send set.

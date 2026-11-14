@@ -1,4 +1,4 @@
-// Package appcommon pkg/app/appcommon/appcommon_more_test.go: unit tests for
+// Package appcommon pkg/app/appcommon/appcommon_more_test.go unit tests for
 // the Hello wire helpers, the ProcKey/ProcConfig helpers (run mode, env
 // encoding, flag parsing, in-process conn registry, internal-start sync), and
 // the bbolt log store hook surface (Write/Fire/Levels/Flush, NewProcLogger,

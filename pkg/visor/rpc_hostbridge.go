@@ -1,4 +1,4 @@
-// Package visor pkg/visor/rpc_hostbridge.go c3-vis-wasm
+// Package visor pkg/visor/rpc_hostbridge.go c3-vis-core
 package visor
 
 import (

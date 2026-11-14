@@ -1,3 +1,4 @@
+// Package api src/api/transaction.go c3-coin-api
 package api
 
 import (
@@ -743,7 +744,7 @@ func verifyTxnHandler(gateway Gatewayer) http.HandlerFunc {
 		}
 
 		var resp HTTPResponse
-		inputs, isTxnConfirmed, err := gateway.VerifyTxnVerbose(txn, signed)
+		inputs, txnConfirmed, err := gateway.VerifyTxnVerbose(txn, signed)
 		if err != nil {
 			switch err.(type) {
 			case transaction.ErrTxnViolatesSoftConstraint,
@@ -761,8 +762,8 @@ func verifyTxnHandler(gateway Gatewayer) http.HandlerFunc {
 		}
 
 		verifyTxnResp := VerifyTransactionResponse{
-			Confirmed: isTxnConfirmed,
-			Unsigned:  !txn.IsFullySigned(),
+			Confirmed: txnConfirmed,
+			Unsigned:  !txn.FullySigned(),
 		}
 
 		if len(inputs) != len(txn.In) {
@@ -779,7 +780,7 @@ func verifyTxnHandler(gateway Gatewayer) http.HandlerFunc {
 
 		resp.Data = verifyTxnResp
 
-		if isTxnConfirmed && resp.Error == nil {
+		if txnConfirmed && resp.Error == nil {
 			resp.Error = &HTTPError{
 				Code:    http.StatusUnprocessableEntity,
 				Message: "transaction has been spent",

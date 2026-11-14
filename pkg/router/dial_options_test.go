@@ -1,4 +1,4 @@
-// Package router pkg/router/dial_options_test.go — unit tests for the
+// Package router pkg/router/dial_options_test.go c2-net-routing — unit tests for the
 // per-direction resolver helpers on DialOptions added for asymmetric
 // routing (operator framing: bandwidth-asymmetric workloads like HTTP
 // GET should be able to use direct upstream + multi-hop downstream).

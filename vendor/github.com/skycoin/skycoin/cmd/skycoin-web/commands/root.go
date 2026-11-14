@@ -1,3 +1,4 @@
+// Package commands cmd/skycoin-web/commands/root.go c4-ui-wallet
 package commands
 
 import (
@@ -578,165 +579,8 @@ func serve(ctx context.Context) error {
 	}
 	guiFS := initGUIFS()
 
-	// The cipher routes are exact matches, so they win over the "/" static
-	// handler and a missing wasm is a plain 404 rather than index.html.
-	mux.HandleFunc("/assets/scripts/skycoin-lite.wasm", gui.ServeCipherWasm)
-	mux.HandleFunc("/assets/scripts/wasm_exec.js", gui.ServeWasmExecJS)
-
-	// Per-coin proxy routes: /coin/{index}/api/*
-	//
-	// This is registered as a "/coin/" subtree rather than with {wildcard}
-	// path patterns, so that routing behaves identically under the standard
-	// library and TinyGo (whose ServeMux does not implement Go 1.22 pattern
-	// matching). The coin index and API sub-path are parsed from the URL below.
-	mux.HandleFunc("/coin/", func(w http.ResponseWriter, r *http.Request) {
-		c := newCtx(w, r)
-		coinIndexStr, apiPath, ok := parseCoinPath(r.URL.Path)
-		if !ok {
-			http.NotFound(w, r)
-			return
-		}
-		c.params = map[string]string{"coinIndex": coinIndexStr, "path": apiPath}
-		if c.Request.Method == "OPTIONS" {
-			c.Status(http.StatusOK)
-			return
-		}
-
-		coinIndex := 0
-		if _, err := fmt.Sscanf(c.Param("coinIndex"), "%d", &coinIndex); err != nil {
-			c.String(http.StatusBadRequest, "invalid coin index")
-			return
-		}
-		coin, ethHandler, btcHandler, services := table.get(coinIndex)
-		if coin == nil {
-			c.String(http.StatusBadRequest, "invalid coin index")
-			return
-		}
-
-		// Ether and tokens are handled by the ethHandler, not proxied to a node
-		if isEthereumCoin(coin) {
-			if handleBtcStubEndpoints(c, apiPath) {
-				return
-			}
-			if ethHandler != nil && ethHandler.handleEthAPI(c, apiPath) {
-				return
-			}
-			if len(services) > 0 {
-				if handleMultiWalletAPI(c, apiPath, services, "") {
-					return
-				}
-			}
-			c.String(http.StatusNotFound, "endpoint not available for %s", coin.CoinSymbol)
-			return
-		}
-
-		// Bitcoin coins are handled by the btcHandler, not proxied to a node
-		if coin.CoinType == "bitcoin" {
-			// Return stub responses for Skycoin-specific endpoints the frontend calls on all coins
-			if handleBtcStubEndpoints(c, apiPath) {
-				return
-			}
-
-			if btcHandler != nil {
-				// Try BTC-specific API endpoints first
-				if btcHandler.handleBtcAPI(c, apiPath) {
-					return
-				}
-			}
-			// Try wallet endpoints (create, list, etc.)
-			if len(services) > 0 {
-				if handleMultiWalletAPI(c, apiPath, services, "") {
-					return
-				}
-			}
-			c.String(http.StatusNotFound, "endpoint not available for bitcoin")
-			return
-		}
-
-		// Intercept read-only POST requests — convert to GET to avoid CSRF issues
-		if c.Request.Method == http.MethodPost {
-			trimmed := strings.TrimSuffix(apiPath, "/")
-			if handled := handleReadOnlyPost(c, trimmed, coin.remoteNodeURL); handled {
-				return
-			}
-		}
-
-		// Try local wallet handling first
-		if len(services) > 0 {
-			if handleMultiWalletAPI(c, apiPath, services, coin.remoteNodeURL) {
-				return
-			}
-		}
-
-		// Proxy to the coin's node
-		proxyToNodeWithBase(c, coin.remoteNodeURL, "/api"+apiPath)
-	})
-
-	// Legacy /api/* route — proxies to the first node for backwards compatibility
-	// Also serves the /api/v1/coins discovery endpoint. Registered as an "/api/"
-	// subtree (see the /coin/ note above) for cross-toolchain routing parity.
-	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
-		c := newCtx(w, r)
-		c.params = map[string]string{"path": strings.TrimPrefix(r.URL.Path, "/api")}
-		if c.Request.Method == "OPTIONS" {
-			c.Status(http.StatusOK)
-			return
-		}
-
-		apiPath := c.Param("path")
-
-		// Coins discovery endpoint
-		if apiPath == "/v1/coins" && c.Request.Method == http.MethodGet {
-			coinsMu.RLock()
-			c.JSON(http.StatusOK, table.visible())
-			coinsMu.RUnlock()
-			return
-		}
-		if custom.handle(c, apiPath) {
-			return
-		}
-
-		// Intercept read-only POST requests — convert to GET to avoid CSRF issues
-		if c.Request.Method == http.MethodPost {
-			trimmed := strings.TrimSuffix(apiPath, "/")
-			if len(coins) > 0 {
-				if handled := handleReadOnlyPost(c, trimmed, coins[0].remoteNodeURL); handled {
-					return
-				}
-			}
-		}
-
-		// Wallet endpoints served locally (legacy route uses coin 0's wallet services)
-		if _, _, _, services := table.get(0); len(services) > 0 {
-			defaultNodeURL := ""
-			if len(coins) > 0 {
-				defaultNodeURL = coins[0].remoteNodeURL
-			}
-			if handleMultiWalletAPI(c, apiPath, services, defaultNodeURL) {
-				return
-			}
-		}
-
-		// Proxy to first node
-		if len(coins) > 0 {
-			proxyToNode(c, coins[0].remoteNodeURL)
-		} else {
-			c.String(http.StatusBadGateway, "no nodes configured")
-		}
-	})
-
-	mountUI2(mux)
-
-	// Serve static files from GUI filesystem. The "/" pattern is the lowest
-	// priority in the ServeMux, so it only matches requests not claimed by the
-	// API/asset routes above — the net/http equivalent of gin's NoRoute.
-	fileServer := http.FileServer(http.FS(guiFS))
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" && r.URL.Path != "/favicon.ico" {
-			log.Printf("[STATIC] %s %s", r.Method, r.URL.Path) //nolint:gosec // logs a request path on a local server; the value is recorded, never interpreted
-		}
-		fileServer.ServeHTTP(w, r)
-	})
+	routeCoins(mux, table, custom, coins)
+	mountUIs(mux, guiFS)
 
 	addr := fmt.Sprintf("%s:%d", host, port)
 	fmt.Printf("Skycoin Web Wallet starting...\n")
@@ -1143,4 +987,151 @@ func proxyHostPort(proxy string) string {
 		return u.Host
 	}
 	return proxy
+}
+
+// routeCoins serves each coin's API at /coin/{index}/api and the first
+// coin's, the coin list and the added coins at /api.
+func routeCoins(mux *http.ServeMux, table *coinTable, custom *customCoins, coins []*discoveredCoin) {
+	// Per-coin proxy routes: /coin/{index}/api/*
+	//
+	// This is registered as a "/coin/" subtree rather than with {wildcard}
+	// path patterns, so that routing behaves identically under the standard
+	// library and TinyGo (whose ServeMux does not implement Go 1.22 pattern
+	// matching). The coin index and API sub-path are parsed from the URL below.
+	mux.HandleFunc("/coin/", func(w http.ResponseWriter, r *http.Request) {
+		c := newCtx(w, r)
+		coinIndexStr, apiPath, ok := parseCoinPath(r.URL.Path)
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		c.params = map[string]string{"coinIndex": coinIndexStr, "path": apiPath}
+		if c.Request.Method == "OPTIONS" {
+			c.Status(http.StatusOK)
+			return
+		}
+
+		coinIndex := 0
+		if _, err := fmt.Sscanf(c.Param("coinIndex"), "%d", &coinIndex); err != nil {
+			c.String(http.StatusBadRequest, "invalid coin index")
+			return
+		}
+		coin, ethHandler, btcHandler, services := table.get(coinIndex)
+		if coin == nil {
+			c.String(http.StatusBadRequest, "invalid coin index")
+			return
+		}
+
+		// Ether and tokens are handled by the ethHandler, not proxied to a node
+		if isEthereumCoin(coin) {
+			if handleBtcStubEndpoints(c, apiPath) {
+				return
+			}
+			if ethHandler != nil && ethHandler.handleEthAPI(c, apiPath) {
+				return
+			}
+			if len(services) > 0 {
+				if handleMultiWalletAPI(c, apiPath, services, "") {
+					return
+				}
+			}
+			c.String(http.StatusNotFound, "endpoint not available for %s", coin.CoinSymbol)
+			return
+		}
+
+		// Bitcoin coins are handled by the btcHandler, not proxied to a node
+		if coin.CoinType == "bitcoin" {
+			// Return stub responses for Skycoin-specific endpoints the frontend calls on all coins
+			if handleBtcStubEndpoints(c, apiPath) {
+				return
+			}
+
+			if btcHandler != nil {
+				// Try BTC-specific API endpoints first
+				if btcHandler.handleBtcAPI(c, apiPath) {
+					return
+				}
+			}
+			// Try wallet endpoints (create, list, etc.)
+			if len(services) > 0 {
+				if handleMultiWalletAPI(c, apiPath, services, "") {
+					return
+				}
+			}
+			c.String(http.StatusNotFound, "endpoint not available for bitcoin")
+			return
+		}
+
+		// Intercept read-only POST requests — convert to GET to avoid CSRF issues
+		if c.Request.Method == http.MethodPost {
+			trimmed := strings.TrimSuffix(apiPath, "/")
+			if handled := handleReadOnlyPost(c, trimmed, coin.remoteNodeURL); handled {
+				return
+			}
+		}
+
+		// Try local wallet handling first
+		if len(services) > 0 {
+			if handleMultiWalletAPI(c, apiPath, services, coin.remoteNodeURL) {
+				return
+			}
+		}
+
+		// Proxy to the coin's node
+		proxyToNodeWithBase(c, coin.remoteNodeURL, "/api"+apiPath)
+	})
+
+	// Legacy /api/* route — proxies to the first node for backwards compatibility
+	// Also serves the /api/v1/coins discovery endpoint. Registered as an "/api/"
+	// subtree (see the /coin/ note above) for cross-toolchain routing parity.
+	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
+		c := newCtx(w, r)
+		c.params = map[string]string{"path": strings.TrimPrefix(r.URL.Path, "/api")}
+		if c.Request.Method == "OPTIONS" {
+			c.Status(http.StatusOK)
+			return
+		}
+
+		apiPath := c.Param("path")
+
+		// Coins discovery endpoint
+		if apiPath == "/v1/coins" && c.Request.Method == http.MethodGet {
+			coinsMu.RLock()
+			c.JSON(http.StatusOK, table.visible())
+			coinsMu.RUnlock()
+			return
+		}
+		if custom.handle(c, apiPath) {
+			return
+		}
+
+		// Intercept read-only POST requests — convert to GET to avoid CSRF issues
+		if c.Request.Method == http.MethodPost {
+			trimmed := strings.TrimSuffix(apiPath, "/")
+			if len(coins) > 0 {
+				if handled := handleReadOnlyPost(c, trimmed, coins[0].remoteNodeURL); handled {
+					return
+				}
+			}
+		}
+
+		// Wallet endpoints served locally (legacy route uses coin 0's wallet services)
+		if _, _, _, services := table.get(0); len(services) > 0 {
+			defaultNodeURL := ""
+			if len(coins) > 0 {
+				defaultNodeURL = coins[0].remoteNodeURL
+			}
+			if handleMultiWalletAPI(c, apiPath, services, defaultNodeURL) {
+				return
+			}
+		}
+
+		// Proxy to first node
+		if len(coins) > 0 {
+			proxyToNode(c, coins[0].remoteNodeURL)
+		} else {
+			c.String(http.StatusBadGateway, "no nodes configured")
+		}
+	})
+
 }

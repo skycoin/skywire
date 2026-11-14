@@ -1,6 +1,6 @@
 //go:build linux
 
-// Package vpn pkg/vpn/os_server_linux.go c4-app-vpn
+// Package vpn pkg/vpn/os_server_linux.go c3-app-vpn
 package vpn
 
 import (
@@ -11,6 +11,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/vpn/netctl"
 )
@@ -74,7 +75,7 @@ func GetIPv6ForwardingValue() (string, error) {
 }
 
 // SetIPv4ForwardingValue sets `val` value of IPv4 forwarding (via /proc).
-func SetIPv4ForwardingValue(val string) error {
+func SetIPv4ForwardingValue(_ logging.FieldLogger, val string) error {
 	if err := netctl.SetIPv4Forwarding(val); err != nil {
 		if errors.Is(err, unix.EPERM) || errors.Is(err, unix.EACCES) {
 			return errPermissionDenied
@@ -96,8 +97,8 @@ func SetIPv6ForwardingValue(val string) error {
 }
 
 // EnableIPv4Forwarding enables IPv4 forwarding.
-func EnableIPv4Forwarding() error {
-	return SetIPv4ForwardingValue("1")
+func EnableIPv4Forwarding(log logging.FieldLogger) error {
+	return SetIPv4ForwardingValue(log, "1")
 }
 
 // EnableIPv6Forwarding enables IPv6 forwarding.
@@ -106,13 +107,13 @@ func EnableIPv6Forwarding() error {
 }
 
 // EnableIPMasquerading enables IP masquerading for the interface with name `ifcName`.
-func EnableIPMasquerading(ifcName string) error {
+func EnableIPMasquerading(_ logging.FieldLogger, ifcName string) error {
 	cmd := fmt.Sprintf(enableIPMasqueradingCMDFmt, ifcName)
 	return osutil.RunElevated("sh", "-c", cmd)
 }
 
 // DisableIPMasquerading disables IP masquerading for the interface with name `ifcName`.
-func DisableIPMasquerading(ifcName string) error {
+func DisableIPMasquerading(_ logging.FieldLogger, ifcName string) error {
 	cmd := fmt.Sprintf(disableIPMasqueradingCMDFmt, ifcName)
 	return osutil.RunElevated("sh", "-c", cmd)
 }

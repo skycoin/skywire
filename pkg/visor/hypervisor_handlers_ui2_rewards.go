@@ -16,14 +16,14 @@ import (
 // The rewards tab of the server rendered UI.
 
 func (hv *Hypervisor) ui2RewardsRoutes(r *httputil.Router) {
-	r.Get("/ui2/visors/{pk}/rewards", hv.ui2Rewards(false))
-	r.Get("/ui2/visors/{pk}/rewards/address", hv.ui2Rewards(true))
-	r.Put("/ui2/visors/{pk}/rewards/address", hv.ui2RewardSave())
-	r.Delete("/ui2/visors/{pk}/rewards/address", hv.ui2RewardDelete())
-	r.Get("/ui2/visors/{pk}/rewards/rules", func(w http.ResponseWriter, r *http.Request) {
+	r.Get("/visors/{pk}/rewards", hv.ui2Rewards(false))
+	r.Get("/visors/{pk}/rewards/address", hv.ui2Rewards(true))
+	r.Put("/visors/{pk}/rewards/address", hv.ui2RewardSave())
+	r.Delete("/visors/{pk}/rewards/address", hv.ui2RewardDelete())
+	r.Get("/visors/{pk}/rewards/rules", func(w http.ResponseWriter, r *http.Request) {
 		hv.render(w, r, ui2.RewardRules(rewards.MainnetRules))
 	})
-	r.Get("/ui2/visors/{pk}/rewards/history", hv.ui2RewardHistory())
+	r.Get("/visors/{pk}/rewards/history", hv.ui2RewardHistory())
 }
 
 // ui2RewardView fills the address view for addr: the addresses an xpub
@@ -34,9 +34,9 @@ func (hv *Hypervisor) ui2RewardView(pk, addr string) ui2.Rewards {
 		return rw
 	}
 	_, xpub, err := rewardconfig.ValidateRewardAddress(addr)
-	rw.IsXpub = err == nil && xpub
+	rw.Xpub = err == nil && xpub
 	switch {
-	case rw.IsXpub:
+	case rw.Xpub:
 		if rw.Addresses, err = rewardconfig.RewardAddresses(addr, 5); err != nil {
 			rw.XpubErr = err.Error()
 		}
@@ -93,7 +93,7 @@ func (hv *Hypervisor) ui2RewardSave() http.HandlerFunc {
 			hv.render(w, r, ui2.RewardAddress(hv.ui2RewardView(pk, "")), ui2.Toast(hv.ui2T(r, "rewards-address-config.done"), false))
 			return
 		}
-		canonical, isXpub, err := rewardconfig.ValidateRewardSetting(draft, acceptRisk)
+		canonical, xpub, err := rewardconfig.ValidateRewardSetting(draft, acceptRisk)
 		switch {
 		case errors.Is(err, rewardconfig.ErrSingleAddress):
 			fail(hv.ui2T(r, "rewards-address-config.single-needs-opt-in"))
@@ -103,7 +103,7 @@ func (hv *Hypervisor) ui2RewardSave() http.HandlerFunc {
 			return
 		}
 		setFn := ctx.API.SetRewardAddress
-		if !isXpub {
+		if !xpub {
 			setFn = ctx.API.SetSingleRewardAddress
 		}
 		set, err := setFn(canonical)

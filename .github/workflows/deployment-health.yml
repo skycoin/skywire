@@ -28,6 +28,6 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: 'stable'
+          go-version-file: go.mod
       - name: Probe dmsg-server wss fronts
         run: go run ./cmd/skywire cli mdisc check --embedded

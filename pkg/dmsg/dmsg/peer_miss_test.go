@@ -135,6 +135,15 @@ func TestForwardViaPeerRecordsMiss(t *testing.T) {
 	_ = s.Close() //nolint:errcheck
 	require.False(t, srvA.peerMissed(onB.LocalPK()))
 
+	// Present on the peer with no listener on the port: the destination's
+	// refusal comes back, and it is not a miss, so the next dial reaches it.
+	_, err = ses.DialStream(ctx, Addr{PK: onB.LocalPK(), Port: 2})
+	require.True(t, errors.Is(err, ErrReqNoListener), "got %v", err)
+	require.False(t, srvA.peerMissed(onB.LocalPK()))
+	s, err = ses.DialStream(ctx, Addr{PK: onB.LocalPK(), Port: 1})
+	require.NoError(t, err)
+	_ = s.Close() //nolint:errcheck
+
 	// Nowhere: refused, and the miss is recorded.
 	absent, _ := cipher.GenerateKeyPair()
 	_, err = ses.DialStream(ctx, Addr{PK: absent, Port: 1})

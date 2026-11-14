@@ -1,3 +1,4 @@
+// Package api pkg/deployment/ar/api/sudph_sessions.go c3-net-discovery
 package api
 
 import (
@@ -11,6 +12,7 @@ import (
 	"weak"
 
 	kcp "github.com/0magnet/kcp-go/v5"
+
 	"github.com/skycoin/skywire/pkg/httputil"
 )
 

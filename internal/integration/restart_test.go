@@ -155,11 +155,6 @@ func TestRestart(t *testing.T) {
 				t.Logf("DMSG ready on %s", visor)
 			}
 
-			// Brief wait for TPD to clear stale transport entries
-			for _, visor := range tc.restartList {
-				env.waitForTPDClean(visor, 5*time.Second)
-			}
-
 			// Re-establish transports after visor restart
 			env.AddDefaultTransports(routerVisor, skychatVisors)
 
@@ -173,15 +168,6 @@ func TestRestart(t *testing.T) {
 					t.Logf("Warning: app %s on %s may not be ready: %v", app.AppName, app.VisorHostName, err)
 				}
 			}
-
-			// LEGITIMATE WAIT: Stale routing rules must expire via time-based GC.
-			// Routing rules have a 30s keepalive (DefaultRouteKeepAlive), and the
-			// GC runs periodically. There is no event or API to force immediate
-			// expiration of stale rules on non-restarted visors, so a fixed wait
-			// is the only option to prevent "routing table: rule not found" errors.
-			// 15s allows for one full GC cycle after the 10s keepalive expires.
-			t.Log("Waiting for stale routing rules to expire (15s)...")
-			time.Sleep(15 * time.Second)
 
 			checkMessage(t, tc.sender, tc.receiver)
 		})

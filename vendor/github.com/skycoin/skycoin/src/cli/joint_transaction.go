@@ -1,3 +1,4 @@
+// Package cli src/cli/joint_transaction.go c3-coin-cli
 package cli
 
 import (
@@ -144,7 +145,11 @@ func parseJointOutputs(specs []string) ([]api.Receiver, error) {
 		if c == 0 {
 			return nil, fmt.Errorf("output %d: coins must not be zero", i)
 		}
-		if c%params.UserVerifyTxn.MaxDropletDivisor() != 0 {
+		divisor, err := params.UserVerifyTxn.MaxDropletDivisor()
+		if err != nil {
+			return nil, err
+		}
+		if c%divisor != 0 {
 			return nil, fmt.Errorf("output %d: coins %s has too many decimal places", i, coins)
 		}
 		if _, err := strconv.ParseUint(hours, 10, 64); err != nil {
@@ -386,7 +391,7 @@ func txnReview(txn *coin.Transaction, inputs []jointInput, mine map[string]struc
 		fmt.Fprintln(w, "Fee: unknown, some inputs are not unspent outputs on this node")
 	}
 	fmt.Fprintf(w, "Signed: %d of %d inputs", countSigned(txn), len(txn.In))
-	if txn.IsFullySigned() {
+	if txn.FullySigned() {
 		fmt.Fprintln(w, ", ready to broadcast")
 	} else {
 		fmt.Fprintln(w)

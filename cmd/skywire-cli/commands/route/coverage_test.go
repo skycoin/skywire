@@ -382,7 +382,7 @@ func TestFetchTPSTransports(t *testing.T) {
 		localPK: src,
 		local: []*visorapi.TransportSummary{
 			{ID: uuid.New(), Local: src, Remote: inter, Type: tptypes.STCPR},
-			{ID: uuid.New(), Local: src, Remote: inter, Type: tptypes.STCPR, IsSetup: true}, // must be dropped
+			{ID: uuid.New(), Local: src, Remote: inter, Type: tptypes.STCPR, Setup: true}, // must be dropped
 		},
 		tps: map[cipher.PubKey][]visorapi.TPSTransportResponse{
 			dst: {{ID: uuid.New(), Local: dst, Remote: inter, Type: string(tptypes.STCPR)}},

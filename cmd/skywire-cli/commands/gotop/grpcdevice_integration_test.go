@@ -1,6 +1,6 @@
 //go:build !withoutgotop && !tinygo
 
-// Package cligotop grpcdevice_integration_test.go: integration tests that
+// Package cligotop cmd/skywire-cli/commands/gotop/grpcdevice_integration_test.go integration tests that
 // drive the gRPC device extension end-to-end against a real (localhost)
 // gRPC server implementing the system-stats streams. This covers the
 // Setup*/stream*/shutdown paths that the pure unit tests can't reach

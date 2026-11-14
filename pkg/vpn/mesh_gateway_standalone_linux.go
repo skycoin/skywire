@@ -1,6 +1,6 @@
 //go:build linux
 
-// Package vpn pkg/vpn/mesh_gateway_standalone_linux.go c4-app-vpn
+// Package vpn pkg/vpn/mesh_gateway_standalone_linux.go c3-app-vpn
 //
 // Standalone mesh gateway: the mesh-name resolver + transparent proxy of the
 // full vpn-router (setupMeshGateway), but WITHOUT taking over the LAN. It runs

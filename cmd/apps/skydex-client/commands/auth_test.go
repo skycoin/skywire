@@ -125,14 +125,18 @@ func TestGatedServerMovesTheEngine(t *testing.T) {
 		t.Fatal("engine was left on the configured address; the gate has nothing to guard")
 	}
 
-	// Stand in for the engine on the address the gate expects it.
+	// Stand in for the engine on the address the gate expects it. It listens
+	// before the first request, which the gate would otherwise answer with 502.
+	ln, err := net.Listen("tcp", engineAddr)
+	if err != nil {
+		t.Fatalf("listen for the engine: %v", err)
+	}
 	engine := &http.Server{ //nolint:gosec
-		Addr:              engineAddr,
 		Handler:           http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, r.URL.Path) }), //nolint
 		ReadHeaderTimeout: time.Second,
 	}
-	go func() { _ = engine.ListenAndServe() }() //nolint:errcheck
-	defer engine.Close()                        //nolint:errcheck
+	go func() { _ = engine.Serve(ln) }() //nolint:errcheck
+	defer engine.Close()                 //nolint:errcheck
 
 	base := "http://" + uiAddr + "/api/status"
 	if code, _ := get(t, base, ""); code != http.StatusUnauthorized {

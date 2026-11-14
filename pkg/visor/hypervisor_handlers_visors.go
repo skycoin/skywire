@@ -236,15 +236,15 @@ func (hv *Hypervisor) visorTree() []VisorTreeSection {
 			s := projectEntryToSummary(e)
 			// The sub-section's ★ icon should appear on the
 			// section's own hypervisor row and nowhere else.
-			// Override IsHypervisor (which projectEntryToSummary
-			// sets from e.IsLocal) with strict PK-equality
+			// Override Hypervisor (which projectEntryToSummary
+			// sets from e.Local) with strict PK-equality
 			// against this section's HypervisorPK. Defends
 			// against any path that might mistakenly mark a
 			// non-local entry with IsLocal=true on the remote
 			// side, and matches the semantic the hvui's
 			// node-list uses for the local section: "star = this
 			// row is the section's hypervisor."
-			s.IsHypervisor = e.PK == sr.hyperPK
+			s.Hypervisor = e.PK == sr.hyperPK
 			visors = append(visors, s)
 			// Pre-#2789 sub-hypervisors return HVVisorEntry with
 			// only the transport COUNT, no per-transport detail.
@@ -467,11 +467,11 @@ func projectEntryTransports(e visorapi.HVVisorEntry) []*visorapi.TransportSummar
 // cache still carry the visor's last-known fields").
 func projectEntryToSummary(e visorapi.HVVisorEntry) visorapi.Summary {
 	overview := &visorapi.Overview{
-		PubKey:         e.PK,
-		LocalIP:        e.LocalIP,
-		PublicIP:       e.PublicIP,
-		CountryCode:    e.CountryCode,
-		IsSymmetricNAT: e.IsSymmetricNAT,
+		PubKey:       e.PK,
+		LocalIP:      e.LocalIP,
+		PublicIP:     e.PublicIP,
+		CountryCode:  e.CountryCode,
+		SymmetricNAT: e.SymmetricNAT,
 		// Hostname is the hvui's default label fallback. Carrying
 		// it through HVVisorEntry → Summary lets sub-section rows
 		// render the same label the visor's own overview would show.
@@ -516,7 +516,7 @@ func projectEntryToSummary(e visorapi.HVVisorEntry) visorapi.Summary {
 	} else if e.Online {
 		health = &visorapi.HealthInfo{ServicesHealth: "healthy"}
 	}
-	// IsHypervisor: the only sub-section row that's actually its
+	// Hypervisor: the only sub-section row that's actually its
 	// section's hypervisor is the one whose PK matches the
 	// sub-hypervisor itself — flagged with IsLocal on the remote's
 	// HVListDirectVisors response. Setting this drives the ★ icon on
@@ -528,13 +528,13 @@ func projectEntryToSummary(e visorapi.HVVisorEntry) visorapi.Summary {
 		BuildTag:      e.BuildTag,
 		Uptime:        e.Uptime,
 		Online:        e.Online,
-		IsHypervisor:  e.IsLocal,
+		Hypervisor:    e.Local,
 		RewardAddress: e.RewardAddress,
 		ConfigVersion: e.ConfigVersion,
 
 		DMSGServers:       e.DMSGServers,
 		PublicAutoconnect: e.PublicAutoconnect,
-		IsPublic:          e.IsPublic,
+		Public:            e.Public,
 		LastSeenAt:        e.LastSeenAt,
 	}
 }
@@ -599,7 +599,7 @@ func (hv *Hypervisor) getVisorSummary() http.HandlerFunc {
 		// If stats not found, leave DmsgStats as nil (don't create empty struct with 0ms latency)
 
 		// Check if this is the local visor (hypervisor)
-		summary.IsHypervisor = summary.Overview.PubKey == hv.visor.conf.PK
+		summary.Hypervisor = summary.Overview.PubKey == hv.visor.conf.PK
 
 		httputil.WriteJSON(w, r, http.StatusOK, summary)
 	})

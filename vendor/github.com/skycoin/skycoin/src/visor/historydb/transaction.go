@@ -1,3 +1,4 @@
+// Package historydb src/visor/historydb/transaction.go c1-coin-visor
 package historydb
 
 // transaction.go mainly provides transaction corresponding buckets and apis,
@@ -105,7 +106,7 @@ func (txs *transactions) getArray(tx *dbutil.Tx, hashes []cipher.SHA256) ([]Tran
 
 // isEmpty checks if transaction bucket is empty
 func (txs *transactions) isEmpty(tx *dbutil.Tx) (bool, error) {
-	return dbutil.IsEmpty(tx, TransactionsBkt)
+	return dbutil.Empty(tx, TransactionsBkt)
 }
 
 // reset resets the bucket

@@ -1,3 +1,4 @@
+// Package addrresolver pkg/transport/network/addrresolver/udp_resolve.go c2-net-transport
 package addrresolver
 
 import (

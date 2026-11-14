@@ -97,9 +97,9 @@ func (r *RPC) Feeds(_ struct{}, fs *[]cipher.PubKey) (_ error) {
 	return
 }
 
-// IsSharing is RPC method
-func (r *RPC) IsSharing(pk cipher.PubKey, yep *bool) (_ error) {
-	*yep = r.n.IsSharing(pk)
+// Sharing is RPC method
+func (r *RPC) Sharing(pk cipher.PubKey, yep *bool) (_ error) {
+	*yep = r.n.Sharing(pk)
 	return
 }
 

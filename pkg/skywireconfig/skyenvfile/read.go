@@ -1,4 +1,4 @@
-// Package skyenvfile pkg/skywireconfig/skyenvfile/read.go c4-vis-cli
+// Package skyenvfile pkg/skywireconfig/skyenvfile/read.go c0-com-env
 //
 // The read half of the skyenv file. Update writes it; this reads it back,
 // unquoting what FormatString quoted, so a value written by `skywire

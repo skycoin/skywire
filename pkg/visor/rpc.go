@@ -71,17 +71,17 @@ func newRPCServerWith(v *Visor, remoteName string, link *hvLink) (*rpc.Server, e
 	return rpcS, nil
 }
 
-func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, includeLogs, isSetup bool) *visorapi.TransportSummary {
+func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, includeLogs, setup bool) *visorapi.TransportSummary {
 	summary := &visorapi.TransportSummary{
 		ID:            tp.Entry.ID,
 		Local:         tm.Local(),
 		Remote:        tp.Remote(),
 		Type:          tp.Type(),
-		IsSetup:       isSetup,
+		Setup:         setup,
 		Label:         tp.Entry.Label,
 		LatencyMS:     tp.GetLatency(),
 		ThroughputBps: tp.GetThroughputBps(),
-		Initiator:     tp.IsInitiator(),
+		Initiator:     tp.Initiator(),
 	}
 	if includeLogs {
 		summary.Log = tp.LogEntry
@@ -189,7 +189,7 @@ func (r *RPC) ApproveHypervisor(sel *string, out *cipher.PubKey) (err error) {
 
 // NewPairCode mints a one-time pairing code.
 func (r *RPC) NewPairCode(ttl *time.Duration, out *visorapi.PairCode) (err error) {
-	defer rpcutil.LogCall(r.log, "NewPairCode", ttl)(out, &err)
+	defer rpcutil.LogCall(r.log, "NewPairCode", ttl)(nil, &err) // the code is a secret
 	*out, err = r.visor.NewPairCode(*ttl)
 	return err
 }

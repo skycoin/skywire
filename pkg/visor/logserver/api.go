@@ -71,8 +71,8 @@ type dmsgHealthProvider interface {
 
 // HealthStatsProvider provides transport statistics for the /health endpoint.
 type HealthStatsProvider interface {
-	// IsPublicAutoconnectRunning returns true if the public autoconnect module is running.
-	IsPublicAutoconnectRunning() bool
+	// PublicAutoconnectRunning returns true if the public autoconnect module is running.
+	PublicAutoconnectRunning() bool
 	// GetTransportCounts returns the count of STCPR and SUDPH transports (excluding "user" labeled).
 	GetTransportCounts() (stcpr, sudph int)
 	// GetTransportTypeCounts returns a count of live transports keyed by their
@@ -660,7 +660,7 @@ func (api *API) health(w http.ResponseWriter, req *http.Request) {
 
 	// Add transport stats if provider is available
 	if api.healthStatsProvider != nil {
-		resp.PublicAutoconnect = api.healthStatsProvider.IsPublicAutoconnectRunning()
+		resp.PublicAutoconnect = api.healthStatsProvider.PublicAutoconnectRunning()
 		resp.StcprCount, resp.SudphCount = api.healthStatsProvider.GetTransportCounts()
 		resp.TransportCounts = api.healthStatsProvider.GetTransportTypeCounts()
 		resp.NetworkTypes = api.healthStatsProvider.GetNetworkTypes()

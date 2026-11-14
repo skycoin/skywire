@@ -1,3 +1,5 @@
+// Package commands cmd/{{.CoinName}}/commands/root.go c4-coin-node
+//
 /*
 {{.CoinName}} daemon
 */
@@ -11,12 +13,12 @@ and then run cmd/newcoin
 */
 
 import (
-	_ "net/http/pprof"
 	"os"
 	"strings"
 
-	"github.com/skycoin/skycoin/src/util/calvin"
 	"github.com/spf13/cobra"
+
+	"github.com/skycoin/skycoin/src/util/calvin"
 
 	"github.com/skycoin/skycoin/src/fiber"
 	"github.com/skycoin/skycoin/src/readable"
@@ -27,6 +29,7 @@ import (
 	_ "github.com/skycoin/skycoin/src/wallet/bip44wallet"
 	_ "github.com/skycoin/skycoin/src/wallet/collection"
 	_ "github.com/skycoin/skycoin/src/wallet/deterministic"
+	_ "github.com/skycoin/skycoin/src/wallet/pqwallet"
 	_ "github.com/skycoin/skycoin/src/wallet/xpubwallet"
 )
 
@@ -69,7 +72,7 @@ var (
 	{{- end}}
 	}
 
-	nodeConfig = skycoin.NewNodeConfig(ConfigMode, fiber.NodeConfig{
+	nodeConfig, nodeConfigErr = skycoin.NewNodeConfig(ConfigMode, fiber.NodeConfig{
 		CoinName:            CoinName,
 		GenesisSignatureStr: GenesisSignatureStr,
 		GenesisAddressStr:   GenesisAddressStr,
@@ -104,6 +107,11 @@ var (
 )
 
 func init() {
+	if nodeConfigErr != nil {
+		logger.Errorf("Invalid node config: %v", nodeConfigErr)
+		os.Exit(1)
+	}
+
 	// Check for FIBER_TOML environment variable to load custom fibercoin config
 	// This sets the default values before flag registration, so CLI flags naturally override
 	if fiberTomlPath := os.Getenv("FIBER_TOML"); fiberTomlPath != "" {

@@ -4,6 +4,8 @@ ARG image_tag
 FROM ${base_image} AS builder
 ARG image_tag
 ARG commit
+# prebuilt names a skywire binary in the build context to use as is.
+ARG prebuilt
 
 ARG CGO_ENABLED=0
 ENV CGO_ENABLED=${CGO_ENABLED} \
@@ -20,7 +22,10 @@ COPY . /src
 # Pure `GOPROXY=direct` makes every module — including stable upstream
 # deps like `gopkg.in/yaml.v3` — depend on `gopkg.in`'s redirect server,
 # which has flaked the build (`gopkg.in i/o timeout`) before.
-RUN apk add --no-cache git && \
+RUN if [ -n "$prebuilt" ]; then \
+        install -D -m 0755 "/src/$prebuilt" /release/skywire; \
+    else \
+    apk add --no-cache git && \
     if [ -n "$commit" ]; then \
         if [ "$image_tag" = "integration" ]; then \
             apk add --no-cache build-base && \
@@ -36,6 +41,7 @@ RUN apk add --no-cache git && \
         else \
             go install -ldflags="-w -s" .; \
         fi; \
+    fi; \
     fi
 
 ## Resulting image

@@ -6,12 +6,12 @@ package ui2
 
 //lint:file-ignore SA4006 This context is only used if a nested component is present.
 
-import "github.com/a-h/templ"
-import templruntime "github.com/a-h/templ/runtime"
-
 import (
 	"fmt"
 	"strconv"
+
+	"github.com/a-h/templ"
+	templruntime "github.com/a-h/templ/runtime"
 )
 
 // RewardsPage is the rewards tab: the reward address, the rules, and the
@@ -219,7 +219,7 @@ func RewardAddress(rw Rewards) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			if !rw.IsXpub {
+			if !rw.Xpub {
 				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<a href=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
@@ -337,7 +337,7 @@ func RewardAddress(rw Rewards) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-		} else if rw.Address != "" && !rw.IsXpub {
+		} else if rw.Address != "" && !rw.Xpub {
 			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<p class=\"alert\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
@@ -356,7 +356,7 @@ func RewardAddress(rw Rewards) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		if rw.IsXpub {
+		if rw.Xpub {
 			templ_7745c5c3_Err = xpubList(rw.Addresses, rw.XpubErr).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err

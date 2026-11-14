@@ -1,4 +1,4 @@
-// Package store pkg/deployment/tpd/store/cxo_metrics_layout.go c4-net-discovery
+// Package store pkg/deployment/tpd/store/cxo_metrics_layout.go c3-net-discovery
 //
 // Layout of TPD's transport-metrics CXO feed, plus the pivot/merge
 // pair that converts between it and the []TransportMetric window

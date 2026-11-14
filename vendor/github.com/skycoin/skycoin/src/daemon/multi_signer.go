@@ -1,3 +1,4 @@
+// Package daemon src/daemon/multi_signer.go c2-coin-daemon
 package daemon
 
 import (
@@ -331,12 +332,12 @@ func (dm *Daemon) signerTick() {
 	newRound := round != dm.multiSigner.lastRound
 	dm.multiSigner.lastRound = round
 
-	voted, hasVote, err := dm.visor.BlockVote(h)
+	voted, found, err := dm.visor.BlockVote(h)
 	if err != nil {
 		logger.WithError(err).Error("signerTick: read block vote")
 		return
 	}
-	if hasVote {
+	if found {
 		if newRound {
 			dm.resendVote(h, voted)
 		}
@@ -631,7 +632,7 @@ func (dm *Daemon) sendBlockCosigs(addr string, blocks []coin.SignedBlock) error 
 func (dm *Daemon) multiSignerPeers(skip string) []string {
 	var addrs []string
 	for _, c := range dm.connections.all() {
-		if c.Addr != skip && c.HasIntroduced() && c.ProtocolVersion >= multiSignerProtocolVersion {
+		if c.Addr != skip && c.Introduced() && c.ProtocolVersion >= multiSignerProtocolVersion {
 			addrs = append(addrs, c.Addr)
 		}
 	}

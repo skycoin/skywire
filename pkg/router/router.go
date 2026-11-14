@@ -420,6 +420,9 @@ type DialOptions struct {
 	// dials the usual way — when no such reserve exists or the peer does not
 	// answer. 0 = an ordinary dial.
 	AdoptReservePort routing.Port
+	// LocalOnly takes only the 0-hop direct path, over a transport to a peer
+	// on this visor's local network, made on demand. It never sets up a route.
+	LocalOnly bool
 	// dialNotes is the decision trail DialRoutes writes as it picks a route —
 	// sibling exclusions, candidate filtering, the first hop it settled on —
 	// which finishDial records on the group as a MuxEventDialDecision, so a

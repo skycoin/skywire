@@ -1,4 +1,4 @@
-// Package appserver pkg/app/appserver/appserver_more_test.go: additional unit
+// Package appserver pkg/app/appserver/appserver_more_test.go additional unit
 // tests broadening coverage of the small helpers (errors, app_state, stderr),
 // the Proc getters/setters and NewProc constructor, and the procManager
 // lifecycle methods.
@@ -83,7 +83,7 @@ func TestProc_GettersSetters(t *testing.T) {
 	p.SetAppPort(routing.Port(99))
 	require.Equal(t, routing.Port(99), p.GetAppPort())
 
-	require.False(t, p.IsRunning())
+	require.False(t, p.Running())
 	require.Nil(t, p.ConnectionsSummary()) // nil rpcGW
 	require.Nil(t, p.Logs())               // nil logDB
 	require.Nil(t, p.Cmd())                // nil cmd

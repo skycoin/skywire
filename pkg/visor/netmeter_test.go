@@ -31,6 +31,7 @@ type fakeLevers struct {
 	closed      int // closeDirect calls
 	dmsgCap     int
 	dmsgDial    bool // paused
+	dmsgClosed  int  // closeDmsg calls
 }
 
 func (f *fakeLevers) pauseAutoconnect(on bool) { f.mu.Lock(); f.autoconnect = on; f.mu.Unlock() }
@@ -44,11 +45,13 @@ func (f *fakeLevers) restrictCreate(r transport.CreateRestriction) {
 func (f *fakeLevers) closeDirect() int      { f.mu.Lock(); f.closed++; f.mu.Unlock(); return 0 }
 func (f *fakeLevers) capDmsgSessions(n int) { f.mu.Lock(); f.dmsgCap = n; f.mu.Unlock() }
 func (f *fakeLevers) pauseDmsgDial(on bool) { f.mu.Lock(); f.dmsgDial = on; f.mu.Unlock() }
+func (f *fakeLevers) closeDmsg() int        { f.mu.Lock(); f.dmsgClosed++; f.mu.Unlock(); return 0 }
 func (f *fakeLevers) snapshot() fakeLevers {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return fakeLevers{autoconnect: f.autoconnect, transit: f.transit, relay: f.relay,
-		restrict: f.restrict, closed: f.closed, dmsgCap: f.dmsgCap, dmsgDial: f.dmsgDial}
+		restrict: f.restrict, closed: f.closed, dmsgCap: f.dmsgCap, dmsgDial: f.dmsgDial,
+		dmsgClosed: f.dmsgClosed}
 }
 
 func meterVisor(t *testing.T) (*Visor, *fakeLevers) {
@@ -86,6 +89,7 @@ func TestMeteredModesPullTheirLevers(t *testing.T) {
 	require.Equal(t, 1, l.closed, "entering dmsg-only closes the direct transports")
 	require.Equal(t, dmsgOnlySessions, l.dmsgCap)
 	require.False(t, l.dmsgDial)
+	require.Zero(t, l.dmsgClosed, "dmsg-only keeps its dmsg sessions")
 
 	set(visorapi.ModeOffline)
 	l = f.snapshot()
@@ -93,6 +97,7 @@ func TestMeteredModesPullTheirLevers(t *testing.T) {
 	require.Equal(t, 1, l.closed, "already closed when coming from dmsg-only")
 	require.Zero(t, l.dmsgCap, "offline restores the cap but dials nothing")
 	require.True(t, l.dmsgDial)
+	require.Equal(t, 1, l.dmsgClosed, "entering offline closes the dmsg sessions")
 
 	off := "false"
 	require.NoError(t, v.NetworkSet(visorapi.NetworkSettings{Metered: &off}))
@@ -173,6 +178,22 @@ func TestNetworkEventMovedRefreshes(t *testing.T) {
 	require.NoError(t, v.NetworkEvent(visorapi.NetworkEvent{Event: "moved", Interface: "wlan0"}))
 	require.Equal(t, "android", <-ran)
 	require.Error(t, v.NetworkEvent(visorapi.NetworkEvent{Event: "exploded"}))
+}
+
+// Offline dials nothing, so a move there does not refresh.
+func TestOfflineSkipsTheRefresh(t *testing.T) {
+	fastNetMove(t)
+	v, _ := meterVisor(t)
+	ran := make(chan string, 4)
+	v.netMove.refresh = func(r string) { ran <- r }
+	mode := visorapi.ModeOffline
+	require.NoError(t, v.NetworkSet(visorapi.NetworkSettings{MeteredMode: &mode}))
+	require.NoError(t, v.NetworkEvent(visorapi.NetworkEvent{Event: "changed", Metered: new(true)}))
+	require.Equal(t, visorapi.ModeOffline, v.NetworkState().Mode)
+
+	require.NoError(t, v.NetworkEvent(visorapi.NetworkEvent{Event: "moved", Metered: new(true)}))
+	require.Eventually(t, func() bool { return !v.NetworkState().Pending }, time.Second, 5*time.Millisecond)
+	require.Empty(t, ran, "offline must not refresh")
 }
 
 // Lean refuses new automatic inbound transports like resource pressure does,

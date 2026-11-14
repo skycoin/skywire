@@ -1,4 +1,4 @@
-// Package history pkg/skychat/history/history.go c4-app-chat
+// Package history pkg/skychat/history/history.go c3-app-chat
 //
 // By default skychat is entirely ephemeral — messages pass through and are not
 // stored anywhere. The history package adds an opt-in persistent store with

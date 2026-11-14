@@ -1,6 +1,6 @@
 //go:build !linux
 
-// Package vpn pkg/vpn/router_other.go c4-app-vpn
+// Package vpn pkg/vpn/router_other.go c3-app-vpn
 package vpn
 
 import (

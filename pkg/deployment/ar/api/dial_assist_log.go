@@ -1,4 +1,4 @@
-// Package api pkg/deployment/ar/api/dial_assist_log.go c4-net-discovery
+// Package api pkg/deployment/ar/api/dial_assist_log.go c3-net-discovery
 //
 // Rate accounting for the SUDPH reverse dial-assist, whose "peer is not
 // connected" outcome used to be logged once per attempt.

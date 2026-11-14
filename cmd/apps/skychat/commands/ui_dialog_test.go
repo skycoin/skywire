@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/ui_dialog_test.go
+// Package commands cmd/apps/skychat/commands/ui_dialog_test.go c4-app-chat
 //
 // Pins the dialog-overflow contract in the embedded UI's stylesheet.
 //

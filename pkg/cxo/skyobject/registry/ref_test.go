@@ -8,17 +8,17 @@ import (
 )
 
 func TestRef_IsBlank(t *testing.T) {
-	// IsBlank() bool
+	// Blank() bool
 
 	var ref Ref
 
-	if true != ref.IsBlank() {
+	if true != ref.Blank() {
 		t.Error("blank is not blank")
 	}
 
 	ref.Hash = cipher.SHA256{1, 2, 3}
 
-	if true == ref.IsBlank() {
+	if true == ref.Blank() {
 		t.Error("not blank is blank")
 	}
 

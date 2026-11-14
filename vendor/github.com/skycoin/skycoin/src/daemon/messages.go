@@ -1,3 +1,4 @@
+// Package daemon src/daemon/messages.go c2-coin-daemon
 package daemon
 
 import (
@@ -18,6 +19,8 @@ import (
 	"github.com/skycoin/skycoin/src/util/iputil"
 	"github.com/skycoin/skycoin/src/util/useragent"
 )
+
+var errMaxMsgLengthTooSmall = errors.New("maxMsgLength must be >= 4")
 
 // Message represent a packet to be serialized over the network by
 // the gnet encoder.
@@ -93,11 +96,13 @@ func NewMessagesConfig() MessagesConfig {
 }
 
 // Register registers our Messages with gnet
-func (msc *MessagesConfig) Register() {
+func (msc *MessagesConfig) Register() error {
 	for _, mc := range msc.Messages {
-		gnet.RegisterMessage(mc.Prefix, mc.Message)
+		if err := gnet.RegisterMessage(mc.Prefix, mc.Message); err != nil {
+			return err
+		}
 	}
-	gnet.VerifyMessages()
+	return gnet.VerifyMessages()
 }
 
 // Messages messages struct
@@ -203,7 +208,7 @@ type GivePeersMessage struct {
 
 // NewGivePeersMessage []*pex.Peer is converted to []IPAddr for binary transmission
 // If the size of the message would exceed maxMsgLength, the IPAddr slice is truncated.
-func NewGivePeersMessage(peers []pex.Peer, maxMsgLength uint64) *GivePeersMessage {
+func NewGivePeersMessage(peers []pex.Peer, maxMsgLength uint64) (*GivePeersMessage, error) {
 	if len(peers) > 512 {
 		peers = peers[:512]
 	}
@@ -221,16 +226,18 @@ func NewGivePeersMessage(peers []pex.Peer, maxMsgLength uint64) *GivePeersMessag
 	m := &GivePeersMessage{
 		Peers: ipaddrs,
 	}
-	truncateGivePeersMessage(m, maxMsgLength)
-	return m
+	if err := truncateGivePeersMessage(m, maxMsgLength); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // truncateGivePeersMessage truncates the blocks in GivePeersMessage to fit inside of MaxOutgoingMessageLength
-func truncateGivePeersMessage(m *GivePeersMessage, maxMsgLength uint64) {
+func truncateGivePeersMessage(m *GivePeersMessage, maxMsgLength uint64) error {
 	// The message length will include a 4 byte message type prefix.
-	// Panic if the prefix can't fit, otherwise we can't adjust the uint64 safely
+	// Fail if the prefix can't fit, otherwise we can't adjust the uint64 safely
 	if maxMsgLength < 4 {
-		logger.Panic("maxMsgLength must be >= 4")
+		return errMaxMsgLengthTooSmall
 	}
 
 	maxMsgLength -= 4
@@ -238,7 +245,7 @@ func truncateGivePeersMessage(m *GivePeersMessage, maxMsgLength uint64) {
 	// Measure the current message size, if it fits, return
 	n := m.EncodeSize()
 	if n <= maxMsgLength {
-		return
+		return nil
 	}
 
 	// Measure the size of an empty message
@@ -261,6 +268,7 @@ func truncateGivePeersMessage(m *GivePeersMessage, maxMsgLength uint64) {
 	if len(m.Peers) == 0 {
 		logger.Critical().Error("truncateGivePeersMessage truncated peers to an empty slice")
 	}
+	return nil
 }
 
 // EncodeSize implements gnet.Serializer
@@ -356,33 +364,39 @@ type IntroductionMessage struct {
 }
 
 // NewIntroductionMessage creates introduction message
-func NewIntroductionMessage(mirror uint32, version int32, port uint16, pubkey cipher.PubKey, userAgent string, verifyParams params.VerifyTxn, genesisHash cipher.SHA256) *IntroductionMessage {
+func NewIntroductionMessage(mirror uint32, version int32, port uint16, pubkey cipher.PubKey, userAgent string, verifyParams params.VerifyTxn, genesisHash cipher.SHA256) (*IntroductionMessage, error) {
+	extra, err := newIntroductionMessageExtra(pubkey, userAgent, verifyParams, genesisHash)
+	if err != nil {
+		return nil, err
+	}
 	return &IntroductionMessage{
 		Mirror:          mirror,
 		ProtocolVersion: version,
 		ListenPort:      port,
-		Extra:           newIntroductionMessageExtra(pubkey, userAgent, verifyParams, genesisHash),
-	}
+		Extra:           extra,
+	}, nil
 }
 
-func newIntroductionMessageExtra(pubkey cipher.PubKey, userAgent string, verifyParams params.VerifyTxn, genesisHash cipher.SHA256) []byte {
+func newIntroductionMessageExtra(pubkey cipher.PubKey, userAgent string, verifyParams params.VerifyTxn, genesisHash cipher.SHA256) ([]byte, error) {
 	if len(userAgent) > useragent.MaxLen {
-		logger.WithFields(logrus.Fields{
-			"userAgent": userAgent,
-			"maxLen":    useragent.MaxLen,
-		}).Panic("user agent exceeds max len")
+		return nil, fmt.Errorf("user agent exceeds max len %d", useragent.MaxLen)
 	}
 	if userAgent == "" {
-		logger.Panic("user agent is required")
+		return nil, errors.New("user agent is required")
 	}
-	useragent.MustParse(userAgent)
+	if _, err := useragent.Parse(userAgent); err != nil {
+		return nil, fmt.Errorf("invalid user agent: %w", err)
+	}
 
 	if err := verifyParams.Validate(); err != nil {
-		logger.Panic(err)
+		return nil, err
 	}
 
 	userAgentSerialized := encoder.SerializeString(userAgent)
-	verifyParamsSerialized := encoder.Serialize(verifyParams)
+	verifyParamsSerialized, err := encoder.Encode(verifyParams)
+	if err != nil {
+		return nil, err
+	}
 
 	extra := make([]byte, len(pubkey)+len(userAgentSerialized)+len(verifyParamsSerialized)+len(genesisHash))
 
@@ -394,7 +408,7 @@ func newIntroductionMessageExtra(pubkey cipher.PubKey, userAgent string, verifyP
 	i += len(userAgentSerialized)
 	copy(extra[i:i+len(genesisHash)], genesisHash[:])
 
-	return extra
+	return extra, nil
 }
 
 // EncodeSize implements gnet.Serializer
@@ -794,7 +808,11 @@ func (gbm *GetBlocksMessage) process(d daemoner) {
 
 	logger.WithFields(fields).Debugf("GetBlocksMessage: replying with %d blocks after block %d", len(blocks), gbm.LastBlock)
 
-	m := NewGiveBlocksMessage(blocks, dc.MaxOutgoingMessageLength)
+	m, err := NewGiveBlocksMessage(blocks, dc.MaxOutgoingMessageLength)
+	if err != nil {
+		logger.WithFields(fields).WithError(err).Error("Build GiveBlocksMessage failed")
+		return
+	}
 	if len(m.Blocks) != len(blocks) {
 		logger.WithField("startBlockSeq", blocks[0].Head.BkSeq).WithFields(fields).Warningf("NewGiveBlocksMessage truncated %d blocks to %d blocks", len(blocks), len(m.Blocks))
 	}
@@ -824,23 +842,25 @@ type GiveBlocksMessage struct {
 
 // NewGiveBlocksMessage creates GiveBlocksMessage.
 // If the size of message would exceed maxMsgLength, the block slice is truncated.
-func NewGiveBlocksMessage(blocks []coin.SignedBlock, maxMsgLength uint64) *GiveBlocksMessage {
+func NewGiveBlocksMessage(blocks []coin.SignedBlock, maxMsgLength uint64) (*GiveBlocksMessage, error) {
 	if len(blocks) > 128 {
 		blocks = blocks[:128]
 	}
 	m := &GiveBlocksMessage{
 		Blocks: blocks,
 	}
-	truncateGiveBlocksMessage(m, maxMsgLength)
-	return m
+	if err := truncateGiveBlocksMessage(m, maxMsgLength); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // truncateGiveBlocksMessage truncates the blocks in GiveBlocksMessage to fit inside of MaxOutgoingMessageLength
-func truncateGiveBlocksMessage(m *GiveBlocksMessage, maxMsgLength uint64) {
+func truncateGiveBlocksMessage(m *GiveBlocksMessage, maxMsgLength uint64) error {
 	// The message length will include a 4 byte message type prefix.
-	// Panic if the prefix can't fit, otherwise we can't adjust the uint64 safely
+	// Fail if the prefix can't fit, otherwise we can't adjust the uint64 safely
 	if maxMsgLength < 4 {
-		logger.Panic("maxMsgLength must be >= 4")
+		return errMaxMsgLengthTooSmall
 	}
 
 	maxMsgLength -= 4
@@ -848,7 +868,7 @@ func truncateGiveBlocksMessage(m *GiveBlocksMessage, maxMsgLength uint64) {
 	// Measure the current message size, if it fits, return
 	n := m.EncodeSize()
 	if n <= maxMsgLength {
-		return
+		return nil
 	}
 
 	// Measure the size of an empty message
@@ -871,6 +891,7 @@ func truncateGiveBlocksMessage(m *GiveBlocksMessage, maxMsgLength uint64) {
 	if len(m.Blocks) == 0 {
 		logger.Critical().Error("truncateGiveBlocksMessage truncated blocks to an empty slice")
 	}
+	return nil
 }
 
 // EncodeSize implements gnet.Serializer
@@ -1065,24 +1086,27 @@ type AnnounceTxnsMessage struct {
 
 // NewAnnounceTxnsMessage creates announce txns message.
 // If the size of the message would exceed maxMsgLength, the hashes slice is truncated.
-func NewAnnounceTxnsMessage(txns []cipher.SHA256, maxMsgLength uint64) *AnnounceTxnsMessage {
+func NewAnnounceTxnsMessage(txns []cipher.SHA256, maxMsgLength uint64) (*AnnounceTxnsMessage, error) {
 	if len(txns) > 256 {
 		txns = txns[:256]
 	}
 	m := &AnnounceTxnsMessage{
 		Transactions: txns,
 	}
-	hashes := truncateAnnounceTxnsHashes(m, maxMsgLength)
+	hashes, err := truncateAnnounceTxnsHashes(m, maxMsgLength)
+	if err != nil {
+		return nil, err
+	}
 	m.Transactions = hashes
-	return m
+	return m, nil
 }
 
 // truncateAnnounceTxnsHashes truncates the hashes in AnnounceTxnsMessage to fit inside of MaxOutgoingMessageLength
-func truncateAnnounceTxnsHashes(m *AnnounceTxnsMessage, maxMsgLength uint64) []cipher.SHA256 {
+func truncateAnnounceTxnsHashes(m *AnnounceTxnsMessage, maxMsgLength uint64) ([]cipher.SHA256, error) {
 	// The message length will include a 4 byte message type prefix.
-	// Panic if the prefix can't fit, otherwise we can't adjust the uint64 safely
+	// Fail if the prefix can't fit, otherwise we can't adjust the uint64 safely
 	if maxMsgLength < 4 {
-		logger.Panic("maxMsgLength must be >= 4")
+		return nil, errMaxMsgLengthTooSmall
 	}
 
 	maxMsgLength -= 4
@@ -1090,7 +1114,7 @@ func truncateAnnounceTxnsHashes(m *AnnounceTxnsMessage, maxMsgLength uint64) []c
 	// Measure the current message size, if it fits, return
 	n := m.EncodeSize()
 	if n <= maxMsgLength {
-		return m.Transactions
+		return m.Transactions, nil
 	}
 
 	// Measure the size of an empty message
@@ -1098,7 +1122,7 @@ func truncateAnnounceTxnsHashes(m *AnnounceTxnsMessage, maxMsgLength uint64) []c
 	size := mm.EncodeSize()
 
 	if maxMsgLength < size {
-		logger.Panic("maxMsgLength must be <= 4 + sizeof(empty AnnounceTxnsMessage)")
+		return nil, fmt.Errorf("maxMsgLength must be >= 4 + sizeof(empty AnnounceTxnsMessage)")
 	}
 
 	maxMsgLength -= size
@@ -1109,7 +1133,7 @@ func truncateAnnounceTxnsHashes(m *AnnounceTxnsMessage, maxMsgLength uint64) []c
 		logger.Critical().Error("truncateAnnounceTxnsHashes truncated hashes to an empty slice")
 	}
 
-	return hashes
+	return hashes, nil
 }
 
 func truncateSHA256Slice(hashes []cipher.SHA256, maxLength uint64) []cipher.SHA256 {
@@ -1176,7 +1200,11 @@ func (atm *AnnounceTxnsMessage) process(d daemoner) {
 		return
 	}
 
-	m := NewGetTxnsMessage(unknown, dc.MaxOutgoingMessageLength)
+	m, err := NewGetTxnsMessage(unknown, dc.MaxOutgoingMessageLength)
+	if err != nil {
+		logger.WithFields(fields).WithError(err).Error("Build GetTxnsMessage failed")
+		return
+	}
 	if len(m.Transactions) != len(unknown) {
 		logger.Warningf("NewGetTxnsMessage truncated %d hashes to %d hashes", len(unknown), len(m.Transactions))
 	}
@@ -1194,24 +1222,27 @@ type GetTxnsMessage struct {
 
 // NewGetTxnsMessage creates GetTxnsMessage.
 // If the size of the message would exceed maxMsgLength, the hashes slice is truncated.
-func NewGetTxnsMessage(txns []cipher.SHA256, maxMsgLength uint64) *GetTxnsMessage {
+func NewGetTxnsMessage(txns []cipher.SHA256, maxMsgLength uint64) (*GetTxnsMessage, error) {
 	if len(txns) > 256 {
 		txns = txns[:256]
 	}
 	m := &GetTxnsMessage{
 		Transactions: txns,
 	}
-	hashes := truncateGetTxnsHashes(m, maxMsgLength)
+	hashes, err := truncateGetTxnsHashes(m, maxMsgLength)
+	if err != nil {
+		return nil, err
+	}
 	m.Transactions = hashes
-	return m
+	return m, nil
 }
 
 // truncateGetTxnsHashes truncates the hashes in GetTxnsMessage to fit inside of MaxOutgoingMessageLength
-func truncateGetTxnsHashes(m *GetTxnsMessage, maxMsgLength uint64) []cipher.SHA256 {
+func truncateGetTxnsHashes(m *GetTxnsMessage, maxMsgLength uint64) ([]cipher.SHA256, error) {
 	// The message length will include a 4 byte message type prefix.
-	// Panic if the prefix can't fit, otherwise we can't adjust the uint64 safely
+	// Fail if the prefix can't fit, otherwise we can't adjust the uint64 safely
 	if maxMsgLength < 4 {
-		logger.Panic("maxMsgLength must be >= 4")
+		return nil, errMaxMsgLengthTooSmall
 	}
 
 	maxMsgLength -= 4
@@ -1219,7 +1250,7 @@ func truncateGetTxnsHashes(m *GetTxnsMessage, maxMsgLength uint64) []cipher.SHA2
 	// Measure the current message size, if it fits, return
 	n := m.EncodeSize()
 	if n <= maxMsgLength {
-		return m.Transactions
+		return m.Transactions, nil
 	}
 
 	// Measure the size of an empty message
@@ -1227,7 +1258,7 @@ func truncateGetTxnsHashes(m *GetTxnsMessage, maxMsgLength uint64) []cipher.SHA2
 	size := mm.EncodeSize()
 
 	if maxMsgLength < size {
-		logger.Panic("maxMsgLength must be <= 4 + sizeof(empty GetTxnsMessage)")
+		return nil, fmt.Errorf("maxMsgLength must be >= 4 + sizeof(empty GetTxnsMessage)")
 	}
 
 	maxMsgLength -= size
@@ -1238,7 +1269,7 @@ func truncateGetTxnsHashes(m *GetTxnsMessage, maxMsgLength uint64) []cipher.SHA2
 		logger.Critical().Error("truncateGetTxnsHashes truncated hashes to an empty slice")
 	}
 
-	return hashes
+	return hashes, nil
 }
 
 // EncodeSize implements gnet.Serializer
@@ -1285,7 +1316,11 @@ func (gtm *GetTxnsMessage) process(d daemoner) {
 	}
 
 	// Reply to sender with GiveTxnsMessage
-	m := NewGiveTxnsMessage(known, dc.MaxOutgoingMessageLength)
+	m, err := NewGiveTxnsMessage(known, dc.MaxOutgoingMessageLength)
+	if err != nil {
+		logger.WithFields(fields).WithError(err).Error("Build GiveTxnsMessage failed")
+		return
+	}
 	if len(m.Transactions) != len(known) {
 		logger.Warningf("NewGiveTxnsMessage truncated %d hashes to %d hashes", len(known), len(m.Transactions))
 	}
@@ -1307,23 +1342,25 @@ type GiveTxnsMessage struct {
 
 // NewGiveTxnsMessage creates GiveTxnsMessage.
 // If the size of the message would exceed maxMsgLength, the transactions slice is truncated.
-func NewGiveTxnsMessage(txns []coin.Transaction, maxMsgLength uint64) *GiveTxnsMessage {
+func NewGiveTxnsMessage(txns []coin.Transaction, maxMsgLength uint64) (*GiveTxnsMessage, error) {
 	if len(txns) > 256 {
 		txns = txns[:256]
 	}
 	m := &GiveTxnsMessage{
 		Transactions: txns,
 	}
-	truncateGiveTxnsMessage(m, maxMsgLength)
-	return m
+	if err := truncateGiveTxnsMessage(m, maxMsgLength); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // truncateGiveTxnsMessage truncates the transactions in GiveTxnsMessage to fit inside of MaxOutgoingMessageLength
-func truncateGiveTxnsMessage(m *GiveTxnsMessage, maxMsgLength uint64) {
+func truncateGiveTxnsMessage(m *GiveTxnsMessage, maxMsgLength uint64) error {
 	// The message length will include a 4 byte message type prefix.
-	// Panic if the prefix can't fit, otherwise we can't adjust the uint64 safely
+	// Fail if the prefix can't fit, otherwise we can't adjust the uint64 safely
 	if maxMsgLength < 4 {
-		logger.Panic("maxMsgLength must be >= 4")
+		return errMaxMsgLengthTooSmall
 	}
 
 	maxMsgLength -= 4
@@ -1331,7 +1368,7 @@ func truncateGiveTxnsMessage(m *GiveTxnsMessage, maxMsgLength uint64) {
 	// Measure the current message size, if it fits, return
 	n := m.EncodeSize()
 	if n <= maxMsgLength {
-		return
+		return nil
 	}
 
 	// Measure the size of an empty message
@@ -1354,6 +1391,7 @@ func truncateGiveTxnsMessage(m *GiveTxnsMessage, maxMsgLength uint64) {
 	if len(m.Transactions) == 0 {
 		logger.Critical().Error("truncateGiveTxnsMessage truncated txns to an empty slice")
 	}
+	return nil
 }
 
 // EncodeSize implements gnet.Serializer
@@ -1416,7 +1454,11 @@ func (gtm *GiveTxnsMessage) process(d daemoner) {
 	}
 
 	// Announce these transactions to peers
-	m := NewAnnounceTxnsMessage(hashes, dc.MaxOutgoingMessageLength)
+	m, err := NewAnnounceTxnsMessage(hashes, dc.MaxOutgoingMessageLength)
+	if err != nil {
+		logger.WithError(err).Error("Build AnnounceTxnsMessage failed")
+		return
+	}
 	if len(m.Transactions) != len(hashes) {
 		logger.Warningf("NewAnnounceTxnsMessage truncated %d hashes to %d hashes", len(hashes), len(m.Transactions))
 	}

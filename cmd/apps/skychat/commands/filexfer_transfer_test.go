@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/filexfer_transfer_test.go
+// Package commands cmd/apps/skychat/commands/filexfer_transfer_test.go c4-app-chat
 //
 // Unit coverage for the file-transfer core that the existing filexfer tests
 // left at 0%: the auto-accept policy (acceptInbound / isEstablishedPeer /
@@ -125,7 +125,7 @@ func establishPeer(t *testing.T, pk cipher.PubKey) {
 	if err := ctrl.SendRaw(context.Background(), pk, []byte("warm the conn")); err != nil {
 		t.Fatalf("seeding a cached conn to %s: %v", pk.Hex(), err)
 	}
-	if !ctrl.HasConn(pk) {
+	if !ctrl.Connected(pk) {
 		t.Fatal("expected a cached conn after SendRaw")
 	}
 	t.Cleanup(func() {
@@ -338,8 +338,8 @@ func TestAcceptInbound_AcceptsEstablishedPeer(t *testing.T) {
 	}
 	defer func() { _ = w.Close() }() //nolint:errcheck
 
-	nf, isNamed := w.(*namedFile)
-	if !isNamed {
+	nf, named := w.(*namedFile)
+	if !named {
 		t.Fatalf("handle is %T, want *namedFile (onDone reads the path off it)", w)
 	}
 	want := filepath.Join(dir, safeFileName(offer.Name, offer.ID))

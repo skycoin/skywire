@@ -1,4 +1,4 @@
-// Package cxoaggregator pkg/deployment/tpd/cxoaggregator/telemetry_batch.go c4-net-discovery
+// Package cxoaggregator pkg/deployment/tpd/cxoaggregator/telemetry_batch.go c3-net-discovery
 //
 // A telemetry shard carries many transports; applying them one by one was a
 // store round trip per script per transport. A shard's due snapshots and due

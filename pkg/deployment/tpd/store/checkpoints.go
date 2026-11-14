@@ -1,4 +1,4 @@
-// Package store pkg/deployment/tpd/store/checkpoints.go c4-net-discovery
+// Package store pkg/deployment/tpd/store/checkpoints.go c3-net-discovery
 //
 // Stream checkpoints verify a transport's bandwidth by content. Each edge
 // publishes, for what it sent and what it received on its current conn, the

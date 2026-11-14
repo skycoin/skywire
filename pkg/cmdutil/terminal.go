@@ -1,4 +1,4 @@
-// Package cmdutil pkg/cmdutil/terminal.go c0-com-util
+// Package cmdutil pkg/cmdutil/terminal.go c1-com-util
 package cmdutil
 
 import (
@@ -15,8 +15,8 @@ func Terminal() (color bool, cols int) { return terminalOf(Stdout()) }
 // terminalOf is Terminal for w. NO_COLOR and TERM=dumb take the color away
 // and leave the width.
 func terminalOf(w io.Writer) (color bool, cols int) {
-	isTerm, cols := terminal(w)
-	if !isTerm {
+	tty, cols := terminal(w)
+	if !tty {
 		return false, 0
 	}
 	return os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb", cols

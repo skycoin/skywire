@@ -1,6 +1,6 @@
 //go:build !js
 
-// Package group pkg/skychat/group/store_seal_test.go c4-app-chat
+// Package group pkg/skychat/group/store_seal_test.go c3-app-chat
 //
 // Tests for encryption at rest. The load-bearing assertion is the plain
 // one: read the bytes bbolt actually wrote and check the group key is not

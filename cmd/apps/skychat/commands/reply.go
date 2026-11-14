@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/reply.go
+// Package commands cmd/apps/skychat/commands/reply.go c4-app-chat
 //
 // Quoted replies for DM and group messages. A reply rides the ordinary
 // message body as a small JSON envelope — the same reference-in-the-text

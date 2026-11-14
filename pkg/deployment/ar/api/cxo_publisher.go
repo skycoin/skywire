@@ -1,4 +1,4 @@
-// Package api pkg/deployment/ar/api/cxo_publisher.go c4-net-discovery
+// Package api pkg/deployment/ar/api/cxo_publisher.go c3-net-discovery
 //
 // CXO publisher for the address-resolver's bindings, keyed by peer public key.
 //

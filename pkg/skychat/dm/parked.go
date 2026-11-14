@@ -1,3 +1,4 @@
+// Package dm pkg/skychat/dm/parked.go c3-app-chat
 package dm
 
 import (

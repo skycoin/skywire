@@ -1,23 +1,18 @@
 package com.skycoin.skywire
 
-import com.skycoin.skywire.ui.mail.attachmentWireSize
+import com.skycoin.skywire.ui.mail.DraftAttachment
+import com.skycoin.skywire.ui.mail.draftFilesSize
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.util.Base64
 
-/**
- * The visor writes an attachment as MIME base64 and ends the last line with
- * CRLF too, which Java's MIME encoder leaves off.
- */
 class MailSizeTest {
 
-    private fun visorWrites(n: Int): Long =
-        Base64.getMimeEncoder(76, "\r\n".toByteArray()).encode(ByteArray(n)).size + 2L
-
+    /** A tester's 4.9 MB and 2.58 MB files were refused against a 10 MB limit. */
     @Test
-    fun matchesTheMimeEncoding() {
-        for (n in listOf(0, 1, 2, 3, 56, 57, 58, 114, 300 * 1024, 770_000, 1 shl 20)) {
-            assertEquals("n=$n", visorWrites(n), attachmentWireSize(n.toLong()))
-        }
+    fun theLimitCountsTheFilesNotTheirBase64() {
+        val files = listOf(5_138_022, 2_580_000).map { DraftAttachment("f.mp3", "audio/mpeg", ByteArray(it)) }
+        assertEquals(7_718_022L, draftFilesSize(files))
+        assertTrue(draftFilesSize(files) <= 10L shl 20)
     }
 }

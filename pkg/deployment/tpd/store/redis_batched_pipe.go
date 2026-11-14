@@ -1,4 +1,4 @@
-// Package store pkg/deployment/tpd/store/redis_batched_pipe.go c4-net-discovery
+// Package store pkg/deployment/tpd/store/redis_batched_pipe.go c3-net-discovery
 package store
 
 import (

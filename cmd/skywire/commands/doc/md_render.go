@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package doc cmd/skywire/commands/doc/md_render.go
+// Package doc cmd/skywire/commands/doc/md_render.go c4-vis-cli
 package doc
 
 import (

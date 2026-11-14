@@ -1,6 +1,6 @@
 //go:build windows
 
-// Package vpn pkg/vpn/os_server_windows.go c4-app-vpn
+// Package vpn pkg/vpn/os_server_windows.go c3-app-vpn
 package vpn
 
 import (
@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"strings"
 
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/util/osutil"
 )
 
@@ -59,11 +60,11 @@ func GetIPv4ForwardingValue() (string, error) {
 func GetIPv6ForwardingValue() (string, error) { return "0", nil }
 
 // SetIPv4ForwardingValue sets the IPEnableRouter registry value (best-effort).
-func SetIPv4ForwardingValue(val string) error {
+func SetIPv4ForwardingValue(log logging.FieldLogger, val string) error {
 	if err := psRun(fmt.Sprintf(
 		"Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters' -Name IPEnableRouter -Value %s",
 		val)); err != nil {
-		fmt.Printf("windows vpn-server: set IPEnableRouter=%s failed (non-fatal): %v\n", val, err)
+		log.WithError(err).Warnf("windows vpn-server: set IPEnableRouter=%s failed (non-fatal)", val)
 	}
 	return nil
 }
@@ -72,7 +73,7 @@ func SetIPv4ForwardingValue(val string) error {
 func SetIPv6ForwardingValue(_ string) error { return nil }
 
 // EnableIPv4Forwarding enables the IP router (best-effort).
-func EnableIPv4Forwarding() error { return SetIPv4ForwardingValue("1") }
+func EnableIPv4Forwarding(log logging.FieldLogger) error { return SetIPv4ForwardingValue(log, "1") }
 
 // EnableIPv6Forwarding is a no-op on Windows.
 func EnableIPv6Forwarding() error { return nil }
@@ -80,7 +81,7 @@ func EnableIPv6Forwarding() error { return nil }
 // EnableIPMasquerading registers the VPN's internal prefixes with WinNAT so
 // client traffic is NAT'd to the internet. Best-effort: the `ifcName` egress
 // interface is unused (WinNAT is prefix-based).
-func EnableIPMasquerading(_ string) error {
+func EnableIPMasquerading(log logging.FieldLogger, _ string) error {
 	// Clear any stale NAT from a previous run, then create ours. WinNAT takes one
 	// prefix per NAT, so name them per prefix.
 	_ = psRun(fmt.Sprintf("Remove-NetNat -Name '%s*' -Confirm:$false -ErrorAction SilentlyContinue", natName)) //nolint
@@ -88,16 +89,16 @@ func EnableIPMasquerading(_ string) error {
 		cmd := fmt.Sprintf("New-NetNat -Name '%s-%d' -InternalIPInterfaceAddressPrefix %s -ErrorAction SilentlyContinue",
 			natName, i, prefix)
 		if err := psRun(cmd); err != nil {
-			fmt.Printf("windows vpn-server: New-NetNat for %s failed (non-fatal): %v\n", prefix, err)
+			log.WithError(err).Warnf("windows vpn-server: New-NetNat for %s failed (non-fatal)", prefix)
 		}
 	}
 	return nil
 }
 
 // DisableIPMasquerading removes the VPN's WinNAT entries (best-effort).
-func DisableIPMasquerading(_ string) error {
+func DisableIPMasquerading(log logging.FieldLogger, _ string) error {
 	if err := psRun(fmt.Sprintf("Remove-NetNat -Name '%s*' -Confirm:$false -ErrorAction SilentlyContinue", natName)); err != nil {
-		fmt.Printf("windows vpn-server: Remove-NetNat failed (non-fatal): %v\n", err)
+		log.WithError(err).Warn("windows vpn-server: Remove-NetNat failed (non-fatal)")
 	}
 	return nil
 }

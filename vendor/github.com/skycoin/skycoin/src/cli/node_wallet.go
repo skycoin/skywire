@@ -1,3 +1,4 @@
+// Package cli src/cli/node_wallet.go c3-coin-cli
 package cli
 
 import (
@@ -88,7 +89,7 @@ func nodeNewAddress(n walletNode, id string, wlt wallet.Wallet, password []byte)
 	switch {
 	case wlt.Type() == wallet.WalletTypeBip44:
 		opts = append(opts, wallet.OptionChange())
-	case wlt.IsEncrypted():
+	case wlt.Encrypted():
 		pwd = string(password)
 	}
 	addrs, err := n.NewWalletAddress(id, pwd, opts...)

@@ -37,6 +37,8 @@ type Apps struct {
 	Err      string
 	// Open is the app whose settings panel is shown.
 	Open string
+	// Filtered is set when a filter hid some apps.
+	Filtered bool
 }
 
 // officialApps follows node-apps-list.component.ts. Multi-instance names such
@@ -131,4 +133,50 @@ func oobAttrs(oob bool) templ.Attributes {
 		return templ.Attributes{"hx-swap-oob": "true"}
 	}
 	return templ.Attributes{}
+}
+
+// AppFilter is the apps list filter, as the Angular filter dialog: name,
+// port, state ("running" or "stopped") and autostart ("on" or "off").
+type AppFilter struct {
+	Name, Port, State, Auto string
+}
+
+// AppFilterOf reads the filter from a form.
+func AppFilterOf(get func(string) string) AppFilter {
+	return AppFilter{Name: strings.TrimSpace(get("f_name")), Port: strings.TrimSpace(get("f_port")), State: get("f_state"), Auto: get("f_auto")}
+}
+
+func (f AppFilter) keep(x App) bool {
+	switch {
+	case f.Name != "" && !strings.Contains(strings.ToLower(x.Name), strings.ToLower(f.Name)):
+		return false
+	case f.Port != "" && !strings.Contains(x.Port, f.Port):
+		return false
+	case f.State == "running" && !x.Running():
+		return false
+	case f.State == "stopped" && x.Running():
+		return false
+	case f.Auto == "on" && !x.AutoStart:
+		return false
+	case f.Auto == "off" && x.AutoStart:
+		return false
+	}
+	return true
+}
+
+// Filter keeps the apps f matches.
+func (a Apps) Filter(f AppFilter) Apps {
+	pick := func(l []App) []App {
+		var out []App
+		for _, x := range l {
+			if f.keep(x) {
+				out = append(out, x)
+			} else {
+				a.Filtered = true
+			}
+		}
+		return out
+	}
+	a.Official, a.Other = pick(a.Official), pick(a.Other)
+	return a
 }

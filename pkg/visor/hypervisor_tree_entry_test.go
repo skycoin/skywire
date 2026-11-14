@@ -32,7 +32,7 @@ func TestEntryRoundTripKeepsServiceColumns(t *testing.T) {
 		},
 		DMSGServers:       []visorapi.DMSGServerInfo{{PK: srv, Latency: 20 * time.Millisecond, Protocol: "tcp"}},
 		PublicAutoconnect: true,
-		IsPublic:          true,
+		Public:            true,
 	}
 
 	entry := visorapi.HVVisorEntry{PK: pk, Online: true}
@@ -42,7 +42,7 @@ func TestEntryRoundTripKeepsServiceColumns(t *testing.T) {
 	got := projectEntryToSummary(entry)
 	require.Equal(t, sum.DMSGServers, got.DMSGServers)
 	require.True(t, got.PublicAutoconnect)
-	require.True(t, got.IsPublic)
+	require.True(t, got.Public)
 	require.Len(t, got.Overview.Apps, 1)
 	require.Equal(t, "skysocks", got.Overview.Apps[0].Name)
 	require.Equal(t, appserver.AppStatusRunning, got.Overview.Apps[0].Status)

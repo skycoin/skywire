@@ -1,6 +1,6 @@
 //go:build tinygo
 
-// Package wasm pkg/router/policy/wasm/evaluator_tinygo.go
+// Package wasm pkg/router/policy/wasm/evaluator_tinygo.go c2-net-routing
 //
 // The TinyGo build has no WASM engine, since wazero's compiler needs Go
 // assembly that TinyGo cannot link. Starlark presets carry the same names.

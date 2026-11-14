@@ -242,9 +242,9 @@ func (a *autoconnector) filterBySite(v *Visor, t tptypes.Type, targets []cipher.
 // siteEligible reports which visors can take a transport of t, from the reach
 // feed; every visor when the feed has nothing to say.
 func siteEligible(t tptypes.Type, reach map[cipher.PubKey]*arfeed.Reach) func(cipher.PubKey) bool {
-	rt, hasReach := reachName(t)
+	rt, reachable := reachName(t)
 	return func(pk cipher.PubKey) bool {
-		if !hasReach || reach == nil {
+		if !reachable || reach == nil {
 			return true
 		}
 		r := reach[pk]

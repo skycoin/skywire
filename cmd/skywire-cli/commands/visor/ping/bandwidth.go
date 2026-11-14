@@ -1,4 +1,4 @@
-// Package clivisor cmd/skywire-cli/commands/visor/ping/bandwidth.go c4-vis-cli
+// Package ping cmd/skywire-cli/commands/visor/ping/bandwidth.go c4-vis-cli
 package ping
 
 import (
@@ -73,12 +73,12 @@ Use --dmsg-only to only test over dmsg.`,
 		}()
 
 		// Progress callback
-		progressCallback := func(bytesSent, bytesReceived uint64, elapsed time.Duration, uploadSpeed, downloadSpeed float64, isFinal bool, testErr error) {
+		progressCallback := func(bytesSent, bytesReceived uint64, elapsed time.Duration, uploadSpeed, downloadSpeed float64, final bool, testErr error) {
 			if testErr != nil {
 				cmdutil.Printf("Error: %v\n", testErr)
 				return
 			}
-			if isFinal {
+			if final {
 				internal.Catch(cmd.Flags(), cliout.Print(cmd, clivisor.Bandwidth{
 					Event: "final", Target: pk.String(), Seconds: elapsed.Seconds(),
 					BytesSent: bytesSent, BytesReceived: bytesReceived,

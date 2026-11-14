@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package pty pkg/pty/pty_js.go c2-app-pty
+// Package pty pkg/pty/pty_js.go c3-vis-pty
 //
 // js/wasm helpers. A browser has no pseudo-terminal or processes, so the pty
 // host runs a websh session instead (pty_websh_js.go).

@@ -1,4 +1,4 @@
-// Package stcp pkg/transport/network/stcp/pktable_test.go: unit tests for the
+// Package stcp pkg/transport/network/stcp/pktable_test.go unit tests for the
 // public-key-to-address table backing skywire-tcp.
 package stcp
 

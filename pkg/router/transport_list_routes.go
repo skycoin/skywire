@@ -214,7 +214,7 @@ func (r *router) localRouteTps(src cipher.PubKey) []oracleLocalTp {
 		return out
 	}
 	r.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
-		if tp == nil || tp.IsClosed() || tp.Entry.Label == transport.LabelSetup {
+		if tp == nil || tp.Closed() || tp.Entry.Label == transport.LabelSetup {
 			return true
 		}
 		out = append(out, oracleLocalTp{

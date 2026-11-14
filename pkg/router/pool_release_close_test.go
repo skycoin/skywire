@@ -34,7 +34,7 @@ func TestPoolReleaseKeepsTransportOpen(t *testing.T) {
 
 	rg.closeReleasedLeg(mts[1].Entry.ID, "test")
 
-	require.False(t, mts[1].IsClosed(), "a pool release must not close the transport")
+	require.False(t, mts[1].Closed(), "a pool release must not close the transport")
 	select {
 	case <-retired:
 	case <-time.After(5 * time.Second):
@@ -61,7 +61,7 @@ func TestPoolReleaseClosesTransportForOldPeer(t *testing.T) {
 
 	rg.closeReleasedLeg(mts[1].Entry.ID, "test")
 
-	require.True(t, mts[1].IsClosed(), "without the signal the peer learns of the release from the close")
+	require.True(t, mts[1].Closed(), "without the signal the peer learns of the release from the close")
 	require.Equal(t, -1, legIdxOf(rg, mts[1]))
 }
 
@@ -73,5 +73,5 @@ func TestPoolReleaseKeepsLastLeg(t *testing.T) {
 	rg.closeReleasedLeg(mts[0].Entry.ID, "test")
 
 	require.Equal(t, 0, legIdxOf(rg, mts[0]))
-	require.False(t, mts[0].IsClosed())
+	require.False(t, mts[0].Closed())
 }

@@ -1,3 +1,4 @@
+// Package daemon src/daemon/pq_sigs.go c2-coin-daemon
 package daemon
 
 import (
@@ -202,7 +203,7 @@ func (dm *Daemon) broadcastPQSigs(blocks []coin.SignedBlock) error {
 	}
 	var addrs []string
 	for _, c := range dm.connections.all() {
-		if c.HasIntroduced() && c.ProtocolVersion >= pqSigsProtocolVersion {
+		if c.Introduced() && c.ProtocolVersion >= pqSigsProtocolVersion {
 			addrs = append(addrs, c.Addr)
 		}
 	}

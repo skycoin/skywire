@@ -323,7 +323,7 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	//     2–3 minutes before shutdown.
 	const dmsgInitTimeout = 30 * time.Second
 	switch {
-	case selfOnly:
+	case selfOnly || ownFileServerOnly(&dmsgConf):
 		// The only server is this visor's own, which starts after this stage.
 		log.Info("DMSG: this visor's own dmsg server is its only one; not waiting for the client")
 	case v.opts.DmsgServer != "":

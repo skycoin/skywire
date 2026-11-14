@@ -232,8 +232,8 @@ func (u *PublicVisorUpdater) OnExternalSTCPR() {
 	}
 }
 
-// IsValidated returns whether the visor has received an external connection.
-func (u *PublicVisorUpdater) IsValidated() bool {
+// Validated returns whether the visor has received an external connection.
+func (u *PublicVisorUpdater) Validated() bool {
 	u.validatedMu.RLock()
 	defer u.validatedMu.RUnlock()
 	return u.validated
@@ -273,7 +273,7 @@ func (u *PublicVisorUpdater) monitorLoop(ctx context.Context) {
 
 		case <-timeoutCh:
 			// Registration timeout elapsed
-			if !u.IsValidated() {
+			if !u.Validated() {
 				u.log.Warn("Public visor validation timeout: no external STCPR connection received. Deregistering from service discovery.")
 				u.deregister("no_external_stcpr")
 				return

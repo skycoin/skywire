@@ -1,4 +1,4 @@
-// Package skyobject pkg/cxo/skyobject/lastroot_missing_cxds_test.go:
+// Package skyobject pkg/cxo/skyobject/lastroot_missing_cxds_test.go
 // pins the behavior of Index.LastRoot and Container.rootByHash when
 // CXDS no longer holds the bytes for a hash the index still
 // references — the exact prod failure mode after #2676 + #2677 made
@@ -14,7 +14,7 @@
 //	  pkg/cxo/treestore.NewWithDMSG                        publisher.go:219
 //	  pkg/visor/visorinit.(*Module).InitConcurrent
 //
-// because the panic site `r.IsFull = true` dereferenced a nil r
+// because the panic site `r.Full = true` dereferenced a nil r
 // returned from rootByHash. Caller (Publisher.New) already had
 // graceful error fallback to an empty in-memory tree — the panic
 // was the only thing that turned the inconsistency into a crashloop.

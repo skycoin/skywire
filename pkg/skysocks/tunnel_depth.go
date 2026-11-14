@@ -1,4 +1,4 @@
-// Package skysocks pkg/skysocks/tunnel_depth.go — the per-tunnel queue depth,
+// Package skysocks pkg/skysocks/tunnel_depth.go c4-app-proxy — the per-tunnel queue depth,
 // sized from the bandwidth-delay product.
 //
 // chunk.per_tunnel (2) and upload.concurrency (4) are FIXED queue depths,
@@ -87,7 +87,7 @@ func (c *Client) tunnelDepth(chunkBytes int64, up bool, fallback int) int {
 	sum, n := 0, 0
 	for i, s := range sessions {
 		m := meters[i]
-		if s == nil || s.IsClosed() || m == nil || c.IsStandby(s) {
+		if s == nil || s.IsClosed() || m == nil || c.Standby(s) {
 			continue
 		}
 		rate, _ := m.capacityDir(now, up)

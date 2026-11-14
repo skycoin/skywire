@@ -1,3 +1,4 @@
+// Package rewardconfig pkg/visor/rewardconfig/exposure.go c3-vis-core
 package rewardconfig
 
 import (

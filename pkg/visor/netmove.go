@@ -187,8 +187,11 @@ func (v *Visor) runNetworkMoves() {
 		if refresh == nil {
 			refresh = v.refreshNetwork
 		}
-		s.runs.Add(1)
-		refresh(reason)
+		// Offline dials nothing. Coming back online refreshes (checkOnline).
+		if v.currentMode() != visorapi.ModeOffline {
+			s.runs.Add(1)
+			refresh(reason)
+		}
 
 		s.mu.Lock()
 		if len(s.reasons) == 0 {

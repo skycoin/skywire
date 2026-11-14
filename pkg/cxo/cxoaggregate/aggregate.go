@@ -1,4 +1,4 @@
-// Package cxoaggregate pkg/cxo/cxoaggregate/aggregate.go c4-net-discovery
+// Package cxoaggregate pkg/cxo/cxoaggregate/aggregate.go c3-net-discovery
 //
 // Shared engine for the service-side CXO fan-in aggregators. It is the
 // receive-side counterpart to pkg/cxo/treestore (the publisher side):
@@ -488,7 +488,7 @@ func (c *Core) subscribe(conn *node.Conn) bool {
 // Conn.Feeds it cost TPD a fifth of its CPU, all on the node's single feeds
 // loop.
 func alreadySubscribed(conn *node.Conn, feed skycipher.PubKey) bool {
-	return conn.HasFeed(feed)
+	return conn.Subscribed(feed)
 }
 
 // cleanup prunes superseded Roots (keeping only the latest per feed),

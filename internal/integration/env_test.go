@@ -682,23 +682,23 @@ func (env *TestEnv) VPNStart(app AppToRun, serverPk string) (string, error) {
 
 			// Get client logs to check for transport/routing errors
 			clientLogs, logErr := env.ReadLog(app.VisorHostName)
-			isTransportError := false
+			transportError := false
 
 			if logErr == nil {
 				if strings.Contains(clientLogs, "routing table: rule not found") {
 					env.logger.Warn("Detected 'routing table: rule not found' error")
-					isTransportError = true
+					transportError = true
 				} else if strings.Contains(clientLogs, "no suitable transport") {
 					env.logger.Warn("Detected 'no suitable transport' error")
-					isTransportError = true
+					transportError = true
 				} else if strings.Contains(clientLogs, "failed to connect to the server") {
 					env.logger.Warn("Detected 'failed to connect to the server' error")
-					isTransportError = true
+					transportError = true
 				}
 			}
 
 			// If it's a transport error and we have retries left, cleanup and retry
-			if isTransportError && attempt < maxRetries {
+			if transportError && attempt < maxRetries {
 				env.logger.Info("Performing transport cleanup for retry...")
 
 				// Stop the client app

@@ -22,6 +22,7 @@ templ SettingsPage(s Settings) {
 				@SettingsPanel(s)
 			</div>
 		}
+		<div hx-get={ VisorURL(s.PK, "settings/alerts") } hx-trigger="load" hx-swap="outerHTML"><p class="small dim">{ T(ctx, "common.loading") }</p></div>
 	}
 }
 

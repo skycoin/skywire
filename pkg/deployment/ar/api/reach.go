@@ -1,4 +1,4 @@
-// Package api pkg/deployment/ar/api/reach.go c4-net-discovery
+// Package api pkg/deployment/ar/api/reach.go c3-net-discovery
 //
 // The reach book: per peer, what is known about whether it can actually be
 // transported, published as the reach feed (see arfeed/reach.go for the

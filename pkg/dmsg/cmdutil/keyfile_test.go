@@ -1,4 +1,4 @@
-// Package cmdutil pkg/cmdutil/keyfile_test.go
+// Package cmdutil pkg/dmsg/cmdutil/keyfile_test.go c1-net-dmsg
 package cmdutil
 
 import (

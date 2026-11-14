@@ -1,4 +1,4 @@
-// Package config cmd/dmsg/dmsg-server/commands/config/gen_test.go
+// Package config cmd/dmsg/dmsg-server/commands/config/gen_test.go c1-net-dmsg
 //
 // Covers the `dmsg server config gen` command's logic: generating a default
 // dmsg-server config and flushing it to the requested output path. The parent `commands` package

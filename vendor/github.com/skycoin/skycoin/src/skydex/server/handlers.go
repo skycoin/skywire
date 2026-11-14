@@ -1,3 +1,4 @@
+// Package server src/skydex/server/handlers.go c2-app-dex
 package server
 
 import (
@@ -238,7 +239,7 @@ func (s *Server) handleCreateListing(pk string, req protocol.Envelope) protocol.
 	}
 
 	// The chosen sell coin must be enabled at this market.
-	sellOK, err := s.db.IsSellCoinAvailable(sellCoin)
+	sellOK, err := s.db.SellCoinAvailable(sellCoin)
 	if err != nil {
 		return s.internal(req.ID, "create_listing.sellcoin", err)
 	}
@@ -252,7 +253,7 @@ func (s *Server) handleCreateListing(pk string, req protocol.Envelope) protocol.
 	if payCur == sellCoin {
 		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "sell coin and payment currency must differ")
 	}
-	payOK, err := s.db.IsPaymentAvailable(payCur)
+	payOK, err := s.db.PaymentAvailable(payCur)
 	if err != nil {
 		return s.internal(req.ID, "create_listing.currency", err)
 	}
@@ -262,12 +263,12 @@ func (s *Server) handleCreateListing(pk string, req protocol.Envelope) protocol.
 	// A fibercoin payment is a FIXED on-chain amount at 3-dp precision; an external
 	// coin uses 8-dp (and later a unique non-round amount). Normalize the price to
 	// whichever applies, then re-check positivity.
-	isFiberPay, err := s.db.IsSellCoinAvailable(payCur)
+	fiberPay, err := s.db.SellCoinAvailable(payCur)
 	if err != nil {
 		return s.internal(req.ID, "create_listing.fiberpay", err)
 	}
 	payDec := paymentDecimals
-	if isFiberPay {
+	if fiberPay {
 		payDec = skyOnChainDecimals
 	}
 	r.PaymentCurrency = payCur
@@ -305,11 +306,11 @@ func (s *Server) handleCreateListing(pk string, req protocol.Envelope) protocol.
 	// insert so two concurrent requests can't both pass.
 	s.allocMu.Lock()
 	defer s.allocMu.Unlock()
-	hasPending, err := s.db.SellerHasPendingListing(pk)
+	pending, err := s.db.SellerHasPendingListing(pk)
 	if err != nil {
 		return s.internal(req.ID, "create_listing.pending_check", err)
 	}
-	if hasPending {
+	if pending {
 		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest,
 			"you already have a pending listing; complete, cancel, or wait for it to expire before creating another")
 	}
@@ -358,7 +359,7 @@ func (s *Server) handleBuyProduct(pk string, req protocol.Envelope) protocol.Env
 		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "invalid buy payload")
 	}
 
-	banned, err := s.db.IsUserBanned(pk)
+	banned, err := s.db.UserBanned(pk)
 	if err != nil {
 		return s.internal(req.ID, "buy.ban_check", err)
 	}
@@ -415,14 +416,14 @@ func (s *Server) handleBuyProduct(pk string, req protocol.Envelope) protocol.Env
 	// 100 FIBER1, not 100.002). For an external explorer coin we allocate a unique
 	// non-round amount so payments to a shared address are individually
 	// identifiable. Either way we hold allocMu across the check and the insert.
-	isFiberPay, err := s.db.IsSellCoinAvailable(product.PaymentCurrency)
+	fiberPay, err := s.db.SellCoinAvailable(product.PaymentCurrency)
 	if err != nil {
 		s.unfreeze(product.ID)
 		return s.internal(req.ID, "buy.fiberpay", err)
 	}
 	s.allocMu.Lock()
 	var expected float64
-	if isFiberPay {
+	if fiberPay {
 		expected = roundToDecimals(product.Price, skyOnChainDecimals)
 		// A single buyer can't have two identical fixed payments to the same seller
 		// in the same coin — the sender no longer disambiguates them. Different

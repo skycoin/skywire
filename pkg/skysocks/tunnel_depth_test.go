@@ -1,4 +1,4 @@
-// Package skysocks pkg/skysocks/tunnel_depth_test.go
+// Package skysocks pkg/skysocks/tunnel_depth_test.go c4-app-proxy
 package skysocks
 
 import (

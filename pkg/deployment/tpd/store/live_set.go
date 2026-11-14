@@ -1,4 +1,4 @@
-// Package store pkg/deployment/tpd/store/live_set.go c4-net-discovery
+// Package store pkg/deployment/tpd/store/live_set.go c3-net-discovery
 //
 // The live transport set: TPD's transports held in memory by the store that
 // writes them.

@@ -1,4 +1,4 @@
-// Package flags pkg/flags/helpall.go
+// Package flags src/util/flags/helpall.go c0-com-util
 //
 // InstallHelp replaces cobra's default (auto-generated) help subcommand
 // with a flag-aware version that consolidates three previously-separate
@@ -152,10 +152,10 @@ func printTreeChildren(c *cobra.Command, prefix string) {
 		visible = append(visible, child)
 	}
 	for i, child := range visible {
-		isLast := i == len(visible)-1
+		last := i == len(visible)-1
 		branch := "├── "
 		nextPrefix := prefix + "│   "
-		if isLast {
+		if last {
 			branch = "└── "
 			nextPrefix = prefix + "    "
 		}

@@ -79,17 +79,17 @@ type DmsgServerEntry struct {
 	} `json:"server"`
 }
 
-// HasDmsgServers returns true if the deployment has DMSG server entries.
-func (s *Services) HasDmsgServers() bool {
+// DmsgServersSet returns true if the deployment has DMSG server entries.
+func (s *Services) DmsgServersSet() bool {
 	return len(s.DmsgServers) > 0
 }
 
-// IsKnownDmsgServer reports whether pk is one of the deployment's known
+// KnownDmsgServer reports whether pk is one of the deployment's known
 // (official) dmsg servers. Used to gate fleet-wide defaults — e.g. the
 // WSSDomainSuffix — to servers this deployment actually runs DNS/TLS for, so a
 // third party running the same binary doesn't self-advertise the deployment's
 // wss domain for a PK that has no DNS record.
-func (s *Services) IsKnownDmsgServer(pk cipher.PubKey) bool {
+func (s *Services) KnownDmsgServer(pk cipher.PubKey) bool {
 	for i := range s.DmsgServers {
 		var spk cipher.PubKey
 		if spk.Set(s.DmsgServers[i].Static) == nil && spk == pk {
@@ -134,8 +134,8 @@ func (s *Services) ToDiscEntries() []*disc.Entry {
 	return DmsgServerEntriesToDisc(s.DmsgServers)
 }
 
-// HasDmsgEndpoints returns true if the deployment has DMSG service endpoints.
-func (s *Services) HasDmsgEndpoints() bool {
+// DmsgEndpointsSet returns true if the deployment has DMSG service endpoints.
+func (s *Services) DmsgEndpointsSet() bool {
 	return s.DmsgDiscoveryDmsg != ""
 }
 

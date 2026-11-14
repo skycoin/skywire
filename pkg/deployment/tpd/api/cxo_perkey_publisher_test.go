@@ -1,4 +1,4 @@
-// Package api pkg/deployment/tpd/api/cxo_perkey_publisher_test.go c4-net-discovery
+// Package api pkg/deployment/tpd/api/cxo_perkey_publisher_test.go c3-net-discovery
 package api
 
 import (

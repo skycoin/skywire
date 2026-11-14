@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/joincost_test.go c4-app-chat
+// Package group pkg/skychat/group/joincost_test.go c3-app-chat
 //
 // Unit coverage for the two anti-flood primitives: the proof of work that
 // prices an identity, and the token bucket that bounds what any number of
@@ -252,10 +252,10 @@ func TestRecordJoinPoWRequired(t *testing.T) {
 // verdict would strand a legitimate joiner.
 func TestChallengeAndThrottledAreNotDecisions(t *testing.T) {
 	for _, s := range []JoinStatus{JoinStatusChallenge, JoinStatusThrottled} {
-		if s.IsDecision() {
+		if s.Decision() {
 			t.Errorf("%q must not count as a decision about the requester", s)
 		}
-		if s.IsTerminal() {
+		if s.Terminal() {
 			t.Errorf("%q must not be terminal", s)
 		}
 		if errForStatus(s, "x") != nil {

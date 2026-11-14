@@ -1,0 +1,108 @@
+package ui2
+
+// BandwidthPage is the bandwidth tab.
+templ BandwidthPage(b Bandwidth) {
+	@VisorLayout(b.PK, "bandwidth") {
+		<div class="head"><h1>{ T(ctx, "node.tabs.bandwidth") }</h1></div>
+		<div class="bar" id="bw-q">
+			@ListSearch(b.url(b.Days), "#bw", "#bw-q", T(ctx, "ui2.list.search-transports"), b.Pager.ListQuery)
+		</div>
+		@BandwidthBody(b)
+	}
+}
+
+// BandwidthBody polls every 30 seconds as the Angular tab does.
+templ BandwidthBody(b Bandwidth) {
+	<div id="bw" hx-get={ b.url(b.Days) + "&page=" + itoa(b.Pager.Page) } hx-trigger="every 30s [document.visibilityState === 'visible']" hx-swap="outerHTML" hx-include="#bw-q">
+		<div class="bar">
+			<span class="dim">{ T(ctx, "bandwidth.window") }:</span>
+			for _, d := range []int{1, 7, 30} {
+				<button class={ "btn sm", templ.KV("primary", d == b.Days) } type="button" hx-get={ b.url(d) } hx-target="#bw" hx-swap="outerHTML">
+					if d == 1 {
+						{ T(ctx, "bandwidth.window-now") }
+					} else {
+						{ itoa(d) }d
+					}
+				</button>
+			}
+			<span class="spacer"></span>
+			<button class="btn sm" type="button" hx-get={ b.url(b.Days) } hx-target="#bw" hx-swap="outerHTML"><span class="mi">refresh</span>{ T(ctx, "bandwidth.refresh") }</button>
+		</div>
+		@ErrorBox(b.Err)
+		if len(b.Rows) == 0 && b.Err == "" {
+			<p class="dim">{ T(ctx, "bandwidth.empty") }</p>
+		}
+		if len(b.Rows) > 0 {
+			<p class="small dim">{ itoa(b.Pager.Total) } { T(ctx, "bandwidth.transports") } · { Bytes(b.Total) } { T(ctx, "bandwidth.total") } · { T(ctx, "bandwidth.last-updated") }: { b.Fetched }</p>
+			<div class="bar">
+				@PagerNav(b.Pager, b.url(b.Days), "#bw")
+			</div>
+			for _, r := range b.Rows {
+				<details class="bw-row" data-open-key={ r.ID.String() } hx-get={ VisorURL(b.PK, "bandwidth/tp?id="+r.ID.String()) } hx-trigger="toggle once" hx-target="find .bw-body" hx-swap="innerHTML">
+					<summary class="bw-head">
+						<span class="badge">{ r.Type }</span>
+						<span class="mono small pk-text" title={ r.ID.String() }>{ r.ID.String() }</span>
+						<span class="mono small pk-text dim" title={ r.Remote }>→ { r.Remote }</span>
+						<span class="spacer"></span>
+						<strong>{ Bytes(r.Sent + r.Recv) }</strong>
+						<span class="small dim">↑ { Bytes(r.Sent) } ↓ { Bytes(r.Recv) }</span>
+						if r.Current != nil && r.Current.LatencyAvgMS > 0 {
+							<span class="small dim">{ ms(r.Current.LatencyAvgMS) }</span>
+						}
+					</summary>
+					<div class="bw-body"><p class="small dim">{ T(ctx, "common.loading") }</p></div>
+				</details>
+			}
+		}
+	</div>
+}
+
+// BwDetail is one transport's live snapshot and daily history.
+templ BwDetail(r BwRow) {
+	if c := r.Current; c != nil {
+		<h3 class="small">{ T(ctx, "bandwidth.current-snapshot") }</h3>
+		<dl class="kv small">
+			<dt>{ T(ctx, "bandwidth.sent") }</dt>
+			<dd>{ Bytes(c.SentBytes) }</dd>
+			<dt>{ T(ctx, "bandwidth.recv") }</dt>
+			<dd>{ Bytes(c.RecvBytes) }</dd>
+			<dt>{ T(ctx, "bandwidth.latency-current") }</dt>
+			<dd>{ latencyTriple(c.LatencyMinMS, c.LatencyAvgMS, c.LatencyMaxMS) }</dd>
+			if !c.SampledAt.IsZero() {
+				<dt>{ T(ctx, "bandwidth.sampled-at") }</dt>
+				<dd>{ c.SampledAt.Local().Format("15:04:05") }</dd>
+			}
+		</dl>
+	}
+	if len(r.Daily) == 0 {
+		<p class="small dim">{ T(ctx, "bandwidth.no-history") }</p>
+	} else {
+		<h3 class="small">{ T(ctx, "bandwidth.daily-history") }</h3>
+		<div class="table-wrap">
+			<table class="list">
+				<thead>
+					<tr>
+						<th>{ T(ctx, "bandwidth.date") }</th>
+						<th class="num">{ T(ctx, "bandwidth.sent") }</th>
+						<th class="num">{ T(ctx, "bandwidth.recv") }</th>
+						<th class="num">{ T(ctx, "bandwidth.total") }</th>
+						<th class="num">{ T(ctx, "bandwidth.latency-min-avg-max") }</th>
+						<th class="num">{ T(ctx, "bandwidth.samples") }</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, d := range r.Daily {
+						<tr>
+							<td data-label={ T(ctx, "bandwidth.date") }>{ d.Date }</td>
+							<td class="num" data-label={ T(ctx, "bandwidth.sent") }>{ Bytes(d.SentBytes) }</td>
+							<td class="num" data-label={ T(ctx, "bandwidth.recv") }>{ Bytes(d.RecvBytes) }</td>
+							<td class="num" data-label={ T(ctx, "bandwidth.total") }><strong>{ Bytes(d.SentBytes + d.RecvBytes) }</strong></td>
+							<td class="num small" data-label={ T(ctx, "bandwidth.latency-min-avg-max") }>{ latencyTriple(d.LatencyMinMS, d.LatencyAvgMS, d.LatencyMaxMS) }</td>
+							<td class="num dim" data-label={ T(ctx, "bandwidth.samples") }>{ itoa(int(d.Samples)) }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	}
+}

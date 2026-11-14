@@ -123,7 +123,7 @@ type APIClient interface {
 type VisorData struct {
 	RemoteAddr   string `json:"remote_addr"`
 	RemoteAddrV6 string `json:"remote_addr_v6,omitempty"`
-	IsLocal      bool   `json:"is_local,omitempty"`
+	Local        bool   `json:"is_local,omitempty"`
 	LocalAddresses
 }
 
@@ -1020,7 +1020,7 @@ func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey
 	if !ask && types.NormalizeType(types.Type(tType)) != types.SUDPH {
 		if f := c.fastResolve.Load(); f != nil {
 			if data, ok := (*f)(ctx, tType, pk); ok {
-				data.IsLocal = sameHost(data.RemoteAddr, c.localPublicIPRaw())
+				data.Local = sameHost(data.RemoteAddr, c.localPublicIPRaw())
 				return data, nil
 			}
 		}
@@ -1038,7 +1038,7 @@ func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey
 				c.notFound.note(nfKey, time.Now())
 			}
 			if err == nil {
-				data.IsLocal = sameHost(data.RemoteAddr, c.localPublicIPRaw())
+				data.Local = sameHost(data.RemoteAddr, c.localPublicIPRaw())
 			}
 			return data, err
 		}
@@ -1359,11 +1359,11 @@ func (c *httpClient) Close() error {
 		}
 	}
 
-	hasPublic, err := netutil.HasPublicIP()
+	publicIP, err := netutil.PublicIPPresent()
 	if err != nil {
 		c.log.Errorf("Failed to check for public IP: %v", err)
 	}
-	if hasPublic {
+	if publicIP {
 		if err := c.delBindSTCPR(context.Background()); err != nil {
 			c.log.WithError(err).Errorf("Failed to delete STCPR binding")
 		}

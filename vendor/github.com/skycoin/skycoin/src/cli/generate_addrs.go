@@ -1,3 +1,4 @@
+// Package cli src/cli/generate_addrs.go c3-coin-cli
 package cli
 
 import (
@@ -136,7 +137,7 @@ func GenerateAddressesInFile(walletFile string, num uint64, pr PasswordReader) (
 
 	switch pr.(type) {
 	case nil:
-		if wlt.IsEncrypted() {
+		if wlt.Encrypted() {
 			return nil, wallet.ErrWalletEncrypted
 		}
 	case PasswordFromBytes:
@@ -145,7 +146,7 @@ func GenerateAddressesInFile(walletFile string, num uint64, pr PasswordReader) (
 			return nil, err
 		}
 
-		if !wlt.IsEncrypted() && len(p) != 0 {
+		if !wlt.Encrypted() && len(p) != 0 {
 			return nil, wallet.ErrWalletNotEncrypted
 		}
 	}
@@ -154,7 +155,7 @@ func GenerateAddressesInFile(walletFile string, num uint64, pr PasswordReader) (
 		return w.GenerateAddresses(wallet.OptionGenerateN(n))
 	}
 
-	if wlt.IsEncrypted() {
+	if wlt.Encrypted() {
 		genAddrsInWallet = func(w wallet.Wallet, n uint64) ([]cipher.Addresser, error) {
 			password, err := pr.Password()
 			if err != nil {

@@ -1,4 +1,4 @@
-// Package vpn pkg/vpn/netstack_tun.go c4-app-vpn
+// Package vpn pkg/vpn/netstack_tun.go c3-app-vpn
 //
 // A gVisor userspace netstack behind the same TUNDevice seam the platform
 // TUNs implement. On js/wasm it IS the TUN (a browser has no L3 interface to

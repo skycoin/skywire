@@ -1,4 +1,4 @@
-// Package main cmd/svc/transport-setup/transport-setup.go c2-net-transport
+// Package main cmd/svc/transport-setup/transport-setup.go c3-net-transport
 package main
 
 import (

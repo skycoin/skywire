@@ -1,4 +1,4 @@
-// Package visor pkg/visor/init_dmsg_skywire_test.go — pins the
+// Package visor pkg/visor/init_dmsg_skywire_test.go c3-vis-core — pins the
 // Phase 3 wiring contract: PK extractor refuses non-skywire conns
 // (defense-in-depth before the whitelist gate), and the dmsgpty
 // dialer chain is skywire-first / dmsg-fallback.
@@ -80,7 +80,7 @@ func TestBuildDmsgptyDialer_SkywireFirstDmsgFallback(t *testing.T) {
 	if len(chain) != 2 {
 		t.Fatalf("chain length = %d, want 2 (skywire + dmsg)", len(chain))
 	}
-	if _, isSkywire := chain[0].(skywireDialer); !isSkywire {
+	if _, ok := chain[0].(skywireDialer); !ok {
 		t.Errorf("chain[0] = %T, want skywireDialer (transport-aware must come first)", chain[0])
 	}
 	// chain[1] is the dmsg adapter (unexported type in dmsgpty);

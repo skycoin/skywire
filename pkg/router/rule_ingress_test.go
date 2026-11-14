@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package router pkg/router/rule_ingress_test.go
+// Package router pkg/router/rule_ingress_test.go c2-net-routing
 package router
 
 import (

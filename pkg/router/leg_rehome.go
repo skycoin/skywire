@@ -455,10 +455,10 @@ func (rg *RouteGroup) detachLegForRehome(id uuid.UUID, reason string) (*rehomeLe
 	leg.hops = rg.legHopsLocked(tpEntryID(leg.tp))
 	rg.legs = append(rg.legs[:idx], rg.legs[idx+1:]...)
 	if rg.mux != nil {
-		rg.mux.removeLegs(idx)
+		rg.compactMuxLocked(idx)
 		rg.mux.rebuildWeights(rg.legs)
 	}
-	rg.forgetPeerPark(tpEntryID(leg.tp))
+	rg.forgetLeg(tpEntryID(leg.tp))
 	rg.noteLegEvent(MuxEventLegRemoved, reason+": the chain left this group", MuxByLocal,
 		idx, len(rg.legs), leg.tp, leg.hops)
 	rg.mu.Unlock()
@@ -492,7 +492,7 @@ func (rg *RouteGroup) adoptRehomedLeg(leg *rehomeLeg, reason string, standby boo
 	idx := rg.appendLegLocked(fwd, rvs, leg.tp)
 	rg.resetLegLiveness(tpEntryID(leg.tp))
 	if rg.mux != nil {
-		rg.mux.growLegs(len(rg.legs))
+		rg.syncMuxLegsLocked()
 		rg.mux.rebuildWeights(rg.legs)
 		// The chain is already established, so it needs no aux-leg handshake to
 		// become selectable. Set under rg.mu, while idx still names this leg.

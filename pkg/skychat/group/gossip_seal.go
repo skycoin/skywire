@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/gossip_seal.go c4-app-chat
+// Package group pkg/skychat/group/gossip_seal.go c3-app-chat
 // sealing the governance leaves — roster/, admin/ and mod/ — under the
 // group key, so an encrypted group's membership and moderation history is
 // as private as the messages it protects.

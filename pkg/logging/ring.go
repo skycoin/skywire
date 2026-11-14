@@ -51,9 +51,9 @@ type Record struct {
 	Module  string
 	Message string
 	Fields  map[string]string
-	// IsEvent is true for a layered route/transport event (events bucket),
+	// Event is true for a layered route/transport event (events bucket),
 	// false for the app's own log output (logs bucket).
-	IsEvent bool
+	Event bool
 }
 
 type appRing struct {
@@ -74,12 +74,12 @@ func (b *Broadcaster) record(e *Entry) {
 	}
 
 	app := ""
-	isEvent := false
+	event := false
 	if a := appFromModule(module); a != "" {
 		app = a // app's own output → logs bucket
 	} else if a := appFromFields(e); a != "" {
 		app = a // layered (router/rg/tp) entry tagged with the app → events bucket
-		isEvent = true
+		event = true
 	}
 	if app == "" {
 		return
@@ -90,7 +90,7 @@ func (b *Broadcaster) record(e *Entry) {
 		Level:   e.Level,
 		Module:  module,
 		Message: e.Message,
-		IsEvent: isEvent,
+		Event:   event,
 	}
 	if len(e.Data) > 0 {
 		rec.Fields = make(map[string]string, len(e.Data))
@@ -120,7 +120,7 @@ func (b *Broadcaster) record(e *Entry) {
 		b.rings[app] = r
 	}
 	r.lastSeen = rec.Time
-	if isEvent {
+	if event {
 		r.events = appendCapped(r.events, rec)
 	} else {
 		r.logs = appendCapped(r.logs, rec)

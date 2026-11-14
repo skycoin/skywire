@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/leave_wire.go c4-app-chat
+// Package group pkg/skychat/group/leave_wire.go c3-app-chat
 // telling a group's admins that a member left.
 //
 // Leave used to be local only: the member closed its session and nobody

@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/keyring.go c4-app-chat
+// Package group pkg/skychat/group/keyring.go c3-app-chat
 // the group's key history: which key encrypts new messages, and which
 // older keys still have to open old ones.
 //

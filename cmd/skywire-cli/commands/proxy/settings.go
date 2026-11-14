@@ -1,4 +1,4 @@
-// Package skysocksc cmd/skywire-cli/commands/proxy/settings.go
+// Package skysocksc cmd/skywire-cli/commands/proxy/settings.go c4-vis-cli
 //
 // `proxy settings` — the live tuning knobs of a RUNNING skysocks-client.
 //
@@ -132,7 +132,7 @@ func applySettingArgs(current map[string]int64, currentText map[string]string, a
 		if !ok {
 			return nil, nil, fmt.Errorf("expected key=value, got %q", a)
 		}
-		if skysettings.IsList(name) {
+		if skysettings.ListKnob(name) {
 			v, err := skysettings.ParseList(name, raw)
 			if err != nil {
 				return nil, nil, err

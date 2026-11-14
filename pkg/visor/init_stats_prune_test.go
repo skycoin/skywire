@@ -1,4 +1,4 @@
-// Package visor pkg/visor/init_stats_prune_test.go
+// Package visor pkg/visor/init_stats_prune_test.go c3-vis-core
 //
 // Pins the telemetry-feed startup-prune invariant for the sharded wire
 // format: after a visor restart the CXO publisher hydrates its in-memory

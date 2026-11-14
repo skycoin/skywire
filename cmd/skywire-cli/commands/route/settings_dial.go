@@ -1,4 +1,4 @@
-// Package cliroute cmd/skywire-cli/commands/route/settings_dial.go
+// Package cliroute cmd/skywire-cli/commands/route/settings_dial.go c4-vis-cli
 //
 // `skywire cli route settings dial` — the DIAL-TIME half of the router's
 // runtime knobs: the route-ranking priors, how many candidates a dial asks the

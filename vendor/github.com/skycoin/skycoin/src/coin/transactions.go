@@ -1,3 +1,4 @@
+// Package coin src/coin/transactions.go c1-coin-chain
 package coin
 
 import (
@@ -230,17 +231,21 @@ func (txn *Transaction) verify(signed bool) error {
 }
 
 func (txn Transaction) verifyInputSignaturesPrelude(uxIn UxArray) error {
+	innerHash, err := txn.hashInner()
+	if err != nil {
+		return err
+	}
 	if len(txn.In) != len(uxIn) {
 		return errors.New("txn.In != uxIn")
 	}
 	if len(txn.In) != len(txn.Sigs) {
 		return errors.New("txn.In != txn.Sigs")
 	}
-	if txn.InnerHash != txn.HashInner() {
+	if txn.InnerHash != innerHash {
 		return errors.New("Invalid Tx Inner Hash")
 	}
-	for i := range txn.In {
-		if txn.In[i] != uxIn[i].Hash() {
+	for i, ux := range uxIn {
+		if txn.In[i] != ux.Hash() {
 			return errors.New("Ux hash mismatch")
 		}
 	}
@@ -251,7 +256,7 @@ func (txn Transaction) verifyInputSignaturesPrelude(uxIn UxArray) error {
 func (txn Transaction) VerifyInputSignatures(uxIn UxArray) error {
 	if err := txn.verifyInputSignaturesPrelude(uxIn); err != nil {
 		if DebugLevel2 {
-			log.Panic(err)
+			log.Printf("CRITICAL: verifyInputSignaturesPrelude failed: %v", err)
 		}
 		return err
 	}
@@ -273,7 +278,7 @@ func (txn Transaction) VerifyInputSignatures(uxIn UxArray) error {
 func (txn Transaction) VerifyPartialInputSignatures(uxIn UxArray) error {
 	if err := txn.verifyInputSignaturesPrelude(uxIn); err != nil {
 		if DebugLevel2 {
-			log.Panic(err)
+			log.Printf("CRITICAL: verifyInputSignaturesPrelude failed: %v", err)
 		}
 		return err
 	}
@@ -343,34 +348,47 @@ func (txn *Transaction) SignInput(key cipher.SecKey, index int) error {
 	}
 
 	h := cipher.AddSHA256(txn.InnerHash, txn.In[index])
-	txn.Sigs[index] = cipher.MustSignHash(h, key)
+	sig, err := cipher.SignHash(h, key)
+	if err != nil {
+		return err
+	}
+	txn.Sigs[index] = sig
 
 	return nil
 }
 
 // SignInputs signs all inputs in the transaction
-func (txn *Transaction) SignInputs(keys []cipher.SecKey) {
+func (txn *Transaction) SignInputs(keys []cipher.SecKey) error {
 	if len(keys) != len(txn.In) {
-		log.Panic("Invalid number of keys")
+		return errors.New("Invalid number of keys")
 	}
 	if len(keys) > math.MaxUint16 {
-		log.Panic("Too many keys")
+		return errors.New("Too many keys")
 	}
 	if len(keys) == 0 {
-		log.Panic("No keys")
+		return errors.New("No keys")
 	}
 	if len(txn.Sigs) > 0 && txn.hasNonNullSignature() {
-		log.Panic("Transaction has been signed")
+		return errors.New("Transaction has been signed")
 	}
 
-	txn.InnerHash = txn.HashInner() // update hash
+	innerHash, err := txn.hashInner()
+	if err != nil {
+		return err
+	}
 
 	sigs := make([]cipher.Sig, len(txn.In))
 	for i, k := range keys {
-		h := cipher.AddSHA256(txn.InnerHash, txn.In[i]) // hash to sign
-		sigs[i] = cipher.MustSignHash(h, k)
+		h := cipher.AddSHA256(innerHash, txn.In[i]) // hash to sign
+		sig, err := cipher.SignHash(h, k)
+		if err != nil {
+			return err
+		}
+		sigs[i] = sig
 	}
+	txn.InnerHash = innerHash
 	txn.Sigs = sigs
+	return nil
 }
 
 // Size returns the encoded byte size of the transaction
@@ -382,10 +400,10 @@ func (txn *Transaction) Size() (uint32, error) {
 	return mathutil.IntToUint32(len(buf))
 }
 
-// IsFullyUnsigned returns true if the transaction is not signed for any input.
+// FullyUnsigned returns true if the transaction is not signed for any input.
 // Unsigned transactions have a full signature array, but the signatures are null.
 // Returns true if the signatures array is empty.
-func (txn *Transaction) IsFullyUnsigned() bool {
+func (txn *Transaction) FullyUnsigned() bool {
 	for i := range txn.Sigs {
 		if txn.InputSigned(i) {
 			return false
@@ -395,9 +413,9 @@ func (txn *Transaction) IsFullyUnsigned() bool {
 	return true
 }
 
-// IsFullySigned returns true if the transaction is fully signed.
+// FullySigned returns true if the transaction is fully signed.
 // Returns true if the signatures array is empty.
-func (txn *Transaction) IsFullySigned() bool {
+func (txn *Transaction) FullySigned() bool {
 	if len(txn.Sigs) == 0 {
 		return false
 	}
@@ -466,7 +484,11 @@ func (txn *Transaction) UpdateHeader() error {
 	if len(txn.PQ) != 0 {
 		txn.Type = TxnTypePQ
 	}
-	txn.InnerHash = txn.HashInner()
+	h, err := txn.hashInner()
+	if err != nil {
+		return err
+	}
+	txn.InnerHash = h
 	return nil
 }
 

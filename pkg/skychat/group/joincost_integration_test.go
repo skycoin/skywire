@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/joincost_integration_test.go
+// Package group pkg/skychat/group/joincost_integration_test.go c3-app-chat
 //
 // The dmsg-backed lane for anti-flood: a real join round trip that must
 // pay a proof of work, and a flood of fresh identities that must stop
@@ -113,7 +113,7 @@ func TestJoinCost_FloodIsThrottled(t *testing.T) {
 	require.NoError(t, err)
 	n := 0
 	for _, q := range pending {
-		if q.IsPending() {
+		if q.Pending() {
 			n++
 		}
 	}

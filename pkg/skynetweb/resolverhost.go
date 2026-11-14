@@ -1,4 +1,4 @@
-// Package skynetweb pkg/skynetweb/resolverhost.go c4-app-skynet
+// Package skynetweb pkg/skynetweb/resolverhost.go c3-app-skynet
 //
 // Shared parser for resolver hostnames used by BOTH the skynet resolving
 // proxy (.skynet) and the dmsg resolving proxy (.dmsg). It generalizes the
@@ -38,9 +38,9 @@ import (
 // RouteLabel is one parsed routing-chain element: either a visor public key
 // (auto/any transport) or a specific transport ID.
 type RouteLabel struct {
-	IsTpID bool
-	PK     cipher.PubKey // valid when !IsTpID
-	TpID   uuid.UUID     // valid when IsTpID
+	ByTpID bool
+	PK     cipher.PubKey // valid when !ByTpID
+	TpID   uuid.UUID     // valid when ByTpID
 }
 
 // classifyRouteLabel reports whether label is a routing element (PK or TpID)
@@ -51,7 +51,7 @@ func classifyRouteLabel(label string) (RouteLabel, bool) {
 		return RouteLabel{PK: pk}, true
 	}
 	if id, err := uuid.Parse(label); err == nil {
-		return RouteLabel{IsTpID: true, TpID: id}, true
+		return RouteLabel{ByTpID: true, TpID: id}, true
 	}
 	return RouteLabel{}, false
 }
@@ -63,9 +63,9 @@ func classifyRouteLabel(label string) (RouteLabel, bool) {
 // aliases maps a human-friendly destination label (e.g. "skywire") to a PK, so
 // "skywire.dmsg" resolves exactly like "<pk>.dmsg". Nil/empty disables aliasing.
 func ParseResolverHost(host, suffix string, aliases map[string]cipher.PubKey) (vhost string, route []RouteLabel, dest cipher.PubKey, port uint16, err error) {
-	hostPart, portStr, hasPort := splitHostPort(host)
+	hostPart, portStr, withPort := splitHostPort(host)
 	port = 80
-	if hasPort {
+	if withPort {
 		p, perr := parseUint16(portStr)
 		if perr != nil {
 			return "", nil, cipher.PubKey{}, 0, fmt.Errorf("invalid port %q: %w", portStr, perr)

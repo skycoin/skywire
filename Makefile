@@ -4,14 +4,14 @@
 .PHONY : build clean install format  bin build-race netview-wasm check-netview-wasm
 .PHONY : build-mobile android-mobile android-mobile-check android-mobile-ndk android-mobile-x86_64 android-apk android-aab android-apk-debug android-sh-apk check-mobile-version
 .PHONY : ios-core ios-deps-check mobile-test
-.PHONY : generate services vet check-cg check-help check-inner check-ci hostbridge-dist
+.PHONY : generate services vet check-cg check-descriptors check-help check-inner check-ci hostbridge-dist
 .PHONY : e2e-build e2e-run e2e-test e2e-stop e2e-clean e2e-skychat
 
 # --match 'v[0-9]*' pins this to the SKYWIRE release tags. The repo also carries
 # `mobile-vX.Y.Z` APK tags, and an annotated one of those sitting on HEAD would
 # otherwise become the version every binary in the tree reports. --always still
 # falls back to a bare hash when no release tag is reachable.
-VERSION := $(shell git describe --always --match 'v[0-9]*')
+VERSION := $(shell git describe --tags --always --match 'v[0-9]*')
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 COMMIT := $(shell git rev-list -1 HEAD)
 
@@ -153,7 +153,7 @@ check: ## Run linters and tests (lint, check-cg, check-help, test). Serialized v
 		$(MAKE) --no-print-directory -f $(firstword $(MAKEFILE_LIST)) check-inner; \
 	fi
 
-check-inner: lint check-cg check-browseui check-help test ## Internal: the actual check targets, run inside flock by 'make check'. Don't call directly unless you've already acquired .make-check.lock.
+check-inner: lint check-descriptors check-cg check-browseui check-help test ## Internal: the actual check targets, run inside flock by 'make check'. Don't call directly unless you've already acquired .make-check.lock.
 
 
 # BROWSEUI_ENTRYPOINTS: embedded browser scripts that define a global when they
@@ -213,7 +213,7 @@ check-help: ## Cursory check of the help menus
 vet: ## Run go vet (the non-golangci-lint half of 'lint')
 	CGO_ENABLED=0 ${OPTS} go vet -mod=vendor -tags 'withoutsystray withoutgotop' ./...
 
-check-ci: vet check-cg check-help test ## CI check: like 'check' but skips golangci-lint (CI runs it as a separate pinned, cached step). Keeps go vet + config-gen smoke + tests.
+check-ci: vet check-descriptors check-cg check-help test ## CI check: like 'check' but skips golangci-lint (CI runs it as a separate pinned, cached step). Keeps go vet + config-gen smoke + tests.
 
 check-windows: lint-windows test-windows ## Run linters and tests on windows image
 
@@ -243,14 +243,16 @@ build-merged-cgo: ## Build with CGO optimization for faster DMSG handshakes (req
 # the vendored wlynxg/anet uses //go:linkname into net (Go ≥1.23 blocks it).
 ANDROID_JNILIBS := android/app/src/main/jniLibs/arm64-v8a
 MOBILE_TAGS := mobile,withoutsystray
-# Size budget for the android payload, in bytes (70 MiB). The CI lane fails
+# Size budget for the android payload, in bytes (72 MiB). The CI lane fails
 # over it so the lite variant can't silently rot or regain the stripped fat.
 # It gates the pure-Go lane, which measured 68.8 MB (65.6 MiB) on 2026-09-23
 # and 67.7 MB (64.6 MiB) on 2026-09-28 with the lite module set; the NDK
 # release lane is 6 MB smaller again (packed relocations). The budget is not
 # what keeps the desktop-only packages out of the phone build — ios-deps-check
 # (run by android-mobile-check) fails on the first one that returns.
-ANDROID_MOBILE_MAX_BYTES := 73400320
+# Raised from 70 MiB on 2026-11-12: the skydex-client templ UI beside React
+# brought it to 74.1 MB. Dropping the React UI should give it back.
+ANDROID_MOBILE_MAX_BYTES := 75497472
 
 # MOBILE_APPINFO stamps the same symbols as $(BUILDINFO) with the phone's own
 # version. It is listed AFTER $(BUILDINFO) on the ldflags line, and the linker
@@ -658,10 +660,16 @@ install-windows: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 install-static: ## Install `skywire-visor`, `skywire-cli`, `setup-node`
 	${STATIC_OPTS} go install -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' .
 
-lint: ## Run linters. Use make install-linters first
-	command -v golangci-lint || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
-	golangci-lint --version
-	CGO_ENABLED=0 ${OPTS} golangci-lint run -c .golangci.yml --build-tags 'withoutsystray withoutgotop' ./...
+# One golangci-lint for skywire, skycoin and skycoin.com. CI pins the same
+# version in .github/workflows/test.yml.
+GOLANGCI_LINT_VERSION := v2.15.0
+LINT_BIN := $(shell go env GOPATH)/bin
+GOLANGCI_LINT := $(LINT_BIN)/golangci-lint
+
+lint: ## Run linters. Installs the pinned golangci-lint when it is missing or another version
+	$(GOLANGCI_LINT) --version 2>/dev/null | grep -q ' $(GOLANGCI_LINT_VERSION:v%=%) ' || GOBIN=$(LINT_BIN) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	$(GOLANGCI_LINT) --version
+	CGO_ENABLED=0 ${OPTS} $(GOLANGCI_LINT) run -c .golangci.yml --build-tags 'withoutsystray withoutgotop' ./...
 	CGO_ENABLED=0 ${OPTS} go vet -mod=vendor -tags 'withoutsystray withoutgotop' ./...
 
 lint-extra: ## Run linters with extra checks.
@@ -672,7 +680,7 @@ gocyclo: ## Run gocyclo
 	gocyclo -over 14 .
 
 lint-windows: ## Run linters. Use make install-linters-windows first
-	powershell 'if (-not (Get-Command golangci-lint -ErrorAction SilentlyContinue)) { go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest }'
+	powershell 'if (-not (Get-Command golangci-lint -ErrorAction SilentlyContinue)) { go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) }'
 	powershell 'golangci-lint --version'
 	powershell '$$env:CGO_ENABLED=0; golangci-lint run -c .golangci.yml --build-tags "withoutsystray withoutgotop" ./...'
 
@@ -703,11 +711,11 @@ test-windows: ## Run tests on windows
 	${OPTS} go test ${TEST_OPTS_WINDOWS} ./internal/... ./pkg/... ./cmd/skywire-cli... ./cmd/skywire-visor... ./cmd/skywire... ./cmd/apps...
 
 install-linters: ## Install linters
-	${OPTS} go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+	${OPTS} go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 	${OPTS} go install golang.org/x/tools/cmd/goimports@latest github.com/FiloSottile/vendorcheck@latest
 
 install-linters-windows: ## Install linters
-	${OPTS} go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest golang.org/x/tools/cmd/goimports@latest
+	${OPTS} go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) golang.org/x/tools/cmd/goimports@latest
 
 tidy: ## Tidies and vendors dependencies.
 	${OPTS} go mod tidy -v
@@ -718,6 +726,7 @@ format: tidy ## Formats the code. Must have goimports installed (use make instal
 		grep -E '^(replace|exclude)' go.mod; \
 		exit 1; \
 	fi
+	gofmt -s -w $$(git ls-files 'pkg/*.go' 'cmd/*.go' 'internal/*.go')
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./pkg ./cmd ./internal
 
 format-windows: tidy ## Formats the code. Must have goimports installed (use make install-linters).
@@ -974,9 +983,11 @@ e2e-logs:
 	bash -c "docker compose logs --tail=all --follow"
 
 e2e-test:  ## E2E. Run e2e-tests suite in Docker. Prepare e2e environment with `make e2e-build && make e2e-run`
-	DOCKER_TAG=e2e docker compose -f ${COMPOSE_FILE} run --rm \
+	@# E2E_TEST_BIN names a compiled internal/integration test binary inside
+	@# the repository to run in place of compiling the suite in the container.
+	DOCKER_TAG=e2e docker compose -f ${COMPOSE_FILE} run --rm -e E2E_TEST_BIN \
 		e2e-test \
-		sh -c "go clean -testcache && go test -v -timeout=45m ./internal/integration"
+		sh -c 'if [ -n "$$E2E_TEST_BIN" ]; then cd internal/integration && "/workspace/$$E2E_TEST_BIN" -test.v -test.timeout=45m; else go clean -testcache && go test -v -timeout=45m ./internal/integration; fi'
 
 e2e-test-local:  ## E2E. Run e2e-tests suite in Docker. Prepare e2e environment with `make e2e-build && make e2e-run`
 	DOCKER_TAG=integration docker compose -f ${COMPOSE_FILE} run --rm \

@@ -1,0 +1,100 @@
+package ui2
+
+import (
+	"sort"
+	"strings"
+)
+
+// The server picker for vpn-client and skysocks-client, as
+// select-proxy-server.component.ts: the public servers of the service
+// discovery, or a key typed in.
+
+// ServerRow is one public server.
+type ServerRow struct {
+	PK      string
+	Country string
+}
+
+// ServerPick is the picker.
+type ServerPick struct {
+	PK      string
+	App     string
+	VPN     bool
+	Rows    []ServerRow
+	Total   int
+	Q       string
+	Current string
+	Err     string
+}
+
+// FilterServers keeps the servers q matches, by country then key, at most
+// 200 of them.
+func FilterServers(p ServerPick, all []ServerRow) ServerPick {
+	p.Total = len(all)
+	q := strings.ToLower(strings.TrimSpace(p.Q))
+	for _, s := range all {
+		if q == "" || strings.Contains(strings.ToLower(s.PK+" "+s.Country), q) {
+			p.Rows = append(p.Rows, s)
+		}
+	}
+	sort.Slice(p.Rows, func(i, j int) bool {
+		if p.Rows[i].Country != p.Rows[j].Country {
+			return p.Rows[i].Country < p.Rows[j].Country
+		}
+		return p.Rows[i].PK < p.Rows[j].PK
+	})
+	if len(p.Rows) > 200 {
+		p.Rows = p.Rows[:200]
+	}
+	return p
+}
+
+func (p ServerPick) url(rest string) string { return VisorURL(p.PK, "vpn"+rest) }
+
+templ ServerPicker(p ServerPick) {
+	<section class="card sub" id="server-pick">
+		<div class="head">
+			<h2>
+				if p.VPN {
+					{ T(ctx, "skysocks-tab.select-server.title-vpn") }
+				} else {
+					{ T(ctx, "skysocks-tab.select-server.title") }
+				}
+			</h2>
+			<span class="spacer"></span>
+			<button class="icon-btn" type="button" data-clear="#app-panel" aria-label={ T(ctx, "common.close") }><span class="mi">close</span></button>
+		</div>
+		<p class="small dim">
+			if p.VPN {
+				{ T(ctx, "skysocks-tab.select-server.help-vpn", "client", p.App) }
+			} else {
+				{ T(ctx, "skysocks-tab.select-server.help", "client", p.App) }
+			}
+		</p>
+		<form class="bar" hx-post={ p.url("/use") } hx-target="#vpn" hx-swap="outerHTML">
+			<input type="hidden" name="app" value={ p.App }/>
+			<input class="mono filter" name="srv" required minlength="66" maxlength="66" value={ p.Current } placeholder={ T(ctx, "skysocks-tab.select-server.manual-pk") } aria-label={ T(ctx, "skysocks-tab.select-server.manual-pk") }/>
+			<button class="btn primary" type="submit">{ T(ctx, "skysocks-tab.select-server.use") }</button>
+		</form>
+		<input class="filter" type="search" name="q" value={ p.Q } placeholder={ T(ctx, "skysocks-tab.select-server.filter") } aria-label={ T(ctx, "skysocks-tab.select-server.filter") } hx-get={ p.url("/servers?app=" + p.App) } hx-trigger="input changed delay:300ms, search" hx-target="#app-panel" hx-swap="innerHTML"/>
+		@ErrorBox(p.Err)
+		if p.Total == 0 && p.Err == "" {
+			<p class="dim">{ T(ctx, "skysocks-tab.select-server.empty") }</p>
+		} else {
+			<p class="small dim">{ T(ctx, "skysocks-tab.select-server.count", "shown", itoa(len(p.Rows)), "total", itoa(p.Total)) }</p>
+			<div class="table-wrap">
+				<table class="list">
+					<tbody>
+						for _, s := range p.Rows {
+							<tr class={ templ.KV("active", s.PK == p.Current) }>
+								<td data-label={ T(ctx, "skysocks-tab.select-server.country") }>{ orDash(s.Country) }</td>
+								<td><span class="mono small pk-text" title={ s.PK }>{ s.PK }</span></td>
+								<td class="actions"><button class="btn sm" type="button" hx-post={ p.url("/use") } hx-vals={ jsonVals(map[string]string{"app": p.App, "srv": s.PK}) } hx-target="#vpn" hx-swap="outerHTML">{ T(ctx, "skysocks-tab.select-server.use") }</button></td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	</section>
+}

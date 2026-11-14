@@ -1,4 +1,4 @@
-// Package cmdutil pkg/cmdutil/cmd_name.go c0-com-util
+// Package cmdutil pkg/cmdutil/cmd_name.go c1-com-util
 package cmdutil
 
 import (

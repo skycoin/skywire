@@ -1,3 +1,5 @@
+// Package router pkg/router/dial_first_hop_holds.go c2-net-routing
+//
 // Package router — in-flight first-hop reservations for diversify dials.
 //
 // siblingRouteGroupExclusions answers "which first hops are taken?" from the

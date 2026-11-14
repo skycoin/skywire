@@ -1,4 +1,4 @@
-// Package tps pkg/services/tps/tps.go c2-vis-appsvc
+// Package tps pkg/services/tps/tps.go c3-vis-appsvc
 //
 // transport-setup as a pkg/services.Service. Listens on dmsg RPC
 // for visors and exposes an HTTP API to manage transports remotely.

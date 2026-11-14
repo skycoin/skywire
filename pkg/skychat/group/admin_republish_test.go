@@ -51,7 +51,7 @@ func adminSessionFixture(t *testing.T) *Session {
 }
 
 // nonAdminSessionFixture builds a Session whose MyPK is NOT in the
-// group's admin set, so the IsAdmin gate in onUpdate fails. Used to
+// group's admin set, so the AdministeredBy gate in onUpdate fails. Used to
 // confirm the republish branch is properly gated.
 func nonAdminSessionFixture(t *testing.T) *Session {
 	t.Helper()
@@ -224,7 +224,7 @@ func TestAdminSkipsHeartbeat(t *testing.T) {
 	s.onUpdate([]treestore.UpdateEvent{{Path: path, Value: body}})
 
 	if _, ok := s.pub.Get(path); ok {
-		t.Errorf("admin republished a heartbeat (the IsHeartbeat gate failed)")
+		t.Errorf("admin republished a heartbeat (the Heartbeat gate failed)")
 	}
 }
 

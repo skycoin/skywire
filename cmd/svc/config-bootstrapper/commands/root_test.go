@@ -1,4 +1,4 @@
-// Package commands cmd/svc/config-bootstrapper/commands/root_test.go: unit
+// Package commands cmd/svc/config-bootstrapper/commands/root_test.go unit
 // tests for the testable surface of the config-bootstrapper root command — the
 // JSON example helpers, readConfig (missing / valid / malformed file), the
 // command metadata and registered flags, and Execute's --help path. The

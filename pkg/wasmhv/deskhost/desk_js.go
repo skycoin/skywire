@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package deskhost pkg/wasmhv/deskhost/desk_js.go — the desk surface, from its promoted home.
+// Package deskhost pkg/wasmhv/deskhost/desk_js.go c3-vis-wasm — the desk surface, from its promoted home.
 //
 // The desk chrome and window registry come from github.com/0magnet/desk (the
 // panel, the Applications menu, task buttons, launch/teardown); this file only

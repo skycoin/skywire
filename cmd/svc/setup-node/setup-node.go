@@ -1,4 +1,4 @@
-// Package main cmd/svc/setup-node/setup-node.go c2-net-routing
+// Package main cmd/svc/setup-node/setup-node.go c3-net-routing
 package main
 
 import (

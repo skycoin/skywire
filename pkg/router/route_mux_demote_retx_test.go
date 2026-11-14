@@ -205,7 +205,7 @@ func TestMuxDemoteFlushNoActiveLegIsSafe(t *testing.T) {
 
 	// Force leg 0 not-ready so no active send leg remains once leg 1 is demoted.
 	rg.mux.legMu.Lock()
-	rg.mux.ready[0] = false
+	rg.mux.legs[0].ready = false
 	rg.mux.legMu.Unlock()
 
 	rg.rotationHook = demoteHook{demote: []int{1}}

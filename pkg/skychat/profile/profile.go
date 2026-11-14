@@ -1,4 +1,4 @@
-// Package profile pkg/skychat/profile/profile.go c4-app-chat
+// Package profile pkg/skychat/profile/profile.go c3-app-chat
 // what a visor says about itself: a display name and a tiny avatar.
 //
 // # Why this exists
@@ -156,8 +156,8 @@ func (p Profile) IsZero() bool {
 	return p.Name == "" && len(p.Avatar) == 0
 }
 
-// HasAvatar reports whether a usable image is present.
-func (p Profile) HasAvatar() bool {
+// AvatarSet reports whether a usable image is present.
+func (p Profile) AvatarSet() bool {
 	return len(p.Avatar) > 0 && p.AvatarMime != ""
 }
 
@@ -168,7 +168,7 @@ func (p Profile) HasAvatar() bool {
 // the decoded one — the browser will happily render whatever a data URI
 // claims, and the point of validating the format was to decide that.
 func (p Profile) AvatarDataURI() string {
-	if !p.HasAvatar() {
+	if !p.AvatarSet() {
 		return ""
 	}
 	return "data:" + p.AvatarMime + ";base64," + base64.StdEncoding.EncodeToString(p.Avatar)

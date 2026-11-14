@@ -1,3 +1,5 @@
+// Package commands cmd/explorer/commands/root.go c4-ui-explorer
+//
 // Package commands implements the skycoin explorer.
 package commands
 
@@ -5,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/fs"
 	"log"
 	"mime"
 	"net/http"
@@ -20,7 +21,7 @@ import (
 
 	"github.com/skycoin/skycoin/src/util/calvin"
 
-	"github.com/skycoin/skycoin/explorer"
+	"github.com/skycoin/skycoin/src/explorerui"
 	"github.com/skycoin/skycoin/src/fiber"
 )
 
@@ -69,7 +70,10 @@ func init() {
 	RootCmd.Flags().BoolVarP(&verify, "verify", "v", false, "Run init() checks and quit")
 	RootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "q", "", "[ cpu | mem | mutex | block | trace | http ]")
 	RootCmd.Flags().StringVarP(&pprofAddr, "pprofaddr", "r", "localhost:6060", "pprof http port")
+}
 
+// buildDocs parses the example responses and renders the API docs page.
+func buildDocs() error {
 	parsedJSONAPIEndpoints = make([]ParsedJSONAPIEndpoint, len(apiEndpoints)+1)
 
 	parsedJSONAPIEndpoints[len(apiEndpoints)] = ParsedJSONAPIEndpoint{
@@ -80,20 +84,16 @@ func init() {
 		parsedJSONAPIEndpoints[i].APIEndpoint = apiEndpoints[i]
 		resp := []byte(apiEndpoints[i].ExampleResponse)
 		if err := json.Unmarshal(resp, &parsedJSONAPIEndpoints[i].ParsedExampleResponse); err != nil {
-			log.Println("Error parsing example response JSON:", err)
-			log.Println("path:", apiEndpoints[i].ExplorerPath)
 			log.Println("Example response:")
 			log.Println(apiEndpoints[i].ExampleResponse)
-			log.Panic(err)
+			return fmt.Errorf("parse example response for %s: %w", apiEndpoints[i].ExplorerPath, err)
 		}
 		if apiEndpoints[i].ExampleVerboseResponse != "" {
 			resp = []byte(apiEndpoints[i].ExampleVerboseResponse)
 			if err := json.Unmarshal(resp, &parsedJSONAPIEndpoints[i].ParsedExampleVerboseResponse); err != nil {
-				log.Println("Error parsing example verbose response JSON:", err)
-				log.Println("path:", apiEndpoints[i].ExplorerPath)
 				log.Println("Example verbose response:")
 				log.Println(apiEndpoints[i].ExampleVerboseResponse)
-				log.Panic(err)
+				return fmt.Errorf("parse example verbose response for %s: %w", apiEndpoints[i].ExplorerPath, err)
 			}
 		}
 	}
@@ -101,7 +101,12 @@ func init() {
 	endpoints = append(endpoints, apiEndpoints...)
 	endpoints = append(endpoints, docEndpoint)
 
-	docTemplateBody = renderDocs(endpoints)
+	body, err := renderDocs(endpoints)
+	if err != nil {
+		return err
+	}
+	docTemplateBody = body
+	return nil
 }
 
 // RootCmd is skycoin blockchain explorer
@@ -130,6 +135,10 @@ var RootCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, _ []string) {
 		stopPProf := initPProf(pprofMode, pprofAddr)
 		defer stopPProf()
+
+		if err := buildDocs(); err != nil {
+			log.Fatalln(err)
+		}
 
 		// Parse the node address flag
 		skycoinAddr = buildNodeURL(skycoinAddrString)
@@ -160,43 +169,38 @@ var RootCmd = &cobra.Command{
 				log.Fatalln("Unable to register js mime type.")
 			}
 
-			var fileServer http.Handler
 			if uiFilesFolder != "" {
-				// External GUI directory
-				log.Printf("Serving GUI from local folder: %s", uiFilesFolder)
-				fileServer = http.FileServer(http.Dir(uiFilesFolder))
-			} else {
-				// Embedded GUI
-				log.Println("Serving embedded GUI")
-				sub, err := fs.Sub(explorer.EmbeddedFiles, "dist")
-				if err == nil {
-					fileServer = http.FileServer(http.FS(sub))
-				} else {
-					// fallback if dist/ not present in FS
-					fileServer = http.FileServer(http.FS(explorer.EmbeddedFiles))
-				}
+				log.Printf("Serving the Angular explorer from local folder: %s", uiFilesFolder)
 			}
+			angular := angularHandler()
+			ui := explorerui.Handler(explorerui.NewClient(skycoinAddr.String()), explorerui.Options{Classic: "angular/"})
 
-			// Serve static files
-			gzipHandle("/", fileServer)
-
-			// Angular SPA fallback (/app/* → index.html)
-			mux.Handle("/app/", gzhttp.GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if uiFilesFolder != "" {
-					http.ServeFile(w, r, filepath.Join(uiFilesFolder, "index.html"))
+			// The server rendered explorer has / and the Angular paths. Other
+			// paths are Angular files, kept where its absolute links expect them.
+			gzipHandle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/" {
+					ui.ServeHTTP(w, r)
 					return
 				}
-				f, err := explorer.EmbeddedFiles.Open("dist/index.html")
-				if err != nil {
-					http.Error(w, "index.html not found", http.StatusInternalServerError)
-					return
-				}
-				defer f.Close() //nolint:errcheck
-				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				if _, err := io.Copy(w, f); err != nil {
-					log.Printf("Error serving index.html: %v", err)
-				}
-			})))
+				angular.files.ServeHTTP(w, r)
+			}))
+			gzipHandle("/app/", ui)
+			gzipHandle("/static/", ui)
+			gzipHandle(angularPrefix, angular)
+
+			// /ui2/ held the server rendered explorer while it sat beside the
+			// Angular one, and /classic/ held the Angular one after.
+			movePrefix := func(from, to string) {
+				gzipHandle(from+"/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					p := to + strings.TrimPrefix(r.URL.Path, from)
+					if r.URL.RawQuery != "" {
+						p += "?" + r.URL.RawQuery
+					}
+					http.Redirect(w, r, p, http.StatusMovedPermanently)
+				}))
+			}
+			movePrefix("/ui2", "")
+			movePrefix("/classic", "/angular")
 
 			// Backwards compatibility redirects
 			gzipHandle("/blocks", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -944,6 +948,28 @@ var apiEndpoints = []APIEndpoint{
 	},
 
 	{
+		ExplorerPath:   "/api/address_uxouts",
+		SkycoinPath:    "/api/v1/address_uxouts",
+		QueryArgs:      []string{"address"},
+		Description:    "Returns every output an address has received. An output with a nonzero spent_block_seq was spent, so the address has sent coins and its public key is on chain.",
+		ExampleRequest: "/api/address_uxouts?address=2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6",
+		ExampleResponse: `[
+    {
+        "uxid": "043836eb6f29aaeb8b9bfce847e07c159c72b25ae17d291f32125e7f1912e2a0",
+        "time": 1426562704,
+        "src_block_seq": 0,
+        "src_tx": "0000000000000000000000000000000000000000000000000000000000000000",
+        "owner_address": "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6",
+        "coins": 100000000000000,
+        "hours": 100000000000000,
+        "calculated_hours": 100000000000000,
+        "spent_block_seq": 1,
+        "spent_tx": "86564b421cd3d4fe6f5f2d7a3e5db9d6fc340892bddd3a150533dff7036d0efe"
+    }
+]`,
+	},
+
+	{
 		ExplorerPath:   "/api/uxout",
 		SkycoinPath:    "/api/v1/uxout",
 		QueryArgs:      []string{"uxid"},
@@ -1049,8 +1075,8 @@ var apiEndpoints = []APIEndpoint{
 	{
 		ExplorerPath:   "/api/richlist",
 		SkycoinPath:    "/api/v1/richlist",
-		QueryArgs:      []string{"n", "include-distribution"},
-		Description:    "Returns top N richer with unspect outputs, If no n are specified, returns 20.",
+		QueryArgs:      []string{"n", "offset", "include-distribution"},
+		Description:    "Returns the top N addresses by unspent coins after skipping offset of them, and total, the length of the whole list. If no n is specified, returns 20.",
 		ExampleRequest: "/api/richlist?n=4&include-distribution=false",
 		ExampleResponse: `{
     "richlist": [

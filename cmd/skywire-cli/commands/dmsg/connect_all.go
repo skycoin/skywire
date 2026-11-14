@@ -93,8 +93,8 @@ reconnecting to any that drop" — recommended for RSN / TPS visors.`,
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
-		if !isJSON {
+		jsonOut, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
+		if !jsonOut {
 			cmdutil.Printf("Updated dmsg.sessions_count = %d (runtime + written to config)\n\n", setSessionsCount)
 		}
 		printConnectAllResult(cmd, result)
@@ -102,8 +102,8 @@ reconnecting to any that drop" — recommended for RSN / TPS visors.`,
 }
 
 func printConnectAllResult(cmd *cobra.Command, result *visorapi.DmsgConnectAllResult) {
-	isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
-	if isJSON {
+	jsonOut, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
+	if jsonOut {
 		internal.PrintOutput(cmd.Flags(), result, "")
 		return
 	}

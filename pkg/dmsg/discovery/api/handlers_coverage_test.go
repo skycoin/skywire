@@ -1,4 +1,4 @@
-// Package api pkg/dmsg/discovery/api/handlers_coverage_test.go
+// Package api pkg/dmsg/discovery/api/handlers_coverage_test.go c3-net-discovery
 package api
 
 import (

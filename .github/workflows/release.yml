@@ -20,7 +20,6 @@ on:
 
 env:
   RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-  GO_VERSION: 'stable'
   MUSL_RELEASE: 'v1.3.29'
   MODULE: github.com/skycoin/skywire
 
@@ -56,7 +55,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
           cache: false
 
       - name: Build the js/wasm module
@@ -121,11 +120,6 @@ jobs:
             toolchain: riscv64-linux-musl
             toolchain_file: riscv64-linux-musl-cross.tgz
     steps:
-      - uses: actions/setup-go@v7
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: false
-
       - name: Install build dependencies
         run: sudo apt-get update && sudo apt-get install -y wget tar xz-utils libusb-1.0-0-dev autoconf automake libtool
 
@@ -141,6 +135,11 @@ jobs:
           ref: ${{ env.RELEASE_TAG }}
           fetch-depth: 0
           fetch-tags: true
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
 
       # Go stamps vcs.modified=true when the work tree is dirty — an UNTRACKED
       # file is enough — and the version then reads v1.3.94+dirty, which is
@@ -256,9 +255,17 @@ jobs:
     needs: create-release
     runs-on: macos-15-intel
     steps:
+      # Only go.mod, for the Go version. The build is go install module@tag.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          path: gomod
+          sparse-checkout: go.mod
+          sparse-checkout-cone-mode: false
+
       - uses: actions/setup-go@v7
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: gomod/go.mod
           cache: false
 
       - name: Install Requirements
@@ -323,9 +330,17 @@ jobs:
     needs: create-release
     runs-on: macos-latest
     steps:
+      # Only go.mod, for the Go version. The build is go install module@tag.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          path: gomod
+          sparse-checkout: go.mod
+          sparse-checkout-cone-mode: false
+
       - uses: actions/setup-go@v7
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: gomod/go.mod
           cache: false
 
       - name: Install Requirements
@@ -405,9 +420,17 @@ jobs:
             wix_arch: x64
             wintun_arch: arm64
     steps:
+      # Only go.mod, for the Go version. The build is go install module@tag.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          path: gomod
+          sparse-checkout: go.mod
+          sparse-checkout-cone-mode: false
+
       - uses: actions/setup-go@v7
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: gomod/go.mod
           cache: false
 
       - name: Install CGO Requirements

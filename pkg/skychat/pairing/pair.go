@@ -1,4 +1,4 @@
-// Package pairing pkg/skychat/pairing/pair.go c4-app-chat
+// Package pairing pkg/skychat/pairing/pair.go c3-app-chat
 // pair's runtime state.
 //
 // One CXO node per pair side, listening on the deterministic pair

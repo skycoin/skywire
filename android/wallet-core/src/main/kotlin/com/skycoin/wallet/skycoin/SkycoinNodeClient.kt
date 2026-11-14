@@ -14,6 +14,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -182,17 +183,17 @@ class SkycoinNodeClient(baseUrl: String, private val client: OkHttpClient) {
     }
 
     suspend fun outputs(addresses: List<String>): Outputs =
-        get("api/v1/outputs", "addrs" to addresses.joinToString(",")) { body ->
+        byAddress("api/v1/outputs", addresses) { body ->
             json.decodeFromString(Outputs.serializer(), body)
         }
 
     suspend fun balance(addresses: List<String>): Balance =
-        get("api/v1/balance", "addrs" to addresses.joinToString(",")) { body ->
+        byAddress("api/v1/balance", addresses) { body ->
             json.decodeFromString(Balance.serializer(), body)
         }
 
     suspend fun transactions(addresses: List<String>): List<TxnEntry> =
-        get("api/v1/transactions", "addrs" to addresses.joinToString(","), "verbose" to "1") { body ->
+        byAddress("api/v1/transactions", addresses, "verbose" to "1") { body ->
             json.decodeFromString(ListSerializer(TxnEntry.serializer()), body)
         }
 
@@ -253,6 +254,31 @@ class SkycoinNodeClient(baseUrl: String, private val client: OkHttpClient) {
         }
     }.getOrNull()
 
+    /** A query over many addresses goes as a POST form: a long URL is refused by proxies (nginx allows 8 KB). */
+    private suspend fun <T> byAddress(
+        path: String,
+        addresses: List<String>,
+        vararg params: Pair<String, String>,
+        parse: (String) -> T,
+    ): T {
+        val addrs = addresses.joinToString(",")
+        if (addrs.length <= MAX_GET_ADDRS_CHARS) return get(path, "addrs" to addrs, *params, parse = parse)
+        return withContext(Dispatchers.IO) {
+            val csrf = fetchCsrf()
+            val form = FormBody.Builder().add("addrs", addrs)
+                .apply { params.forEach { (k, v) -> add(k, v) } }
+                .build()
+            val req = Request.Builder().url(base.newBuilder().addPathSegments(path).build()).post(form)
+                .apply { if (csrf != null) header("X-CSRF-Token", csrf) }
+                .build()
+            client.newCall(req).execute().use { resp ->
+                val body = resp.body.string()
+                if (!resp.isSuccessful) throw IOException(errorMessage(body, resp.code))
+                parse(body)
+            }
+        }
+    }
+
     private suspend fun <T> get(
         path: String,
         vararg params: Pair<String, String>,
@@ -270,6 +296,9 @@ class SkycoinNodeClient(baseUrl: String, private val client: OkHttpClient) {
 
     companion object {
         private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+
+        /** About 100 addresses. */
+        internal const val MAX_GET_ADDRS_CHARS = 3600
 
         /** Prefer the node's own message: v2 wraps it in error.message, v1 is plain text. */
         fun errorMessage(body: String, code: Int): String {

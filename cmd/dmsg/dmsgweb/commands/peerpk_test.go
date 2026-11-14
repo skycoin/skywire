@@ -1,4 +1,4 @@
-// Package commands cmd/dmsg/dmsgweb/commands/peerpk_test.go
+// Package commands cmd/dmsg/dmsgweb/commands/peerpk_test.go c3-net-dmsg
 //
 // Covers peerPK's fallback branch: a connection that is not a *dmsg.Stream has
 // no dmsg public key, so peerPK returns the zero key. The *dmsg.Stream branch

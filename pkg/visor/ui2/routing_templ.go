@@ -6,10 +6,12 @@ package ui2
 
 //lint:file-ignore SA4006 This context is only used if a nested component is present.
 
-import "github.com/a-h/templ"
-import templruntime "github.com/a-h/templ/runtime"
+import (
+	"context"
 
-import "context"
+	"github.com/a-h/templ"
+	templruntime "github.com/a-h/templ/runtime"
+)
 
 // RoutingPage is the routing tab: the min hops setting, then one sub view.
 func RoutingPage(pk string, minHops string, view string) templ.Component {

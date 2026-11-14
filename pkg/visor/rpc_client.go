@@ -16,6 +16,6 @@ var (
 
 // StatusMessage defines a status of visor update.
 type StatusMessage struct {
-	Text    string
-	IsError bool
+	Text   string
+	Failed bool
 }

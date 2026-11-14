@@ -1,4 +1,4 @@
-// Package router pkg/router/router_dial_dmsg_multihop_test.go —
+// Package router pkg/router/router_dial_dmsg_multihop_test.go c2-net-routing —
 // pins the "no DMSG in multihop routes" invariant. DMSG transports
 // relay through an opaque dmsg server (potentially a chain of
 // servers via server-to-server forwarding), so a DMSG hop in a

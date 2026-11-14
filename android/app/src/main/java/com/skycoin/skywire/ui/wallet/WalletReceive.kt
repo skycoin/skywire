@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -401,106 +403,111 @@ private fun AddressSheet(
                 Text(stringResource(R.string.wallet_addresses_hide_empty), style = MaterialTheme.typography.bodyMedium)
             }
             val perAddress = state.snapshot?.perAddress.orEmpty()
-            wallet.receiveAddresses.forEachIndexed { i, addr ->
-                val held = perAddress[addr]
-                // The address being shown stays, so hiding never takes away what is on screen.
-                if (hideEmpty && (held == null || held == 0uL) && i != state.receiveIndex) return@forEachIndexed
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            viewModel.pickReceiveIndex(i)
-                            onPicked()
-                        }
-                        .padding(horizontal = 20.dp, vertical = 13.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text(
-                        "${i + 1}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.width(16.dp),
-                    )
-                    Column(Modifier.weight(1f)) {
+            // The address being shown stays, so hiding never takes away what is on screen.
+            val shown = wallet.receiveAddresses.withIndex().filter { (i, addr) ->
+                !hideEmpty || (perAddress[addr] ?: 0uL) > 0uL || i == state.receiveIndex
+            }
+            // Scrolls on its own so the new address button below stays on screen however many there are.
+            LazyColumn(Modifier.weight(1f, fill = false)) {
+                items(shown, key = { it.value }) { (i, addr) ->
+                    val held = perAddress[addr]
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                viewModel.pickReceiveIndex(i)
+                                onPicked()
+                            }
+                            .padding(horizontal = 20.dp, vertical = 13.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
                         Text(
-                            shortAddress(addr),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
+                            "${i + 1}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.width(16.dp),
                         )
-                        if (i == 0) {
+                        Column(Modifier.weight(1f)) {
                             Text(
-                                stringResource(R.string.wallet_address_default),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 2.dp),
+                                shortAddress(addr),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
                             )
-                        } else if (held == null || held == 0uL) {
-                            // With coins on it the balance line says more
-                            // than "never used" ever could.
+                            if (i == 0) {
+                                Text(
+                                    stringResource(R.string.wallet_address_default),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 2.dp),
+                                )
+                            } else if (held == null || held == 0uL) {
+                                // With coins on it the balance line says more
+                                // than "never used" ever could.
+                                Text(
+                                    stringResource(R.string.wallet_address_unused),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 2.dp),
+                                )
+                            }
+                            if (addr in exposed) {
+                                Text(
+                                    stringResource(
+                                        if ((held ?: 0uL) > 0uL) R.string.wallet_address_exposed_funded
+                                        else R.string.wallet_address_exposed,
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = PENDING_AMBER,
+                                    modifier = Modifier.padding(top = 2.dp),
+                                )
+                            }
+                        }
+                        if (held != null) {
                             Text(
-                                stringResource(R.string.wallet_address_unused),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 2.dp),
-                            )
-                        }
-                        if (addr in exposed) {
-                            Text(
-                                stringResource(
-                                    if ((held ?: 0uL) > 0uL) R.string.wallet_address_exposed_funded
-                                    else R.string.wallet_address_exposed,
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = PENDING_AMBER,
-                                modifier = Modifier.padding(top = 2.dp),
-                            )
-                        }
-                    }
-                    if (held != null) {
-                        Text(
-                            state.coin.amountText(held),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = if (held > 0uL) FontWeight.Bold else FontWeight.Normal,
-                            color = if (held > 0uL) {
-                                MaterialTheme.colorScheme.onSurface
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                        )
-                    }
-                    if (i == state.receiveIndex) {
-                        Box(
-                            Modifier
-                                .size(8.dp)
-                                .clip(androidx.compose.foundation.shape.CircleShape)
-                                .background(MaterialTheme.colorScheme.primary),
-                        )
-                    }
-                    Box {
-                        IconButton(onClick = { menuFor = addr }, modifier = Modifier.size(32.dp)) {
-                            Icon(
-                                Icons.Outlined.MoreVert,
-                                contentDescription = stringResource(R.string.wallet_address_actions),
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
-                        DropdownMenu(expanded = menuFor == addr, onDismissRequest = { menuFor = null }) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.wallet_address_history)) },
-                                onClick = {
-                                    menuFor = null
-                                    onHistory(addr)
+                                state.coin.amountText(held),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (held > 0uL) FontWeight.Bold else FontWeight.Normal,
+                                color = if (held > 0uL) {
+                                    MaterialTheme.colorScheme.onSurface
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
                                 },
                             )
-                            if (state.coin.kind == CoinKind.SKY_FIBER) {
+                        }
+                        if (i == state.receiveIndex) {
+                            Box(
+                                Modifier
+                                    .size(8.dp)
+                                    .clip(androidx.compose.foundation.shape.CircleShape)
+                                    .background(MaterialTheme.colorScheme.primary),
+                            )
+                        }
+                        Box {
+                            IconButton(onClick = { menuFor = addr }, modifier = Modifier.size(32.dp)) {
+                                Icon(
+                                    Icons.Outlined.MoreVert,
+                                    contentDescription = stringResource(R.string.wallet_address_actions),
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                            DropdownMenu(expanded = menuFor == addr, onDismissRequest = { menuFor = null }) {
                                 DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.wallet_address_outputs)) },
+                                    text = { Text(stringResource(R.string.wallet_address_history)) },
                                     onClick = {
                                         menuFor = null
-                                        onOutputs(addr)
+                                        onHistory(addr)
                                     },
                                 )
+                                if (state.coin.kind == CoinKind.SKY_FIBER) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.wallet_address_outputs)) },
+                                        onClick = {
+                                            menuFor = null
+                                            onOutputs(addr)
+                                        },
+                                    )
+                                }
                             }
                         }
                     }

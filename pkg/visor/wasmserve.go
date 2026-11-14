@@ -316,6 +316,8 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	serveBytes("/browse-sw.js", "text/javascript", realorigin.ServiceWorkerJS())
 	serveBytes("/browse-responder.js", "text/javascript", realorigin.ResponderJS())
 	serveBytes("/browse-transport.js", "text/javascript", wasmhv.BrowseTransportJS)
+	// The push-only worker browse-transport.js registers per browse frame.
+	serveBytes("/push-sw.js", "text/javascript", wasmhv.PushSWJS)
 	swJS := wasmhv.ServiceWorkerFor(wasmVer, []string{"./", "manifest.webmanifest", "icon-192.png", "icon-512.png", "wasm_exec.js", "browse.js", "desk-boot.js", "skywire-worker.js", "autoupdate.js"})
 	mux.HandleFunc("/sw.js", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/javascript")

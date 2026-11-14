@@ -132,8 +132,8 @@ func TestReadSocks5Reply(t *testing.T) {
 
 func TestClassifyHTTP(t *testing.T) {
 	cases := []struct {
-		in              string
-		decided, isHTTP bool
+		in               string
+		decided, httpReq bool
 	}{
 		{"", false, false},              // empty → keep reading
 		{"GE", false, false},            // prefix of GET → keep reading
@@ -146,8 +146,8 @@ func TestClassifyHTTP(t *testing.T) {
 	}
 	for _, c := range cases {
 		d, h := classifyHTTP([]byte(c.in))
-		if d != c.decided || h != c.isHTTP {
-			t.Errorf("classifyHTTP(%q) = (%v,%v), want (%v,%v)", c.in, d, h, c.decided, c.isHTTP)
+		if d != c.decided || h != c.httpReq {
+			t.Errorf("classifyHTTP(%q) = (%v,%v), want (%v,%v)", c.in, d, h, c.decided, c.httpReq)
 		}
 	}
 }

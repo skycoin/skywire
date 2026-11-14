@@ -1,3 +1,4 @@
+// Package charts pkg/deployment/charts/board.go c3-net-discovery
 package charts
 
 import (

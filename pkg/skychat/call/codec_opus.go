@@ -1,6 +1,6 @@
 //go:build !(js && wasm)
 
-// Package call pkg/skychat/call/codec_opus.go c4-app-chat
+// Package call pkg/skychat/call/codec_opus.go c3-app-chat
 //
 // Opus codec — ~24 kbit/s versus the PCM passthrough's ~1.5 Mbit/s for the same
 // 48 kHz mono voice. This uses github.com/thesyncim/gopus, a hand-written PURE-GO

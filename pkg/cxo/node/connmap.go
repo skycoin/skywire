@@ -93,15 +93,15 @@ func (m *addrConnMap) shardFor(addr string) *addrConnShard {
 // reservePending is the atomic combo onNewConn used to do under
 // Node.mx: check the address against both maps and, if neither
 // holds it, insert c into pending. Returns the existing entry on
-// hit (with isPending reflecting which map it came from), or
-// isNew=true on a fresh insert. Single shard mutex acquisition.
+// hit (with pending reflecting which map it came from), or
+// created=true on a fresh insert. Single shard mutex acquisition.
 //
 // capCheck (when non-nil) runs under the shard lock just before
 // the insert and may veto with an error — used by onNewConn to
 // enforce MaxConnections / MaxPendingConnections without a separate
 // lock acquire. The cap reads use the atomic counters so capCheck
 // itself is lock-free.
-func (m *addrConnMap) reservePending(addr string, c *Conn, capCheck func() error) (existing *Conn, isPending, isNew bool, err error) {
+func (m *addrConnMap) reservePending(addr string, c *Conn, capCheck func() error) (existing *Conn, pending, created bool, err error) {
 	s := m.shardFor(addr)
 	s.mu.Lock()
 	defer s.mu.Unlock()

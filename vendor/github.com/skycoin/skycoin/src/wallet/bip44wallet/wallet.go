@@ -1,6 +1,7 @@
 // This file is still under refactoring, once it gets done, we will replace the
 // old bip44_wallet.go.
 
+// Package bip44wallet src/wallet/bip44wallet/wallet.go c1-coin-wallet
 package bip44wallet
 
 import (
@@ -195,7 +196,7 @@ func NewWallet(filename, label, seed, seedPassphrase string, options ...wallet.O
 
 	// encrypts wallet if options.Encrypt is true
 	if advOpts.Encrypt {
-		if wlt.IsTemp() {
+		if wlt.Temp() {
 			return nil, wallet.ErrEncryptTempWallet
 		}
 
@@ -335,15 +336,15 @@ func (w *Wallet) Deserialize(b []byte) error {
 	return nil
 }
 
-// IsEncrypted returns whether the wallet is encrypted
-func (w Wallet) IsEncrypted() bool {
-	return w.Meta.IsEncrypted()
+// Encrypted returns whether the wallet is encrypted
+func (w Wallet) Encrypted() bool {
+	return w.Meta.Encrypted()
 }
 
 // Lock encrypts the wallet if it is unencrypted, return false
 // if it is already encrypted.
 func (w *Wallet) Lock(password []byte) error {
-	if w.IsTemp() {
+	if w.Temp() {
 		return wallet.ErrEncryptTempWallet
 	}
 
@@ -351,7 +352,7 @@ func (w *Wallet) Lock(password []byte) error {
 		return wallet.ErrMissingPassword
 	}
 
-	if w.IsEncrypted() {
+	if w.Encrypted() {
 		return wallet.ErrWalletEncrypted
 	}
 
@@ -400,7 +401,7 @@ func (w *Wallet) Lock(password []byte) error {
 
 // Unlock decrypt the wallet
 func (w *Wallet) Unlock(password []byte) (wallet.Wallet, error) {
-	if !w.IsEncrypted() {
+	if !w.Encrypted() {
 		return nil, wallet.ErrWalletNotEncrypted
 	}
 
@@ -473,36 +474,34 @@ func (w *Wallet) Unlock(password []byte) (wallet.Wallet, error) {
 }
 
 // Fingerprint returns a unique ID fingerprint for this wallet, composed of its wallet type and initial address
-func (w Wallet) Fingerprint() string {
+func (w Wallet) Fingerprint() (string, error) {
 	addr := ""
 	cw := w.Clone().(*Wallet)
 	if w.accountManager.len() == 0 {
 		// Due to the value receiver of the Wallet, the new account should not be applied to
 		// the wallet.
-		_, err := cw.NewAccount(DefaultAccountName)
-		if err != nil {
-			panic(err)
+		if _, err := cw.NewAccount(DefaultAccountName); err != nil {
+			return "", fmt.Errorf("fingerprint account: %w", err)
 		}
 	}
 
 	entries, err := cw.externalEntries(0)
 	if err != nil {
-		logger.WithError(err).Panic("Fingerprint get external entries failed")
-		return ""
+		return "", fmt.Errorf("fingerprint external entries: %w", err)
 	}
 
 	if len(entries) == 0 {
-		if !cw.IsEncrypted() {
+		if !cw.Encrypted() {
 			addrs, err := cw.newExternalAddresses(0, 1)
 			if err != nil {
-				logger.WithError(err).Panic("Fingerprint failed to generate initial entry for empty wallet")
+				return "", fmt.Errorf("fingerprint initial entry: %w", err)
 			}
 			addr = addrs[0].String()
 		}
 	} else {
 		addr = entries[0].Address.String()
 	}
-	return fmt.Sprintf("%s-%s", cw.Type(), addr)
+	return fmt.Sprintf("%s-%s", cw.Type(), addr), nil
 }
 
 // Clone deep clone of the bip44 wallet
@@ -740,9 +739,9 @@ func (w *Wallet) GetEntry(addr cipher.Addresser, options ...wallet.Option) (wall
 	return e, nil
 }
 
-// HasEntry checks whether the entry of given address exists on selected account and chain,
+// Contains checks whether the entry of given address exists on selected account and chain,
 // if no options are provided, check the external chain of account 0.
-func (w *Wallet) HasEntry(addr cipher.Addresser, options ...wallet.Option) (bool, error) {
+func (w *Wallet) Contains(addr cipher.Addresser, options ...wallet.Option) (bool, error) {
 	opts := getBip44Options(options...)
 	_, ok, err := w.getEntry(opts.Account, addr)
 	if err != nil {
@@ -868,7 +867,11 @@ func (w *Wallet) XPubAddresses(path string, n uint32) ([]cipher.Addresser, error
 		if err != nil {
 			return nil, err
 		}
-		addrs = append(addrs, ad.AddressFromPubKey(cpk))
+		addr, err := ad.AddressFromPubKey(cpk)
+		if err != nil {
+			return nil, err
+		}
+		addrs = append(addrs, addr)
 	}
 	return addrs, nil
 }

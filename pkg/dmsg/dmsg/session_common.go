@@ -27,7 +27,7 @@ import (
 type SessionCommon struct {
 	entity *EntityCommon // back reference
 	rPK    cipher.PubKey // remote pk
-	isPeer bool          // true if this session is with a peer server
+	peer   bool          // true if this session is with a peer server
 
 	// filing, when set, holds an accepted session out of the session map until
 	// its first stream shows whether it is a peer link or a client. See

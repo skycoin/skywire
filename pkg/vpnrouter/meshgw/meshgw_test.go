@@ -1,4 +1,4 @@
-// Package meshgw pkg/vpnrouter/meshgw/meshgw_test.go c4-app-vpn
+// Package meshgw pkg/vpnrouter/meshgw/meshgw_test.go c3-app-vpn
 package meshgw
 
 import (
@@ -241,7 +241,7 @@ func TestRouteLabelsReachTheDial(t *testing.T) {
 	if _, err := g.DialIP(context.Background(), pinned, 80); err != nil {
 		t.Fatal(err)
 	}
-	if r := <-routes; len(r) != 1 || !r[0].IsTpID || r[0].TpID != tp {
+	if r := <-routes; len(r) != 1 || !r[0].ByTpID || r[0].TpID != tp {
 		t.Fatalf("pinned name dialed with route %v, want transport %s", r, tp)
 	}
 }

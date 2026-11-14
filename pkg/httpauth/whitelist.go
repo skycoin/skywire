@@ -1,4 +1,4 @@
-// Package httpauth pkg/httpauth/whitelist.go c0-com-http
+// Package httpauth pkg/httpauth/whitelist.go c2-com-http
 package httpauth
 
 import (

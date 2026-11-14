@@ -1,4 +1,4 @@
-// Package policy pkg/router/policy/distribution_test.go — pins
+// Package policy pkg/router/policy/distribution_test.go c2-net-routing — pins
 // the descriptor grammar promised by RFC #2882 phase 5.
 package policy
 

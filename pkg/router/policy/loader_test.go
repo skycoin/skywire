@@ -1,4 +1,4 @@
-// Package policy pkg/router/policy/loader_test.go — tests for
+// Package policy pkg/router/policy/loader_test.go c2-net-routing — tests for
 // the @filepath / inline / noop loader paths and the file-watcher
 // hot-reload semantics.
 package policy
@@ -18,8 +18,8 @@ func TestLoader_NoopMode(t *testing.T) {
 		t.Fatalf("NewLoader(\"\"): %v", err)
 	}
 	defer l.Close() //nolint:errcheck
-	if l.IsActive() {
-		t.Error("expected IsActive() = false for empty source")
+	if l.Active() {
+		t.Error("expected Active() = false for empty source")
 	}
 	spec, err := l.Decide(context.Background(), RoutingContext{App: "x"}, nil)
 	if err != nil {
@@ -37,8 +37,8 @@ func TestLoader_InlineScript(t *testing.T) {
 		t.Fatalf("NewLoader inline: %v", err)
 	}
 	defer l.Close() //nolint:errcheck
-	if !l.IsActive() {
-		t.Fatal("expected IsActive() = true for inline script")
+	if !l.Active() {
+		t.Fatal("expected Active() = true for inline script")
 	}
 	spec, err := l.Decide(context.Background(), RoutingContext{}, nil)
 	if err != nil {
@@ -62,8 +62,8 @@ func TestLoader_FileScript(t *testing.T) {
 		t.Fatalf("NewLoader @file: %v", err)
 	}
 	defer l.Close() //nolint:errcheck
-	if !l.IsActive() {
-		t.Fatal("expected IsActive() = true for @file")
+	if !l.Active() {
+		t.Fatal("expected Active() = true for @file")
 	}
 	spec, err := l.Decide(context.Background(), RoutingContext{}, nil)
 	if err != nil {

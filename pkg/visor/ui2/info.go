@@ -194,7 +194,7 @@ func (i Info) Alerts(ctx context.Context) []Alert {
 	if v, c := i.Version(), i.Sum.ConfigVersion; v != "" && c != "" && !SameRelease(v, c) {
 		out = append(out, Alert{false, T(ctx, "node.overview.alert-config-version", "config", c)})
 	}
-	if i.ov().IsSymmetricNAT {
+	if i.ov().SymmetricNAT {
 		out = append(out, Alert{false, T(ctx, "node.overview.alert-symmetric-nat")})
 	}
 	return out

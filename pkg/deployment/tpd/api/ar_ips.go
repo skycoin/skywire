@@ -1,4 +1,4 @@
-// Package api pkg/deployment/tpd/api/ar_ips.go c4-net-discovery
+// Package api pkg/deployment/tpd/api/ar_ips.go c3-net-discovery
 //
 // Public IPs from the address resolver's bindings feed, so the per-visor
 // bandwidth day can leave out transports between two visors on one IP. A

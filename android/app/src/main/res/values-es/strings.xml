@@ -143,6 +143,9 @@
     <string name="core_notification_title">Skywire en marcha</string>
     <string name="core_notification_starting">Iniciando el nodo…</string>
     <string name="core_notification_running">Conectado a la red Skywire.</string>
+    <string name="core_notification_offline">Esperando una conexión a internet.</string>
+    <string name="core_notification_mobile_data">Conectado con datos móviles.</string>
+    <string name="core_notification_waiting_wifi">Los datos móviles están desactivados para Skywire. Esperando Wi-Fi.</string>
     <string name="core_notification_restarting">El nodo falló: reiniciando (intento %1$d).</string>
 
     <!-- Voice calls -->
@@ -169,15 +172,31 @@
     <string name="call_unmute">Activar</string>
     <string name="call_speaker">Altavoz</string>
     <string name="call_missed_title">Llamada perdida</string>
+    <string name="chat_notif_join_request">Solicitud para unirse al grupo</string>
+    <string name="chat_notif_message_request">Solicitud de mensaje</string>
+    <plurals name="chat_notif_join_waiting">
+        <item quantity="one">%1$d persona espera unirse a %2$s</item>
+        <item quantity="other">%1$d personas esperan unirse a %2$s</item>
+    </plurals>
 
     <!-- Home / Connect -->
     <string name="state_disconnected">Desconectado</string>
     <string name="state_starting">Iniciando…</string>
+    <string name="state_no_internet">Sin conexión a internet</string>
+    <string name="state_waiting_wifi">Esperando Wi-Fi</string>
     <string name="state_connected">Conectado</string>
     <string name="state_stopping">Deteniendo…</string>
     <string name="state_restarting">Reiniciando (intento %1$d)…</string>
     <string name="home_hint_disconnected">Conectar inicia el núcleo de Skywire en este teléfono.</string>
     <string name="home_hint_starting">Entrando en la red Skywire. La primera conexión puede tardar unos minutos.</string>
+    <string name="home_hint_no_internet">Este teléfono no tiene conexión a internet. Skywire se une a la red por sí solo cuando el teléfono vuelve a estar en línea.</string>
+    <string name="home_hint_waiting_wifi">Skywire está configurado para usar solo Wi-Fi. Se une a la red por sí solo cuando el teléfono está en Wi-Fi. En Ajustes puedes permitir los datos móviles.</string>
+    <string name="home_hint_mobile_data">Usando datos móviles. Aquí Skywire no transporta tráfico de otros nodos, y en Ajustes puedes mantenerlo fuera de los datos móviles.</string>
+    <string name="home_mobile_data_title">¿Usar datos móviles?</string>
+    <string name="home_mobile_data_body">Este teléfono está usando datos móviles, y Skywire no los usa hasta que lo permitas. Con datos móviles Skywire solo transporta tu propio tráfico. Puedes cambiarlo más tarde en Ajustes.</string>
+    <string name="home_mobile_data_deny">Solo Wi-Fi</string>
+    <string name="home_mobile_data_allowed">Skywire ya usa datos móviles. Puedes cambiarlo en Ajustes.</string>
+    <string name="home_mobile_data_denied">Skywire sigue solo con Wi-Fi. Puedes cambiarlo en Ajustes.</string>
     <string name="home_error_start">El núcleo no llegó a arrancar. Revisa el registro del proceso.</string>
     <string name="visor_info_title">Nodo</string>
     <string name="visor_public_key">Clave pública</string>
@@ -637,6 +656,9 @@
     <string name="settings_autoconnect">Conectar con nodos públicos</string>
     <string name="settings_autoconnect_hint">Mantiene transportes abiertos hacia nodos públicos para que la red pueda enrutar a través de este teléfono, y para que este teléfono pueda enrutar a través de ellos. Cuesta batería y datos móviles, y por eso está desactivado. Las rutas de más de un salto lo necesitan.</string>
     <string name="settings_autoconnect_restart">Se aplica la próxima vez que arranque el núcleo.</string>
+    <string name="settings_mobile_data">Usar datos móviles</string>
+    <string name="settings_mobile_data_hint">Si está desactivado, Skywire usa solo Wi-Fi. Se desconecta con datos móviles y vuelve con Wi-Fi. Si está activado, Skywire también funciona con datos móviles y otras redes de uso medido, y allí solo transporta tu propio tráfico.</string>
+    <string name="settings_mobile_data_restart">Cambiarlo reinicia el núcleo.</string>
     <string name="settings_dns">Servidor DNS</string>
     <string name="settings_dns_hint">SkyVPN y SkyDNS le preguntan a este servidor por cada nombre que no sea .dmsg ni .skynet, con DNS sobre TLS cuando el servidor lo ofrece, como hacen Cloudflare, Google y Quad9. Si lo dejas vacío, SkyVPN usa 1.1.1.1 (Cloudflare), porque un servidor VPN no tiene un resolvedor que compartir, y SkyDNS por sí solo usa el DNS de este teléfono.</string>
     <string name="settings_dns_invalid">Escribe una dirección IPv4, como 9.9.9.9.</string>
@@ -1211,7 +1233,7 @@
     <string name="mail_attachment_failed">No se pudo guardar el adjunto: %1$s</string>
     <string name="mail_compose_title">Mensaje nuevo</string>
     <string name="mail_to_hint">Una dirección de SkyMail o la clave pública de un nodo</string>
-    <string name="mail_via_hint">Todas las direcciones de Para y Cc van por esta red. dmsg no necesita ruta; skynet es más rápido cuando hay una.</string>
+    <string name="mail_via_hint">Todas las direcciones de Para y Cc van por esta red. Un destinatario en tu red local recibe un enlace directo. dmsg no necesita ruta; skynet es más rápido cuando hay una.</string>
     <string name="mail_contacts">Contactos</string>
     <string name="mail_no_contacts">Aún no hay contactos. Añade uno o guarda un remitente desde un mensaje.</string>
     <string name="mail_contacts_shared">La libreta de contactos del nodo. SkyChat también toma de aquí los nombres.</string>
@@ -1229,7 +1251,7 @@
     <string name="mail_body">Mensaje</string>
     <string name="mail_attach">Adjuntar archivos</string>
     <string name="mail_remove">Quitar</string>
-    <string name="mail_send_note">El correo sale ahora, por dmsg para una dirección .dmsg. Si el nodo del destinatario está desconectado, no lo recibe y nada lo reintenta.</string>
+    <string name="mail_send_note">El correo sale ahora. Si el nodo del destinatario está desconectado, no lo recibe y nada lo reintenta.</string>
     <string name="mail_send">Enviar</string>
     <string name="mail_sending">Enviando…</string>
     <string name="mail_sent">Enviado</string>
@@ -1237,7 +1259,8 @@
     <string name="mail_send_unknown">Sigue en camino: el nodo aún no ha respondido. Revisa Enviados en unos minutos antes de reenviar.</string>
     <string name="mail_bad_address">No es una dirección de SkyMail: %1$s</string>
     <string name="mail_no_recipient">Añade un destinatario.</string>
-    <string name="mail_attachments_too_big">Estos adjuntos ocupan %1$s en tránsito; un mensaje puede ser de unos %2$s.</string>
+    <string name="mail_attachments_too_big">Estos archivos suman %1$s, y un mensaje puede llevar %2$s.</string>
+    <string name="mail_attachments_size">Adjuntos: %1$s de %2$s.</string>
     <string name="mail_result_title">No llegó a todos</string>
     <string name="mail_result_delivered">Entregado por %1$s</string>
     <string name="mail_result_failed">No entregado: %1$s</string>
@@ -1246,6 +1269,7 @@
     <string name="mail_setting_on">Buzón encendido</string>
     <string name="mail_setting_on_desc">Recibe correo en tu dirección. Mientras está apagado, el correo para ti se rechaza.</string>
     <string name="mail_usage">%1$s de %2$s en uso</string>
+    <string name="mail_usage_encoded">El correo se guarda tal como se envió, así que los adjuntos ocupan un tercio más que los archivos.</string>
     <string name="mail_limits">Se rechazan los mensajes de más de %1$s y se elimina el correo de más de %2$d días.</string>
     <string name="mail_allowed_title">Quién puede escribirte</string>
     <string name="mail_allowed_everyone">Todos. Añade una clave para aceptar correo solo de las claves de tu lista.</string>
@@ -1412,6 +1436,7 @@
     <string name="chat_call">Llamar</string>
     <string name="chat_call_incoming">Llamada entrante</string>
     <string name="chat_call_outgoing">Llamada saliente</string>
+    <string name="chat_call_unanswered">Llamada sin respuesta</string>
     <string name="chat_call_name">Llamar a %1$s</string>
     <string name="chat_calls_failed">No se pudo cargar el registro de llamadas.</string>
     <string name="chat_cancel">Cancelar</string>

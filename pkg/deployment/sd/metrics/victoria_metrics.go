@@ -1,4 +1,4 @@
-// Package sdmetrics pkg/deployment/sd/metrics/victoria_metrics.go c4-net-discovery
+// Package sdmetrics pkg/deployment/sd/metrics/victoria_metrics.go c3-net-discovery
 package sdmetrics
 
 import (

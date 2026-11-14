@@ -14,6 +14,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"runtime"
@@ -66,10 +67,15 @@ func (hv *Hypervisor) postBrowseClearnet() http.HandlerFunc {
 func (hv *Hypervisor) uiHandler() http.Handler {
 	fileServer := uiCacheControl(http.FileServer(http.FS(hv.c.UIAssets)))
 	bootReport := bootReportHandler(hv.logger, "")
+	home := hv.ui2Home()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// See wasmhv.ServeVNetFallback: a /vnet/ request here bypassed the worker.
 		if strings.HasPrefix(r.URL.Path, "/vnet/") {
 			wasmhv.ServeVNetFallback(w, r)
+			return
+		}
+		if r.URL.Path == "/angular" || strings.HasPrefix(r.URL.Path, "/angular/") {
+			hv.serveAngular(w, r, fileServer)
 			return
 		}
 		switch r.URL.Path {
@@ -149,39 +155,36 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 			// serving contexts share.
 			serveJS(w, browseui.DeskBootJS())
 			return
-		case "/", "/index.html":
-			// EMBEDDED: serve the dashboard itself, not the desk. A desk inside
-			// a desk window is never what the embedder wanted, and the root is
-			// the only path that survives being framed — a page served under a
-			// /vnet/<port>/ prefix gets its <base href> rewritten to that
-			// prefix, so any deeper path (".../dashboard/") is normalised away
-			// before the document even finishes loading, landing back here.
-			//
-			// fetchDest is the reliable signal and survives a frame reload;
-			// ?embed=1 is the explicit override for callers that set it (and
-			// for engines that omit the header).
-			if fetchDest(r) == "iframe" || r.URL.Query().Get("embed") == "1" {
-				hv.serveInjectedIndex(w, r, fileServer)
-				return
-			}
-			// Two roots, one handler. The DESK — the wasm-visor hypervisor UI,
-			// with the dashboard as a tab inside it — is the root of the desk
-			// listener (hypervisor.desk_addr, :8010). Every other root — the
-			// dashboard's own listener (hypervisor.addr, :8000), the dmsg UI
-			// port — is the Angular dashboard. The two used to share :8000 with
-			// a legacy_ui switch choosing between them; both are served now,
-			// each on its own port, the same API and login behind each.
+		case "/index.html":
+			// The Angular UI's old entry point.
+			w.Header().Set("Location", "angular/")
+			w.WriteHeader(http.StatusMovedPermanently)
+			return
+		case "/":
+			// Two roots, one handler. The DESK, with the dashboard as a tab
+			// inside it, is the root of the desk listener (hypervisor.desk_addr,
+			// :8010). Every other root (the dashboard's own listener
+			// hypervisor.addr :8000, the dmsg UI port) is the ui2 visor list. A
+			// framed request is never the desk: a desk inside a desk window is
+			// never what the embedder wanted.
 			//
 			// The desk is `skywire desk-host` out of the command module, which
 			// is fetched the first time the desk is opened. A visor with no
 			// place for one starts no desk listener, and its dashboard is the
 			// whole web UI (logUIRoot says so once).
-			if _, haveExec := hv.execModule(); haveExec && isDeskRoot(r) {
+			if r.URL.Query().Get("embed") == "1" {
+				// A desk link from before the Angular UI moved; the browser
+				// keeps the #/ route across the redirect.
+				w.Header().Set("Location", "angular/?"+r.URL.RawQuery)
+				w.WriteHeader(http.StatusFound)
+				return
+			}
+			if _, haveExec := hv.execModule(); haveExec && isDeskRoot(r) && fetchDest(r) != "iframe" {
 				hv.wasmModule().refresh(r.Context())
 				hv.serveNativeDesk(w)
 				return
 			}
-			hv.serveInjectedIndex(w, r, fileServer)
+			home.ServeHTTP(w, r)
 			return
 		case "/desk":
 			// The old separate desk path — gone; the desk IS the root now.
@@ -201,6 +204,42 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 		}
 		fileServer.ServeHTTP(w, r)
 	})
+}
+
+// serveAngular serves the Angular UI under /angular/. Its files come from the
+// embedded build. Anything else the bundle asks for relative to its base, such
+// as api/, ws or wallet/, is the same path at the root, so it goes back through
+// the router there and keeps its auth.
+func (hv *Hypervisor) serveAngular(w http.ResponseWriter, r *http.Request, files http.Handler) {
+	rest, _ := strings.CutPrefix(r.URL.Path, "/angular")
+	rest = strings.TrimPrefix(rest, "/")
+	switch {
+	case r.URL.Path == "/angular":
+		w.Header().Set("Location", "angular/")
+		w.WriteHeader(http.StatusMovedPermanently)
+		return
+	case rest == "" || rest == "index.html":
+		hv.serveInjectedIndex(w, r, http.StripPrefix("/angular", files))
+		return
+	case hv.c.UIAssets != nil && isUIFile(hv.c.UIAssets, rest):
+		http.StripPrefix("/angular", files).ServeHTTP(w, r)
+		return
+	}
+	ref, ok := hv.wsMux.Load().(muxRef)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	r2 := r.Clone(r.Context())
+	r2.URL.Path = "/" + rest
+	r2.URL.RawPath = ""
+	ref.h.ServeHTTP(w, r2)
+}
+
+// isUIFile is whether name is a file, not a directory, in the UI build.
+func isUIFile(fsys fs.FS, name string) bool {
+	st, err := fs.Stat(fsys, name)
+	return err == nil && !st.IsDir()
 }
 
 func serveJS(w http.ResponseWriter, b []byte) {
@@ -353,7 +392,7 @@ func nativeDeskBootOpts(localPK string) string {
 			// pairing procedure had nowhere to open from when a tab is unpaired.
 			"  docsPort: 8002,\n" +
 			"  hvWindow: true,\n" +
-			"  dashboardURL: './?embed=1#/?embed=1',\n"
+			"  dashboardURL: './angular/?embed=1#/?embed=1',\n"
 	if localPK != "" {
 		opts += "  terminalURL: './pty/" + localPK + "',\n"
 	}

@@ -1,4 +1,4 @@
-// Package vpn pkg/vpn/share.go c4-app-vpn
+// Package vpn pkg/vpn/share.go c3-app-vpn
 //
 // Sharing the tunnel with other devices — the phone's VPN hotspot.
 //

@@ -103,7 +103,7 @@ func DefaultPublicVisorConfig() *visorconfig.V1 {
 	conf.LogLevel = "info"
 	conf.LocalPath = "./local"
 	conf.CLIAddr = "localhost:3435"
-	conf.IsPublic = false
+	conf.Public = false
 	return &conf
 }
 

@@ -13,16 +13,16 @@ type HVVisorEntry struct {
 	Online bool          `json:"online"`
 	// State is one of the alerts.State values, the same state the hypervisor
 	// alerts on. Empty from an older hypervisor.
-	State          string  `json:"state,omitempty"`
-	IsLocal        bool    `json:"is_local,omitempty"`
-	Version        string  `json:"version,omitempty"`
-	BuildTag       string  `json:"build_tag,omitempty"`
-	Uptime         float64 `json:"uptime_seconds,omitempty"`
-	LocalIP        string  `json:"local_ip,omitempty"`
-	PublicIP       string  `json:"public_ip,omitempty"`
-	CountryCode    string  `json:"country_code,omitempty"`
-	IsSymmetricNAT bool    `json:"symmetric_nat,omitempty"`
-	Transports     int     `json:"transports"`
+	State        string  `json:"state,omitempty"`
+	Local        bool    `json:"is_local,omitempty"`
+	Version      string  `json:"version,omitempty"`
+	BuildTag     string  `json:"build_tag,omitempty"`
+	Uptime       float64 `json:"uptime_seconds,omitempty"`
+	LocalIP      string  `json:"local_ip,omitempty"`
+	PublicIP     string  `json:"public_ip,omitempty"`
+	CountryCode  string  `json:"country_code,omitempty"`
+	SymmetricNAT bool    `json:"symmetric_nat,omitempty"`
+	Transports   int     `json:"transports"`
 	// TransportSummaries is the full per-transport detail (type,
 	// remote PK, sent/recv counters, etc.) the hvui's node-list
 	// table needs to render its Transports column. Populated by
@@ -71,7 +71,7 @@ type HVVisorEntry struct {
 	DMSGServers       []DMSGServerInfo `json:"dmsg_servers,omitempty"`
 	RunningApps       []string         `json:"running_apps,omitempty"`
 	PublicAutoconnect bool             `json:"public_autoconnect,omitempty"`
-	IsPublic          bool             `json:"is_public,omitempty"`
+	Public            bool             `json:"is_public,omitempty"`
 	// LastSeenAt is when the hypervisor last got a summary from this visor.
 	LastSeenAt *time.Time `json:"last_seen_at,omitempty"`
 }

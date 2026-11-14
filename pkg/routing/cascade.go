@@ -55,14 +55,14 @@ type CascadeSetup struct {
 	Payload  []byte // next hop's CascadeSetup (opaque to this hop)
 }
 
-// IsTerminal returns true if this is the last hop (no further relay).
-func (cs *CascadeSetup) IsTerminal() bool {
+// Terminal returns true if this is the last hop (no further relay).
+func (cs *CascadeSetup) Terminal() bool {
 	return cs.RelayTpID == uuid.Nil
 }
 
-// IsEdge reports whether this Install-phase hop is a route-group edge (the
+// Edge reports whether this Install-phase hop is a route-group edge (the
 // responding destination): EdgeDesc is set, so the hop must IntroduceRules.
-func (cs *CascadeSetup) IsEdge() bool {
+func (cs *CascadeSetup) Edge() bool {
 	return cs.EdgeDesc != RouteDescriptor{}
 }
 

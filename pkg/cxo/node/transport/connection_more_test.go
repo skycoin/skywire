@@ -24,12 +24,12 @@ func TestConnectionAccessors(t *testing.T) {
 	defer b.Close() //nolint:errcheck
 
 	c := newConnection(a, true)
-	assert.True(t, c.IsTCP())
-	assert.False(t, c.IsClosed())
+	assert.True(t, c.TCP())
+	assert.False(t, c.Closed())
 	assert.NotNil(t, c.GetRemoteAddr())
 
 	c.Close()
-	assert.True(t, c.IsClosed())
+	assert.True(t, c.Closed())
 	c.Close() // idempotent — must not panic or double-close
 }
 
@@ -93,7 +93,7 @@ func TestConnectionReadInvalidLength(t *testing.T) {
 
 	_, err := c.ReadFrame(2 * time.Second)
 	require.Error(t, err)
-	require.True(t, c.IsClosed(), "an invalid length must close the connection")
+	require.True(t, c.Closed(), "an invalid length must close the connection")
 }
 
 // TestConnectionWriterExitsWhenIdle verifies the writer goroutine only lives
@@ -157,7 +157,7 @@ func TestConnectionInterruptKeepsWrites(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("Interrupt did not unblock ReadFrame")
 	}
-	require.Eventually(t, c.IsClosed, 2*time.Second, 10*time.Millisecond)
+	require.Eventually(t, c.Closed, 2*time.Second, 10*time.Millisecond)
 }
 
 // TestConnectionInterruptIdleNoDeadline verifies Interrupt wakes a reader on a

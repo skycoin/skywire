@@ -46,7 +46,7 @@ type Context struct {
 	Port              uint16
 	NowUnixNano       int64
 	CLIOverrides      map[string]string
-	IsDirectDial      bool
+	DirectDial        bool
 	TransportKind     string
 	ReverseCandidates []Candidate
 }

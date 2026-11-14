@@ -1,4 +1,4 @@
-// Package network pkg/transport/network/quic_conn_test.go: in-process
+// Package network pkg/transport/network/quic_conn_test.go in-process
 // integration test of a real QUIC connection secured by the skywire-PK-
 // bound TLS identity (option A). Proves the transport core — quic.Dial /
 // quic.Listen + mutual PK authentication over a stream — works end to end

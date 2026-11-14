@@ -1,4 +1,4 @@
-// Package dmsgtracker manager_dmsg_test.go: integration coverage for the
+// Package dmsgtracker pkg/visor/dmsgtracker/manager_dmsg_test.go integration coverage for the
 // Manager's establish / update / serve paths, driven against an in-memory
 // dmsg env. Mirrors the existing newDmsgTracker test's skip-on-instability
 // approach since a small dmsg test mesh can have transient session failures

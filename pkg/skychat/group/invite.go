@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/invite.go c4-app-chat
+// Package group pkg/skychat/group/invite.go c3-app-chat
 // the invite payload an owner hands to a prospective member.
 //
 // Invite-link grammar:

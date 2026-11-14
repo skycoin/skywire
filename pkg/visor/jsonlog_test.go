@@ -8,8 +8,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // TestJSONLogHook_PreservesFields is the point of the whole thing: the text log

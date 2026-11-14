@@ -1,4 +1,4 @@
-// Package flags pkg/flags/flags_test.go: unit tests for the cobra help/
+// Package flags pkg/flags/flags_test.go unit tests for the cobra help/
 // styling helpers (InitFlags/InitStyle) and the flag-aware help command
 // installed by InstallHelp (tree / doc / recursive / default modes).
 package flags

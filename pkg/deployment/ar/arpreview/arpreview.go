@@ -1,4 +1,4 @@
-// Package arpreview pkg/deployment/ar/arpreview/arpreview.go c4-net-discovery
+// Package arpreview pkg/deployment/ar/arpreview/arpreview.go c3-net-discovery
 //
 // Preview-backed reads of the address resolver's CXO bindings feed: resolve
 // one peer's transport addresses over an already-open CXO connection, holding

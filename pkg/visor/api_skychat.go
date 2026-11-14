@@ -255,6 +255,12 @@ func (v *Visor) skychatPasswordPath() string {
 
 func (v *Visor) skychatInternalToken() string {
 	skychatTokenOnce.Do(func() {
+		// Skychat starts with the token saved in its args, so reuse that one
+		// after a visor restart instead of minting a token it does not know.
+		if t := readAppArg(v, skyenv.SkychatName, skychatTokenArg); t != "" {
+			skychatToken = t
+			return
+		}
 		var b [24]byte
 		if _, err := rand.Read(b[:]); err != nil {
 			// Fall back to a time-derived value — still unguessable

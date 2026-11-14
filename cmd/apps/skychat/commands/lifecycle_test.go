@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/lifecycle_test.go
+// Package commands cmd/apps/skychat/commands/lifecycle_test.go c4-app-chat
 //
 // Coverage for the long-running / lifecycle surface that was still at 0%: the
 // two SSE stream handlers (/sse and /events), the DM send handler, the
@@ -555,6 +555,8 @@ func (p *pollAPI) PairPoll(time.Time) ([]visorapi.PairMessage, error) {
 // PairList feeds the poller's revoked-peer filter: no pairs listed, so no
 // message is ever filtered out (the pre-filter behavior).
 func (p *pollAPI) PairList() ([]visorapi.PairInfo, error) { return nil, nil }
+
+func (p *pollAPI) GroupList() ([]visorapi.GroupInfo, error) { return nil, nil }
 
 func (p *pollAPI) GroupPoll(time.Time) ([]visorapi.GroupMessage, error) {
 	p.mu.Lock()

@@ -309,7 +309,7 @@ func mustOK(t *testing.T, c *market.Conn, msgType string, data any) protocol.Env
 	if err != nil {
 		t.Fatalf("%s transport error: %v", msgType, err)
 	}
-	if resp.IsError() {
+	if resp.Failed() {
 		var e protocol.ErrorData
 		_ = resp.Bind(&e) //nolint:errcheck
 		t.Fatalf("%s failed: %s (%s)", msgType, e.Message, e.Code)

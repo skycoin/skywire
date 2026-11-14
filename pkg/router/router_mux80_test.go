@@ -1,4 +1,4 @@
-// Package router pkg/router/router_mux80_test.go
+// Package router pkg/router/router_mux80_test.go c2-net-routing
 //
 // Regression tests for #80: on the RESPONDER, an aux (2nd..N) mux leg that
 // arrives (via AddEdgeRules -> IntroduceRules) while the primary route group is

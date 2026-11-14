@@ -1,6 +1,6 @@
 //go:build !windows && !(js && wasm)
 
-// Package cmdutil pkg/cmdutil/signal_unix.go c0-com-util
+// Package cmdutil pkg/cmdutil/signal_unix.go c1-com-util
 package cmdutil
 
 import (

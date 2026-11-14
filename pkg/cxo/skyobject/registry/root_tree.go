@@ -52,7 +52,7 @@ func rootTreeDynamic(d *Dynamic, pack Pack) (it gotree.Tree) {
 		return it
 	}
 
-	if d.IsBlank() == true { //nolint:staticcheck
+	if d.Blank() == true { //nolint:staticcheck
 		it = gotree.New("*(dynamic) nil")
 		return it
 	}
@@ -107,7 +107,7 @@ func rootTreeData(
 	it gotree.Tree,
 ) {
 
-	if sch.IsReference() == true { //nolint:staticcheck
+	if sch.Referential() == true { //nolint:staticcheck
 		return rootTreeReferences(pack, sch, val)
 	}
 

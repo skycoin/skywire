@@ -62,7 +62,7 @@ heavy `pkg/visor`:
    (`tpdCXOPeer/sdCXOPeer/dmsgdCXOPeer` → `FeedSpec`) + `v.dmsgC`. The existing
    `cxoSubMgrAdapter` continues bridging to tpviz's `CXOSubMgr`. Behavior
    unchanged; the visor keeps its tab→feed map.
-4. **Reward server** (`cmd/skywire-cli/commands/rewards/server`): build
+4. **Reward server** (`pkg/deployment/rewards/server`): build
    `cxosub.Deps` from **deployment config dmsg PKs**
    (`deployment.Prod.TransportDiscoveryDmsg` → TPD PK, `…ServiceDiscoveryDmsg`,
    `…DmsgDiscoveryDmsg`) + the reward server's existing embedded dmsg client

@@ -114,8 +114,8 @@ func (e *EmbeddedSkymailBridge) Stop() error {
 	return nil
 }
 
-// IsRunning reports whether the SMTP server goroutine is alive.
-func (e *EmbeddedSkymailBridge) IsRunning() bool {
+// Running reports whether the SMTP server goroutine is alive.
+func (e *EmbeddedSkymailBridge) Running() bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.running

@@ -4,6 +4,7 @@ package ui2
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,18 +20,22 @@ type Node struct {
 	Online   bool
 	// State is the hypervisor's state for the visor, see alerts.State.
 	State       string
-	IsHV        bool
+	HV          bool
 	PublicIP    string
 	LocalIP     string
 	Location    string
 	Transports  int
 	Apps        int
+	AppNames    []string
 	AppsRunning int
 	Routes      int
 	DmsgServer  string
 	DmsgPing    string
+	PingMS      int
 	Reward      string
 	LastSeen    string
+	// Outdated is a version older than the newest one in the list.
+	Outdated bool
 
 	// ViaSub is a visor only a sub-hypervisor manages, so its pages do not
 	// open here. Children are the visors of a sub-hypervisor, and SubErr
@@ -42,7 +47,7 @@ type Node struct {
 
 // NodeOf turns a visor summary into a row.
 func NodeOf(s visorapi.Summary) Node {
-	n := Node{Online: s.Online, State: s.State, IsHV: s.IsHypervisor, Reward: s.RewardAddress, Routes: len(s.Routes)}
+	n := Node{Online: s.Online, State: s.State, HV: s.Hypervisor, Reward: s.RewardAddress, Routes: len(s.Routes)}
 	if o := s.Overview; o != nil {
 		n.PK = o.PubKey.Hex()
 		n.Hostname = o.Hostname
@@ -60,6 +65,9 @@ func NodeOf(s visorapi.Summary) Node {
 		n.Transports = len(o.Transports)
 		n.Apps = len(o.Apps)
 		for _, a := range o.Apps {
+			if a != nil {
+				n.AppNames = append(n.AppNames, a.Name)
+			}
 			if a != nil && a.Status == appserver.AppStatusRunning {
 				n.AppsRunning++
 			}
@@ -71,6 +79,7 @@ func NodeOf(s visorapi.Summary) Node {
 	if d := s.DmsgStats; d != nil {
 		n.DmsgServer = d.ServerPK.Hex()
 		n.DmsgPing = Millis(d.RoundTrip)
+		n.PingMS = int(d.RoundTrip.Milliseconds())
 	}
 	if s.LastSeenAt != nil && !s.Online {
 		n.LastSeen = s.LastSeenAt.Local().Format(time.DateTime)
@@ -88,8 +97,8 @@ func (n Node) Held() bool {
 func SortNodes(ns []Node) {
 	sort.SliceStable(ns, func(i, j int) bool {
 		a, b := ns[i], ns[j]
-		if a.IsHV != b.IsHV {
-			return a.IsHV
+		if a.HV != b.HV {
+			return a.HV
 		}
 		if a.Online != b.Online {
 			return a.Online
@@ -131,4 +140,75 @@ func (n Node) ShortVersion() string {
 // SearchText is what the list's search box matches, in lower case.
 func (n Node) SearchText() string {
 	return strings.ToLower(strings.Join([]string{n.Hostname, n.PK, n.PublicIP, n.LocalIP, n.Location, n.Version}, " "))
+}
+
+// versionParts reads major, minor, patch and the commits since the tag from
+// a version such as v1.3.104-76-gc08475bdb, as the Angular list does.
+func versionParts(v string) ([4]int, bool) {
+	var p [4]int
+	v = strings.TrimPrefix(v, "v")
+	end := strings.IndexFunc(v, func(c rune) bool { return c != '.' && (c < '0' || c > '9') })
+	if end < 0 {
+		end = len(v)
+	}
+	rel, rest := v[:end], strings.TrimPrefix(v[end:], "-")
+	f := strings.Split(rel, ".")
+	if len(f) != 3 {
+		return p, false
+	}
+	for i, s := range f {
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			return p, false
+		}
+		p[i] = n
+	}
+	if c, _, _ := strings.Cut(rest, "-"); c != "" {
+		if n, err := strconv.Atoi(c); err == nil {
+			p[3] = n
+		}
+	}
+	return p, true
+}
+
+func compareVersions(a, b [4]int) int {
+	for i := range a {
+		if a[i] != b[i] {
+			return a[i] - b[i]
+		}
+	}
+	return 0
+}
+
+// MarkOutdated flags every visor, nested ones included, that runs an older
+// version than the newest one in the list.
+func MarkOutdated(ns []Node) {
+	var newest [4]int
+	var seen bool
+	walk := func(f func(*Node)) {
+		for i := range ns {
+			f(&ns[i])
+			for j := range ns[i].Children {
+				f(&ns[i].Children[j])
+			}
+		}
+	}
+	walk(func(n *Node) {
+		if v, ok := versionParts(n.Version); ok && (!seen || compareVersions(v, newest) > 0) {
+			newest, seen = v, true
+		}
+	})
+	walk(func(n *Node) {
+		v, ok := versionParts(n.Version)
+		n.Outdated = ok && compareVersions(v, newest) < 0
+	})
+}
+
+// VersionKey sorts versions as text, oldest first, and unknown ones first.
+func (n Node) VersionKey() string {
+	v, ok := versionParts(n.Version)
+	if !ok {
+		return ""
+	}
+	return fmt.Sprintf("%06d.%06d.%06d.%06d", v[0], v[1], v[2], v[3])
 }

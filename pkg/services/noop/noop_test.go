@@ -1,4 +1,4 @@
-// Package noop noop_test.go: unit tests for the noop service factory and
+// Package noop pkg/services/noop/noop_test.go unit tests for the noop service factory and
 // its Run loop (default tick, explicit tick that fires, and the
 // negative "no-tick" placeholder mode).
 package noop

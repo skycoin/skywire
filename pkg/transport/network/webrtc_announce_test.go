@@ -1,4 +1,4 @@
-// Package network pkg/transport/network/webrtc_announce_test.go
+// Package network pkg/transport/network/webrtc_announce_test.go c2-net-transport
 package network
 
 import (

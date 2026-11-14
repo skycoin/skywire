@@ -67,7 +67,7 @@ func TestOfflineRecipientIsQueuedThenDelivered(t *testing.T) {
 	require.NoError(t, a.mb.Retry(""))
 	waitFor(t, "delivered once B is back", func() bool { return folderLen(t, b, FolderInbox) == 1 })
 	waitFor(t, "moved to Sent", func() bool { return folderLen(t, a, FolderSent) == 1 })
-	require.Zero(t, folderLen(t, a, FolderOutbox))
+	waitFor(t, "cleared from the Outbox", func() bool { return folderLen(t, a, FolderOutbox) == 0 })
 	require.Zero(t, a.mb.Queued())
 	inbox, _ := b.mb.List(FolderInbox) //nolint:errcheck
 	require.Equal(t, "later", inbox[0].Subject)

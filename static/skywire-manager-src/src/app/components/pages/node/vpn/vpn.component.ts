@@ -119,6 +119,6 @@ export class VpnComponent extends PageBaseComponent implements OnInit, OnDestroy
     if (!this.node) {
  return; 
 }
-    window.open(location.origin + '/#/vpn/' + this.node.localPk + '/status', '_blank', 'noopener noreferrer');
+    window.open(location.origin + '/angular/#/vpn/' + this.node.localPk + '/status', '_blank', 'noopener noreferrer');
   }
 }

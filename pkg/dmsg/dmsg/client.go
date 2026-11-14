@@ -1599,8 +1599,9 @@ func (ce *Client) RelayedSince(t time.Time) bool {
 type reapDecision int
 
 const (
+	_ reapDecision = iota
 	// reapWait: under the threshold. Count it and look again next tick.
-	reapWait reapDecision = iota
+	reapWait
 	// reapKeep: over the threshold, but the session is still relaying. New
 	// dials should prefer another server; this one keeps its streams.
 	reapKeep
@@ -1867,9 +1868,13 @@ func (ce *Client) reapOrphanPorts() {
 		Debug("Reaped orphaned ephemeral port reservations")
 }
 
-// SetDialPaused stops the client dialing server sessions while p is true.
-// Sessions already up stay up and are not redialed when they drop. False
-// resumes dialing.
+// ErrDialPaused is the answer to a server session dial while SetDialPaused
+// is in force.
+var ErrDialPaused = errors.New("dmsg: dialing server sessions is paused")
+
+// SetDialPaused stops the client dialing server sessions while p is true,
+// from the serve loop and for a stream alike. Sessions already up stay up
+// and are not redialed when they drop. False resumes dialing.
 func (ce *Client) SetDialPaused(p bool) {
 	ce.dialPaused.Store(p)
 }

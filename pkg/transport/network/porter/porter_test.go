@@ -1,4 +1,4 @@
-// Package porter pkg/transport/network/porter/porter_test.go: unit tests for
+// Package porter pkg/transport/network/porter/porter_test.go unit tests for
 // the port-reservation helper.
 package porter
 

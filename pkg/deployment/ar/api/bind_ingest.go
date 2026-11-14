@@ -1,4 +1,4 @@
-// Package api pkg/deployment/ar/api/bind_ingest.go c4-net-discovery
+// Package api pkg/deployment/ar/api/bind_ingest.go c3-net-discovery
 //
 // AR-bind-over-CXO ingest: the server side of the fan-in path where visors
 // publish their AR bindings as a CXO feed instead of re-registering over a

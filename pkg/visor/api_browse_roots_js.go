@@ -1,5 +1,6 @@
 //go:build js && wasm
 
+// Package visor pkg/visor/api_browse_roots_js.go c3-vis-core
 package visor
 
 import (

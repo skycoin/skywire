@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/profile_test.go c4-app-chat
+// Package group pkg/skychat/group/profile_test.go c3-app-chat
 //
 // The responder's disclosure policy, exercised over a net.Pipe rather than a
 // real transport: what a stranger gets back for asking "who are you?" is

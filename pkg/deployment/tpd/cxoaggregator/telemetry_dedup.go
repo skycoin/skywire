@@ -1,4 +1,4 @@
-// Package cxoaggregator pkg/deployment/tpd/cxoaggregator/telemetry_dedup.go c4-net-discovery
+// Package cxoaggregator pkg/deployment/tpd/cxoaggregator/telemetry_dedup.go c3-net-discovery
 //
 // A visor re-Puts a telemetry shard only when its content changes (the
 // tracker's shardSig ignores sampled_at), but every Root — the 45 s

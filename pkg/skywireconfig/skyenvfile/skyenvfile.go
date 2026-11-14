@@ -1,4 +1,4 @@
-// Package skyenvfile pkg/skywireconfig/skyenvfile/skyenvfile.go c4-vis-cli
+// Package skyenvfile pkg/skywireconfig/skyenvfile/skyenvfile.go c0-com-env
 //
 // Update applies a list of key/value edits to a bash-style env file
 // (e.g. /etc/skywire.conf). For each edit:

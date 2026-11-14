@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgserver"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 func TestGenerateDefaultConfig(t *testing.T) {

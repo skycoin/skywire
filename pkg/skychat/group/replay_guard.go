@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/replay_guard.go c4-app-chat
+// Package group pkg/skychat/group/replay_guard.go c3-app-chat
 // freshness gating for signed gossip, so a superseded mutation cannot
 // be replayed to resurrect state an admin already undid.
 //

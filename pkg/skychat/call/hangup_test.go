@@ -1,4 +1,4 @@
-// Package call pkg/skychat/call/hangup_test.go
+// Package call pkg/skychat/call/hangup_test.go c3-app-chat
 package call
 
 import (

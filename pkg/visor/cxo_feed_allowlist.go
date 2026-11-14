@@ -35,7 +35,7 @@ import (
 type gatedCXOFeed struct {
 	pub         *treestore.Publisher
 	consumer    cipher.PubKey
-	hasConsumer bool
+	consumerSet bool
 }
 
 // composeFeedAllowlist builds the subscriber allowlist for one feed:
@@ -43,7 +43,7 @@ type gatedCXOFeed struct {
 // the resulting set would be empty — i.e. no peer-whitelist entries and no
 // known consumer — so a feed is never gated to an empty allowlist that
 // locks out every subscriber.
-func composeFeedAllowlist(v *Visor, consumer cipher.PubKey, hasConsumer bool) []cipher.PubKey {
+func composeFeedAllowlist(v *Visor, consumer cipher.PubKey, consumerSet bool) []cipher.PubKey {
 	seen := make(map[cipher.PubKey]struct{})
 	var out []cipher.PubKey
 	add := func(pk cipher.PubKey) {
@@ -64,7 +64,7 @@ func composeFeedAllowlist(v *Visor, consumer cipher.PubKey, hasConsumer bool) []
 			}
 		}
 	}
-	if hasConsumer {
+	if consumerSet {
 		add(consumer)
 	}
 
@@ -82,7 +82,7 @@ func composeFeedAllowlist(v *Visor, consumer cipher.PubKey, hasConsumer bool) []
 // allowlist is set at construction (via PubConfig.SubscriberAllowlist), so
 // this only records for future refreshes. nil publishers are ignored (the
 // tp-list feed can be nil when the dedicated publisher didn't start).
-func (v *Visor) registerGatedCXOFeed(pub *treestore.Publisher, consumer cipher.PubKey, hasConsumer bool) {
+func (v *Visor) registerGatedCXOFeed(pub *treestore.Publisher, consumer cipher.PubKey, consumerSet bool) {
 	if pub == nil {
 		return
 	}
@@ -90,7 +90,7 @@ func (v *Visor) registerGatedCXOFeed(pub *treestore.Publisher, consumer cipher.P
 	v.gatedCXOFeeds = append(v.gatedCXOFeeds, gatedCXOFeed{
 		pub:         pub,
 		consumer:    consumer,
-		hasConsumer: hasConsumer,
+		consumerSet: consumerSet,
 	})
 	v.gatedCXOFeedsMu.Unlock()
 }
@@ -107,6 +107,6 @@ func (v *Visor) refreshGatedCXOAllowlists() {
 	v.gatedCXOFeedsMu.Unlock()
 
 	for _, fd := range feeds {
-		fd.pub.SetAllowlist(composeFeedAllowlist(v, fd.consumer, fd.hasConsumer))
+		fd.pub.SetAllowlist(composeFeedAllowlist(v, fd.consumer, fd.consumerSet))
 	}
 }

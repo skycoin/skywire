@@ -1,6 +1,6 @@
 //go:build js
 
-// Package deskhost pkg/wasmhv/deskhost/desk_install_js.go c5-wasm-desk
+// Package deskhost pkg/wasmhv/deskhost/desk_install_js.go c3-vis-wasm
 //
 // The PWA install offer as an Applications entry.
 //

@@ -1,0 +1,182 @@
+package ui2
+
+import (
+	"strconv"
+	"strings"
+
+	"github.com/skycoin/skywire/pkg/cipher"
+
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
+)
+
+// Skynet is the skynet tab, as skynet.component.ts: the ports this visor
+// forwards and the reverse proxies it holds open to other visors' ports.
+type Skynet struct {
+	PK       string
+	Ports    []visorapi.ForwardedPort
+	Forwards []SkynetForward
+	Err      string
+}
+
+// SkynetForward is one open reverse proxy.
+type SkynetForward struct {
+	ID         string
+	Network    string `json:"network"`
+	RemotePK   string `json:"remote_pk"`
+	RemotePort int    `json:"remote_port"`
+	LocalPort  int    `json:"local_port"`
+}
+
+func (s Skynet) url(rest string) string { return VisorURL(s.PK, "skynet") + rest }
+
+func whitelistText(pks []string) string { return strings.Join(pks, ", ") }
+
+func pkStrings(pks []cipher.PubKey) []string {
+	out := make([]string, len(pks))
+	for i, p := range pks {
+		out[i] = p.Hex()
+	}
+	return out
+}
+
+templ SkynetPage(s Skynet) {
+	@VisorLayout(s.PK, "skynet") {
+		<div class="head"><h1>{ T(ctx, "node.tabs.skynet") }</h1></div>
+		@SkynetBody(s)
+	}
+}
+
+templ SkynetBody(s Skynet) {
+	<div id="skynet">
+		@ErrorBox(s.Err)
+		<h2>{ T(ctx, "ui2.skynet.ports-title") }</h2>
+		if len(s.Ports) == 0 {
+			<p class="dim">{ T(ctx, "ui2.skynet.no-ports") }</p>
+		} else {
+			<div class="table-wrap">
+				<table class="list">
+					<thead>
+						<tr>
+							<th class="num">{ T(ctx, "ui2.skynet.port") }</th>
+							<th>{ T(ctx, "ui2.skynet.target") }</th>
+							<th>{ T(ctx, "ui2.skynet.label") }</th>
+							<th>{ T(ctx, "ui2.skynet.skynet") }</th>
+							<th>{ T(ctx, "ui2.skynet.dmsg") }</th>
+							<th>{ T(ctx, "ui2.skynet.landing") }</th>
+							<th>{ T(ctx, "ui2.skynet.whitelist") }</th>
+							<th></th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, p := range s.Ports {
+							@skynetPortRow(s, p)
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+		<details class="add">
+			<summary class="btn sm"><span class="mi">add</span>{ T(ctx, "ui2.skynet.add") }</summary>
+			<form class="form" hx-post={ s.url("/ports") } hx-target="#skynet" hx-swap="outerHTML">
+				<label>{ T(ctx, "ui2.skynet.port") }<input type="number" name="port" min="1" max="65535" required/></label>
+				<label>{ T(ctx, "ui2.skynet.local-port") }<input type="number" name="local_port" min="1" max="65535"/></label>
+				<label>{ T(ctx, "ui2.skynet.target") }<input class="mono" name="proxy_addr" placeholder="127.0.0.1:3000"/></label>
+				<label>{ T(ctx, "ui2.skynet.label") }<input name="label"/></label>
+				<label>{ T(ctx, "ui2.skynet.description") }<input name="description"/></label>
+				<label class="check"><input type="checkbox" name="skynet" value="1" checked/> { T(ctx, "ui2.skynet.skynet") }</label>
+				<label class="check"><input type="checkbox" name="dmsg" value="1"/> { T(ctx, "ui2.skynet.dmsg") }</label>
+				<label class="check"><input type="checkbox" name="show_on_landing" value="1"/> { T(ctx, "ui2.skynet.landing") }</label>
+				<label>{ T(ctx, "ui2.skynet.whitelist") } <span class="small dim">{ T(ctx, "ui2.skynet.whitelist-help") }</span><textarea class="mono" name="whitelist" rows="2"></textarea></label>
+				<p><button class="btn primary" type="submit">{ T(ctx, "ui2.skynet.add") }</button></p>
+			</form>
+		</details>
+		<h2>{ T(ctx, "ui2.skynet.proxy-title") }</h2>
+		if len(s.Forwards) == 0 {
+			<p class="dim">{ T(ctx, "ui2.skynet.no-proxies") }</p>
+		} else {
+			<div class="table-wrap">
+				<table class="list">
+					<thead>
+						<tr>
+							<th>{ T(ctx, "ui2.skynet.network") }</th>
+							<th>{ T(ctx, "ui2.skynet.remote-pk") }</th>
+							<th class="num">{ T(ctx, "ui2.skynet.remote-port") }</th>
+							<th class="num">{ T(ctx, "ui2.skynet.local-port") }</th>
+							<th></th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, f := range s.Forwards {
+							<tr>
+								<td data-label={ T(ctx, "ui2.skynet.network") }>{ f.Network }</td>
+								<td class="mono small pk-text" title={ f.RemotePK } data-label={ T(ctx, "ui2.skynet.remote-pk") }>{ f.RemotePK }</td>
+								<td class="num" data-label={ T(ctx, "ui2.skynet.remote-port") }>{ itoa(f.RemotePort) }</td>
+								<td class="num" data-label={ T(ctx, "ui2.skynet.local-port") }>localhost:{ itoa(f.LocalPort) }</td>
+								<td class="actions"><button class="btn sm" type="button" hx-post={ s.url("/disconnect") } hx-vals={ jsonVals(map[string]string{"id": f.ID}) } hx-target="#skynet" hx-swap="outerHTML">{ T(ctx, "ui2.skynet.disconnect") }</button></td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+		<form class="bar" hx-post={ s.url("/connect") } hx-target="#skynet" hx-swap="outerHTML">
+			<select name="network" aria-label={ T(ctx, "ui2.skynet.network") }>
+				<option value="skynet">skynet</option>
+				<option value="dmsg">dmsg</option>
+			</select>
+			<input class="mono filter" name="remote_pk" required placeholder={ T(ctx, "ui2.skynet.remote-pk") } aria-label={ T(ctx, "ui2.skynet.remote-pk") }/>
+			<input type="number" name="remote_port" min="1" max="65535" required placeholder={ T(ctx, "ui2.skynet.remote-port") } aria-label={ T(ctx, "ui2.skynet.remote-port") }/>
+			<input type="number" name="local_port" min="1" max="65535" required placeholder={ T(ctx, "ui2.skynet.local-port") } aria-label={ T(ctx, "ui2.skynet.local-port") }/>
+			<button class="btn primary" type="submit">{ T(ctx, "ui2.skynet.connect") }</button>
+		</form>
+	</div>
+}
+
+templ skynetPortRow(s Skynet, p visorapi.ForwardedPort) {
+	<tr>
+		<td class="num" data-label={ T(ctx, "ui2.skynet.port") }>{ itoa(p.Port) }</td>
+		<td class="mono small" data-label={ T(ctx, "ui2.skynet.target") }>
+			if p.ProxyAddr != "" {
+				{ p.ProxyAddr }
+			} else if p.LocalPort != 0 {
+				localhost:{ itoa(p.LocalPort) }
+			} else {
+				localhost:{ itoa(p.Port) }
+			}
+		</td>
+		<td data-label={ T(ctx, "ui2.skynet.label") }>
+			{ p.Label }
+			if p.Description != "" {
+				<div class="small dim">{ p.Description }</div>
+			}
+		</td>
+		@skynetFlag(s, p.Port, "skynet", p.Skynet, T(ctx, "ui2.skynet.skynet"))
+		@skynetFlag(s, p.Port, "dmsg", p.DMSG, T(ctx, "ui2.skynet.dmsg"))
+		@skynetFlag(s, p.Port, "show_on_landing", p.ShowOnLanding, T(ctx, "ui2.skynet.landing"))
+		<td data-label={ T(ctx, "ui2.skynet.whitelist") }>
+			<details>
+				<summary class="small">
+					if len(p.Whitelist) == 0 {
+						{ T(ctx, "ui2.skynet.everyone") }
+					} else {
+						{ itoa(len(p.Whitelist)) }
+					}
+				</summary>
+				<form class="form" hx-post={ s.url("/whitelist") } hx-target="#skynet" hx-swap="outerHTML">
+					<input type="hidden" name="port" value={ itoa(p.Port) }/>
+					<textarea class="mono" name="whitelist" rows="3" aria-label={ T(ctx, "ui2.skynet.whitelist") }>{ whitelistText(pkStrings(p.Whitelist)) }</textarea>
+					<button class="btn sm primary" type="submit">{ T(ctx, "common.save") }</button>
+				</form>
+			</details>
+		</td>
+		<td class="actions">
+			<button class="btn sm" type="button" hx-post={ s.url("/remove") } hx-vals={ jsonVals(map[string]string{"port": itoa(p.Port)}) } hx-confirm={ T(ctx, "ui2.skynet.remove-confirm") } hx-target="#skynet" hx-swap="outerHTML">{ T(ctx, "ui2.skynet.remove") }</button>
+		</td>
+	</tr>
+}
+
+templ skynetFlag(s Skynet, port int, field string, on bool, label string) {
+	<td data-label={ label }>
+		<button class={ "switch", templ.KV("on", on) } type="button" role="switch" aria-checked={ strconv.FormatBool(on) } aria-label={ label } hx-post={ s.url("/toggle") } hx-vals={ jsonVals(map[string]string{"port": itoa(port), "field": field}) } hx-target="#skynet" hx-swap="outerHTML"><span></span></button>
+	</td>
+}

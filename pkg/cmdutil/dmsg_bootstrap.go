@@ -1,4 +1,4 @@
-// Package cmdutil pkg/cmdutil/dmsg_bootstrap.go c0-com-util
+// Package cmdutil pkg/cmdutil/dmsg_bootstrap.go c1-com-util
 package cmdutil
 
 import (

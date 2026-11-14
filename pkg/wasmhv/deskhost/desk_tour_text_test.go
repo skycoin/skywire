@@ -1,4 +1,4 @@
-// Package deskhost pkg/wasmhv/deskhost/desk_tour_text_test.go c4-wasm-desk
+// Package deskhost pkg/wasmhv/deskhost/desk_tour_text_test.go c3-vis-wasm
 package deskhost
 
 import (

@@ -1,3 +1,4 @@
+// Package noise pkg/dmsg/noise/decoder.go c1-net-dmsg
 package noise
 
 import (

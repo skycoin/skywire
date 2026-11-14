@@ -1,4 +1,4 @@
-// Package proxystatus pkg/proxystatus/provider.go c4-app-web
+// Package proxystatus pkg/proxystatus/provider.go c2-app-web
 //
 // A read-only, self-contained diagnostic page each native mesh proxy serves at
 // a reserved, well-known host through itself — the proxy counterpart of the

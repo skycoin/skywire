@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/delete_persistence_test.go
+// Package commands cmd/apps/skychat/commands/delete_persistence_test.go c4-app-chat
 //
 // Delete-for-everyone must be durable, not just a UI hide. Before these,
 // /delete and the controller's OnDelete only pushed an SSE event: the message

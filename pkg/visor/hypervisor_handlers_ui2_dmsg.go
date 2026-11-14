@@ -13,10 +13,10 @@ import (
 // The dmsg tab of the server rendered UI.
 
 func (hv *Hypervisor) ui2DmsgRoutes(r *httputil.Router) {
-	r.Get("/ui2/visors/{pk}/dmsg", hv.ui2Dmsg(false))
-	r.Get("/ui2/visors/{pk}/dmsg/clients", hv.ui2Dmsg(true))
-	r.Post("/ui2/visors/{pk}/dmsg/connect-all", hv.ui2DmsgConnectAll())
-	r.Put("/ui2/visors/{pk}/dmsg/sessions-count", hv.ui2DmsgSessionsCount())
+	r.Get("/visors/{pk}/dmsg", hv.ui2Dmsg(false))
+	r.Get("/visors/{pk}/dmsg/clients", hv.ui2Dmsg(true))
+	r.Post("/visors/{pk}/dmsg/connect-all", hv.ui2DmsgConnectAll())
+	r.Put("/visors/{pk}/dmsg/sessions-count", hv.ui2DmsgSessionsCount())
 }
 
 func ui2DmsgState(pk string, ctx *httpCtx) ui2.Dmsg {

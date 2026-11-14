@@ -94,7 +94,7 @@ func (v *Visor) bridgeUDPForward(dg *router.DatagramRouteGroup, fp visorapi.Forw
 			return
 		default:
 		}
-		if !dg.IsAlive() {
+		if !dg.Alive() {
 			return
 		}
 		select {

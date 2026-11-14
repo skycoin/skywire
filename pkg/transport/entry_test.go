@@ -1,4 +1,4 @@
-// Package transport_test pkg/transport/entry_test.go
+// Package transport_test pkg/transport/entry_test.go c2-net-transport
 package transport_test
 
 import (

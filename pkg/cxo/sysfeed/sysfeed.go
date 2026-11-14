@@ -45,5 +45,5 @@ func PrefixOf(service string) string {
 	return ""
 }
 
-// IsRegistration reports whether a top-level leaf name is a registration leaf.
-func IsRegistration(name string) bool { return strings.HasPrefix(name, Prefix) }
+// Registration reports whether a top-level leaf name is a registration leaf.
+func Registration(name string) bool { return strings.HasPrefix(name, Prefix) }

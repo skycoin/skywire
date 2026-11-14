@@ -290,7 +290,7 @@ func (s *Server) handleQUICConn(qc *quic.Conn) {
 	dSes := makeServerSessionQUIC(s.m, &s.EntityCommon, qc, pk)
 	log = log.WithField("remote_pk", pk)
 	if s.isPeerPK(pk) {
-		dSes.isPeer = true
+		dSes.peer = true
 		log.Info("Started peer server session (quic).")
 	} else {
 		log.Info("Started session (quic).")
@@ -307,7 +307,7 @@ func (s *Server) handleQUICConn(qc *quic.Conn) {
 	dSes.Serve()
 	dSes.settleFiling(notFiled)
 
-	if dSes.isPeer {
+	if dSes.peer {
 		s.peerSessionsMx.Lock()
 		if s.peerSessions[pk] == dSes.SessionCommon {
 			delete(s.peerSessions, pk)

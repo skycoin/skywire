@@ -1,4 +1,4 @@
-// Package api pkg/deployment/tpd/api/cxo_stats_publisher.go c4-net-discovery
+// Package api pkg/deployment/tpd/api/cxo_stats_publisher.go c3-net-discovery
 //
 // CXO publisher for TPD's NETWORK-AGGREGATE stats — the sub-kilobyte
 // reductions that the bulk feeds are otherwise downloaded to compute.

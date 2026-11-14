@@ -142,7 +142,7 @@ internal class NotificationBridge(context: Context) {
         val body = shownBody(event)
         val builder = NotificationCompat.Builder(app, channel.id)
             .setSmallIcon(R.drawable.skywire_logo)
-            .setContentTitle(event.title.ifEmpty { channel.label })
+            .setContentTitle(shownTitle(event).ifEmpty { channel.label })
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setContentIntent(open)
@@ -172,12 +172,27 @@ internal class NotificationBridge(context: Context) {
         return thread !in prefs.muted && event.tag !in prefs.muted
     }
 
+    // SkyChat titles these two in English (group.go scanPendingJoins, skychat.go onChatEvent).
+    private fun shownTitle(event: NotifyEvent): String = when {
+        event.app != SKYCHAT -> event.title
+        event.title == JOIN_TITLE -> AppLocale.localized(app).getString(R.string.chat_notif_join_request)
+        event.title == REQUEST_TITLE -> AppLocale.localized(app).getString(R.string.chat_notif_message_request)
+        else -> event.title
+    }
+
     // SkyChat stores its call records in English (voice_missed.go callRecordText),
     // and a missed call is the one it notifies.
     private fun shownBody(event: NotifyEvent): String {
         if (event.app != SKYCHAT) return event.body
         if (event.body == MISSED_CALL) {
             return "$CALL_ICON " + AppLocale.localized(app).getString(R.string.call_missed_title)
+        }
+        // group.go scanPendingJoins: "<n> waiting to join <group name>".
+        if (event.tag.startsWith("join:")) {
+            JOIN_WAITING.matchEntire(event.body)?.let { m ->
+                val n = m.groupValues[1].toIntOrNull() ?: return event.body
+                return AppLocale.localized(app).resources.getQuantityString(R.plurals.chat_notif_join_waiting, n, n, m.groupValues[2])
+            }
         }
         val message = event.tag.isNotEmpty() && !event.tag.startsWith("join:") && !event.body.startsWith(CALL_ICON)
         if (message && !ChatRepository.get(app).store.notif.value.preview) {
@@ -225,11 +240,23 @@ internal class NotificationBridge(context: Context) {
             for (t in setOf(thread, thread.lowercase())) notifications.cancel("$SKYCHAT:$t", TAGGED_ID)
         }
 
+        /** Takes down the new-mail notifications for the message ids [gone] says are read or deleted. */
+        fun clearMail(context: Context, gone: (String) -> Boolean) {
+            val manager = context.getSystemService(NotificationManager::class.java) ?: return
+            runCatching { manager.activeNotifications }.getOrNull()?.forEach { n ->
+                val id = n.tag?.removePrefix("$SKYMAIL:")?.takeIf { it != n.tag } ?: return@forEach
+                if (gone(id)) manager.cancel(n.tag, n.id)
+            }
+        }
+
         private const val TAG = "SkywireNotify"
         private const val SKYCHAT = "skychat"
         private const val SKYMAIL = "skymail"
         private const val CALL_ICON = "\uD83D\uDCDE"
         private const val MISSED_CALL = "$CALL_ICON Missed call"
+        private val JOIN_WAITING = Regex("(\\d+) waiting to join (.*)", RegexOption.DOT_MATCHES_ALL)
+        private const val JOIN_TITLE = "Group join request"
+        private const val REQUEST_TITLE = "Message request"
         private const val DATA_PREFIX = "data: "
         private const val RETRY_MS = 2_000L
 

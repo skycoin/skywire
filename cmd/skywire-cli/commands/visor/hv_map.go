@@ -178,7 +178,7 @@ func collectHVMap(local visorapi.API, tree visorapi.HVVisorTree, only map[cipher
 				continue
 			}
 			seen[e.PK] = true
-			m.Visors = append(m.Visors, mapVisor{PK: e.PK, Hypervisor: s.HypervisorPK, Local: e.IsLocal,
+			m.Visors = append(m.Visors, mapVisor{PK: e.PK, Hypervisor: s.HypervisorPK, Local: e.Local,
 				Online: e.Online, Hostname: e.Hostname, Version: e.Version, PublicIP: e.PublicIP,
 				CountryCode: e.CountryCode, Error: e.Error})
 		}

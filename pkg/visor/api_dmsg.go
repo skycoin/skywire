@@ -508,8 +508,8 @@ func (v *Visor) DmsgBandwidthTest(conf visorapi.BandwidthTestConfig) (visorapi.B
 	}, nil
 }
 
-// IsDMSGClientReady return availability of dsmg client
-func (v *Visor) IsDMSGClientReady() (bool, error) {
+// DMSGClientReady return availability of dsmg client
+func (v *Visor) DMSGClientReady() (bool, error) {
 	if v.isDTMReady() {
 		dmsgTracker, ok := v.dmsgTracker.manager.Get(v.conf.PK)
 		if ok && dmsgTracker.ServerPK.Hex() != "00000" {

@@ -22,9 +22,10 @@ templ WalletsPage(w Wallets) {
 				<div class="bar">
 					<a class="btn primary" href="new"><span class="mi">add</span>{ T(ctx, "create.new-title") }</a>
 					<a class="btn" href="load"><span class="mi">file_download</span>{ T(ctx, "create.load-title") }</a>
+					<a class="btn" href="hw"><span class="mi">memory</span>{ T(ctx, "hw.title") }</a>
 				</div>
 				if w.Err == "" && len(w.Rows) == 0 {
-					<p class="dim">{ T(ctx, "wallets.none") }</p>
+					@onboarding(false)
 				}
 				@walletsTable(w)
 			}
@@ -67,6 +68,9 @@ templ walletsTable(w Wallets) {
 								</a>
 								if r.Encrypted {
 									<span class="mi small-icon" title={ T(ctx, "wallet.encrypted") }>lock</span>
+								}
+								if r.Temp {
+									<span class="badge warn-text" title={ T(ctx, "wallet.temp-help") }>{ T(ctx, "wallet.temp") }</span>
 								}
 							</td>
 							<td data-label={ T(ctx, "wallets.type") }><span class="badge">{ r.Type }</span></td>

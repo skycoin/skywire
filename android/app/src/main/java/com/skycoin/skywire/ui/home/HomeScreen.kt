@@ -110,14 +110,32 @@ fun HomeScreen(
         ConnectButton(state, onConnect = connect, onDisconnect = viewModel::disconnect)
         Spacer(Modifier.height(16.dp))
         StatusCaption(state, onOpenLogs)
-        if (state.offerBatteryExemption) {
+        // One question at a time, and this one decides whether the core runs.
+        if (state.offerMobileData) {
+            Spacer(Modifier.height(20.dp))
+            PermissionPrompt(
+                title = stringResource(R.string.home_mobile_data_title),
+                body = stringResource(R.string.home_mobile_data_body),
+                allow = stringResource(R.string.settings_battery_allow),
+                dismiss = stringResource(R.string.home_mobile_data_deny),
+                onAllow = {
+                    viewModel.answerMobileData(true)
+                    Toast.makeText(context, R.string.home_mobile_data_allowed, Toast.LENGTH_LONG).show()
+                },
+                onDismiss = {
+                    viewModel.answerMobileData(false)
+                    Toast.makeText(context, R.string.home_mobile_data_denied, Toast.LENGTH_LONG).show()
+                },
+            )
+        }
+        if (state.offerBatteryExemption && !state.offerMobileData) {
             Spacer(Modifier.height(20.dp))
             BatteryPrompt(
                 onAllow = viewModel::requestBatteryExemption,
                 onDismiss = viewModel::dismissBatteryPrompt,
             )
         }
-        if (state.offerFullScreenCalls) {
+        if (state.offerFullScreenCalls && !state.offerMobileData) {
             Spacer(Modifier.height(20.dp))
             PermissionPrompt(
                 title = stringResource(R.string.home_calls_title),
@@ -166,6 +184,7 @@ private fun PermissionPrompt(
     allow: String,
     onAllow: () -> Unit,
     onDismiss: () -> Unit,
+    dismiss: String = stringResource(R.string.settings_battery_not_now),
 ) {
     SectionCard {
         Text(title, style = MaterialTheme.typography.titleMedium)
@@ -186,7 +205,7 @@ private fun PermissionPrompt(
                 Text(allow)
             }
             FilledTonalButton(onClick = onDismiss) {
-                Text(stringResource(R.string.settings_battery_not_now))
+                Text(dismiss)
             }
         }
     }
@@ -196,6 +215,8 @@ private fun PermissionPrompt(
 private fun StatusLine(state: HomeUiState) {
     val core = state.coreState
     val (label, color) = when {
+        state.waitingForInternet -> stringResource(R.string.state_no_internet) to MaterialTheme.colorScheme.error
+        state.waitingForWifi -> stringResource(R.string.state_waiting_wifi) to SkyAccents.warning
         state.connected -> stringResource(R.string.state_connected) to SkyAccents.success
         core is CoreState.Starting || core is CoreState.Running ->
             stringResource(R.string.state_starting) to SkyAccents.warning
@@ -230,11 +251,16 @@ private fun ConnectButton(
     // Disabled only for the brief transitional phases. While the core runs
     // (even before the API answers) or crash-loops, the button stays live as
     // Disconnect — the user must always be able to stop the core.
-    val busy = core is CoreState.Starting || core is CoreState.Stopping
-    val showDisconnect = core is CoreState.Running || core is CoreState.Restarting
+    val waiting = state.waitingForInternet || state.waitingForWifi
+    // A core held back for Wi-Fi stays in Starting, and that can last hours.
+    val held = core is CoreState.Starting && waiting
+    val busy = (core is CoreState.Starting && !held) || core is CoreState.Stopping
+    val showDisconnect = core is CoreState.Running || core is CoreState.Restarting || held
 
-    val connecting = core is CoreState.Starting || core is CoreState.Restarting ||
-        (core is CoreState.Running && !state.connected)
+    val connecting = !waiting && (
+        core is CoreState.Starting || core is CoreState.Restarting ||
+            (core is CoreState.Running && !state.connected)
+        )
 
     // Idle: the brand gradient asking to be pressed. Running: a quiet tonal
     // disc — stopping should never look like the loud action — with the
@@ -276,7 +302,7 @@ private fun ConnectButton(
                         color = content,
                         strokeWidth = 4.dp,
                     )
-                    showDisconnect && !state.connected -> Column(
+                    showDisconnect && !state.connected && !waiting -> Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         CircularProgressIndicator(
@@ -328,6 +354,20 @@ private fun StatusCaption(state: HomeUiState, onOpenLogs: (String) -> Unit) {
                 textAlign = TextAlign.Center,
             )
         core is CoreState.Stopping -> Unit
+        state.waitingForInternet ->
+            Text(
+                stringResource(R.string.home_hint_no_internet),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+                textAlign = TextAlign.Center,
+            )
+        state.waitingForWifi ->
+            Text(
+                stringResource(R.string.home_hint_waiting_wifi),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
         // Startup can take minutes on a slow network (dmsg discovery retries),
         // so give the user something to watch instead of a bare spinner.
         !state.connected -> {
@@ -346,6 +386,13 @@ private fun StatusCaption(state: HomeUiState, onOpenLogs: (String) -> Unit) {
                 error,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
+                textAlign = TextAlign.Center,
+            )
+        state.onMobileData ->
+            Text(
+                stringResource(R.string.home_hint_mobile_data),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
     }

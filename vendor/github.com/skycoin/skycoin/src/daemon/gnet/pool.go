@@ -1,3 +1,5 @@
+// Package gnet src/daemon/gnet/pool.go c1-coin-daemon
+//
 /*
 Package gnet is the core networking library
 */
@@ -426,7 +428,7 @@ func (pool *ConnectionPool) canConnect(a string, solicited bool) error {
 	}
 
 	if solicited {
-		if _, ok := pool.Config.defaultConnections[a]; ok && pool.IsMaxOutgoingDefaultConnectionsReached() {
+		if _, ok := pool.Config.defaultConnections[a]; ok && pool.MaxOutgoingDefaultConnectionsReached() {
 			return ErrMaxOutgoingDefaultConnectionsReached
 		} else if pool.isMaxOutgoingConnectionsReached() {
 			return ErrMaxOutgoingConnectionsReached
@@ -732,7 +734,7 @@ func decodeData(buf *bytes.Buffer, maxMsgLength int) ([][]byte, error) {
 			// encoder.DeserializeAtomic should only return an error if there wasn't
 			// enough data in buf to read the integer, but the prefix buf length
 			// is already ensured to be long enough
-			logger.Panicf("encoder.DeserializeUint32 failed unexpectedly: %v", err)
+			return nil, fmt.Errorf("encoder.DeserializeUint32 failed unexpectedly: %w", err)
 		}
 
 		length := int(tmpLength)
@@ -784,8 +786,8 @@ func (pool *ConnectionPool) isMaxOutgoingConnectionsReached() bool {
 	return len(pool.outgoingConnections) >= pool.Config.MaxOutgoingConnections
 }
 
-// IsMaxOutgoingDefaultConnectionsReached checks whether the max outgoing default connections reached
-func (pool *ConnectionPool) IsMaxOutgoingDefaultConnectionsReached() bool {
+// MaxOutgoingDefaultConnectionsReached checks whether the max outgoing default connections reached
+func (pool *ConnectionPool) MaxOutgoingDefaultConnectionsReached() bool {
 	return len(pool.defaultOutgoingConnections) >= pool.Config.MaxDefaultPeerOutgoingConnections
 }
 
@@ -863,10 +865,10 @@ func (pool *ConnectionPool) Disconnect(addr string, r DisconnectReason) error {
 		}).Debug("Disconnecting")
 
 		// checks if the address is default node address
-		isDefaultOutgoingConn := false
+		defaultOutgoingConn := false
 		if _, ok := pool.Config.defaultConnections[addr]; ok {
 			if _, ok := pool.outgoingConnections[addr]; ok {
-				isDefaultOutgoingConn = true
+				defaultOutgoingConn = true
 			}
 		}
 
@@ -876,7 +878,7 @@ func (pool *ConnectionPool) Disconnect(addr string, r DisconnectReason) error {
 			return errors.New("Disconnect: connection does not exist")
 		}
 
-		if isDefaultOutgoingConn {
+		if defaultOutgoingConn {
 			l := len(pool.defaultOutgoingConnections)
 			logger.Debugf("%d/%d default connections in use", l, pool.Config.MaxDefaultPeerOutgoingConnections)
 		}

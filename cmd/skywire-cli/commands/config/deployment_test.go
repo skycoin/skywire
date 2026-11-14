@@ -21,7 +21,7 @@ func TestDeploymentBlocks(t *testing.T) {
 		if b.Type == "dmsg-server" {
 			t.Fatalf("a new deployment folds its dmsg server into the visor, got a block: %s", b.Raw)
 		}
-		_, bpk, hasKey, err := svcblock.OwnKey(b.Raw)
+		_, bpk, keyFound, err := svcblock.OwnKey(b.Raw)
 		if err != nil {
 			t.Fatalf("%s: %v", b.Type, err)
 		}
@@ -29,8 +29,8 @@ func TestDeploymentBlocks(t *testing.T) {
 		for _, typ := range ownKeyTypes {
 			own = own || typ == b.Type
 		}
-		if hasKey != own {
-			t.Errorf("%s: own key %v, want %v", b.Type, hasKey, own)
+		if keyFound != own {
+			t.Errorf("%s: own key %v, want %v", b.Type, keyFound, own)
 		}
 		// Every service with a dmsg config reaches the deployment through the
 		// visor's own server.
@@ -38,7 +38,7 @@ func TestDeploymentBlocks(t *testing.T) {
 			!strings.Contains(string(b.Raw), `"static":"`+pk.Hex()+`"`) {
 			t.Errorf("%s: not pointed at the visor's dmsg server: %s", b.Type, b.Raw)
 		}
-		if !hasKey {
+		if !keyFound {
 			continue
 		}
 		if bpk == pk {

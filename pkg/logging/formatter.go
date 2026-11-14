@@ -185,7 +185,7 @@ type TextFormatter struct {
 	colorScheme *compiledColorScheme
 
 	// Whether the logger's out is to a terminal.
-	isTerminal bool
+	terminal bool
 
 	sync.Once
 }
@@ -221,7 +221,7 @@ func (f *TextFormatter) init(entry *Entry) {
 		f.QuoteCharacter = "\""
 	}
 	if entry.Logger != nil {
-		f.isTerminal = f.checkIfTerminal(entry.Logger.Out)
+		f.terminal = f.checkIfTerminal(entry.Logger.Out)
 	}
 }
 
@@ -262,16 +262,16 @@ func (f *TextFormatter) Format(entry *Entry) ([]byte, error) {
 
 	f.Do(func() { f.init(entry) })
 
-	isFormatted := f.ForceFormatting || f.isTerminal
+	formatted := f.ForceFormatting || f.terminal
 
 	timestampFormat := f.TimestampFormat
 	if timestampFormat == "" {
 		timestampFormat = defaultTimestampFormat
 	}
-	if isFormatted {
-		isColored := (f.ForceColors || f.isTerminal) && !f.DisableColors
+	if formatted {
+		colored := (f.ForceColors || f.terminal) && !f.DisableColors
 		var colorScheme *compiledColorScheme
-		if isColored {
+		if colored {
 			if f.colorScheme == nil {
 				colorScheme = defaultCompiledColorScheme
 			} else {
@@ -318,7 +318,7 @@ func (f *TextFormatter) printColored(b *bytes.Buffer, entry *Entry, keys []strin
 	}
 
 	module, priority := prefixParts(entry)
-	hasPriority := priority == logPriorityCritical
+	critical := priority == logPriorityCritical
 
 	var levelText string
 	if entry.Level != WarnLevel {
@@ -333,9 +333,9 @@ func (f *TextFormatter) printColored(b *bytes.Buffer, entry *Entry, keys []strin
 
 	message := entry.Message
 	ccFile, ccFunc, ccLine := callContext(entry)
-	hasCallContext := ccFile != "" || ccFunc != "" || ccLine != ""
+	withCallContext := ccFile != "" || ccFunc != "" || ccLine != ""
 
-	if hasPriority {
+	if critical {
 		// The critical color wraps the whole line, so it cannot be streamed
 		// piecewise; this path is rare enough to leave on fmt.
 		f.printCritical(b, entry, colorScheme, levelText, message, timestampFormat, ccFile, ccFunc, ccLine)
@@ -349,7 +349,7 @@ func (f *TextFormatter) printColored(b *bytes.Buffer, entry *Entry, keys []strin
 			b.WriteByte(' ') //nolint:gosec
 		}
 		levelColor.write(b, levelText)
-		if hasCallContext {
+		if withCallContext {
 			// The leading space sits outside the color, as it did when this
 			// was " " + CallContextColor(strings.Join(parts, ":")).
 			b.WriteByte(' ') //nolint:gosec

@@ -539,7 +539,7 @@ var connsAppCmd = &cobra.Command{
 			fmt.Fprintln(w, "alive\tlatency\tup/s\tdown/s\tsent\trecv\terror") //nolint:errcheck
 			for _, s := range summaries {
 				fmt.Fprintf(w, "%v\t%s\t%d\t%d\t%d\t%d\t%s\n", //nolint:errcheck
-					s.IsAlive, s.Latency, s.UploadSpeed, s.DownloadSpeed, s.BandwidthSent, s.BandwidthReceived, s.Error)
+					s.Alive, s.Latency, s.UploadSpeed, s.DownloadSpeed, s.BandwidthSent, s.BandwidthReceived, s.Error)
 			}
 			w.Flush() //nolint:errcheck,gosec
 		}

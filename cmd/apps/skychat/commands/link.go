@@ -66,7 +66,7 @@ var links = &linkStore{
 
 // state reports pk's link without touching the network.
 func (s *linkStore) state(pk cipher.PubKey) linkState {
-	ready := chatCtrl != nil && chatCtrl.HasConn(pk)
+	ready := chatCtrl != nil && chatCtrl.Connected(pk)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	st := linkState{Ready: ready, Connecting: s.dial[pk]}
@@ -84,7 +84,7 @@ func (s *linkStore) ensure(pk cipher.PubKey, netType appnet.Type) linkState {
 	if chatCtrl == nil {
 		return linkState{Err: "chat transport unavailable"}
 	}
-	if chatCtrl.HasConn(pk) {
+	if chatCtrl.Connected(pk) {
 		return linkState{Ready: true}
 	}
 	s.mu.Lock()

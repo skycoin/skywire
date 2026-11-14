@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skydex-client/commands/api.go
+// Package commands cmd/skydex-client/commands/api.go c4-app-dex
 //
 // Local control API consumed by the embedded trading UI. It exposes the
 // configured default market public key and drives the manual connect/disconnect
@@ -68,7 +68,7 @@ func (s *session) connect(pkHex string) ([]string, string, error) {
 		_ = conn.Close() //nolint:errcheck
 		return nil, "", err
 	}
-	if resp.IsError() {
+	if resp.Failed() {
 		_ = conn.Close() //nolint:errcheck
 		var e protocol.ErrorData
 		_ = resp.Bind(&e) //nolint:errcheck
@@ -254,7 +254,7 @@ func forward(w http.ResponseWriter, sess *session, msgType string, data any) {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	if resp.IsError() {
+	if resp.Failed() {
 		var e protocol.ErrorData
 		_ = resp.Bind(&e) //nolint:errcheck
 		writeJSON(w, statusForCode(e.Code), map[string]any{"error": e.Message, "code": e.Code})

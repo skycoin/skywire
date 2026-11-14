@@ -1,4 +1,4 @@
-// Package cxoaggregate pkg/cxo/cxoaggregate/feed_consumers.go c4-net-discovery
+// Package cxoaggregate pkg/cxo/cxoaggregate/feed_consumers.go c3-net-discovery
 //
 // In-process delivery of registrations a visor carries on its system feed.
 // A service that runs in the same process as the transport discovery
@@ -209,7 +209,7 @@ func RegistrationLeaves(pack registry.Pack, n *treestore.TreeNode) map[string][]
 		if _, err := n.Children.ValueByIndex(pack, i, &entry); err != nil {
 			continue
 		}
-		if len(entry.Leaf) == 0 || !sysfeed.IsRegistration(entry.Name) {
+		if len(entry.Leaf) == 0 || !sysfeed.Registration(entry.Name) {
 			continue
 		}
 		if out == nil {

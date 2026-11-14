@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/key_reconcile.go c4-app-chat
+// Package group pkg/skychat/group/key_reconcile.go c3-app-chat
 // the session half of key rotation: emitting a keys/<seq> leaf and
 // applying one. Split from keyrotate.go for the same reason
 // roster_reconcile.go is split from gossip.go — the envelope is testable
@@ -226,7 +226,7 @@ func (s *Session) applyKeyLeaf(body []byte) {
 	}
 
 	s.membersMu.Lock()
-	if !s.cfg.Record.IsAdmin(m.IssuerPK) {
+	if !s.cfg.Record.AdministeredBy(m.IssuerPK) {
 		s.membersMu.Unlock()
 		s.log.WithField("issuer", m.IssuerPK.String()).
 			Debug("group: reconcile: rejecting key rotation from non-admin issuer")

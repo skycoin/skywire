@@ -1,3 +1,4 @@
+// Package gnet src/daemon/gnet/dispatcher.go c1-coin-daemon
 package gnet
 
 import (
@@ -89,7 +90,7 @@ func convertToMessage(id uint64, msg []byte, debugPrint bool) (Message, error) {
 		// This occurs only when the user registers an interface that does not
 		// match the Message interface.  They should have known about this
 		// earlier via a call to VerifyMessages
-		logger.Panic("Message obtained from map does not match Message interface")
+		logger.Critical().Error("Message obtained from map does not match Message interface")
 		return nil, errors.New("MessageIdMaps contain non-Message")
 	}
 
@@ -145,7 +146,7 @@ func EncodeMessage(msg Serializer) ([]byte, error) {
 	// Lookup message ID
 	msgID, succ := MessageIDMap[t]
 	if !succ {
-		logger.Panicf("Attempted to serialize message struct not in MessageIDMap: %v", msg)
+		return nil, fmt.Errorf("attempted to serialize message struct not in MessageIDMap: %T", msg)
 	}
 	if uint64(len(msgID)) > math.MaxUint32 {
 		return nil, errors.New("Message ID length exceeds math.MaxUint32")

@@ -1978,6 +1978,8 @@
       "remove-all-confirm": "移除此 Visor 的所有传输？持久传输可能很快会被重新创建。"
     },
     "route-viz": "路由可视化",
+    "refresh-rate": "刷新频率",
+    "refresh-help": "节点列表的刷新频率。",
     "wallet": {
       "node": "币节点"
     },

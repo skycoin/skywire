@@ -1,4 +1,4 @@
-// Package tpdclient pkg/transport/tpdclient/client_test.go
+// Package tpdclient pkg/transport/tpdclient/client_test.go c2-net-transport
 package tpdclient
 
 import (

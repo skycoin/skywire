@@ -60,7 +60,7 @@ func TestInfoRender(t *testing.T) {
 	require.Contains(t, out, "Not eligible for rewards: old version")
 	require.Contains(t, out, "The config was made by v1.3.100")
 	require.Contains(t, out, "2 hours")
-	require.Contains(t, out, `hx-post="ui2/visors/`+pk.Hex()+`/info/restart"`)
+	require.Contains(t, out, `hx-post="visors/`+pk.Hex()+`/info/restart"`)
 	require.True(t, SameRelease("v1.3.103-122-gabc", "v1.3.103-122-gabc-abc1234"))
 }
 

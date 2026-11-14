@@ -105,7 +105,7 @@ func TestFiller_DBFailure_FailsFillingNotProcess(t *testing.T) {
 				}
 			}()
 
-			r.IsFull = true // a failed Run must reset it
+			r.Full = true // a failed Run must reset it
 			err = f.Run()
 			f.Close()
 			close(rq)
@@ -114,7 +114,7 @@ func TestFiller_DBFailure_FailsFillingNotProcess(t *testing.T) {
 			if !errors.Is(err, errDiskGone) {
 				t.Fatalf("Run: want an error wrapping %v, got %v", errDiskGone, err)
 			}
-			if r.IsFull {
+			if r.Full {
 				t.Fatal("Run failed but left the Root marked full")
 			}
 		})

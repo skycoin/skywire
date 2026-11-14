@@ -1,4 +1,4 @@
-// Package db internal/db/bans.go
+// Package db src/skydex/db/bans.go c1-app-dex
 package db
 
 import (
@@ -69,8 +69,8 @@ func (d *Database) GetBan(pubkey string) (*Ban, error) {
 	return ban, nil
 }
 
-// IsUserBanned checks if a user is currently banned.
-func (d *Database) IsUserBanned(pubkey string) (bool, error) {
+// UserBanned checks if a user is currently banned.
+func (d *Database) UserBanned(pubkey string) (bool, error) {
 	ban, err := d.GetBan(pubkey)
 	if err != nil {
 		return false, err

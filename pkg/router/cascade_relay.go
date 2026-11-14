@@ -74,7 +74,7 @@ func (rc *RSNRelayCache) FindRelayTransport(
 	for _, relayPK := range relayPeers {
 		var found *transport.ManagedTransport
 		tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
-			if tp.Remote() == relayPK && !tp.IsClosed() {
+			if tp.Remote() == relayPK && !tp.Closed() {
 				found = tp
 				return false // stop walking
 			}
@@ -92,7 +92,7 @@ func (rc *RSNRelayCache) FindRelayTransport(
 func FindDirectRSNTransport(rsnPK cipher.PubKey, tm *transport.Manager) *transport.ManagedTransport {
 	var found *transport.ManagedTransport
 	tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
-		if tp.Remote() == rsnPK && tp.Entry.Label == transport.LabelSetup && !tp.IsClosed() {
+		if tp.Remote() == rsnPK && tp.Entry.Label == transport.LabelSetup && !tp.Closed() {
 			found = tp
 			return false
 		}

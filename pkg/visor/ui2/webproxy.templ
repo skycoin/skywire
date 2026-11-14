@@ -1,0 +1,105 @@
+package ui2
+
+import "github.com/skycoin/skywire/pkg/visor/visorapi"
+
+// WebProxy is the web proxy tab: the resolving proxies for .dmsg and
+// .skynet, as web-proxy.component.ts.
+type WebProxy struct {
+	PK     string
+	Status *visorapi.EmbeddedProxiesStatus
+	Err    string
+}
+
+// On is whether the .skynet resolver runs, which the Angular tab's box
+// follows.
+func (p WebProxy) On() bool {
+	return p.Status != nil && p.Status.SkynetWeb != nil && p.Status.SkynetWeb.Running
+}
+
+// Upstream is the .skynet resolver's upstream SOCKS5 address.
+func (p WebProxy) Upstream() string {
+	if p.Status != nil && p.Status.SkynetWeb != nil {
+		return p.Status.SkynetWeb.UpstreamSOCKS
+	}
+	return ""
+}
+
+templ WebProxyPage(p WebProxy) {
+	@VisorLayout(p.PK, "web-proxy") {
+		<div class="head"><h1>{ T(ctx, "web-proxy.title") }</h1></div>
+		<p class="small dim">{ T(ctx, "web-proxy.help") }</p>
+		@WebProxyBody(p)
+	}
+}
+
+templ WebProxyBody(p WebProxy) {
+	<div id="wp">
+		@ErrorBox(p.Err)
+		if s := p.Status; s != nil && (s.DmsgWeb != nil || s.SkynetWeb != nil) {
+			<div class="table-wrap">
+				<table class="list">
+					<thead>
+						<tr>
+							<th>{ T(ctx, "web-proxy.resolver") }</th>
+							<th>{ T(ctx, "web-proxy.running") }</th>
+							<th>{ T(ctx, "web-proxy.socks-addr") }</th>
+							<th>{ T(ctx, "web-proxy.upstream") }</th>
+						</tr>
+					</thead>
+					<tbody>
+						@wpRow(".dmsg", s.DmsgWeb)
+						@wpRow(".skynet", s.SkynetWeb)
+					</tbody>
+				</table>
+			</div>
+		}
+		<div class="bar">
+			<label class="check">
+				<input type="checkbox" checked?={ p.On() } hx-put={ VisorURL(p.PK, "web-proxy/enabled") } hx-vals={ jsonVals(map[string]string{"on": onVal(!p.On())}) } hx-target="#wp" hx-swap="outerHTML"/>
+				{ T(ctx, "web-proxy.enable") }
+			</label>
+		</div>
+		<form class="bar" hx-put={ VisorURL(p.PK, "web-proxy/upstream") } hx-target="#wp" hx-swap="outerHTML">
+			<input class="mono filter" name="addr" value={ p.Upstream() } placeholder="127.0.0.1:1080" aria-label={ T(ctx, "web-proxy.upstream-label") }/>
+			<button class="btn primary" type="submit">{ T(ctx, "web-proxy.set") }</button>
+			<button class="btn" type="button" hx-get={ VisorURL(p.PK, "web-proxy/body") } hx-target="#wp" hx-swap="outerHTML"><span class="mi">refresh</span>{ T(ctx, "web-proxy.refresh") }</button>
+		</form>
+	</div>
+}
+
+templ wpRow(name string, i *visorapi.EmbeddedProxyInfo) {
+	if i != nil {
+		<tr>
+			<td data-label={ T(ctx, "web-proxy.resolver") }>{ name }</td>
+			<td data-label={ T(ctx, "web-proxy.running") }>
+				if i.Running {
+					<span class="mi ok">check_circle</span>
+				} else {
+					<span class="dim">-</span>
+				}
+			</td>
+			<td class="mono small" data-label={ T(ctx, "web-proxy.socks-addr") }>{ orDash(i.SocksAddr) }</td>
+			<td class="mono small" data-label={ T(ctx, "web-proxy.upstream") }>
+				if i.UpstreamSOCKS != "" {
+					{ i.UpstreamSOCKS }
+				} else {
+					direct
+				}
+			</td>
+		</tr>
+	}
+}
+
+func onVal(b bool) string {
+	if b {
+		return "1"
+	}
+	return ""
+}
+
+func orDash(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
+}

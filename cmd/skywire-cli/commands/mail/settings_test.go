@@ -61,7 +61,7 @@ func TestParseHelperLists(t *testing.T) {
 	_, err = parseSettings([]string{"helpers=nope"})
 	require.Error(t, err)
 
-	out := renderSettings(&visorapi.MailStatus{HasOutbox: true, Helpers: []cipher.PubKey{pk}, RelayForDefault: true})
+	out := renderSettings(&visorapi.MailStatus{OutboxEnabled: true, Helpers: []cipher.PubKey{pk}, RelayForDefault: true})
 	require.Contains(t, out, "helpers           "+pk.Hex()+"\n")
 	require.Contains(t, out, "relay_for         none (default: this visor's hypervisors)")
 }

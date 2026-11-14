@@ -1,6 +1,6 @@
 //go:build nftfw && linux
 
-// Package netctl pkg/vpn/netctl/firewall_nft_linux.go c4-app-vpn
+// Package netctl pkg/vpn/netctl/firewall_nft_linux.go c3-app-vpn
 //
 // NFTFirewall is a pure-Go (google/nftables) replacement for the vpn-router /
 // vpn-client iptables shell-outs — masquerade, FORWARD accept, the mesh-gateway

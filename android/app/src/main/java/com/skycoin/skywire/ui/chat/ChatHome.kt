@@ -583,7 +583,7 @@ fun shownText(text: String): String {
     Regex("^(🎤|📹) (Voice|Video) message$").find(t)?.let { m ->
         return m.groupValues[1] + " " + stringResource(if (m.groupValues[2] == "Voice") R.string.chat_voice_message else R.string.chat_video_message)
     }
-    Regex("^📞 (Missed call|Incoming call|Outgoing call)( · \\d+:\\d\\d)?$").find(t)?.let { m ->
+    Regex("^📞 (Missed call|Incoming call|Outgoing call|Unanswered call)( · \\d+:\\d\\d)?$").find(t)?.let { m ->
         return "📞 " + outcomeLabel(m.groupValues[1]) + m.groupValues[2]
     }
     return text
@@ -594,6 +594,7 @@ fun outcomeLabel(outcome: String): String = when (outcome) {
     "Missed call" -> stringResource(R.string.call_missed_title)
     "Incoming call" -> stringResource(R.string.chat_call_incoming)
     "Outgoing call" -> stringResource(R.string.chat_call_outgoing)
+    "Unanswered call" -> stringResource(R.string.chat_call_unanswered)
     else -> outcome
 }
 

@@ -1,4 +1,4 @@
-// Package main main_test.go — table-driven tests for the tally
+// Package main cmd/mux-probe-assert/main_test.go c2-net-routing — table-driven tests for the tally
 // parser + assertion engine. The contract this pins:
 //
 //   - Tally parsing tolerates leading log lines from the bash runner.

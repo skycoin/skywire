@@ -141,7 +141,7 @@ func renderSettings(st *visorapi.MailStatus) string {
 	}
 	out := fmt.Sprintf("enable            %v (%s)\nmax_message_size  %s\nmax_total_size    %s (%s used)\nmax_age           %s\n",
 		st.Enabled, running, skymail.FormatSize(l.MaxMessageSize), skymail.FormatSize(l.MaxTotalSize), skymail.FormatSize(st.Usage), skymail.FormatAge(l.MaxAge))
-	if st.HasOutbox {
+	if st.OutboxEnabled {
 		out += "helpers           " + renderPKList(st.Helpers, st.HelpersDefault, "the visors this one manages") + "\n"
 		out += "relay_for         " + renderPKList(st.RelayFor, st.RelayForDefault, "this visor's hypervisors") + "\n"
 	}
