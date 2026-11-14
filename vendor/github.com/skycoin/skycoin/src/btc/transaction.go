@@ -100,10 +100,10 @@ func BuildTransaction(inputs []UTXO, destinations []TxDestination, changeAddr st
 	}
 
 	// Determine if any inputs are segwit
-	hasSegwit := false
+	segwit := false
 	for _, input := range inputs {
 		if isSegwitAddress(input.Address) {
-			hasSegwit = true
+			segwit = true
 			break
 		}
 	}
@@ -147,7 +147,10 @@ func BuildTransaction(inputs []UTXO, destinations []TxDestination, changeAddr st
 			return "", fmt.Errorf("no key found for input address %s", input.Address)
 		}
 
-		pubKey := cipher.MustPubKeyFromSecKey(key)
+		pubKey, err := cipher.PubKeyFromSecKey(key)
+		if err != nil {
+			return "", fmt.Errorf("pubkey for input %d: %w", i, err)
+		}
 
 		if isSegwitAddress(input.Address) {
 			// BIP143 segwit signing for P2WPKH
@@ -205,7 +208,7 @@ func BuildTransaction(inputs []UTXO, destinations []TxDestination, changeAddr st
 	writeUint32LE(&buf, 1)
 
 	// Segwit marker and flag (if any segwit inputs)
-	if hasSegwit {
+	if segwit {
 		buf.WriteByte(0x00) // marker
 		buf.WriteByte(0x01) // flag
 	}
@@ -242,7 +245,7 @@ func BuildTransaction(inputs []UTXO, destinations []TxDestination, changeAddr st
 	}
 
 	// Witness data (if segwit)
-	if hasSegwit {
+	if segwit {
 		for _, in := range signedInputs {
 			if in.witness != nil {
 				writeVarInt(&buf, uint64(len(in.witness)))

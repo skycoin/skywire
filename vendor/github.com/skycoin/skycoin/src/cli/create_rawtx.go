@@ -1016,7 +1016,10 @@ func makeChangeOut(outs []transaction.UxBalance, chgAddr string, toAddrs []SendA
 
 	haveChange := changeAmount > 0
 	nAddrs := uint64(len(toAddrs))
-	changeHours, addrHours, totalOutHours := transaction.DistributeSpendHours(totalInHours, nAddrs, haveChange)
+	changeHours, addrHours, totalOutHours, err := transaction.DistributeSpendHours(totalInHours, nAddrs, haveChange)
+	if err != nil {
+		return nil, err
+	}
 
 	if err := fee.VerifyTransactionFeeForHours(totalOutHours, totalInHours-totalOutHours, params.UserVerifyTxn.BurnFactor); err != nil {
 		return nil, err
@@ -1044,22 +1047,30 @@ func makeChangeOut(outs []transaction.UxBalance, chgAddr string, toAddrs []SendA
 			}
 		}
 
-		outAddrs = append(outAddrs, mustMakeUtxoOutput(to.Addr, to.Coins, addrHours[i]))
+		uo, err := makeUtxoOutput(to.Addr, to.Coins, addrHours[i])
+		if err != nil {
+			return nil, err
+		}
+		outAddrs = append(outAddrs, uo)
 	}
 
 	if haveChange {
-		outAddrs = append(outAddrs, mustMakeUtxoOutput(chgAddr, changeAmount, changeHours))
+		uo, err := makeUtxoOutput(chgAddr, changeAmount, changeHours)
+		if err != nil {
+			return nil, err
+		}
+		outAddrs = append(outAddrs, uo)
 	}
 
 	return outAddrs, nil
 }
 
-func mustMakeUtxoOutput(addr string, coins, hours uint64) coin.TransactionOutput {
-	uo := coin.TransactionOutput{}
-	uo.Address = cipher.MustDecodeBase58Address(addr)
-	uo.Coins = coins
-	uo.Hours = hours
-	return uo
+func makeUtxoOutput(addr string, coins, hours uint64) (coin.TransactionOutput, error) {
+	a, err := cipher.DecodeBase58Address(addr)
+	if err != nil {
+		return coin.TransactionOutput{}, fmt.Errorf("invalid address %s: %w", addr, err)
+	}
+	return coin.TransactionOutput{Address: a, Coins: coins, Hours: hours}, nil
 }
 
 func getEntries(wlt wallet.Wallet, outs []transaction.UxBalance) ([]wallet.Entry, error) {

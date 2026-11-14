@@ -80,14 +80,14 @@ func hostCheck(apiVersion, host string, hostWhitelist []string, handler http.Han
 		var err error
 		addr, port, err = iputil.SplitAddr(host)
 		if err != nil {
-			logger.Panic(err)
+			return rejectAll(apiVersion, fmt.Errorf("invalid host %q: %w", host, err))
 		}
 	}
 
-	isLocalhost := iputil.IsLocalhost(addr)
+	localhost := iputil.IsLocalhost(addr)
 
-	if isLocalhost && port == 0 {
-		logger.Panic("localhost with no port specified is unsupported")
+	if localhost && port == 0 {
+		return rejectAll(apiVersion, fmt.Errorf("host %q: localhost with no port specified is unsupported", host))
 	}
 
 	hostWhitelistMap := make(map[string]struct{}, len(hostWhitelist)+2)
@@ -99,14 +99,22 @@ func hostCheck(apiVersion, host string, hostWhitelist []string, handler http.Han
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// NOTE: The "Host" header is not in http.Request.Header, it's put in the http.Request.Host field
-		_, isWhitelisted := hostWhitelistMap[r.Host]
-		if isLocalhost && r.Host != "" && !isWhitelisted {
+		_, ok := hostWhitelistMap[r.Host]
+		if localhost && r.Host != "" && !ok {
 			logger.Critical().Errorf("Detected DNS rebind attempt - configured-host=%s header-host=%s", host, r.Host)
 			writeError(w, apiVersion, http.StatusForbidden, "Invalid Host")
 			return
 		}
 
 		handler.ServeHTTP(w, r)
+	})
+}
+
+// rejectAll stands in for a handler that cannot be built from a bad config.
+func rejectAll(apiVersion string, err error) http.Handler {
+	logger.WithError(err).Error("Rejecting all requests")
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeError(w, apiVersion, http.StatusInternalServerError, "Invalid server host configuration")
 	})
 }
 
@@ -157,7 +165,7 @@ func originRefererCheck(apiVersion, host string, hostWhitelist []string, handler
 				return
 			}
 
-			if _, isWhitelisted := hostWhitelistMap[u.Host]; !isWhitelisted {
+			if _, ok := hostWhitelistMap[u.Host]; !ok {
 				logger.Critical().Errorf("%s header value %s does not match host and is not whitelisted", toCheckHeader, toCheck)
 				writeError(w, apiVersion, http.StatusForbidden, "Invalid Origin or Referer")
 				return

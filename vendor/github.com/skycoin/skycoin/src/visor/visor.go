@@ -34,6 +34,8 @@ import (
 
 var logger = logging.MustGetLogger("visor")
 
+var errNotBlockPublisher = errors.New("only a block publisher node can create blocks")
+
 // Visor manages the blockchain
 type Visor struct {
 	Config Config
@@ -64,7 +66,7 @@ type richlistAtSeq struct {
 // New creates a Visor for managing the blockchain database
 func New(c Config, db *dbutil.DB, wltServ *wallet.Service) (*Visor, error) {
 	logger.Info("Creating new visor")
-	if c.IsBlockPublisher {
+	if c.BlockPublisher {
 		logger.Info("Visor running in block publisher mode")
 	}
 
@@ -243,14 +245,14 @@ func (vs *Visor) maybeCreateGenesisBlock(tx *dbutil.Tx) error {
 	}
 
 	logger.Info("Create genesis block")
-	signsGenesis := vs.Config.IsBlockPublisher
+	signsGenesis := vs.Config.BlockPublisher
 	if vs.Config.MultiSigner.Enabled() {
 		// The genesis block is still signed by blockchain_pubkey_str, which a signer
 		// may or may not hold (docs/multi-signer-fiber.md, Configuration).
 		pk, err := cipher.PubKeyFromSecKey(vs.Config.BlockchainSeckey)
 		signsGenesis = signsGenesis && err == nil && pk == vs.Config.BlockchainPubkey
-	} else {
-		vs.GenesisPreconditions()
+	} else if err := vs.GenesisPreconditions(); err != nil {
+		return err
 	}
 	b, err := coin.NewGenesisBlock(vs.Config.GenesisAddress, vs.Config.GenesisCoinVolume, vs.Config.GenesisTimestamp)
 	if err != nil {
@@ -260,7 +262,10 @@ func (vs *Visor) maybeCreateGenesisBlock(tx *dbutil.Tx) error {
 	var sb coin.SignedBlock
 	// record the signature of genesis block
 	if signsGenesis {
-		sb = vs.signBlock(*b)
+		sb, err = vs.signBlock(*b)
+		if err != nil {
+			return err
+		}
 		logger.Infof("Genesis block signature=%s", sb.Sig.Hex())
 	} else {
 		sb = coin.SignedBlock{
@@ -272,13 +277,18 @@ func (vs *Visor) maybeCreateGenesisBlock(tx *dbutil.Tx) error {
 	return vs.executeSignedBlock(tx, sb)
 }
 
-// GenesisPreconditions panics if conditions for genesis block are not met
-func (vs *Visor) GenesisPreconditions() {
+// GenesisPreconditions returns an error if conditions for genesis block are not met
+func (vs *Visor) GenesisPreconditions() error {
 	if vs.Config.BlockchainSeckey != (cipher.SecKey{}) {
-		if vs.Config.BlockchainPubkey != cipher.MustPubKeyFromSecKey(vs.Config.BlockchainSeckey) {
-			logger.Panic("Cannot create genesis block. Invalid secret key for pubkey")
+		pk, err := cipher.PubKeyFromSecKey(vs.Config.BlockchainSeckey)
+		if err != nil {
+			return fmt.Errorf("cannot create genesis block, invalid secret key: %w", err)
+		}
+		if vs.Config.BlockchainPubkey != pk {
+			return errors.New("cannot create genesis block, invalid secret key for pubkey")
 		}
 	}
+	return nil
 }
 
 // StartedAt returns the time that the visor was created
@@ -326,8 +336,8 @@ func (vs *Visor) RemoveInvalidUnconfirmed() ([]cipher.SHA256, error) {
 
 // createBlock creates a SignedBlock from pending transactions
 func (vs *Visor) createBlock(tx *dbutil.Tx, when uint64) (coin.SignedBlock, error) {
-	if !vs.Config.IsBlockPublisher {
-		logger.Panic("Only a block publisher node can create blocks")
+	if !vs.Config.BlockPublisher {
+		return coin.SignedBlock{}, errNotBlockPublisher
 	}
 
 	// Gather all unconfirmed transactions
@@ -341,7 +351,7 @@ func (vs *Visor) createBlock(tx *dbutil.Tx, when uint64) (coin.SignedBlock, erro
 		return coin.SignedBlock{}, err
 	}
 
-	return vs.signBlock(b), nil
+	return vs.signBlock(b)
 }
 
 // createBlockFromTxns creates a Block from specified set of transactions according to set of determinstic rules.
@@ -403,7 +413,7 @@ func (vs *Visor) createBlockFromTxns(tx *dbutil.Tx, txns coin.Transactions, when
 	}
 
 	if len(txns) == 0 {
-		logger.Panic("TruncateBytesTo removed all transactions")
+		return coin.Block{}, errors.New("TruncateBytesTo removed all transactions")
 	}
 
 	logger.Infof("Creating new block with %d transactions, head time %d", len(txns), when)
@@ -526,27 +536,31 @@ func (vs *Visor) executeSignedBlockUnsafe(tx *dbutil.Tx, b coin.SignedBlock) err
 	return vs.history.ParseBlock(tx, b.Block)
 }
 
-// signBlock signs a block for a block publisher node. Will panic if anything is invalid
-func (vs *Visor) signBlock(b coin.Block) coin.SignedBlock {
-	if !vs.Config.IsBlockPublisher {
-		logger.Panic("Only a block publisher node can sign blocks")
+// signBlock signs a block for a block publisher node
+func (vs *Visor) signBlock(b coin.Block) (coin.SignedBlock, error) {
+	if !vs.Config.BlockPublisher {
+		return coin.SignedBlock{}, errors.New("only a block publisher node can sign blocks")
 	}
 
+	sig, err := cipher.SignHash(b.HashHeader(), vs.Config.BlockchainSeckey)
+	if err != nil {
+		return coin.SignedBlock{}, fmt.Errorf("sign block: %w", err)
+	}
 	sb := coin.SignedBlock{
 		Block: b,
-		Sig:   cipher.MustSignHash(b.HashHeader(), vs.Config.BlockchainSeckey),
+		Sig:   sig,
 	}
 
 	if vs.Config.PQBlocks.Applies(b.Seq()) {
 		h := b.HashHeader()
 		pqSig, err := pqsig.SignBlock(vs.Config.BlockchainPQSeckey, h[:])
 		if err != nil {
-			logger.WithError(err).Panic("post-quantum block signing failed")
+			return coin.SignedBlock{}, fmt.Errorf("post-quantum block signing failed: %w", err)
 		}
 		sb.PQSig = pqSig
 	}
 
-	return sb
+	return sb, nil
 }
 
 /*
@@ -1023,9 +1037,13 @@ func (vs *Visor) getTransaction(tx *dbutil.Tx, txnHash cipher.SHA256) (*Transact
 	}
 
 	confirms := headSeq - htxn.BlockSeq + 1
+	status, err := NewConfirmedTransactionStatus(confirms, htxn.BlockSeq)
+	if err != nil {
+		return nil, err
+	}
 	return &Transaction{
 		Transaction: htxn.Txn,
-		Status:      NewConfirmedTransactionStatus(confirms, htxn.BlockSeq),
+		Status:      status,
 		Time:        b.Time(),
 	}, nil
 }
@@ -1070,8 +1088,8 @@ func (cf ConfirmedTxFilter) Match(tx *Transaction) bool {
 }
 
 // NewConfirmedTxFilter collects the transaction whose 'Confirmed' status matchs the parameter passed in.
-func NewConfirmedTxFilter(isConfirmed bool) TxFilter {
-	return ConfirmedTxFilter{Confirmed: isConfirmed}
+func NewConfirmedTxFilter(confirmed bool) TxFilter {
+	return ConfirmedTxFilter{Confirmed: confirmed}
 }
 
 // GetTransactions returns transactions that can pass the filters with page.
@@ -1197,11 +1215,11 @@ func (vs *Visor) GetUnconfirmedTransactionsVerbose(filter func(UnconfirmedTransa
 
 // SendsToAddresses represents a filter that check if tx has output to the given addresses
 func SendsToAddresses(addresses []cipher.Address) func(UnconfirmedTransaction) bool {
-	return func(tx UnconfirmedTransaction) (isRelated bool) {
+	return func(tx UnconfirmedTransaction) (related bool) {
 		for _, out := range tx.Transaction.Out {
 			for _, address := range addresses {
 				if out.Address == address {
-					isRelated = true
+					related = true
 					return
 				}
 			}
@@ -1462,11 +1480,11 @@ func (vs *Visor) getBlockInputs(tx *dbutil.Tx, b *coin.SignedBlock) ([][]Transac
 	// The genesis block has no inputs to query or to calculate fees from
 	if b.Block.Head.BkSeq == 0 {
 		if len(b.Block.Body.Transactions) != 1 {
-			logger.Panicf("Genesis block should have only 1 transaction (has %d)", len(b.Block.Body.Transactions))
+			return nil, fmt.Errorf("genesis block should have only 1 transaction (has %d)", len(b.Block.Body.Transactions))
 		}
 
 		if len(b.Block.Body.Transactions[0].In) != 0 {
-			logger.Panic("Genesis block transaction should not have inputs")
+			return nil, errors.New("genesis block transaction should not have inputs")
 		}
 
 		inputs := make([][]TransactionInput, 1)
@@ -1917,7 +1935,7 @@ func (vs *Visor) GetUnspentsOfAddrs(addrs []cipher.Address) (coin.AddressUxOuts,
 // transaction is confirmed, and error if any
 func (vs *Visor) VerifyTxnVerbose(txn *coin.Transaction, signed transaction.TxnSignedFlag) ([]TransactionInput, bool, error) {
 	var uxa coin.UxArray
-	var isTxnConfirmed bool
+	var txnConfirmed bool
 	var feeCalcTime uint64
 
 	verifyErr := vs.db.View("VerifyTxnVerbose", func(tx *dbutil.Tx) error {
@@ -1958,14 +1976,14 @@ func (vs *Visor) VerifyTxnVerbose(txn *coin.Transaction, signed transaction.TxnS
 
 			if historyTxn != nil {
 				// Transaction is confirmed
-				isTxnConfirmed = true
+				txnConfirmed = true
 			}
 
 			// For confirmed transactions, use the previous block time to calculate hours and fees,
 			// except for the genesis block which has no previous block and has no inputs nor fees.
 			feeCalcTime = 0
 			if historyTxn != nil && historyTxn.BlockSeq > 0 {
-				if isTxnConfirmed {
+				if txnConfirmed {
 					prevBlock, err := vs.blockchain.GetSignedBlockBySeq(tx, historyTxn.BlockSeq-1)
 					if err != nil {
 						return err
@@ -2001,11 +2019,11 @@ func (vs *Visor) VerifyTxnVerbose(txn *coin.Transaction, signed transaction.TxnS
 		var err error
 		inputs, err = NewTransactionInputs(uxa, feeCalcTime)
 		if err != nil {
-			return nil, isTxnConfirmed, err
+			return nil, txnConfirmed, err
 		}
 	}
 
-	return inputs, isTxnConfirmed, verifyErr
+	return inputs, txnConfirmed, verifyErr
 }
 
 // AddressCount returns the total number of addresses with unspents
@@ -2278,7 +2296,10 @@ func (vs *Visor) buildRichlist(includeDistribution bool) (Richlist, error) {
 		}
 	}
 
-	lockedAddrs := vs.Config.Distribution.LockedAddressesDecoded()
+	lockedAddrs, err := vs.Config.Distribution.LockedAddressesDecoded()
+	if err != nil {
+		return nil, fmt.Errorf("locked distribution addresses: %w", err)
+	}
 	addrsMap := make(map[cipher.Address]struct{}, len(lockedAddrs))
 	for _, a := range lockedAddrs {
 		addrsMap[a] = struct{}{}
@@ -2290,7 +2311,10 @@ func (vs *Visor) buildRichlist(includeDistribution bool) (Richlist, error) {
 	}
 
 	if !includeDistribution {
-		unlockedAddrs := vs.Config.Distribution.UnlockedAddressesDecoded()
+		unlockedAddrs, err := vs.Config.Distribution.UnlockedAddressesDecoded()
+		if err != nil {
+			return nil, fmt.Errorf("unlocked distribution addresses: %w", err)
+		}
 		for _, a := range unlockedAddrs {
 			addrsMap[a] = struct{}{}
 		}

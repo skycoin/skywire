@@ -153,7 +153,10 @@ func getGenesisUxID() (string, error) {
 
 func createDistributionTransaction(uxID string, genesisSecKey cipher.SecKey, p params.Distribution) (*coin.Transaction, error) {
 	// Sanity check
-	addrs := p.AddressesDecoded()
+	addrs, err := p.AddressesDecoded()
+	if err != nil {
+		return nil, err
+	}
 	if p.MaxCoinSupply%uint64(len(addrs)) != 0 {
 		return nil, errors.New("the number of distribution addresses must divide MaxCoinSupply exactly")
 	}
@@ -178,12 +181,9 @@ func createDistributionTransaction(uxID string, genesisSecKey cipher.SecKey, p p
 		}
 	}
 
-	seckeys := make([]cipher.SecKey, 1)
-	seckey := genesisSecKey.Hex()
-	seckeys[0] = cipher.MustSecKeyFromHex(seckey)
-	txn.SignInputs([]cipher.SecKey{
-		genesisSecKey,
-	})
+	if err := txn.SignInputs([]cipher.SecKey{genesisSecKey}); err != nil {
+		return nil, err
+	}
 
 	if err := txn.UpdateHeader(); err != nil {
 		return nil, err
