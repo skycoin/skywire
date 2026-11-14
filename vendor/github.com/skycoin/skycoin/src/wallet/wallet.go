@@ -228,7 +228,7 @@ type Wallet interface {
 	// CopyFrom(src Wallet)
 	// CopyFromRef copies the src wallet with a pointer dereference
 	CopyFromRef(src Wallet)
-	Fingerprint() string
+	Fingerprint() (string, error)
 	// ScanAddresses scans ahead given number of addresses
 	ScanAddresses(scanN uint64, tf TransactionsFinder) ([]cipher.Addresser, error)
 	// GetAddresses returns all addresses.
@@ -493,27 +493,18 @@ func IsValidWalletType(t string) bool {
 }
 
 // AddressConstructor returns a function to create a cipher.Addresser from a cipher.PubKey
-func AddressConstructor(m Meta) func(cipher.PubKey) cipher.Addresser {
+func AddressConstructor(m Meta) (func(cipher.PubKey) (cipher.Addresser, error), error) {
 	switch m.Coin() {
 	case CoinTypeSkycoin:
-		return func(pk cipher.PubKey) cipher.Addresser {
-			return cipher.AddressFromPubKey(pk)
-		}
+		return skycoinDecoder{}.AddressFromPubKey, nil
 	case CoinTypeBitcoin:
-		return func(pk cipher.PubKey) cipher.Addresser {
-			return cipher.BitcoinAddressFromPubKey(pk)
-		}
+		return bitcoinDecoder{}.AddressFromPubKey, nil
 	case CoinTypeBitcoinSegwit:
-		return func(pk cipher.PubKey) cipher.Addresser {
-			return cipher.BitcoinSegwitAddressFromPubKey(pk)
-		}
+		return bitcoinSegwitDecoder{}.AddressFromPubKey, nil
 	case CoinTypeEthereum:
-		return func(pk cipher.PubKey) cipher.Addresser {
-			return ethereumDecoder{}.AddressFromPubKey(pk)
-		}
+		return ethereumDecoder{}.AddressFromPubKey, nil
 	default:
-		logger.Panicf("Invalid wallet coin type %q", m.Coin())
-		return nil
+		return nil, fmt.Errorf("invalid wallet coin type %q", m.Coin())
 	}
 }
 
@@ -538,17 +529,17 @@ func ValidateMeta(m Meta) error {
 		return errors.New("coin field not set")
 	}
 
-	var isEncrypted bool
+	var encrypted bool
 	if encStr, ok := m[MetaEncrypted]; ok {
 		// validate the encrypted value
 		var err error
-		isEncrypted, err = strconv.ParseBool(encStr)
+		encrypted, err = strconv.ParseBool(encStr)
 		if err != nil {
 			return errors.New("encrypted field is not a valid bool")
 		}
 	}
 
-	if isEncrypted {
+	if encrypted {
 		if s := m[MetaSecrets]; s == "" {
 			return errors.New("wallet is encrypted, but secrets field not set")
 		}
