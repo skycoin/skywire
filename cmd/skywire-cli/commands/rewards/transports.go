@@ -58,7 +58,7 @@ func init() {
 	bwCollectCmd.Flags().BoolVarP(&noCache, "no-cache", "n", false, "bypass cache and fetch fresh data")
 	bwCollectCmd.Flags().StringVarP(&histPath, "hist", "p", "hist", "path to history directory for daily files")
 	bwCollectCmd.Flags().Uint64VarP(&minBandwidth, "min-bw", "b", defaultMinBandwidth, "minimum bandwidth in bytes to qualify")
-	bwCollectCmd.Flags().StringVarP(&bwSurveyPath, "lpath", "l", "log_collecting", "path to hardware surveys (for same-LAN detection)")
+	bwCollectCmd.Flags().StringVarP(&bwSurveyPath, "lpath", "l", "log_backups", "path to hardware surveys (for same-LAN detection)")
 	bwCollectCmd.Flags().IntVar(&bwDays, "days", 1, "TPD ?days= window to fetch (max 35); only the entries whose Date matches --date are counted")
 	bwCollectCmd.Flags().StringVar(&bwDate, "date", "", "UTC date the output file is named for and the only Daily entry counted (default: today)")
 
@@ -299,72 +299,79 @@ sender-side aggregation. Designed to be run hourly by the reward service.`,
 				logging.SetLevel(lvl)
 			}
 		}
-
-		// Ensure hist directory exists
-		if err := os.MkdirAll(histPath, 0750); err != nil {
-			bwLog.Fatal("Failed to create hist directory: ", err)
+		if err := collectBandwidth(cmd.Flags(), bwLog); err != nil {
+			bwLog.Fatal(err)
 		}
-
-		targetDate := bwDate
-		if targetDate == "" {
-			targetDate = time.Now().UTC().Format("2006-01-02")
-		}
-
-		// Build PK→IP map from hardware surveys for same-LAN detection.
-		// Same-LAN filtering belongs at this stage rather than calc time
-		// because it depends on visor IP from the survey, not on reward
-		// eligibility — a transport between two PKs on one host is
-		// excluded regardless of whether either side ends up eligible.
-		pkIPMap := buildPKtoIPMap(bwLog, bwSurveyPath)
-		bwLog.Infof("Built PK→IP map with %d entries from %s", len(pkIPMap), bwSurveyPath)
-
-		// Fetch per-transport sender-side bandwidth from TPD (same-LAN
-		// already filtered out; only Daily entries matching targetDate
-		// counted when targetDate is non-empty).
-		transports, err := fetchTransportBandwidthFromTPD(cmd.Flags(), bwLog, pkIPMap, !noCache, bwDays, targetDate)
-		if err != nil {
-			bwLog.Fatal("Failed to fetch bandwidth data: ", err)
-		}
-
-		// An empty answer is never a real day: TPD always has transports
-		// moving bytes. It comes from a source with nothing to serve yet,
-		// such as a CXO cache that has not synced, and written out it
-		// stands as that day's data. Keep whatever file the day already
-		// has and exit cleanly, so the reward run that follows still goes
-		// ahead on it, and a later run can collect again.
-		dailyFile := fmt.Sprintf("%s/%s_bandwidth.json", histPath, targetDate)
-		if len(transports) == 0 {
-			bwLog.Warnf("TPD returned no transports with bandwidth for %s; not writing %s", targetDate, dailyFile)
-			return
-		}
-
-		// Write the v2 bandwidth JSON
-		out := BandwidthData{
-			Version:    BandwidthDataVersion,
-			Transports: transports,
-		}
-		jsonData, err := json.MarshalIndent(out, "", "  ")
-		if err != nil {
-			bwLog.Fatal("Failed to marshal bandwidth data: ", err)
-		}
-		if err := os.WriteFile(dailyFile, jsonData, 0600); err != nil {
-			bwLog.Fatal("Failed to write bandwidth file: ", err)
-		}
-
-		// Print summary stats. The "qualifying visors" count under the
-		// old aggregated format is no longer meaningful here — eligibility
-		// and min-bandwidth are now applied at calc time — so report the
-		// raw transport count and total sender-side bytes instead.
-		var totalSent uint64
-		uniqueEdges := make(map[string]struct{})
-		for _, tp := range transports {
-			totalSent += tp.SentA + tp.SentB
-			uniqueEdges[tp.A] = struct{}{}
-			uniqueEdges[tp.B] = struct{}{}
-		}
-		cmdutil.Printf("Bandwidth collection complete: %d transports across %d unique visors, total sender-side bandwidth: %s, written to %s\n",
-			len(transports), len(uniqueEdges), formatBytes(totalSent), dailyFile)
 	},
+}
+
+// collectBandwidth writes hist/<date>_bandwidth.json. `rewards run` keeps
+// going when it fails, and the calculation then has pool 2 repeat pool 1.
+func collectBandwidth(flags *pflag.FlagSet, bwLog *logging.Logger) error {
+	if err := os.MkdirAll(histPath, 0750); err != nil {
+		return fmt.Errorf("create hist directory: %w", err)
+	}
+
+	targetDate := bwDate
+	if targetDate == "" {
+		targetDate = time.Now().UTC().Format("2006-01-02")
+	}
+
+	// Build PK→IP map from hardware surveys for same-LAN detection.
+	// Same-LAN filtering belongs at this stage rather than calc time
+	// because it depends on visor IP from the survey, not on reward
+	// eligibility — a transport between two PKs on one host is
+	// excluded regardless of whether either side ends up eligible.
+	pkIPMap := buildPKtoIPMap(bwLog, bwSurveyPath)
+	bwLog.Infof("Built PK→IP map with %d entries from %s", len(pkIPMap), bwSurveyPath)
+
+	// Fetch per-transport sender-side bandwidth from TPD (same-LAN
+	// already filtered out; only Daily entries matching targetDate
+	// counted when targetDate is non-empty).
+	transports, err := fetchTransportBandwidthFromTPD(flags, bwLog, pkIPMap, !noCache, bwDays, targetDate)
+	if err != nil {
+		return fmt.Errorf("fetch bandwidth data: %w", err)
+	}
+
+	// An empty answer is never a real day: TPD always has transports
+	// moving bytes. It comes from a source with nothing to serve yet,
+	// such as a CXO cache that has not synced, and written out it
+	// stands as that day's data. Keep whatever file the day already
+	// has and exit cleanly, so the reward run that follows still goes
+	// ahead on it, and a later run can collect again.
+	dailyFile := fmt.Sprintf("%s/%s_bandwidth.json", histPath, targetDate)
+	if len(transports) == 0 {
+		bwLog.Warnf("TPD returned no transports with bandwidth for %s; not writing %s", targetDate, dailyFile)
+		return nil
+	}
+
+	// Write the v2 bandwidth JSON
+	out := BandwidthData{
+		Version:    BandwidthDataVersion,
+		Transports: transports,
+	}
+	jsonData, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal bandwidth data: %w", err)
+	}
+	if err := os.WriteFile(dailyFile, jsonData, 0600); err != nil {
+		return fmt.Errorf("write bandwidth file: %w", err)
+	}
+
+	// Print summary stats. The "qualifying visors" count under the
+	// old aggregated format is no longer meaningful here — eligibility
+	// and min-bandwidth are now applied at calc time — so report the
+	// raw transport count and total sender-side bytes instead.
+	var totalSent uint64
+	uniqueEdges := make(map[string]struct{})
+	for _, tp := range transports {
+		totalSent += tp.SentA + tp.SentB
+		uniqueEdges[tp.A] = struct{}{}
+		uniqueEdges[tp.B] = struct{}{}
+	}
+	cmdutil.Printf("Bandwidth collection complete: %d transports across %d unique visors, total sender-side bandwidth: %s, written to %s\n",
+		len(transports), len(uniqueEdges), formatBytes(totalSent), dailyFile)
+	return nil
 }
 
 // buildPKtoIPMap reads hardware surveys and returns a map of PK hex → external IP
