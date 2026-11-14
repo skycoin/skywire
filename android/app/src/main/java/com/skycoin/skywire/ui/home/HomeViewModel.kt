@@ -15,6 +15,7 @@ import com.skycoin.skywire.core.Internet
 import com.skycoin.skywire.core.ConfigManager
 import com.skycoin.skywire.core.CoreServiceState
 import com.skycoin.skywire.core.CoreState
+import com.skycoin.skywire.core.MobileData
 import com.skycoin.skywire.core.SecretStore
 import com.skycoin.skywire.core.SkywireCoreService
 import com.skycoin.skywire.core.SkywirePaths
@@ -42,11 +43,19 @@ data class HomeUiState(
     val offerFullScreenCalls: Boolean = false,
     /** The phone has a network with internet access. */
     val online: Boolean = true,
+    /** The network under the core is metered, mobile data in practice. */
+    val metered: Boolean = false,
+    /** The user's [MobileData] choice. */
+    val useMobileData: Boolean = MobileData.DEFAULT,
 ) {
     val connected: Boolean get() = coreState is CoreState.Running && apiUp
+    private val coreOn: Boolean get() =
+        coreState is CoreState.Starting || coreState is CoreState.Running || coreState is CoreState.Restarting
     /** On, but the phone has no way to reach the Skywire network. */
-    val waitingForInternet: Boolean get() = !online &&
-        (coreState is CoreState.Starting || coreState is CoreState.Running || coreState is CoreState.Restarting)
+    val waitingForInternet: Boolean get() = !online && coreOn
+    /** On, but kept off the metered network the phone is using. */
+    val waitingForWifi: Boolean get() = online && metered && !useMobileData && coreOn
+    val onMobileData: Boolean get() = online && metered && useMobileData && connected
 }
 
 /**
@@ -69,6 +78,14 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private val batteryOffer = MutableStateFlow(false)
     private val fullScreenOffer = MutableStateFlow(false)
 
+    private data class Net(val online: Boolean, val metered: Boolean, val useMobileData: Boolean)
+
+    private fun network(app: Application) = combine(
+        Internet.online(app),
+        MobileData.metered(app),
+        prefs.boolean(MobileData.PREF_KEY, MobileData.DEFAULT),
+    ) { online, metered, allowed -> Net(online, metered == true, allowed) }
+
     private data class LiveData(
         val apiUp: Boolean = false,
         val summary: VisorSummary? = null,
@@ -82,8 +99,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             live.asStateFlow(),
             batteryOffer.asStateFlow(),
             fullScreenOffer.asStateFlow(),
-            Internet.online(app),
-        ) { core, data, offerBattery, offerCalls, online ->
+            network(app),
+        ) { core, data, offerBattery, offerCalls, net ->
             HomeUiState(
                 coreState = core,
                 apiUp = data.apiUp,
@@ -96,7 +113,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 // One question at a time: the call one waits its turn behind
                 // the battery one, so Home never stacks two permission cards.
                 offerFullScreenCalls = offerCalls && !offerBattery && core is CoreState.Running,
-                online = online,
+                online = net.online,
+                metered = net.metered,
+                useMobileData = net.useMobileData,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 

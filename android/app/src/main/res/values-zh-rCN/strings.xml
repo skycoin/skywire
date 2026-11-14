@@ -108,6 +108,8 @@
     <string name="core_notification_starting">正在启动节点…</string>
     <string name="core_notification_running">已连接到 Skywire 网络。</string>
     <string name="core_notification_offline">正在等待网络连接。</string>
+    <string name="core_notification_mobile_data">已通过移动数据连接。</string>
+    <string name="core_notification_waiting_wifi">已为 Skywire 关闭移动数据。正在等待 Wi-Fi。</string>
     <string name="core_notification_restarting">节点已崩溃，正在重启（第 %1$d 次尝试）。</string>
 
     <!-- Voice calls -->
@@ -144,12 +146,15 @@
     <string name="state_disconnected">未连接</string>
     <string name="state_starting">正在启动…</string>
     <string name="state_no_internet">无网络连接</string>
+    <string name="state_waiting_wifi">正在等待 Wi-Fi</string>
     <string name="state_connected">已连接</string>
     <string name="state_stopping">正在停止…</string>
     <string name="state_restarting">正在重启（第 %1$d 次尝试）…</string>
     <string name="home_hint_disconnected">点按“连接”即可在本机启动 Skywire 核心。</string>
     <string name="home_hint_starting">正在加入 Skywire 网络。首次连接可能需要几分钟。</string>
     <string name="home_hint_no_internet">这部手机没有网络连接。手机恢复联网后，Skywire 会自动加入网络。</string>
+    <string name="home_hint_waiting_wifi">已在设置中为 Skywire 关闭移动数据。手机连上 Wi-Fi 后，Skywire 会自动加入网络。</string>
+    <string name="home_hint_mobile_data">正在使用移动数据。此时 Skywire 不会为其他节点转发流量，你也可以在设置中让它不使用移动数据。</string>
     <string name="home_error_start">核心未能启动。请查看进程日志。</string>
     <string name="visor_info_title">节点</string>
     <string name="visor_public_key">公钥</string>
@@ -583,6 +588,9 @@
     <string name="settings_autoconnect">连接公共节点</string>
     <string name="settings_autoconnect_hint">保持与公共节点之间的传输通道，让网络可以经这部手机路由，也让这部手机可以经它们路由。会消耗电量和移动数据，因此默认关闭。路由长度超过 1 跳时必须开启。</string>
     <string name="settings_autoconnect_restart">核心下次启动时生效。</string>
+    <string name="settings_mobile_data">使用移动数据</string>
+    <string name="settings_mobile_data_hint">在移动数据和其他按流量计费的网络上，Skywire 只传输你自己的流量。关闭后仅使用 Wi-Fi：使用移动数据时离线，连上 Wi-Fi 后恢复。</string>
+    <string name="settings_mobile_data_restart">更改此项会重启核心。</string>
     <string name="settings_dns">DNS 服务器</string>
     <string name="settings_dns_hint">SkyVPN 和 SkyDNS 会向此服务器查询所有不以 .dmsg 或 .skynet 结尾的域名；服务器支持时使用 DNS over TLS，Cloudflare、Google 和 Quad9 都支持。留空时，SkyVPN 使用 1.1.1.1（Cloudflare），因为 VPN 服务器没有可共享的解析服务；单独运行的 SkyDNS 则使用本机的 DNS。</string>
     <string name="settings_dns_invalid">请输入 IPv4 地址，例如 9.9.9.9。</string>

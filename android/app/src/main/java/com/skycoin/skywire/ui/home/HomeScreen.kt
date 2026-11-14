@@ -197,6 +197,7 @@ private fun StatusLine(state: HomeUiState) {
     val core = state.coreState
     val (label, color) = when {
         state.waitingForInternet -> stringResource(R.string.state_no_internet) to MaterialTheme.colorScheme.error
+        state.waitingForWifi -> stringResource(R.string.state_waiting_wifi) to SkyAccents.warning
         state.connected -> stringResource(R.string.state_connected) to SkyAccents.success
         core is CoreState.Starting || core is CoreState.Running ->
             stringResource(R.string.state_starting) to SkyAccents.warning
@@ -231,10 +232,13 @@ private fun ConnectButton(
     // Disabled only for the brief transitional phases. While the core runs
     // (even before the API answers) or crash-loops, the button stays live as
     // Disconnect — the user must always be able to stop the core.
-    val busy = core is CoreState.Starting || core is CoreState.Stopping
-    val showDisconnect = core is CoreState.Running || core is CoreState.Restarting
+    val waiting = state.waitingForInternet || state.waitingForWifi
+    // A core held back for Wi-Fi stays in Starting, and that can last hours.
+    val held = core is CoreState.Starting && waiting
+    val busy = (core is CoreState.Starting && !held) || core is CoreState.Stopping
+    val showDisconnect = core is CoreState.Running || core is CoreState.Restarting || held
 
-    val connecting = !state.waitingForInternet && (
+    val connecting = !waiting && (
         core is CoreState.Starting || core is CoreState.Restarting ||
             (core is CoreState.Running && !state.connected)
         )
@@ -279,7 +283,7 @@ private fun ConnectButton(
                         color = content,
                         strokeWidth = 4.dp,
                     )
-                    showDisconnect && !state.connected && !state.waitingForInternet -> Column(
+                    showDisconnect && !state.connected && !waiting -> Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         CircularProgressIndicator(
@@ -338,6 +342,13 @@ private fun StatusCaption(state: HomeUiState, onOpenLogs: (String) -> Unit) {
                 color = MaterialTheme.colorScheme.error,
                 textAlign = TextAlign.Center,
             )
+        state.waitingForWifi ->
+            Text(
+                stringResource(R.string.home_hint_waiting_wifi),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
         // Startup can take minutes on a slow network (dmsg discovery retries),
         // so give the user something to watch instead of a bare spinner.
         !state.connected -> {
@@ -356,6 +367,13 @@ private fun StatusCaption(state: HomeUiState, onOpenLogs: (String) -> Unit) {
                 error,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
+                textAlign = TextAlign.Center,
+            )
+        state.onMobileData ->
+            Text(
+                stringResource(R.string.home_hint_mobile_data),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
     }

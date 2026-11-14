@@ -142,6 +142,8 @@
     <string name="core_notification_starting">Démarrage du visor…</string>
     <string name="core_notification_running">Connecté au réseau Skywire.</string>
     <string name="core_notification_offline">En attente d’une connexion internet.</string>
+    <string name="core_notification_mobile_data">Connecté via les données mobiles.</string>
+    <string name="core_notification_waiting_wifi">Les données mobiles sont désactivées pour Skywire. En attente du Wi-Fi.</string>
     <string name="core_notification_restarting">Le visor a planté — redémarrage (tentative %1$d).</string>
 
     <!-- Voice calls -->
@@ -179,12 +181,15 @@
     <string name="state_disconnected">Déconnecté</string>
     <string name="state_starting">Démarrage…</string>
     <string name="state_no_internet">Pas de connexion internet</string>
+    <string name="state_waiting_wifi">En attente du Wi-Fi</string>
     <string name="state_connected">Connecté</string>
     <string name="state_stopping">Arrêt…</string>
     <string name="state_restarting">Redémarrage (tentative %1$d)…</string>
     <string name="home_hint_disconnected">Connecter démarre le cœur Skywire sur ce téléphone.</string>
     <string name="home_hint_starting">Connexion au réseau Skywire. La première connexion peut prendre quelques minutes.</string>
     <string name="home_hint_no_internet">Ce téléphone n’a pas de connexion internet. Skywire rejoint le réseau tout seul dès que le téléphone est de nouveau en ligne.</string>
+    <string name="home_hint_waiting_wifi">Les données mobiles sont désactivées pour Skywire dans les Paramètres. Il rejoint le réseau tout seul dès que le téléphone est en Wi-Fi.</string>
+    <string name="home_hint_mobile_data">Données mobiles en cours d’utilisation. Ici, Skywire ne transporte pas le trafic des autres visors, et les Paramètres permettent de le tenir à l’écart des données mobiles.</string>
     <string name="home_error_start">Le cœur n’a pas démarré. Consultez le journal du processus.</string>
     <string name="visor_info_title">Visor</string>
     <string name="visor_public_key">Clé publique</string>
@@ -644,6 +649,9 @@
     <string name="settings_autoconnect">Connecter aux visors publics</string>
     <string name="settings_autoconnect_hint">Garde des transports ouverts vers des visors publics pour que le réseau puisse router à travers ce téléphone, et que ce téléphone puisse router à travers eux. Coûte batterie et données mobiles, voilà pourquoi c’est désactivé. Les longueurs de route au-delà d’un saut en ont besoin.</string>
     <string name="settings_autoconnect_restart">S’applique au prochain démarrage du cœur.</string>
+    <string name="settings_mobile_data">Utiliser les données mobiles</string>
+    <string name="settings_mobile_data_hint">Sur les données mobiles et les autres réseaux limités, Skywire ne transporte que votre propre trafic. Désactivez cette option pour rester en Wi-Fi uniquement. Il passe alors hors ligne sur les données mobiles et revient en Wi-Fi.</string>
+    <string name="settings_mobile_data_restart">Modifier ce réglage redémarre le cœur.</string>
     <string name="settings_dns">Serveur DNS</string>
     <string name="settings_dns_hint">SkyVPN et SkyDNS demandent à ce serveur chaque nom qui n’est ni .dmsg ni .skynet, via DNS-over-TLS quand le serveur l’offre, comme le font Cloudflare, Google et Quad9. Laissé vide, SkyVPN utilise 1.1.1.1 (Cloudflare), parce qu’un serveur VPN n’a pas de résolveur à partager, et SkyDNS seul utilise le DNS de ce téléphone.</string>
     <string name="settings_dns_invalid">Entrez une adresse IPv4, par exemple 9.9.9.9.</string>
