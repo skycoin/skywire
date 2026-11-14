@@ -66,8 +66,10 @@ func TestDeliverCountSurvivesSubDrop(t *testing.T) {
 	defer in.unsubscribe(sub)
 
 	pk, _ := cipher.GenerateKeyPair()
-	for range 5 {
-		in.deliver("g", pk, skychatgroup.Message{Text: "x", TS: time.Now().UTC()})
+	now := time.Now().UTC()
+	for i := range 5 {
+		// Distinct TSs: a coarse clock would make these replays, which the inbox does not fan out.
+		in.deliver("g", pk, skychatgroup.Message{Text: "x", TS: now.Add(time.Duration(i))})
 	}
 
 	if got := in.deliverCount.Load(); got != 5 {
