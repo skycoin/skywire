@@ -13,6 +13,7 @@ import (
 	"time"
 
 	rpc "github.com/0magnet/gobrpc"
+	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
@@ -20,7 +21,6 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var (

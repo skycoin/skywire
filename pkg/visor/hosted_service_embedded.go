@@ -1,6 +1,6 @@
 //go:build !mobile
 
-// Package visor pkg/visor/hosted_service_embedded.go
+// Package visor pkg/visor/hosted_service_embedded.go c3-vis-core
 //
 // Recording the own-key services this visor embeds as hosted here. The mobile
 // build embeds no services (embedded_services_mobile.go), so it has no
