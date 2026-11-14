@@ -10,6 +10,7 @@ description: Inspect and debug the skywire deployment services (transport discov
 - Usually each service has its own key. A service without its own key is mounted on the host visor under a path prefix on the visor's dmsg port 80 (`dmsg://<visor pk>:80/<prefix>`). A mounted service starts and stops with the visor and cannot be controlled apart from it.
 - Services bind no plain HTTP listener by default. The `mode` field is `dmsg`, `http` or `dual`. Add an HTTP listener only on purpose.
 - `skywire cli visor state --select services` lists the embedded services of a visor and whether each is running. Use it first when a service looks down. `skywire cli visor services start|stop|restart <name>` controls a service that has its own key.
+- The reward system runs as an own-key block of type `rewards` (see skywire-rewards-cli). Its `detail.reward_cycle` in `visor state --select services` shows the last hourly cycle.
 - A visor that hosts services serves a status page on the address in `deployment_status_addr` when that is set.
 - The old network monitor subcommand of `svc` was removed. The service set is `svc health`, `svc tpd`, `svc dmsgd` and `svc ar`.
 - Everything is dmsg only. The old public HTTP endpoints are gone.

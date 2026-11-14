@@ -12,6 +12,7 @@
 package rewardsserver
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -30,7 +31,7 @@ const visorBWWriteInterval = 10 * time.Minute
 
 // startVisorBWWriter keeps hist/ supplied with settled days from TPD's
 // per-visor bandwidth feed, for as long as the process runs.
-func startVisorBWWriter(histDir string) {
+func startVisorBWWriter(ctx context.Context, histDir string) {
 	mgr := statsCXOMgr()
 	if mgr == nil {
 		return
@@ -40,7 +41,11 @@ func startVisorBWWriter(histDir string) {
 	go func() {
 		for {
 			writeSettledVisorBW(mgr, histDir, time.Now().UTC(), log)
-			time.Sleep(visorBWWriteInterval)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(visorBWWriteInterval):
+			}
 		}
 	}()
 }

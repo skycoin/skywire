@@ -81,6 +81,16 @@ bytes. See `reward rules` for the human eligibility rules.
   routes refuse while a cycle runs, as they did while the oneshot unit was active. Runs the telegram
   bot too when `TG_BOT_TOKEN` and `TG_CHAT_ID` are set (watches `<wd>/transactions0.txt`). Never run it
   beside the old timer on the same work dir.
+- **Embedded in a visor**: an `embedded_services` block of type `rewards` runs the same server and
+  cycle under its own key (`keyfile` or `secret_key`, the `reward_system_dmsg` UI key) with
+  `work_dir` (hist/, log_backups/, xpub_index.json). Optional: `skycoin_node`, `whitelist`, `addr`
+  (plain HTTP, none by default), `dmsg_port`, `canonical_domain`, `login_node`, `survey_min_version`,
+  `skip_collect`, `fetch` + `proxy` (e.g. the visor's survey-whitelist proxy `127.0.0.1:4443`),
+  `min_version`, `prune_below_version`, `cycle_interval`, `no_cycle`, `bot_token_file` + `bot_chat_id`
+  (else `TG_BOT_TOKEN`/`TG_CHAT_ID` from the visor's environment; the token never goes in the block).
+  `visor state --select services` shows it with `detail.reward_cycle`; `visor services
+  start|stop|restart rewards` controls it; a failed start is retried with backoff. `skywire svc run`
+  runs the same block outside a visor.
 - **`rewards tp-collect`** → fetch per-key transport stats from TPD
   (`/all-transports/per-key-stats`, cached 5min in `/tmp/tpd.json`), append PKs with
   >= `-m/--min` (default 2) p2p transports (dmsg excluded) to `hist/YYYY-MM-DD_transports.txt`.

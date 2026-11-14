@@ -1856,14 +1856,22 @@ func BuildHandler() http.Handler {
 }
 
 // serveStandalone starts HTTP and DMSG listeners. Called by the CLI command.
-// bindAddr is the host:port listen address for the HTTP server.
 func serveStandalone(h http.Handler, bindAddr string) {
 	log := logging.MustGetLogger("dmsghttp")
-	if dmsgDisc == "" {
-		log.Fatal("Dmsg Discovery URL not specified")
-	}
-
 	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
+	defer cancel()
+	if err := serve(ctx, h, bindAddr, log); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// serve runs the dmsg listener under sk, and bindAddr when set, until ctx
+// ends. Everything it starts stops with ctx.
+func serve(ctx context.Context, h http.Handler, bindAddr string, log *logging.Logger) error {
+	if dmsgDisc == "" {
+		return errors.New("dmsg discovery URL not specified")
+	}
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	pk, err := sk.PubKey()
 	if err != nil {
@@ -1880,7 +1888,7 @@ func serveStandalone(h http.Handler, bindAddr string) {
 	// fall back on rendered "unavailable" in production.
 	dmsgClient, stopDmsg, err := dmsgclient.StartDmsgEmbedded(ctx, log, pk, sk, false, rewardServicePKs()...)
 	if err != nil {
-		log.WithError(err).Fatal("Failed to start DMSG client")
+		return fmt.Errorf("start dmsg client: %w", err)
 	}
 	defer stopDmsg()
 
@@ -1900,7 +1908,8 @@ func serveStandalone(h http.Handler, bindAddr string) {
 	// sessions (#4538), while a subscriber reads a snapshot it already
 	// holds.
 	setStatsCXOSubMgrFromDmsg(dmsgClient)
-	startVisorBWWriter(filepath.Join(wd, "hist"))
+	defer closeStatsCXO()
+	startVisorBWWriter(ctx, filepath.Join(wd, "hist"))
 	log.Info("stats pages: TPD aggregates sourced over CXO (HTTP-over-dmsg kept as fallback)")
 
 	// tp-viz reads the deployment over THIS client rather than one of its own.
@@ -1916,75 +1925,76 @@ func serveStandalone(h http.Handler, bindAddr string) {
 
 	lis, err := dmsgClient.Listen(dmsgPort) //nolint: gosec
 	if err != nil {
-		log.WithError(err).Fatal("Failed to listen on DMSG port")
+		return fmt.Errorf("listen on dmsg port %d: %w", dmsgPort, err)
 	}
-	go func() {
-		<-ctx.Done()
-		if err := lis.Close(); err != nil {
-			log.WithError(err).Error("Failed to close DMSG listener")
-		}
-	}()
 
 	// Increased timeouts for dmsg latency characteristics
 	// DMSG has higher latency than direct TCP due to multi-hop routing
-	serve := &http.Server{
+	dmsgSrv := &http.Server{
 		Handler:           h,
 		ReadTimeout:       30 * time.Second, // Allow for dmsg multi-hop latency
 		WriteTimeout:      60 * time.Second, // Allow time to generate large responses
 		IdleTimeout:       90 * time.Second, // Keep connections alive longer
 		ReadHeaderTimeout: 10 * time.Second, // Headers can be slow over dmsg
 	}
-
+	servers := []*http.Server{dmsgSrv}
+	errc := make(chan error, 2)
 	wg := new(sync.WaitGroup)
-	// Start serving
-	wg.Go(func() {
-		cmdutil.Printf("listening on http://%s\n", bindAddr)
-		srv := &http.Server{Addr: bindAddr, Handler: h, ReadHeaderTimeout: 10 * time.Second}
-		if err := srv.ListenAndServe(); err != nil {
-			log.WithError(err).Error("HTTP listener stopped")
-		}
-	})
-
+	if bindAddr != "" {
+		httpSrv := &http.Server{Addr: bindAddr, Handler: h, ReadHeaderTimeout: 10 * time.Second}
+		servers = append(servers, httpSrv)
+		wg.Go(func() {
+			cmdutil.Printf("listening on http://%s\n", bindAddr)
+			if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.WithError(err).Error("HTTP listener stopped")
+			}
+		})
+	}
 	wg.Go(func() {
 		log.WithField("dmsg_addr", lis.Addr().String()).Info("Serving...")
-		if err := serve.Serve(lis); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Serve: %v", err)
+		if err := dmsgSrv.Serve(lis); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errc <- fmt.Errorf("serve: %w", err)
 		}
 	})
 
-	// Graceful shutdown handler
-	go func() {
-		<-ctx.Done()
-		log.Info("Shutting down dmsghttp reward server...")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := serve.Shutdown(shutdownCtx); err != nil {
-			log.WithError(err).Error("HTTP server shutdown error")
-		}
-	}()
-
-	go func() {
-		err := generateAndCacheJSON()
-		if err != nil {
-			cmdutil.Println("Error updating log-collection cache:", err)
-		}
-		err = generateAndCacheStats()
-		if err != nil {
-			cmdutil.Println("Error updating statistics cache:", err)
-		}
-		for range time.NewTicker(cacheInterval).C {
-			err := generateAndCacheJSON()
-			if err != nil {
+	wg.Go(func() {
+		refresh := func() {
+			if err := generateAndCacheJSON(); err != nil {
 				cmdutil.Println("Error updating log-collection cache:", err)
 			}
-			err = generateAndCacheStats()
-			if err != nil {
+			if err := generateAndCacheStats(); err != nil {
 				cmdutil.Println("Error updating statistics cache:", err)
 			}
 		}
-	}()
+		refresh()
+		tick := time.NewTicker(cacheInterval)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-tick.C:
+				refresh()
+			}
+		}
+	})
 
+	select {
+	case <-ctx.Done():
+	case err = <-errc:
+	}
+	log.Info("Shutting down dmsghttp reward server...")
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelShutdown()
+	for _, s := range servers {
+		if serr := s.Shutdown(shutdownCtx); serr != nil {
+			log.WithError(serr).Error("HTTP server shutdown error")
+		}
+	}
+	_ = lis.Close() //nolint:errcheck
+	cancel()
 	wg.Wait()
+	return err
 }
 
 func cal() (ret string) {

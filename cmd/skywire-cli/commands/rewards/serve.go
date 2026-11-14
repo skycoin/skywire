@@ -15,8 +15,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	tgbot "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards/tgbot"
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	rewardsbot "github.com/skycoin/skywire/pkg/deployment/rewards/bot"
 	rewardsserver "github.com/skycoin/skywire/pkg/deployment/rewards/server"
 	"github.com/skycoin/skywire/pkg/logging"
 )
@@ -42,6 +42,17 @@ func init() {
 		}
 		f.AddFlag(fl)
 	})
+	runDefaults, runFlagDefaults := runOpts, runFlags
+	rewardsserver.NewCycle = func(c rewardsserver.CycleConfig) func(context.Context) error {
+		cc := runFlagDefaults
+		cc.skipCollect, cc.fetch, cc.proxy, cc.minVersion = c.SkipCollect, c.Fetch, c.Proxy, c.MinVersion
+		if c.PruneBelow != "" {
+			cc.pruneBelow = c.PruneBelow
+		}
+		return func(context.Context) error {
+			return containedCycle(runCmd.Flags(), cycleOpts(c.WorkDir, runDefaults), cc, c.SkycoinNode)
+		}
+	}
 }
 
 var serveCmd = &cobra.Command{
@@ -133,26 +144,11 @@ func (fatalHook) Fire(e *logging.Entry) error {
 }
 
 // startBot runs the telegram bot when TG_BOT_TOKEN and TG_CHAT_ID are set.
-// A failed start is retried, since the bot only reports.
 func startBot(ctx context.Context, txFile string) {
-	token, chatID, err := tgbot.FromEnv()
+	token, chatID, err := rewardsbot.FromEnv()
 	if err != nil {
 		log.WithError(err).Info("Telegram bot off")
 		return
 	}
-	go func() {
-		for {
-			log.WithField("watch", txFile).Info("Telegram bot started")
-			err := tgbot.Run(ctx, token, chatID, txFile)
-			if ctx.Err() != nil {
-				return
-			}
-			log.WithError(err).Warn("Telegram bot stopped; starting it again in a minute")
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(time.Minute):
-			}
-		}
-	}()
+	rewardsbot.Start(ctx, token, chatID, txFile, log)
 }

@@ -145,6 +145,17 @@ func setStatsCXOSubMgrFromDmsg(dmsgC *dmsg.Client) {
 	statsCXO.Unlock()
 }
 
+// closeStatsCXO closes the manager, when the server that set it stops.
+func closeStatsCXO() {
+	statsCXO.Lock()
+	mgr := statsCXO.mgr
+	statsCXO.mgr = nil
+	statsCXO.Unlock()
+	if mgr != nil {
+		mgr.Close()
+	}
+}
+
 // statsCXOMgr returns the manager, or nil when CXO is not wired.
 func statsCXOMgr() *cxosub.Manager {
 	statsCXO.RLock()
