@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -156,24 +157,52 @@ func (c *quicStreamConn) Close() error {
 type quicListener struct {
 	lis   *quic.Listener
 	conns chan net.Conn
+	slots chan struct{}
 	done  chan struct{}
+	wg    sync.WaitGroup
 	log   *logging.Logger
 }
 
+// maxPendingQUICConns caps the accepted QUIC conns waiting for their stream
+// or for Accept. Past it the loop stops accepting and quic-go's own accept
+// queue refuses further handshakes.
+const maxPendingQUICConns = 64
+
 func newQuicListener(lis *quic.Listener, log *logging.Logger) *quicListener {
-	l := &quicListener{lis: lis, conns: make(chan net.Conn, 16), done: make(chan struct{}), log: log}
+	l := &quicListener{
+		lis:   lis,
+		conns: make(chan net.Conn, 16),
+		slots: make(chan struct{}, maxPendingQUICConns),
+		done:  make(chan struct{}),
+		log:   log,
+	}
 	go l.acceptLoop()
 	return l
 }
 
 func (l *quicListener) acceptLoop() {
+	// Close conns only once no handler can still send on it.
+	defer func() {
+		l.wg.Wait()
+		close(l.conns)
+	}()
 	for {
-		conn, err := l.lis.Accept(context.Background())
-		if err != nil {
-			close(l.conns)
+		select {
+		case l.slots <- struct{}{}:
+		case <-l.done:
 			return
 		}
-		go l.handleConn(conn)
+		conn, err := l.lis.Accept(context.Background())
+		if err != nil {
+			<-l.slots
+			return
+		}
+		l.wg.Add(1)
+		go func() {
+			defer l.wg.Done()
+			defer func() { <-l.slots }()
+			l.handleConn(conn)
+		}()
 	}
 }
 
