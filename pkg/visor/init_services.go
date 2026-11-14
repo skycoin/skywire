@@ -48,7 +48,8 @@ func initEventBroadcaster(ctx context.Context, v *Visor, log *logging.Logger) er
 }
 
 func initSystemSurvey(ctx context.Context, v *Visor, log *logging.Logger) error {
-	go GenerateSurvey(v, log, true) //nolint:gosec
+	// Tied to the module ctx like the push below, so it ends with the visor.
+	go generateSurvey(ctx, v, log, true) //nolint:gosec
 	// Push the survey to the reward system over dmsg (conditional on change). Tied to
 	// the module ctx so Suspend cancels it and Resume starts a fresh one. See
 	// reward_push.go.
@@ -95,7 +96,10 @@ func initUptimeHeartbeat(_ context.Context, v *Visor, log *logging.Logger) error
 		}
 
 		if tpdUT == nil {
-			v.log.Warn("uptime: no heartbeat client could be built; visor presence will not be reported")
+			// A visor that closed while the client was being built says nothing.
+			if bgCtx.Err() == nil {
+				v.log.Warn("uptime: no heartbeat client could be built; visor presence will not be reported")
+			}
 			return
 		}
 
@@ -132,10 +136,14 @@ func initUptimeHeartbeat(_ context.Context, v *Visor, log *logging.Logger) error
 				v.isUptimeTrackerHealthy.set()
 				return
 			}
-			c, cancel := context.WithTimeout(context.Background(), heartbeatSendTimeout)
+			// Under the visor's ctx, so a round in flight ends with the visor.
+			c, cancel := context.WithTimeout(bgCtx, heartbeatSendTimeout)
 			defer cancel()
 			if tpdUT != nil {
 				if err := tpdUT.UpdateVisorUptime(c, v.conf.Version); err != nil {
+					if bgCtx.Err() != nil {
+						return // the visor closed under the round
+					}
 					v.isServicesHealthy.unset()
 					v.isUptimeTrackerHealthy.unset()
 					n := consecutiveFails.Add(1)
@@ -180,8 +188,15 @@ func initUptimeHeartbeat(_ context.Context, v *Visor, log *logging.Logger) error
 		// current slot instead of forfeiting the first full tick — every restart
 		// was silently losing 5 minutes of uptime.
 		runRound()
-		for range ticker.C {
-			runRound()
+		// The ticker is only stopped on close, never closed, so the loop
+		// ends on the visor's ctx.
+		for {
+			select {
+			case <-ticker.C:
+				runRound()
+			case <-bgCtx.Done():
+				return
+			}
 		}
 	}()
 
@@ -212,9 +227,11 @@ func buildUptimeClient(ctx context.Context, v *Visor, url, label string) utclien
 		v.log.WithError(err).Warnf("%s: failed to resolve public IP", label)
 		return nil
 	}
-	c, err := utclient.NewHTTP(url, v.conf.PK, v.conf.SK, httpC, pIP, v.MasterLogger())
+	c, err := utclient.NewHTTPContext(ctx, url, v.conf.PK, v.conf.SK, httpC, pIP, v.MasterLogger())
 	if err != nil {
-		v.log.WithError(err).Warnf("%s: failed to connect", label)
+		if ctx.Err() == nil {
+			v.log.WithError(err).Warnf("%s: failed to connect", label)
+		}
 		return nil
 	}
 	return c

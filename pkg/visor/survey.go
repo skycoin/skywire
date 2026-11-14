@@ -19,7 +19,31 @@ import (
 // The survey is only generated if a valid reward address is set.
 // Does not require root — only needs write access to the visor's local path.
 func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
+	ctx := v.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	generateSurvey(ctx, v, log, routine)
+}
+
+// generateSurvey is GenerateSurvey ending when ctx does, so the daily routine
+// and its retries do not outlive the visor that started them.
+func generateSurvey(ctx context.Context, v *Visor, log *logging.Logger, routine bool) {
+	// wait sleeps for d and reports whether ctx is still live.
+	wait := func(d time.Duration) bool {
+		t := time.NewTimer(d)
+		defer t.Stop()
+		select {
+		case <-ctx.Done():
+			return false
+		case <-t.C:
+			return true
+		}
+	}
 	for {
+		if ctx.Err() != nil {
+			return
+		}
 		// Check for valid reward address: prefer config, fall back to reward file
 		rewardAddress := strings.TrimSpace(v.conf.RewardAddress)
 		if rewardAddress == "" {
@@ -36,7 +60,9 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 			if !routine {
 				return
 			}
-			time.Sleep(24 * time.Hour)
+			if !wait(24 * time.Hour) {
+				return
+			}
 			continue
 		}
 
@@ -46,7 +72,9 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 			if !routine {
 				return
 			}
-			time.Sleep(24 * time.Hour)
+			if !wait(24 * time.Hour) {
+				return
+			}
 			continue
 		}
 
@@ -58,7 +86,9 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 			if !routine {
 				return
 			}
-			time.Sleep(24 * time.Hour)
+			if !wait(24 * time.Hour) {
+				return
+			}
 			continue
 		}
 
@@ -69,7 +99,9 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 			if !routine {
 				return
 			}
-			time.Sleep(24 * time.Hour)
+			if !wait(24 * time.Hour) {
+				return
+			}
 			continue
 		}
 
@@ -105,8 +137,8 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 			ipLookupOneShotMaxAttempts = 3
 		)
 		for attempt := 1; ; attempt++ {
-			ctx, cancel := context.WithTimeout(context.Background(), ipLookupAttemptTimeout)
-			ipAddr, err := v.dmsgC.LookupIP(ctx, nil)
+			lookupCtx, cancel := context.WithTimeout(ctx, ipLookupAttemptTimeout)
+			ipAddr, err := v.dmsgC.LookupIP(lookupCtx, nil)
 			cancel()
 			if err == nil && ipAddr != nil {
 				survey.IPAddr = ipAddr.String()
@@ -117,7 +149,9 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 				log.Warn("Giving up IP lookup for one-shot survey refresh; the periodic survey will retry")
 				return
 			}
-			time.Sleep(ipLookupRetryDelay)
+			if !wait(ipLookupRetryDelay) {
+				return
+			}
 		}
 
 		log.Info("Generating system survey")
@@ -132,7 +166,9 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 			if !routine {
 				return
 			}
-			time.Sleep(24 * time.Hour)
+			if !wait(24 * time.Hour) {
+				return
+			}
 			continue
 		}
 
@@ -142,7 +178,9 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 			if !routine {
 				return
 			}
-			time.Sleep(24 * time.Hour)
+			if !wait(24 * time.Hour) {
+				return
+			}
 			continue
 		}
 
@@ -151,6 +189,8 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 		if !routine {
 			return
 		}
-		time.Sleep(24 * time.Hour)
+		if !wait(24 * time.Hour) {
+			return
+		}
 	}
 }

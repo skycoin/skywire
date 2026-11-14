@@ -92,10 +92,16 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	m.dmsgAsyncMod = maker("dmsg_async", initDmsgAsync, &m.dmsgC)
 	// Mails when a watched visor goes offline. Idle until one is set up.
 	m.alertsMod = maker("alerts", initAlerts, &m.dmsgC)
+	// Rewards: the survey the reward system checks, written daily and pushed to
+	// it over dmsg (reward_push.go). Idle until a reward address is set.
+	m.systemSurvey = maker("system_survey", initSystemSurvey, &m.dmsgC)
+	// The presence heartbeat to TPD every five minutes, which reward uptime is
+	// counted from. Without the stats module nothing else reports it.
+	m.uptime = maker("uptime", initUptimeHeartbeat, &m.dmsgHTTP)
 
 	// Dropped. Remote shell and file copy (the phone profile removes pty);
-	// the dmsghttp log server and system survey; host telemetry (stats), the
-	// uptime heartbeat and the transportability self-check; public-visor
+	// the dmsghttp log server; host telemetry (stats) and the
+	// transportability self-check; public-visor
 	// advertising; every server role and embedded infrastructure node; the
 	// browsing proxies and resolvers; the skymail bridge; a browser visor's
 	// host bridge; the tpviz UI server; node health; skynet port
@@ -105,9 +111,7 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	// the visor's key or their own.
 	m.ptyModule = dropped("dmsg_pty")
 	m.dmsgHTTPLogServer = dropped("dmsghttp_logserver")
-	m.systemSurvey = dropped("system_survey")
 	m.statsMod = dropped("stats")
-	m.uptime = dropped("uptime")
 	m.tc = dropped("transportable")
 	m.pvs = dropped("public_visor")
 	m.dmsgSrv = dropped("dmsg_server")
@@ -133,7 +137,7 @@ func registerModules(logger *logging.MasterLogger) *modules {
 
 	m.vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &m.ebc, &m.ar, &m.disc,
 		&m.tr, &m.rt, &m.launch, &m.cli, &m.hvs, &m.pv, &m.trs, &m.stcpC, &m.stcprC, &m.quicC, &m.wsC, &m.wtC,
-		&m.skyFwd, &m.pi, &m.dmsgPi, &m.tpdco, &m.cxoUserFeedsMod, &m.pairingMod, &m.groupingMod, &m.dmsgAsyncMod, &m.voiceMod, &m.netWatch, &m.alertsMod)
+		&m.skyFwd, &m.pi, &m.dmsgPi, &m.tpdco, &m.cxoUserFeedsMod, &m.pairingMod, &m.groupingMod, &m.dmsgAsyncMod, &m.voiceMod, &m.netWatch, &m.alertsMod, &m.systemSurvey, &m.uptime)
 	// Hypervisor: the local API the app talks to (plus Fleet, opt-in).
 	m.hv = maker("hypervisor", initHypervisor, &m.vis)
 	return m
