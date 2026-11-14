@@ -14,7 +14,9 @@
 package visor
 
 import (
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	skychatgroup "github.com/skycoin/skywire/pkg/skychat/group"
@@ -40,7 +42,7 @@ func TestGroupInbox_SubDropCount_LiveSumWhenChannelFull(t *testing.T) {
 
 	pk, _ := cipher.GenerateKeyPair()
 	for range 5 {
-		g.deliver("group-a", pk, skychatgroup.Message{Text: "x"})
+		g.deliver("group-a", pk, skychatgroup.Message{Text: "x", TS: dropTestTS()})
 	}
 	// One message fits in the buf=1 channel, the other four drop.
 	if got := g.SubDropCount(); got != 4 {
@@ -59,7 +61,7 @@ func TestGroupInbox_SubDropCount_AccumulatesAcrossUnsubscribe(t *testing.T) {
 	sub1 := g.subscribe(1)
 	pk, _ := cipher.GenerateKeyPair()
 	for range 4 {
-		g.deliver("group-a", pk, skychatgroup.Message{Text: "x"})
+		g.deliver("group-a", pk, skychatgroup.Message{Text: "x", TS: dropTestTS()})
 	}
 	if got := g.SubDropCount(); got != 3 {
 		t.Fatalf("pre-unsubscribe: SubDropCount = %d, want 3", got)
@@ -78,7 +80,7 @@ func TestGroupInbox_SubDropCount_AccumulatesAcrossUnsubscribe(t *testing.T) {
 
 	// Stream 2 drops 2 more.
 	for range 3 {
-		g.deliver("group-a", pk, skychatgroup.Message{Text: "y"})
+		g.deliver("group-a", pk, skychatgroup.Message{Text: "y", TS: dropTestTS()})
 	}
 	if got := g.SubDropCount(); got != 5 {
 		t.Errorf("post-second-stream drops: SubDropCount = %d, want 5 (3 accumulated + 2 live)", got)
@@ -97,7 +99,7 @@ func TestGroupInbox_SubDropCount_AggregatesMultipleLiveSubs(t *testing.T) {
 
 	pk, _ := cipher.GenerateKeyPair()
 	for range 4 {
-		g.deliver("group-a", pk, skychatgroup.Message{Text: "x"})
+		g.deliver("group-a", pk, skychatgroup.Message{Text: "x", TS: dropTestTS()})
 	}
 	// Each sub takes 1, drops 3 → total 6.
 	if got := g.SubDropCount(); got != 6 {
@@ -122,9 +124,17 @@ func TestGroupInbox_SubDropCount_RoomyChannelDoesNotDrop(t *testing.T) {
 
 	pk, _ := cipher.GenerateKeyPair()
 	for range N {
-		g.deliver("group-a", pk, skychatgroup.Message{Text: "x"})
+		g.deliver("group-a", pk, skychatgroup.Message{Text: "x", TS: dropTestTS()})
 	}
 	if got := g.SubDropCount(); got != 0 {
 		t.Errorf("buf=2N, N deliveries: SubDropCount = %d, want 0", got)
 	}
+}
+
+var dropTestClock atomic.Int64
+
+// dropTestTS gives each delivery its own TS, since the inbox does not fan
+// a replay of a message it holds out again.
+func dropTestTS() time.Time {
+	return time.Unix(0, dropTestClock.Add(1))
 }

@@ -484,6 +484,12 @@ type GroupPollRequest struct {
 	Since time.Time `json:"since"`
 }
 
+// GroupWaitRequest is the input to RPC.GroupWait.
+type GroupWaitRequest struct {
+	Since time.Time     `json:"since"`
+	Wait  time.Duration `json:"wait"`
+}
+
 // GroupSetListedRequest is the input to RPC.GroupSetListed.
 type GroupSetListedRequest struct {
 	ID     string `json:"id"`

@@ -509,6 +509,9 @@ type pollAPI struct {
 	group  []visorapi.GroupMessage
 	pairN  int
 	groupN int
+	// noWait answers GroupWait as a visor from before it did.
+	noWait bool
+	waitN  int
 	// polled fires once per poll. stopPairPoller/stopGroupPoller only CANCEL
 	// the loop — they do not join it — so a test that restored the globals the
 	// goroutine reads (hub, pairPollInterval) right after canceling would race
@@ -566,6 +569,17 @@ func (p *pollAPI) GroupPoll(time.Time) ([]visorapi.GroupMessage, error) {
 	p.group = nil
 	p.signal()
 	return out, nil
+}
+
+func (p *pollAPI) GroupWait(since time.Time, _ time.Duration) ([]visorapi.GroupMessage, error) {
+	p.mu.Lock()
+	if p.noWait {
+		p.mu.Unlock()
+		return nil, errors.New("gobrpc: can't find method RPC.GroupWait")
+	}
+	p.waitN++
+	p.mu.Unlock()
+	return p.GroupPoll(since)
 }
 
 func (p *pollAPI) counts() (pair, group int) {
@@ -643,6 +657,37 @@ func TestGroupPoller_BridgesInboundToSSE(t *testing.T) {
 	}
 	if m["channel"] != "group" || m["group_id"] != "g-1" {
 		t.Errorf("bridged envelope = %v, want a group-channel message for g-1", m)
+	}
+}
+
+// TestGroupPoller_OldVisorFallsBackToPoll: a visor without GroupWait is
+// polled with GroupPoll instead.
+func TestGroupPoller_OldVisorFallsBackToPoll(t *testing.T) {
+	withLifecycleEnv(t)
+	pairEnable = true
+	pairPollInterval = 10 * time.Millisecond
+
+	peer, _ := cipher.GenerateKeyPair()
+	fake := newPollAPI()
+	fake.noWait = true
+	fake.group = []visorapi.GroupMessage{{GroupID: "g-1", SenderPK: peer, Text: "from an old visor", TS: time.Now().UTC()}}
+	withFakePairRPC(t, fake)
+
+	raw, unsub := hub.subscribe()
+	defer unsub()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	startGroupPoller(ctx)
+	t.Cleanup(func() { fake.awaitQuiet(t, 2); cancel(); stopGroupPoller() })
+
+	got := waitForString(t, raw, 3*time.Second)
+	if !strings.Contains(got, "from an old visor") {
+		t.Errorf("bridged %q, want the polled message", got)
+	}
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	if fake.waitN != 0 || fake.groupN == 0 {
+		t.Errorf("GroupWait served %d, GroupPoll %d, want the poll fallback", fake.waitN, fake.groupN)
 	}
 }
 

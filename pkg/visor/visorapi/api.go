@@ -235,6 +235,7 @@ type Chat interface {
 	GroupFileKey(args GroupFileKeyArgs) (GroupFileKeyResult, error)
 	GroupUnsend(args GroupUnsendArgs) error
 	GroupPoll(since time.Time) ([]GroupMessage, error)
+	GroupWait(since time.Time, wait time.Duration) ([]GroupMessage, error)
 	GroupDelete(id string) error
 	GroupLeave(id string) error
 	GroupHistory(groupID string, limit int) ([]GroupMessage, error)

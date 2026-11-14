@@ -2,7 +2,7 @@
 //
 // Browser-facing group chat: HTTP endpoints that proxy the visor's GroupX
 // RPC (the same net/rpc surface the pair endpoints + /status use via
-// pairRPCCall) plus an SSE bridge that drains visor.GroupPoll onto the chat
+// pairRPCCall) plus an SSE bridge that drains visor.GroupWait onto the chat
 // stream. This is the group analog of pairing.go — the browser UI can only
 // reach the app's HTTP surface, so every group operation is relayed to the
 // visor here.
@@ -149,19 +149,23 @@ func sendFileToVisorGroup(_ context.Context, groupID, path, name string) (string
 // groupPollerCancel stops the SSE-bridge goroutine on shutdown.
 var groupPollerCancel context.CancelFunc
 
-// startGroupPoller bridges visor.GroupPoll into the SSE pipeline, mirroring
-// startPairPoller. Each inbound group message is broadcast as a legacy /sse
-// envelope tagged channel="group" + group_id, and recorded on the structured
-// /events "group" channel. No-op when pairing (and thus the visor RPC) is off.
+// groupWaitTimeout is how long one GroupWait call waits for a message.
+const groupWaitTimeout = 15 * time.Second
+
+// startGroupPoller bridges the visor's group inbox into the SSE pipeline,
+// mirroring startPairPoller. Each inbound group message is broadcast as a
+// legacy /sse envelope tagged channel="group" + group_id, and recorded on the
+// structured /events "group" channel. No-op when pairing (and thus the visor
+// RPC) is off.
 func startGroupPoller(parent context.Context) {
 	if !pairEnable {
 		return
 	}
 	ctx, cancel := context.WithCancel(parent) //nolint:gosec
 	groupPollerCancel = cancel
+	interval := pairPollInterval
 
 	go func() {
-		var since time.Time
 		// pendingSeen tracks the last observed pending-request count per
 		// group so a rising edge — someone new asked to join — can be
 		// surfaced once, rather than re-notifying on every poll for a
@@ -169,7 +173,7 @@ func startGroupPoller(parent context.Context) {
 		pendingSeen := map[string]int{}
 		// groupSeen is each group as the last scan saw it, for scanGroupChanges.
 		groupSeen := map[string]visorapi.GroupInfo{}
-		ticker := time.NewTicker(pairPollInterval)
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
 			select {
@@ -180,85 +184,130 @@ func startGroupPoller(parent context.Context) {
 			// Role, roster and rule changes reach the UI from this scan, so it runs
 			// every tick. GroupList is a cheap store read on the visor side.
 			scanGroups(pendingSeen, groupSeen)
-			var msgs []visorapi.GroupMessage
-			err := pairRPCCall("GroupPoll", func(c visorapi.API) error {
-				out, e := c.GroupPoll(since)
-				msgs = out
-				return e
-			})
-			if err != nil {
-				if !errors.Is(err, errPairRPCUnavailable) {
-					appLog("Group: GroupPoll error: %v", err)
-				}
-				continue
-			}
-			for _, m := range msgs {
-				if m.Arrived.After(since) {
-					since = m.Arrived
-				}
-				// A delete tombstone hides a message for everyone. It's authored
-				// (signed) by the deleter, so deleted_by is authentic — a reader
-				// applies it only to a message by that same author. Surfaced as a
-				// control event, never rendered as a chat line.
-				if dmeta, ok := parseGroupDeleteText(m.Text); ok {
-					if body, e := json.Marshal(map[string]any{
-						"channel":         "group-delete",
-						"group_id":        m.GroupID,
-						"deleted_by":      m.SenderPK.Hex(),
-						"deleted_ts_nano": dmeta.ToTSNano,
-					}); e == nil {
-						hub.broadcast(string(body))
-					}
-					continue
-				}
-				envelope := map[string]any{
-					"sender":   m.SenderPK.Hex(),
-					"message":  m.Text,
-					"channel":  "group",
-					"group_id": m.GroupID,
-					"ts":       m.TS.Format(time.RFC3339Nano),
-					"ts_nano":  m.TS.UnixNano(),
-				}
-				if meta, ok := parseGroupFileText(m.Text); ok {
-					envelope["message"] = "📎 " + meta.Name
-					enrichGroupFileRow(envelope, meta)
-				} else if rmeta, ok := parseReplyText(m.Text); ok {
-					envelope["message"] = rmeta.Text
-					enrichReplyRow(envelope, rmeta)
-				} else if fmeta, ok := parseForwardText(m.Text); ok {
-					envelope["message"] = fmeta.Text
-					enrichForwardRow(envelope, fmeta)
-				}
-				body, mErr := json.Marshal(envelope)
-				if mErr != nil {
-					appLog("Group: marshal SSE message: %v", mErr)
-					continue
-				}
-				hub.broadcast(string(body))
-				hub.recordEvent(chatEvent{
-					ID:        newEventID(),
-					Channel:   channelGroup,
-					Transport: "cxo",
-					Dir:       "in",
-					From:      m.SenderPK.Hex(),
-					GroupID:   m.GroupID,
-					Text:      m.Text,
-				})
-				// Host-OS notification when no capable browser UI is showing it.
-				// Body = "<sender>: <text>" using the display text (file/reply
-				// overrides applied above). Own posts come back through this
-				// same poll — the owner echoes its sends and a member's CXO
-				// subscription returns theirs — and are not news to their
-				// author, so they never notify.
-				if appCl != nil && m.SenderPK == appCl.Config().VisorPK {
-					continue
-				}
-				msgText, _ := envelope["message"].(string)
-				notifyOSInboundThread(m.GroupID, m.GroupID,
-					"Group message", displayName(m.SenderPK.Hex())+": "+notifPreview(msgText))
-			}
 		}
 	}()
+
+	go runGroupMessages(ctx, interval)
+}
+
+// runGroupMessages hands each inbound group message to the UI as it lands,
+// with GroupWait. A visor from before GroupWait is polled every interval.
+func runGroupMessages(ctx context.Context, interval time.Duration) {
+	var since time.Time
+	wait := true
+	pause := func(d time.Duration) bool {
+		t := time.NewTimer(d)
+		defer t.Stop()
+		select {
+		case <-ctx.Done():
+			return false
+		case <-t.C:
+			return true
+		}
+	}
+	for ctx.Err() == nil {
+		var msgs []visorapi.GroupMessage
+		tp := time.Now()
+		err := pairRPCCall("GroupWait", func(c visorapi.API) error {
+			var e error
+			if wait {
+				msgs, e = c.GroupWait(since, groupWaitTimeout)
+			} else {
+				msgs, e = c.GroupPoll(since)
+			}
+			return e
+		})
+		if wait && err != nil && strings.Contains(err.Error(), "can't find method") {
+			appLog("Group: visor has no GroupWait, polling every %s", interval)
+			wait = false
+			continue
+		}
+		if err != nil {
+			if !errors.Is(err, errPairRPCUnavailable) {
+				appLog("Group: group message poll error: %v", err)
+			}
+			if !pause(interval) {
+				return
+			}
+			continue
+		}
+		deliverGroupMessages(msgs, &since)
+		// Polling, or a wait that came back early with nothing, paces itself.
+		if !wait || (len(msgs) == 0 && time.Since(tp) < interval) {
+			if !pause(interval) {
+				return
+			}
+		}
+	}
+}
+
+// deliverGroupMessages broadcasts msgs to the UI and moves since past them.
+func deliverGroupMessages(msgs []visorapi.GroupMessage, since *time.Time) {
+	for _, m := range msgs {
+		if m.Arrived.After(*since) {
+			*since = m.Arrived
+		}
+		// A delete tombstone hides a message for everyone. It's authored
+		// (signed) by the deleter, so deleted_by is authentic — a reader
+		// applies it only to a message by that same author. Surfaced as a
+		// control event, never rendered as a chat line.
+		if dmeta, ok := parseGroupDeleteText(m.Text); ok {
+			if body, e := json.Marshal(map[string]any{
+				"channel":         "group-delete",
+				"group_id":        m.GroupID,
+				"deleted_by":      m.SenderPK.Hex(),
+				"deleted_ts_nano": dmeta.ToTSNano,
+			}); e == nil {
+				hub.broadcast(string(body))
+			}
+			continue
+		}
+		envelope := map[string]any{
+			"sender":   m.SenderPK.Hex(),
+			"message":  m.Text,
+			"channel":  "group",
+			"group_id": m.GroupID,
+			"ts":       m.TS.Format(time.RFC3339Nano),
+			"ts_nano":  m.TS.UnixNano(),
+		}
+		if meta, ok := parseGroupFileText(m.Text); ok {
+			envelope["message"] = "📎 " + meta.Name
+			enrichGroupFileRow(envelope, meta)
+		} else if rmeta, ok := parseReplyText(m.Text); ok {
+			envelope["message"] = rmeta.Text
+			enrichReplyRow(envelope, rmeta)
+		} else if fmeta, ok := parseForwardText(m.Text); ok {
+			envelope["message"] = fmeta.Text
+			enrichForwardRow(envelope, fmeta)
+		}
+		body, mErr := json.Marshal(envelope)
+		if mErr != nil {
+			appLog("Group: marshal SSE message: %v", mErr)
+			continue
+		}
+		hub.broadcast(string(body))
+		hub.recordEvent(chatEvent{
+			ID:        newEventID(),
+			Channel:   channelGroup,
+			Transport: "cxo",
+			Dir:       "in",
+			From:      m.SenderPK.Hex(),
+			GroupID:   m.GroupID,
+			Text:      m.Text,
+		})
+		// Host-OS notification when no capable browser UI is showing it.
+		// Body = "<sender>: <text>" using the display text (file/reply
+		// overrides applied above). Own posts come back through this
+		// same poll — the owner echoes its sends and a member's CXO
+		// subscription returns theirs — and are not news to their
+		// author, so they never notify.
+		if appCl != nil && m.SenderPK == appCl.Config().VisorPK {
+			continue
+		}
+		msgText, _ := envelope["message"].(string)
+		notifyOSInboundThread(m.GroupID, m.GroupID,
+			"Group message", displayName(m.SenderPK.Hex())+": "+notifPreview(msgText))
+	}
 }
 
 // isGroupMetaInputError classifies GroupSetMeta rejections the user can fix

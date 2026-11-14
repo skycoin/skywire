@@ -761,6 +761,23 @@ func (v *Visor) GroupPoll(since time.Time) ([]visorapi.GroupMessage, error) {
 	return inbox.snapshotArrivedAfter(since), nil
 }
 
+// groupWaitMax bounds GroupWait, below the 30 s call timeout of the RPC
+// clients.
+const groupWaitMax = 20 * time.Second
+
+// GroupWait is GroupPoll that waits up to wait for a message to arrive
+// when none has since, so a client hears of a message as it lands
+// instead of on its next poll.
+func (v *Visor) GroupWait(since time.Time, wait time.Duration) ([]visorapi.GroupMessage, error) {
+	v.initLock.RLock()
+	inbox := v.grouping.inbox
+	v.initLock.RUnlock()
+	if inbox == nil {
+		return nil, ErrGroupingDisabled
+	}
+	return inbox.waitArrivedAfter(since, min(wait, groupWaitMax)), nil
+}
+
 // GroupHistoryFetcher is the read side of the group history store.
 // Wired in init_group.go as an adapter around skychat/history.BoltStore
 // when persistence is enabled. nil when disabled — callers must
@@ -949,7 +966,9 @@ type groupInbox struct {
 	buf []visorapi.GroupMessage
 	// lastArrived is the newest Arrived stamped, so the next is later. Under mu.
 	lastArrived time.Time
-	mgr         *skychatgroup.Manager
+	// arrived is closed and replaced when a message arrives. Under mu.
+	arrived chan struct{}
+	mgr     *skychatgroup.Manager
 
 	subsMu sync.RWMutex
 	subs   map[*groupSub]struct{}
@@ -1031,7 +1050,8 @@ func (g *groupInbox) deliver(groupID string, senderPK cipher.PubKey, msg skychat
 	g.mu.Lock()
 	// A feed that reconnects replays what it holds. A message the ring has
 	// keeps its first arrival, or every replay would reach the pollers again.
-	if !g.holdsLocked(gm) {
+	held := g.holdsLocked(gm)
+	if !held {
 		gm.Arrived = time.Now().UTC()
 		if !gm.Arrived.After(g.lastArrived) {
 			gm.Arrived = g.lastArrived.Add(time.Nanosecond)
@@ -1042,9 +1062,16 @@ func (g *groupInbox) deliver(groupID string, senderPK cipher.PubKey, msg skychat
 			drop := len(g.buf) - g.cap
 			g.buf = append(g.buf[:0], g.buf[drop:]...)
 		}
+		if g.arrived != nil {
+			close(g.arrived)
+			g.arrived = nil
+		}
 	}
 	mgr := g.mgr
 	g.mu.Unlock()
+	if held {
+		return // a replay, delivered when it first arrived
+	}
 
 	// Fan-out to live subscribers (gRPC StreamGroupMessages path).
 	// select+default so a backed-up subscriber never blocks delivery
@@ -1095,11 +1122,50 @@ func (g *groupInbox) holdsLocked(gm visorapi.GroupMessage) bool {
 	return false
 }
 
+// waitArrivedAfter is snapshotArrivedAfter that waits up to wait for a
+// message when none arrived after since.
+func (g *groupInbox) waitArrivedAfter(since time.Time, wait time.Duration) []visorapi.GroupMessage {
+	out, ch := g.arrivedOrWait(since)
+	if len(out) > 0 || wait <= 0 {
+		return out
+	}
+	t := time.NewTimer(wait)
+	defer t.Stop()
+	for {
+		select {
+		case <-ch:
+		case <-t.C:
+			return nil
+		}
+		if out, ch = g.arrivedOrWait(since); len(out) > 0 {
+			return out
+		}
+	}
+}
+
+// arrivedOrWait returns the messages that arrived after since, or when there
+// are none a channel closed on the next arrival.
+func (g *groupInbox) arrivedOrWait(since time.Time) ([]visorapi.GroupMessage, chan struct{}) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if out := g.arrivedAfterLocked(since); len(out) > 0 {
+		return out, nil
+	}
+	if g.arrived == nil {
+		g.arrived = make(chan struct{})
+	}
+	return nil, g.arrived
+}
+
 // snapshotArrivedAfter is the inbox's messages that arrived after since,
 // whatever their TS, in arrival order.
 func (g *groupInbox) snapshotArrivedAfter(since time.Time) []visorapi.GroupMessage {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	return g.arrivedAfterLocked(since)
+}
+
+func (g *groupInbox) arrivedAfterLocked(since time.Time) []visorapi.GroupMessage {
 	out := make([]visorapi.GroupMessage, 0, len(g.buf))
 	for _, m := range g.buf {
 		if m.Arrived.After(since) {
