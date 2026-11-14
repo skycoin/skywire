@@ -309,9 +309,13 @@ func (f *Filler) Go(fn func()) {
 		f.await.Add(1)
 		f.mx.Unlock()
 
+		// Hold the slot while fn runs, so maxParall bounds the goroutines
+		// waiting on objects. Nested Go calls past the cap run inline.
 		go func() {
 			defer f.await.Done()
-			<-f.limit // release
+			if f.limit != nil {
+				defer func() { <-f.limit }()
+			}
 			fn()
 		}()
 
