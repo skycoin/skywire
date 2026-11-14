@@ -155,6 +155,16 @@ final class NotificationBridge: NSObject, ObservableObject {
         UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ids)
     }
 
+    /// Takes down the new-mail notifications for the message ids `gone` says are read or deleted.
+    static func clearMail(_ gone: @escaping @Sendable (String) -> Bool) {
+        let prefix = "\(MailProfile.app):"
+        // The handler runs off the main thread, so it must not take this type's isolation.
+        UNUserNotificationCenter.current().getDeliveredNotifications { @Sendable delivered in
+            let ids = delivered.map(\.request.identifier).filter { $0.hasPrefix(prefix) && gone(String($0.dropFirst(prefix.count))) }
+            if !ids.isEmpty { UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ids) }
+        }
+    }
+
     private func post(_ event: NotifyEvent) {
         if event.app == SkychatProfile.app && !Self.chatAllows(event, ChatRepository.shared.store.notif) { return }
         let style = Self.presentation(of: event.app)

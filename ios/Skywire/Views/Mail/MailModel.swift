@@ -109,7 +109,13 @@ final class MailModel: ObservableObject {
         let folder = self.folder
         do {
             let list = try await app.client.mailList(folder)
-            if folder == MailFolder.sent { sent = list } else { inbox = list }
+            if folder == MailFolder.sent {
+                sent = list
+            } else {
+                inbox = list
+                let read = Set(list.filter(\.seen).map(\.id))
+                NotificationBridge.clearMail { read.contains($0) }
+            }
         } catch {
             if !app.handle(error) { notice = error.localizedDescription }
         }
@@ -123,6 +129,8 @@ final class MailModel: ObservableObject {
         Task {
             do {
                 let message = try await app.client.mailRead(folder, id: summary.id)
+                let id = summary.id
+                NotificationBridge.clearMail { $0 == id }
                 if open?.summary.id == summary.id { open?.message = message }
                 inbox = inbox?.map { item in
                     var item = item
@@ -147,6 +155,8 @@ final class MailModel: ObservableObject {
             defer { busy = false }
             do {
                 try await app.client.mailDelete(current.folder, id: current.summary.id)
+                let id = current.summary.id
+                NotificationBridge.clearMail { $0 == id }
                 open = nil
                 inbox = inbox?.filter { $0.id != current.summary.id }
                 sent = sent?.filter { $0.id != current.summary.id }
