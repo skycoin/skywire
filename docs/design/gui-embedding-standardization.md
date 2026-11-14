@@ -30,7 +30,7 @@ Grouped by stack:
   fetch+SSE), **browse.js + WinBox** (`pkg/wasmhv/browseui`, the in-SPA virtual
   browser / mini-desktop), **pty terminal** (websh's terminal page, `github.com/0magnet/websh/term`).
 - **Go server-rendered HTML** (`html/template` on `net/http`): the **reward system UI**
-  (`cmd/skywire-cli/commands/rewards/server`), proxied into the SPA at
+  (`pkg/deployment/rewards/server`), proxied into the SPA at
   `/api/rewards/*`.
 - **WASM**: **`skywire web`** (`cmd/skywire/commands/web`, TinyGo `b.wasm` CLI-
   tree browser), **wasm-visor** (its UI is

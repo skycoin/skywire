@@ -1,4 +1,4 @@
-// Package tpviz pkg/tpviz/tpviz.go c4-app-rewards
+// Package tpviz pkg/tpviz/tpviz.go c3-app-rewards
 package tpviz
 
 import (

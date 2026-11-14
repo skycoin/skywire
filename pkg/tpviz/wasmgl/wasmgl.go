@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package wasmgl pkg/tpviz/wasmgl/wasmgl.go c4-app-rewards
+// Package wasmgl pkg/tpviz/wasmgl/wasmgl.go c3-app-rewards
 // The Go/wasm WebGL view for tpviz: the same GPU force-directed graph the
 // TypeScript view draws, with the engine (github.com/0magnet/cosmos-go, a Go
 // port of cosmos.gl 2.6.3) and the group-boundary overlay both in Go.

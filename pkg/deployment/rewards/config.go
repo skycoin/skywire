@@ -1,4 +1,4 @@
-// Package rewards pkg/deployment/rewards/config.go c4-app-rewards
+// Package rewards pkg/deployment/rewards/config.go c3-app-rewards
 // handler. It can be used standalone (via the CLI) or embedded in the
 // visor's port 80 router for integrated DMSG/skynet access.
 package rewards

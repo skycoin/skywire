@@ -2,7 +2,7 @@
 package proxystatus
 
 // mononokiWoff2 is the base64-encoded WOFF2 data for the mononoki monospace font,
-// copied verbatim from cmd/skywire-cli/commands/rewards/server/fonts.go
+// copied verbatim from pkg/deployment/rewards/server/fonts.go
 // (MononokiWoff2). pkg/proxystatus cannot import that CLI package, so the constant
 // is duplicated here rather than shared. It is embedded once in the page shell as an
 // @font-face data-URI (never in the streamed RenderFragment) so the route tree's

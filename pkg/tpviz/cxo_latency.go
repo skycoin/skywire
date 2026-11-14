@@ -1,4 +1,4 @@
-// Package tpviz pkg/tpviz/cxo_latency.go c4-app-rewards
+// Package tpviz pkg/tpviz/cxo_latency.go c3-app-rewards
 //
 // The latency graph behind the latency-space view: an undirected,
 // weighted graph over visor public keys where an edge weight is the

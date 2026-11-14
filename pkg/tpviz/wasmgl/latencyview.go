@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package wasmgl pkg/tpviz/wasmgl/latencyview.go c4-app-rewards
+// Package wasmgl pkg/tpviz/wasmgl/latencyview.go c3-app-rewards
 // The latency-space view: visors positioned by measured round-trip time
 // rather than by geography, with a spherical Voronoi cell per visor.
 //

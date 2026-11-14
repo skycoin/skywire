@@ -61,13 +61,6 @@ var streamingCommands = map[string]string{
 	"commands/log/log.go":                           "bulk log collection; per-file progress",
 	"commands/log/single_heapdump.go":               "one line naming where the visor wrote the dump",
 	"commands/proxy/log.go":                         "stream of route and transport events",
-	"commands/rewards/server/server.go":             "an HTTP server, not a command that returns a value",
-	"commands/rewards/server/login.go":              "part of the rewards HTTP server",
-	"commands/rewards/server/logging.go":            "part of the rewards HTTP server",
-	"commands/rewards/server/stats.go":              "part of the rewards HTTP server",
-	"commands/rewards/server/htmpl.go":              "part of the rewards HTTP server",
-	"commands/rewards/server/nodeproxy.go":          "part of the rewards HTTP server",
-	"commands/rewards/server/loginchain.go":         "part of the rewards HTTP server",
 }
 
 // localJSONFlags are commands that declare their own --json instead of using

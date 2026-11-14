@@ -4,12 +4,12 @@
 package clirewards
 
 import (
-	server "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards/server"
+	rewardsserver "github.com/skycoin/skywire/pkg/deployment/rewards/server"
 )
 
 func init() {
 	RootCmd.AddCommand(
-		server.ServerCmd,
-		server.LoginChainCmd,
+		rewardsserver.ServerCmd,
+		rewardsserver.LoginChainCmd,
 	)
 }

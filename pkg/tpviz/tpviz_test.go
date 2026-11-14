@@ -1,6 +1,6 @@
 //go:build !mobile
 
-// Package tpviz pkg/tpviz/tpviz_test.go c4-app-rewards
+// Package tpviz pkg/tpviz/tpviz_test.go c3-app-rewards
 package tpviz
 
 import (

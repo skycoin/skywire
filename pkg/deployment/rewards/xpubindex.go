@@ -1,4 +1,4 @@
-// Package rewards pkg/deployment/rewards/xpubindex.go c4-app-rewards
+// Package rewards pkg/deployment/rewards/xpubindex.go c3-app-rewards
 package rewards
 
 import (

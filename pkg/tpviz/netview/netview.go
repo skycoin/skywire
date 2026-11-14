@@ -1,4 +1,4 @@
-// Package netview pkg/tpviz/netview/netview.go c4-app-rewards
+// Package netview pkg/tpviz/netview/netview.go c3-app-rewards
 //
 // Package netview embeds the WebGL graph view (cmd/netview) as a js/wasm
 // module of its own, about 1 MB gzipped, so every build serves it. Rebuild it

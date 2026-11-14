@@ -1,4 +1,4 @@
-// Package tpviz pkg/tpviz/tpviz_extra_test.go c4-app-rewards
+// Package tpviz pkg/tpviz/tpviz_extra_test.go c3-app-rewards
 //
 // Coverage for the CXO-subscriber integration, geoip/IP-group caches,
 // the embedded-visor refresh path, and the server lifecycle helpers.

@@ -11,7 +11,7 @@
 // services' actual routers (pkg/dmsg/discovery/api, pkg/deployment/tpd/api,
 // pkg/deployment/ar/api, pkg/deployment/rf/api, pkg/deployment/sd/api,
 // pkg/deployment/ut/api, and the reward server in
-// cmd/skywire-cli/commands/rewards/server).
+// pkg/deployment/rewards/server).
 //
 // Path parameters are expressed inline in Path with chi's "{name}" syntax and
 // are parsed by the renderer at display time — they need no dedicated field.
@@ -131,7 +131,7 @@ var Manifest = map[string][]Endpoint{
 			{Name: "visors", Desc: "filter to a ;-separated PK list", Example: "pk1;pk2"},
 		}},
 	},
-	// reward system — cmd/skywire-cli/commands/rewards/server
+	// reward system — pkg/deployment/rewards/server
 	"reward": {
 		{Method: "GET", Path: "/health", Desc: "service health"},
 		{Method: "GET", Path: "/transports", Desc: "transport visualization page"},

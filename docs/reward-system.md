@@ -89,7 +89,7 @@ This service is called by a timer which triggers it to run hourly
 
 The 'frontend' of the reward system, is currently running at [theskywirenetwork.net](https://theskywirenetwork.net) and is reliant upon on the output of certain cli commands ~~and some scripts~~
 
-[`skywire cli rewards ui`](https://github.com/skycoin/skywire/blob/develop/cmd/skywire-cli/commands/rewards/server/cmd.go) serves the reward system frontend or user interface - via http and dmsghttp.
+[`skywire cli rewards ui`](https://github.com/skycoin/skywire/blob/develop/pkg/deployment/rewards/server/cmd.go) serves the reward system frontend or user interface - via http and dmsghttp.
 
 The service which runs the reward system UI:
 /etc/systemd/system/[`fiberreward.service`](https://github.com/skycoin/skywire/blob/develop/scripts/rewards/services/fiberreward.service)
