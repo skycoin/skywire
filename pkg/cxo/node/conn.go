@@ -67,6 +67,11 @@ type Conn struct {
 	// debug lines format it on every message whether or not they print.
 	str atomic.Pointer[string]
 
+	// objectServes and deltaServes count the RqObject and RqDelta requests
+	// being served on their own goroutines, see takeServe.
+	objectServes atomic.Int32
+	deltaServes  atomic.Int32
+
 	// deltaCap is whether the peer serves RqDelta, see probeDelta.
 	deltaCap atomic.Int32
 
@@ -854,8 +859,15 @@ func (c *Conn) handle(seq uint32, m msg.Msg) (err error) {
 	// objects
 
 	case *msg.RqObject: // <- RqO (key, prefetch)
+		if !takeServe(&c.objectServes, maxObjectServes) {
+			c.sendErr(seq, errServesBusy)
+			return err
+		}
 		c.await.Add(1)
-		go c.handleRqObject(seq, x)
+		go func() {
+			defer c.objectServes.Add(-1)
+			c.handleRqObject(seq, x)
+		}()
 		return err
 
 	// preview
@@ -872,8 +884,15 @@ func (c *Conn) handle(seq uint32, m msg.Msg) (err error) {
 		if c.n.noDelta {
 			return fmt.Errorf("invalid message type %T", m) // as decoding fails before RqDelta
 		}
+		if !takeServe(&c.deltaServes, maxDeltaServes) {
+			c.sendErr(seq, errServesBusy)
+			return err
+		}
 		c.await.Add(1)
-		go c.handleRqDelta(seq, x)
+		go func() {
+			defer c.deltaServes.Add(-1)
+			c.handleRqDelta(seq, x)
+		}()
 		return err
 
 	//
@@ -1142,4 +1161,22 @@ func (c *Conn) handleRqPeers(seq uint32, rqp *msg.RqPeers) error {
 	})
 
 	return nil
+}
+
+// Caps on the peer-driven requests one conn serves at once. A fill of one feed
+// keeps one request per conn in flight, so only a flooding peer reaches them.
+const (
+	maxObjectServes = 64
+	maxDeltaServes  = 8
+)
+
+var errServesBusy = errors.New("too many requests in flight")
+
+// takeServe takes one of limit serving slots counted by n.
+func takeServe(n *atomic.Int32, limit int32) bool {
+	if n.Add(1) > limit {
+		n.Add(-1)
+		return false
+	}
+	return true
 }
