@@ -83,7 +83,9 @@ final class ChatRepository: ObservableObject {
     @Published var uploads: [String: Upload] = [:]
     @Published var groupUnread: [String: Int] = [:]
     @Published var hist: [String: HistPage] = [:]
-    @Published var summaries: [String: ThreadSummary] = [:]
+    @Published var summaries: [String: ThreadSummary] = [:] {
+        didSet { summariesTick &+= 1 }
+    }
     /// Route for DM sends: `skynet`, `dmsg` or `cxo`.
     @Published var network = "skynet"
     /// The conversation on screen.
@@ -114,7 +116,7 @@ final class ChatRepository: ObservableObject {
     private weak var app: AppModel?
     private var session: Task<Void, Never>?
     private var wantApp = false
-    private var postedUnread = -1
+    private var summariesTick = 0
     private var changeTick = 0
 
     nonisolated static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "skywire", category: "chat")
@@ -411,8 +413,9 @@ final class ChatRepository: ObservableObject {
         }
     }
 
+    /// What the conversation rows show as unread, groups and channels included.
     var totalUnread: Int {
-        summaries.filter { Skychat.isPk($0.key) }.values.reduce(0) { $0 + $1.unread }
+        summaries.values.reduce(0) { $0 + $1.unread }
     }
 
     // MARK: The open conversation
@@ -628,11 +631,13 @@ final class ChatRepository: ObservableObject {
         }
     }
 
-    /// The hub card's badge reads this total back from skychat.
+    /// The total skychat keeps for when these screens are not following it. Sent after every
+    /// change: skychat bumps it for each inbound message, read ones too.
     private func unreadLoop() async {
+        var posted = -1
         while !Task.isCancelled {
-            let total = totalUnread
-            if total != postedUnread, (try? await api.reportUnread(total)) != nil { postedUnread = total }
+            let tick = summariesTick
+            if tick != posted, (try? await api.reportUnread(totalUnread)) != nil { posted = tick }
             try? await Task.sleep(for: Self.unreadInterval)
         }
     }

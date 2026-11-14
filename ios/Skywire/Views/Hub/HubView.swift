@@ -6,7 +6,6 @@ import WalletCore
 struct HubView: View {
     @EnvironmentObject private var app: AppModel
     @EnvironmentObject private var navigator: Navigator
-    @EnvironmentObject private var notifications: NotificationBridge
     @StateObject private var model = HubModel()
     @State private var filter = HubFilter.all
 
@@ -88,9 +87,11 @@ struct HubView: View {
                             status: model.dot(SkydexProfile.app)) { navigator.push(.dex) }
                 .accessibilityIdentifier("hub-dex"))
         case .chat:
-            AnyView(AppCard(icon: MI.roundedForum, name: L10n.key("app_skychat"), subtitle: Text("hub_chat_sub"),
-                            status: model.dot(SkychatProfile.app), badge: notifications.unread ?? 0) { navigator.openFromHub(.chat) }
-                .accessibilityIdentifier("hub-chat"))
+            AnyView(ChatUnread { unread in
+                AppCard(icon: MI.roundedForum, name: L10n.key("app_skychat"), subtitle: Text("hub_chat_sub"),
+                        status: model.dot(SkychatProfile.app), badge: unread) { navigator.openFromHub(.chat) }
+            }
+            .accessibilityIdentifier("hub-chat"))
         case .wallet:
             AnyView(AppCard(icon: MI.roundedAccountBalanceWallet, name: L10n.key("app_wallet"),
                             subtitle: model.skyBalance.map { Text(verbatim: L10n.format("hub_wallet_balance", $0)) } ?? Text("hub_wallet_sub"),
@@ -203,6 +204,18 @@ private struct CountBadge: View {
             .padding(.horizontal, 7)
             .padding(.vertical, 2)
             .background(Color.skyPrimary, in: Capsule())
+    }
+}
+
+/// The SkyChat card's count: the chat rows' own while they follow skychat, else skychat's
+/// estimate, which counts every inbound message.
+private struct ChatUnread<Content: View>: View {
+    @ObservedObject private var repo = ChatRepository.shared
+    @EnvironmentObject private var notifications: NotificationBridge
+    @ViewBuilder let content: (Int) -> Content
+
+    var body: some View {
+        content(repo.conn.ready ? repo.totalUnread : notifications.unread ?? 0)
     }
 }
 

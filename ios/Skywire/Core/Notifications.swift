@@ -127,7 +127,11 @@ final class NotificationBridge: NSObject, ObservableObject {
                     try SecretStore.app().password(.skychatPassword)
                 }
             }
-            if let skychat {
+            // The chat screens' own count while they follow skychat, so the badge matches the
+            // rows. skychat's estimate counts every inbound message.
+            if ChatRepository.shared.conn.ready {
+                setUnread(ChatRepository.shared.totalUnread)
+            } else if let skychat {
                 setUnread(await skychat.unread())
             }
             do {
