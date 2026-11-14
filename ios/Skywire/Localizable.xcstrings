@@ -24652,31 +24652,60 @@
         }
       }
     },
+    "mail_attachments_size" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Attachments: %1$@ of %2$@."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adjuntos: %1$@ de %2$@."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pièces jointes : %1$@ sur %2$@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "附件共 %1$@，上限 %2$@。"
+          }
+        }
+      }
+    },
     "mail_attachments_too_big" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "These attachments become %1$@ in transit — a message can be about %2$@."
+            "value" : "These files add up to %1$@, and a message can carry %2$@."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Estos adjuntos ocupan %1$@ en tránsito; un mensaje puede ser de unos %2$@."
+            "value" : "Estos archivos suman %1$@, y un mensaje puede llevar %2$@."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ces pièces jointes deviennent %1$@ en transit — un message peut faire environ %2$@."
+            "value" : "Ces fichiers font %1$@ au total, et un message peut en porter %2$@."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这些附件在传输时会膨胀到 %1$@，而一封邮件大约只能有 %2$@。"
+            "value" : "这些文件共 %1$@，而一封邮件最多可带 %2$@。"
           }
         }
       }
@@ -26166,25 +26195,25 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mail goes out now, over dmsg for a .dmsg address. A recipient whose visor is offline does not get it, and nothing retries."
+            "value" : "Mail goes out now. A recipient whose visor is offline does not get it, and nothing retries."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El correo sale ahora, por dmsg para una dirección .dmsg. Si el nodo del destinatario está desconectado, no lo recibe y nada lo reintenta."
+            "value" : "El correo sale ahora. Si el nodo del destinatario está desconectado, no lo recibe y nada lo reintenta."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Le courrier part maintenant, via dmsg pour une adresse .dmsg. Un destinataire dont le visor est hors ligne ne le reçoit pas, et rien ne réessaie."
+            "value" : "Le courrier part maintenant. Un destinataire dont le visor est hors ligne ne le reçoit pas, et rien ne réessaie."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "邮件会立即发出，.dmsg 地址走 dmsg。收件人的节点离线时收不到，也不会重试。"
+            "value" : "邮件会立即发出。收件人的节点离线时收不到，也不会重试。"
           }
         }
       }
@@ -26624,6 +26653,35 @@
         }
       }
     },
+    "mail_usage_encoded" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail is kept as it was sent, so attachments take about a third more than the files."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El correo se guarda tal como se envió, así que los adjuntos ocupan un tercio más que los archivos."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le courrier est gardé tel qu’envoyé, donc les pièces jointes prennent environ un tiers de plus que les fichiers."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "邮件按发送时的形式保存，因此附件占用的空间比原文件多约三分之一。"
+          }
+        }
+      }
+    },
     "mail_verified_line" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -26659,25 +26717,25 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Every address in To and Cc goes over this network. dmsg needs no route; skynet is faster when one exists."
+            "value" : "Every address in To and Cc goes over this network. A recipient on your local network gets a direct link instead. dmsg needs no route; skynet is faster when one exists."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Todas las direcciones de Para y Cc van por esta red. dmsg no necesita ruta; skynet es más rápido cuando hay una."
+            "value" : "Todas las direcciones de Para y Cc van por esta red. Un destinatario en tu red local recibe un enlace directo. dmsg no necesita ruta; skynet es más rápido cuando hay una."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Toutes les adresses de À et Cc passent par ce réseau. dmsg n’exige pas de route ; skynet est plus rapide quand il en existe une."
+            "value" : "Toutes les adresses de À et Cc passent par ce réseau. Un destinataire sur votre réseau local passe par un lien direct. dmsg n’exige pas de route ; skynet est plus rapide quand il en existe une."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "收件人和抄送中的所有地址都经由此网络发送。dmsg 无需路由；有路由时 skynet 更快。"
+            "value" : "收件人和抄送中的所有地址都经由此网络发送；与你在同一局域网的收件人则走直连。dmsg 无需路由；有路由时 skynet 更快。"
           }
         }
       }

@@ -4,16 +4,12 @@ import XCTest
 /// The mail screen's own rules (Android: MailSizeTest and friends).
 @MainActor
 final class MailTests: XCTestCase {
-    /// The visor writes an attachment as MIME base64 in 76-column lines and ends the last one
-    /// with CRLF too, which Foundation's encoder leaves off.
-    private func visorWrites(_ count: Int) -> Int64 {
-        Int64(Data(count: count).base64EncodedString(options: [.lineLength76Characters, .endLineWithCarriageReturn, .endLineWithLineFeed]).utf8.count) + 2
-    }
-
-    func testAttachmentWireSizeMatchesTheMimeEncoding() {
-        for count in [0, 1, 2, 3, 56, 57, 58, 114, 300 * 1024, 770_000, 1 << 20] {
-            XCTAssertEqual(MailModel.attachmentWireSize(Int64(count)), visorWrites(count), "count \(count)")
-        }
+    /// A tester's 4.9 MB and 2.58 MB files were refused against a 10 MB limit (Android: MailSizeTest).
+    func testTheLimitCountsTheFilesNotTheirBase64() {
+        let files = [5_138_022, 2_580_000].map { DraftAttachment(name: "f.mp3", mime: "audio/mpeg", bytes: Data(count: $0)) }
+        XCTAssertEqual(MailModel.filesSize(files), 7_718_022)
+        XCTAssertLessThanOrEqual(MailModel.filesSize(files), MailModel.defaultMaxMessage)
+        XCTAssertEqual(MailModel().messageLimit, 10 << 20)
     }
 
     private let pcLabel = "akn3cloqt2fcnaq42wbiy5ye7uymhyogbmyuvegosv7xj3q4ynf5e"

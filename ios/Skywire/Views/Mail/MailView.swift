@@ -669,6 +669,11 @@ private struct MailComposeView: View {
                         .accessibilityLabel(Text("mail_remove"))
                     }
                 }
+                if let attachments = model.draft?.attachments, !attachments.isEmpty {
+                    Text(verbatim: L10n.format("mail_attachments_size", MailModel.formatBytes(MailModel.filesSize(attachments)), MailModel.formatBytes(model.messageLimit)))
+                        .skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
+                        .accessibilityIdentifier("mail-attachments-size")
+                }
                 Button { picking = true } label: {
                     Label { Text("mail_attach") } icon: { MaterialIcon(MI.roundedAttachFile, size: 18) }
                 }
@@ -794,6 +799,7 @@ private struct MailSettingsView: View {
                             let total = status.limits.maxTotalSize
                             Text(verbatim: L10n.format("mail_usage", MailModel.formatBytes(status.usage), MailModel.formatBytes(total)))
                                 .skyText(.bodyMedium)
+                            Text("mail_usage_encoded").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
                             if total > 0 {
                                 ProgressBar(value: Double(status.usage) / Double(total)).padding(.top, 6)
                             }
