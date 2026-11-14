@@ -319,7 +319,7 @@ func MailBody(m Mail) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		if m.Status != nil && m.Status.HasOutbox {
+		if m.Status != nil && m.Status.OutboxEnabled {
 			templ_7745c5c3_Err = mailTab(m, "list", FolderOutbox, T(ctx, "mail.outbox"), m.Status.Outbox).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
@@ -2176,7 +2176,7 @@ func mailSettings(m Mail) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			if s.HasOutbox {
+			if s.OutboxEnabled {
 				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 170, "<form class=\"form\" hx-post=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err

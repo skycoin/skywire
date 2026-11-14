@@ -47,7 +47,7 @@ type Node struct {
 
 // NodeOf turns a visor summary into a row.
 func NodeOf(s visorapi.Summary) Node {
-	n := Node{Online: s.Online, State: s.State, HV: s.IsHypervisor, Reward: s.RewardAddress, Routes: len(s.Routes)}
+	n := Node{Online: s.Online, State: s.State, HV: s.Hypervisor, Reward: s.RewardAddress, Routes: len(s.Routes)}
 	if o := s.Overview; o != nil {
 		n.PK = o.PubKey.Hex()
 		n.Hostname = o.Hostname

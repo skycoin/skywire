@@ -60,7 +60,7 @@ type Provider interface {
 }
 
 // NopProvider returns a Provider that knows nothing — Geo
-// returns "??", Latency 0, Kind "", IsTrusted/IsHypervisor false.
+// returns "??", Latency 0, Kind "", Trusted/Hypervisor false.
 // Used as the default when no Provider is wired up, so policies
 // that don't depend on visor state still work.
 func NopProvider() Provider { return nopProvider{} }

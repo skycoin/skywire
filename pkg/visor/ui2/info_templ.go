@@ -749,9 +749,9 @@ func overview(i Info) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var46 string
-		templ_7745c5c3_Var46, templ_7745c5c3_Err = templ.JoinStringErrs(yesNo(ctx, i.Sum.IsPublic))
+		templ_7745c5c3_Var46, templ_7745c5c3_Err = templ.JoinStringErrs(yesNo(ctx, i.Sum.Public))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `info.templ`, Line: 84, Col: 114}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `info.templ`, Line: 84, Col: 112}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var46))
 		if templ_7745c5c3_Err != nil {
@@ -1242,7 +1242,7 @@ func infoCards(i Info) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		if i.Sum.IsHypervisor || i.PK == From(ctx).HVPK {
+		if i.Sum.Hypervisor || i.PK == From(ctx).HVPK {
 			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 98, "<h2>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
@@ -1755,9 +1755,9 @@ func infoCards(i Info) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var109 string
-		templ_7745c5c3_Var109, templ_7745c5c3_Err = templ.JoinStringErrs(yesNo(ctx, i.ov().IsSymmetricNAT))
+		templ_7745c5c3_Var109, templ_7745c5c3_Err = templ.JoinStringErrs(yesNo(ctx, i.ov().SymmetricNAT))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `info.templ`, Line: 183, Col: 43}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `info.templ`, Line: 183, Col: 41}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var109))
 		if templ_7745c5c3_Err != nil {
@@ -1767,7 +1767,7 @@ func infoCards(i Info) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		if !i.ov().IsSymmetricNAT && i.ov().PublicIP != "" {
+		if !i.ov().SymmetricNAT && i.ov().PublicIP != "" {
 			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 148, "<dt>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err

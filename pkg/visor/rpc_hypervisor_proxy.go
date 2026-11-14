@@ -48,7 +48,7 @@ import (
 func sortHVVisorEntries(entries []visorapi.HVVisorEntry, localPublicIP string) {
 	bucket := func(e *visorapi.HVVisorEntry) int {
 		switch {
-		case e.IsLocal:
+		case e.Local:
 			return 0
 		case localPublicIP != "" && e.PublicIP == localPublicIP:
 			return 1
@@ -74,7 +74,7 @@ func populateEntryFromSummary(entry *visorapi.HVVisorEntry, summary *visorapi.Su
 	entry.LocalIP = summary.Overview.LocalIP
 	entry.PublicIP = summary.Overview.PublicIP
 	entry.CountryCode = summary.Overview.CountryCode
-	entry.IsSymmetricNAT = summary.Overview.IsSymmetricNAT
+	entry.SymmetricNAT = summary.Overview.SymmetricNAT
 	entry.Transports = len(summary.Overview.Transports)
 	// Only the type and the direction survive: this entry feeds the
 	// node-list table (and `hv ls`, which reads the count alone), and
@@ -93,7 +93,7 @@ func populateEntryFromSummary(entry *visorapi.HVVisorEntry, summary *visorapi.Su
 	entry.Hypervisors = summary.Overview.Hypervisors
 	entry.DMSGServers = summary.DMSGServers
 	entry.PublicAutoconnect = summary.PublicAutoconnect
-	entry.IsPublic = summary.IsPublic
+	entry.Public = summary.Public
 	for _, a := range summary.Overview.Apps {
 		if a != nil && a.Status == appserver.AppStatusRunning {
 			entry.RunningApps = append(entry.RunningApps, a.Name)
@@ -154,7 +154,7 @@ func (v *Visor) HVListDirectVisors() ([]visorapi.HVVisorEntry, error) {
 	var localEntry visorapi.HVVisorEntry
 	localFound := false
 	if hv.visor != nil {
-		localEntry = visorapi.HVVisorEntry{PK: v.conf.PK, Online: true, IsLocal: true}
+		localEntry = visorapi.HVVisorEntry{PK: v.conf.PK, Online: true, Local: true}
 		if localSummary, err := v.Summary(); err == nil {
 			populateEntryFromSummary(&localEntry, localSummary)
 		}
@@ -214,7 +214,7 @@ func (v *Visor) HVListVisors() ([]visorapi.HVVisorEntry, error) {
 	// the top, so position-on-insert doesn't matter.
 	var localEntry visorapi.HVVisorEntry
 	if hv.visor != nil {
-		localEntry = visorapi.HVVisorEntry{PK: v.conf.PK, Online: true, IsLocal: true}
+		localEntry = visorapi.HVVisorEntry{PK: v.conf.PK, Online: true, Local: true}
 		if localSummary, err := v.Summary(); err == nil {
 			populateEntryFromSummary(&localEntry, localSummary)
 		}
@@ -272,7 +272,7 @@ func (v *Visor) HVListVisors() ([]visorapi.HVVisorEntry, error) {
 				continue
 			}
 			seen[entry.PK] = true
-			entry.IsLocal = false
+			entry.Local = false
 			pk := hyperPK
 			entry.ProxiedVia = &pk
 			results = append(results, entry)
@@ -488,7 +488,7 @@ func (v *Visor) HVListVisorsTree() (*visorapi.HVVisorTree, error) {
 	// for its own hypervisor's row), then LAN-adjacent, then by PK.
 	var localPublicIP string
 	for _, e := range sections[0].Visors {
-		if e.IsLocal {
+		if e.Local {
 			localPublicIP = e.PublicIP
 			break
 		}

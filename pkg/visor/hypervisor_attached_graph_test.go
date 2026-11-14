@@ -33,7 +33,7 @@ func TestAttachedEntriesFromSummaries(t *testing.T) {
 		a: {seenAt: now, sum: summaryWith(
 			&visorapi.TransportSummary{ID: abID, Local: a, Remote: b, Type: tptypes.STCPR, LatencyMS: 12},
 			&visorapi.TransportSummary{Local: a, Remote: c, Type: tptypes.SUDPH}, // zero ID: derived
-			&visorapi.TransportSummary{Local: a, Remote: rsn, Type: tptypes.DMSG, IsSetup: true},
+			&visorapi.TransportSummary{Local: a, Remote: rsn, Type: tptypes.DMSG, Setup: true},
 		)},
 		b: {seenAt: now.Add(-time.Second), sum: summaryWith(
 			&visorapi.TransportSummary{ID: abID, Local: b, Remote: a, Type: tptypes.STCPR, ThroughputBps: 5000}, // other end

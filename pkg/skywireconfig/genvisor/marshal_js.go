@@ -373,7 +373,7 @@ func marshalV1(w *strings.Builder, v *visorconfig.V1, indent int) {
 	}
 
 	o.field("is_public")
-	writeBool(w, v.IsPublic)
+	writeBool(w, v.Public)
 
 	if v.PublicVisorConfig != nil {
 		o.field("public_visor")

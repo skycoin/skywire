@@ -40,10 +40,10 @@ const dialSetupCeiling = 90 * time.Second
 // disassemble error on the server side and reassemble it back on the
 // client side.
 type RPCIOErr struct {
-	Text           string
-	IsNetErr       bool
-	IsTimeoutErr   bool
-	IsTemporaryErr bool
+	Text      string
+	NetErr    bool
+	Timeout   bool
+	Temporary bool
 }
 
 // ToError converts `*RPCIOErr` to `error`.
@@ -52,7 +52,7 @@ func (e *RPCIOErr) ToError() error {
 		return nil
 	}
 
-	if !e.IsNetErr {
+	if !e.NetErr {
 		switch e.Text {
 		case io.EOF.Error():
 			return io.EOF
@@ -67,8 +67,8 @@ func (e *RPCIOErr) ToError() error {
 
 	return &netErr{
 		err:       errors.New(e.Text),
-		timeout:   e.IsTimeoutErr,
-		temporary: e.IsTemporaryErr,
+		timeout:   e.Timeout,
+		temporary: e.Temporary,
 	}
 }
 
@@ -1049,8 +1049,8 @@ func ioErrToRPCIOErr(err error) *RPCIOErr {
 	}
 
 	if netErr, ok := err.(net.Error); ok {
-		rpcIOErr.IsNetErr = true
-		rpcIOErr.IsTimeoutErr = netErr.Timeout()
+		rpcIOErr.NetErr = true
+		rpcIOErr.Timeout = netErr.Timeout()
 	}
 
 	return rpcIOErr

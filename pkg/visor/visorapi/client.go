@@ -325,7 +325,7 @@ func (rc *rpcClient) Health() (*HealthInfo, error) {
 // StartupComplete calls StartupComplete
 func (rc *rpcClient) StartupComplete() bool {
 	var out bool
-	if err := rc.Call("IsStartupComplete", &struct{}{}, &out); err != nil {
+	if err := rc.Call("StartupComplete", &struct{}{}, &out); err != nil {
 		return false
 	}
 	return out
@@ -356,7 +356,7 @@ func (rc *rpcClient) DisableHypervisorPersist(persist bool) error {
 // HypervisorEnabled calls HypervisorEnabled
 func (rc *rpcClient) HypervisorEnabled() bool {
 	var out bool
-	if err := rc.Call("IsHypervisorEnabled", &struct{}{}, &out); err != nil {
+	if err := rc.Call("HypervisorEnabled", &struct{}{}, &out); err != nil {
 		return false
 	}
 	return out
@@ -381,7 +381,7 @@ func (rc *rpcClient) SetHypervisorAuthPersist(enable, persist bool) error {
 // HypervisorAuthEnabled reports whether the hypervisor UI requires a login.
 func (rc *rpcClient) HypervisorAuthEnabled() bool {
 	var out bool
-	if err := rc.Call("IsHypervisorAuthEnabled", &struct{}{}, &out); err != nil {
+	if err := rc.Call("HypervisorAuthEnabled", &struct{}{}, &out); err != nil {
 		return false
 	}
 	return out
@@ -390,7 +390,7 @@ func (rc *rpcClient) HypervisorAuthEnabled() bool {
 // HypervisorUIServing calls HypervisorUIServing
 func (rc *rpcClient) HypervisorUIServing() bool {
 	var out bool
-	if err := rc.Call("IsHypervisorUIServing", &struct{}{}, &out); err != nil {
+	if err := rc.Call("HypervisorUIServing", &struct{}{}, &out); err != nil {
 		return false
 	}
 	return out
@@ -1153,7 +1153,7 @@ func (rc *rpcClient) Resume() error {
 // Suspended calls Suspended.
 func (rc *rpcClient) Suspended() (bool, error) {
 	var suspended bool
-	err := rc.Call("IsSuspended", &struct{}{}, &suspended)
+	err := rc.Call("Suspended", &struct{}{}, &suspended)
 	return suspended, err
 }
 
@@ -1357,7 +1357,7 @@ func (rc *rpcClient) Ports() (map[string]PortDetail, error) {
 // DMSGClientReady return availability of dsmg client
 func (rc *rpcClient) DMSGClientReady() (bool, error) {
 	var out bool
-	err := rc.Call("IsDMSGClientReady", &struct{}{}, &out)
+	err := rc.Call("DMSGClientReady", &struct{}{}, &out)
 	return out, err
 }
 

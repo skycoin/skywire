@@ -572,7 +572,7 @@ func (p *Proc) Error() string {
 
 // ConnectionSummary sums up the connection stats.
 type ConnectionSummary struct {
-	IsAlive            bool          `json:"is_alive"`
+	Alive              bool          `json:"is_alive"`
 	Latency            time.Duration `json:"latency"`
 	UploadSpeed        uint32        `json:"upload_speed"`
 	DownloadSpeed      uint32        `json:"download_speed"`
@@ -614,7 +614,7 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 			return true
 		}
 		summaries = append(summaries, ConnectionSummary{
-			IsAlive: skywireConn.Alive(),
+			Alive: skywireConn.Alive(),
 			// Latency in summary is expected to be in ms and not ns so we change the base to ms
 			Latency:            time.Duration(skywireConn.Latency().Milliseconds()),
 			UploadSpeed:        skywireConn.UploadSpeed(),

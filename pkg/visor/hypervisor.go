@@ -1373,7 +1373,7 @@ type Health struct {
 
 func makeSummaryResp(online, hyper bool, sum *visorapi.Summary) visorapi.Summary {
 	sum.Online = online
-	sum.IsHypervisor = hyper
+	sum.Hypervisor = hyper
 	return *sum
 }
 

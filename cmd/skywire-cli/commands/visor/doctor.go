@@ -156,7 +156,7 @@ func runDoctor(cmd *cobra.Command) doctorReport {
 	return r
 }
 
-// probeVisor populates r.Visor from the Summary + IsStartupComplete
+// probeVisor populates r.Visor from the Summary + StartupComplete
 // RPC calls. Reachability errors at this layer escalate the verdict
 // to RED; degraded subsystems escalate to YELLOW.
 func probeVisor(r *doctorReport, rc visorapi.API) {
@@ -185,7 +185,7 @@ func probeVisor(r *doctorReport, rc visorapi.API) {
 		r.Visor.TransportabilityHealth = summary.Health.TransportabilityHealth
 	}
 	if !r.Visor.Ready {
-		bumpVerdict(r, verdictRed, "visor not ready (IsStartupComplete=false)")
+		bumpVerdict(r, verdictRed, "visor not ready (StartupComplete=false)")
 	}
 	for label, val := range map[string]string{
 		"services_health":         r.Visor.ServicesHealth,

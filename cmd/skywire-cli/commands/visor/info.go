@@ -196,7 +196,7 @@ var summaryCmd = &cobra.Command{
 		}{
 			PublicKey:            summary.Overview.PubKey.String(),
 			Hostname:             summary.Overview.Hostname,
-			SymmetricNAT:         summary.Overview.IsSymmetricNAT,
+			SymmetricNAT:         summary.Overview.SymmetricNAT,
 			LocalIP:              summary.Overview.LocalIP,
 			PublicIP:             summary.Overview.PublicIP,
 			CountryCode:          summary.Overview.CountryCode,
@@ -210,7 +210,7 @@ var summaryCmd = &cobra.Command{
 			TimeOnline:           summary.Uptime,
 			BuildTag:             summary.BuildTag,
 			ARRegistration:       arSelf,
-			Hypervisor:           summary.IsHypervisor,
+			Hypervisor:           summary.Hypervisor,
 			HypervisorAddr:       summary.HypervisorAddr,
 			Hypervisors:          hvPKs,
 			ConnectedHypervisors: connectedHvPKs,
@@ -781,7 +781,7 @@ func buildSummaryMessageWithData(rpcClient visorapi.API) (string, *visorapi.Summ
 		msg += fmt.Sprintf("Hostname: %s\n", summary.Overview.Hostname)
 	}
 	msg += fmt.Sprintf("Symmetric NAT: %t\nLocal IP: %s\nPublic IP: %s\n",
-		summary.Overview.IsSymmetricNAT, summary.Overview.LocalIP, summary.Overview.PublicIP)
+		summary.Overview.SymmetricNAT, summary.Overview.LocalIP, summary.Overview.PublicIP)
 
 	if geoStr != "" {
 		msg += fmt.Sprintf("Location: %s\n", geoStr)
@@ -841,7 +841,7 @@ func buildSummaryMessageWithData(rpcClient visorapi.API) (string, *visorapi.Summ
 	// hypervisors from the static config, (c) the runtime-connected
 	// subset. Renders all three so the operator can see both the
 	// declared intent and the live state in one place.
-	if summary.IsHypervisor {
+	if summary.Hypervisor {
 		if summary.HypervisorAddr != "" {
 			msg += fmt.Sprintf("Hypervisor UI: enabled at %s\n", summary.HypervisorAddr)
 		} else {

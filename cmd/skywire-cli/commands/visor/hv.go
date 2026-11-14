@@ -458,7 +458,7 @@ func fmtLoadCells(e visorapi.HVVisorEntry) string {
 func formatHVVisorRow(tw *tabwriter.Writer, e visorapi.HVVisorEntry, indent string, showLoad bool) {
 	pk := e.PK.String()
 	status := "ok"
-	if e.IsLocal {
+	if e.Local {
 		status = "local"
 	}
 	if e.Error != "" {

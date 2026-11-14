@@ -212,7 +212,7 @@ func appStatusBtn(t *appTray, rpcClient visorapi.API) {
 		t.mx.Lock()
 		stats, _ := rpcClient.GetAppConnectionsSummary(t.name) //nolint:errcheck
 		if len(stats) == 1 {
-			if stats[0].IsAlive {
+			if stats[0].Alive {
 				if t.lastStatus != 1 {
 					t.status.SetTitle("Status: Connected")
 					t.button.SetTitle("Disconnect")

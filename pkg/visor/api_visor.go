@@ -82,7 +82,7 @@ func (v *Visor) Overview() (*visorapi.Overview, error) {
 		Transports:          tSummaries,
 		RoutesCount:         routesCount,
 		PublicIP:            publicIP,
-		IsSymmetricNAT:      symmetricNAT,
+		SymmetricNAT:        symmetricNAT,
 		NATType:             natType,
 		Hypervisors:         v.conf.Hypervisors,
 		ConnectedHypervisor: v.connectedHypervisorPKs(),
@@ -233,11 +233,11 @@ func (v *Visor) Summary() (*visorapi.Summary, error) {
 		RewardEligible:         rewardEligible,
 		RewardIneligibleReason: rewardIneligibleReason,
 		PublicAutoconnect:      v.conf.Transport.PublicAutoconnect,
-		IsPublic:               v.conf.Public,
+		Public:                 v.conf.Public,
 		DmsgStats:              dmsgStatValue,
 		ConnectedDmsgServers:   connectedDmsgServers,
 		DMSGServers:            dmsgServers,
-		IsHypervisor:           v.HypervisorEnabled(),
+		Hypervisor:             v.HypervisorEnabled(),
 		Load:                   collectLoadStats(),
 	}
 	conn := v.Connectivity()

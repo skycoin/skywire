@@ -14,8 +14,8 @@ import (
 )
 
 // Health returns health information about the visor
-// IsStartupComplete returns whether the visor has finished initializing all modules.
-func (r *RPC) IsStartupComplete(_ *struct{}, out *bool) (err error) {
+// StartupComplete returns whether the visor has finished initializing all modules.
+func (r *RPC) StartupComplete(_ *struct{}, out *bool) (err error) {
 	*out = r.visor.StartupComplete()
 	return nil
 }
@@ -36,8 +36,8 @@ func (r *RPC) DisableHypervisor(persist *bool, _ *struct{}) (err error) {
 	return r.visor.DisableHypervisorPersist(p)
 }
 
-// IsHypervisorEnabled returns whether the hypervisor is currently serving.
-func (r *RPC) IsHypervisorEnabled(_ *struct{}, out *bool) (err error) {
+// HypervisorEnabled returns whether the hypervisor is currently serving.
+func (r *RPC) HypervisorEnabled(_ *struct{}, out *bool) (err error) {
 	*out = r.visor.HypervisorEnabled()
 	return nil
 }
@@ -68,15 +68,15 @@ func (r *RPC) SetHypervisorAuth(in *visorapi.SetHypervisorAuthIn, _ *struct{}) (
 	return r.visor.SetHypervisorAuthPersist(in.Enable, in.Persist)
 }
 
-// IsHypervisorAuthEnabled returns whether the hypervisor web UI requires a login.
-func (r *RPC) IsHypervisorAuthEnabled(_ *struct{}, out *bool) (err error) {
-	defer rpcutil.LogCall(r.log, "IsHypervisorAuthEnabled", nil)(out, &err)
+// HypervisorAuthEnabled returns whether the hypervisor web UI requires a login.
+func (r *RPC) HypervisorAuthEnabled(_ *struct{}, out *bool) (err error) {
+	defer rpcutil.LogCall(r.log, "HypervisorAuthEnabled", nil)(out, &err)
 	*out = r.visor.HypervisorAuthEnabled()
 	return nil
 }
 
-// IsHypervisorUIServing returns whether the hypervisor web UI is serving.
-func (r *RPC) IsHypervisorUIServing(_ *struct{}, out *bool) (err error) {
+// HypervisorUIServing returns whether the hypervisor web UI is serving.
+func (r *RPC) HypervisorUIServing(_ *struct{}, out *bool) (err error) {
 	*out = r.visor.HypervisorUIServing()
 	return nil
 }
@@ -247,9 +247,9 @@ func (r *RPC) Resume(_ *struct{}, _ *struct{}) (err error) {
 	return r.visor.Resume()
 }
 
-// IsSuspended reports whether the visor is currently suspended.
-func (r *RPC) IsSuspended(_ *struct{}, out *bool) (err error) {
-	defer rpcutil.LogCall(r.log, "IsSuspended", nil)(out, &err)
+// Suspended reports whether the visor is currently suspended.
+func (r *RPC) Suspended(_ *struct{}, out *bool) (err error) {
+	defer rpcutil.LogCall(r.log, "Suspended", nil)(out, &err)
 	*out, err = r.visor.Suspended()
 	return err
 }
@@ -524,9 +524,9 @@ func (r *RPC) Ports(_ *struct{}, out *map[string]visorapi.PortDetail) (err error
 	return err
 }
 
-// IsDMSGClientReady return status of dmsg client
-func (r *RPC) IsDMSGClientReady(_ *struct{}, out *bool) (err error) {
-	defer rpcutil.LogCall(r.log, "IsDMSGClientReady", nil)(out, &err)
+// DMSGClientReady return status of dmsg client
+func (r *RPC) DMSGClientReady(_ *struct{}, out *bool) (err error) {
+	defer rpcutil.LogCall(r.log, "DMSGClientReady", nil)(out, &err)
 
 	status, err := r.visor.DMSGClientReady()
 	*out = status

@@ -23,7 +23,7 @@ func testSummaries() []visorapi.Summary {
 	pk1, _ := cipher.GenerateKeyPair()
 	pk2, _ := cipher.GenerateKeyPair()
 	return []visorapi.Summary{
-		{Overview: &visorapi.Overview{PubKey: pk1}, BuildTag: "<b>&tag</b>", IsPublic: true},
+		{Overview: &visorapi.Overview{PubKey: pk1}, BuildTag: "<b>&tag</b>", Public: true},
 		{Overview: &visorapi.Overview{PubKey: pk2}, RewardAddress: "addr", MinHops: 2},
 	}
 }

@@ -642,7 +642,7 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visorapi.TransportSummary)
 		if !tp.Initiator {
 			tpMode = "in"
 		}
-		if tp.IsSetup {
+		if tp.Setup {
 			tpMode = "setup"
 		}
 
@@ -880,7 +880,7 @@ func PrintTransportsWithBandwidth(cmdFlags *pflag.FlagSet, bwByTpID map[string]s
 		if !tp.Initiator {
 			tpMode = "in"
 		}
-		if tp.IsSetup {
+		if tp.Setup {
 			tpMode = "setup"
 		}
 
@@ -1090,7 +1090,7 @@ func renderTransportListLive(rpcClient visorapi.API) (string, error) {
 		if !tp.Initiator {
 			tpMode = "in"
 		}
-		if tp.IsSetup {
+		if tp.Setup {
 			tpMode = "setup"
 		}
 

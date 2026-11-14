@@ -235,7 +235,7 @@ func (v *Visor) MailStatus() (*visorapi.MailStatus, error) {
 		st.Whitelist = s.Whitelist
 	}
 	st.Unread, st.Total = s.Unread, s.Total
-	st.HasOutbox, st.Outbox = s.OutboxEnabled, s.Outbox
+	st.OutboxEnabled, st.Outbox = s.OutboxEnabled, s.Outbox
 	st.Helpers, st.HelpersDefault = s.Helpers, s.HelpersDefault
 	st.RelayFor, st.RelayForDefault = s.RelayFor, s.RelayForDefault
 	return st, nil

@@ -318,7 +318,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 		tableHeader := []string{"#", "PK", "VERSION", "UPTIME", "TP", "APPS", "IP", "CC", "STATUS"}
 		tableRow := func(i int, e visorapi.HVVisorEntry) ([]string, tcell.Style) {
 			st, stStyle := "ok", tcell.StyleDefault.Foreground(color.Green)
-			if e.IsLocal {
+			if e.Local {
 				st, stStyle = "local", tcell.StyleDefault.Foreground(color.Aqua)
 			}
 			if e.ProxiedVia != nil {
@@ -417,7 +417,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 			sb.WriteString(fmt.Sprintf("[yellow]Local IP:[white]   %s\n", e.LocalIP))
 			sb.WriteString(fmt.Sprintf("[yellow]Public IP:[white]  %s\n", e.PublicIP))
 			sb.WriteString(fmt.Sprintf("[yellow]Country:[white]    %s\n", e.CountryCode))
-			sb.WriteString(fmt.Sprintf("[yellow]NAT:[white]        %v\n", e.IsSymmetricNAT))
+			sb.WriteString(fmt.Sprintf("[yellow]NAT:[white]        %v\n", e.SymmetricNAT))
 			sb.WriteString(fmt.Sprintf("[yellow]Transports:[white] %d\n", e.Transports))
 			sb.WriteString(fmt.Sprintf("[yellow]Apps:[white]       %d\n", e.Apps))
 			if e.RewardAddress != "" {
@@ -430,7 +430,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 			if e.Error != "" {
 				sb.WriteString(fmt.Sprintf("\n[red]Error:[white] %s\n", e.Error))
 			}
-			if e.IsLocal {
+			if e.Local {
 				sb.WriteString("\n[cyan](this is the local hypervisor visor)[white]\n")
 			}
 

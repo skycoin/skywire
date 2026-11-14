@@ -76,7 +76,7 @@ func (r *RPCClientNode) Feeds() (fs []cipher.PubKey, err error) {
 
 // Sharing a feed or not
 func (r *RPCClientNode) Sharing(pk cipher.PubKey) (yep bool, err error) {
-	err = r.r.c.Call("node.IsSharing", pk, &yep)
+	err = r.r.c.Call("node.Sharing", pk, &yep)
 	return
 }
 

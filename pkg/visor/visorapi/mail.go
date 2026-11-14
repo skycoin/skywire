@@ -56,10 +56,10 @@ type MailStatus struct {
 	Whitelist   []cipher.PubKey `json:"whitelist"`
 	Unread      int             `json:"unread"`
 	Total       int             `json:"total"`
-	// HasOutbox is false on a visor that sends now or not at all (the
+	// OutboxEnabled is false on a visor that sends now or not at all (the
 	// phone apps). Outbox is how many messages wait for a recipient.
-	HasOutbox bool `json:"has_outbox"`
-	Outbox    int  `json:"outbox"`
+	OutboxEnabled bool `json:"has_outbox"`
+	Outbox        int  `json:"outbox"`
 	// Helpers get a sealed copy of queued mail to deliver too. By
 	// default they are the visors this one manages as a hypervisor.
 	Helpers        []cipher.PubKey `json:"helpers"`

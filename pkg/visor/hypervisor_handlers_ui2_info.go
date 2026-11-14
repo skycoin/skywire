@@ -40,7 +40,7 @@ func (hv *Hypervisor) ui2Summary(ctx *httpCtx) (visorapi.Summary, error) {
 			s.DmsgStats = &d
 		}
 	}
-	s.IsHypervisor = s.Overview.PubKey == hv.c.PK
+	s.Hypervisor = s.Overview.PubKey == hv.c.PK
 	return *s, nil
 }
 

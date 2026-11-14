@@ -50,7 +50,7 @@ templ MailBody(m Mail) {
 		<div class="bar mail-bar">
 			@mailTab(m, "list", FolderInbox, T(ctx, "mail.inbox"), unread(m))
 			@mailTab(m, "list", FolderSent, T(ctx, "mail.sent"), 0)
-			if m.Status != nil && m.Status.HasOutbox {
+			if m.Status != nil && m.Status.OutboxEnabled {
 				@mailTab(m, "list", FolderOutbox, T(ctx, "mail.outbox"), m.Status.Outbox)
 			}
 			@mailTab(m, "compose", "", T(ctx, "mail.compose"), 0)
@@ -336,7 +336,7 @@ templ mailSettings(m Mail) {
 				<p class="small dim">{ T(ctx, "mail.whitelist-help") }</p>
 				<div class="bar"><button class="btn" type="submit">{ T(ctx, "mail.save") }</button></div>
 			</form>
-			if s.HasOutbox {
+			if s.OutboxEnabled {
 				<form class="form" hx-post={ MailURL(m.PK, "/helpers") } hx-target="#mail" hx-swap="outerHTML">
 					<label class="small">{ T(ctx, "mail.helpers") }<textarea class="mono" name="helpers" rows="3" placeholder={ T(ctx, "mail.helpers-default") }>{ ListText(s.Helpers, s.HelpersDefault) }</textarea></label>
 					<label class="small">{ T(ctx, "mail.relay-for") }<textarea class="mono" name="relay_for" rows="3" placeholder={ T(ctx, "mail.relay-for-default") }>{ ListText(s.RelayFor, s.RelayForDefault) }</textarea></label>

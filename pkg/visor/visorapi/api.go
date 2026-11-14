@@ -657,7 +657,7 @@ type Overview struct {
 	RoutesCount     int                   `json:"routes_count"`
 	LocalIP         string                `json:"local_ip"`
 	PublicIP        string                `json:"public_ip"`
-	IsSymmetricNAT  bool                  `json:"is_symmetic_nat"`
+	SymmetricNAT    bool                  `json:"is_symmetic_nat"`
 	// NATType is the visor's STUN-classified NAT type (e.g. "Full cone NAT",
 	// "Symmetric NAT"), determined once at startup. Surfaced so `cli visor ip`
 	// reports the visor's already-known result instead of re-running STUN.
@@ -681,14 +681,14 @@ type Overview struct {
 
 // Summary provides detailed info including overview and health of the visor.
 type Summary struct {
-	Overview     *Overview         `json:"overview"`
-	Health       *HealthInfo       `json:"health"`
-	Uptime       float64           `json:"uptime"`
-	Routes       []RoutingRuleResp `json:"routes"`
-	RouteGroups  []RouteGroupInfo  `json:"route_groups,omitempty"`
-	IsHypervisor bool              `json:"is_hypervisor,omitempty"`
+	Overview    *Overview         `json:"overview"`
+	Health      *HealthInfo       `json:"health"`
+	Uptime      float64           `json:"uptime"`
+	Routes      []RoutingRuleResp `json:"routes"`
+	RouteGroups []RouteGroupInfo  `json:"route_groups,omitempty"`
+	Hypervisor  bool              `json:"is_hypervisor,omitempty"`
 	// HypervisorAddr is the host:port the hypervisor UI is bound to
-	// when IsHypervisor=true. Empty when this visor isn't hosting a
+	// when Hypervisor=true. Empty when this visor isn't hosting a
 	// hypervisor (or when v.conf.Hypervisor is nil). Sourced from
 	// v.conf.Hypervisor.HTTPAddr.
 	HypervisorAddr       string                         `json:"hypervisor_addr,omitempty"`
@@ -720,7 +720,7 @@ type Summary struct {
 	BuildTag               string `json:"build_tag"`
 	ConfigVersion          string `json:"config_version"`
 	PublicAutoconnect      bool   `json:"public_autoconnect"`
-	IsPublic               bool   `json:"is_public"`
+	Public                 bool   `json:"is_public"`
 	// Load is a lightweight resource snapshot (load average, mem %, disk %)
 	// for the `hv ls --load` view. omitempty so the field is absent on
 	// summaries from older visors that don't populate it.

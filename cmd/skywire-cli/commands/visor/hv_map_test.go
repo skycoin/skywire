@@ -107,7 +107,7 @@ func TestHVMapOnly(t *testing.T) {
 	a, _ := cipher.GenerateKeyPair()
 	b, _ := cipher.GenerateKeyPair()
 	tree := visorapi.HVVisorTree{Sections: []visorapi.HVVisorTreeNode{
-		{HypervisorPK: hv, Visors: []visorapi.HVVisorEntry{{PK: hv, IsLocal: true}, {PK: a}, {PK: b}}},
+		{HypervisorPK: hv, Visors: []visorapi.HVVisorEntry{{PK: hv, Local: true}, {PK: a}, {PK: b}}},
 	}}
 	m := collectHVMap(nil, tree, map[cipher.PubKey]bool{a: true})
 	require.Equal(t, hv, m.Hypervisor)

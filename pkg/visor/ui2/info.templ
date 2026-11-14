@@ -81,7 +81,7 @@ templ overview(i Info) {
 			<span class="ov-row" title={ T(ctx, "ui2.routing-rules-info") }><span class="ov-key">{ T(ctx, "ui2.routing-rules") }</span>{ strconv.Itoa(i.ov().RoutesCount) }</span>
 			<span class="ov-row"><span class="ov-key">{ T(ctx, "ui2.route-groups") }</span>{ strconv.Itoa(len(i.Sum.RouteGroups)) }</span>
 			<span class="ov-row"><span class="ov-key">{ T(ctx, "node.overview.min-hops") }</span>{ strconv.Itoa(int(i.Sum.MinHops)) }</span>
-			<span class="ov-row"><span class="ov-key">{ T(ctx, "node.overview.public") }</span>{ yesNo(ctx, i.Sum.IsPublic) }</span>
+			<span class="ov-row"><span class="ov-key">{ T(ctx, "node.overview.public") }</span>{ yesNo(ctx, i.Sum.Public) }</span>
 		</a>
 		<a class="ov-card link" href={ templ.URL(VisorURL(i.PK, "apps")) }>
 			<span class="ov-title">{ T(ctx, "node.overview.apps") }</span>
@@ -121,7 +121,7 @@ templ healthRow(state, key string) {
 templ infoCards(i Info) {
 	<div class="grid">
 		<section class="card">
-			if i.Sum.IsHypervisor || i.PK == From(ctx).HVPK {
+			if i.Sum.Hypervisor || i.PK == From(ctx).HVPK {
 				<h2>{ T(ctx, "node.details.node-info.title-local") }</h2>
 			} else {
 				<h2>{ T(ctx, "node.details.node-info.title") }</h2>
@@ -180,8 +180,8 @@ templ infoCards(i Info) {
 			<h2>{ T(ctx, "node.details.node-info.network-section") }</h2>
 			<dl class="kv">
 				<dt title={ T(ctx, "node.details.node-info.symmetic-nat-info") }>{ T(ctx, "node.details.node-info.symmetic-nat") }</dt>
-				<dd>{ yesNo(ctx, i.ov().IsSymmetricNAT) }</dd>
-				if !i.ov().IsSymmetricNAT && i.ov().PublicIP != "" {
+				<dd>{ yesNo(ctx, i.ov().SymmetricNAT) }</dd>
+				if !i.ov().SymmetricNAT && i.ov().PublicIP != "" {
 					<dt>{ T(ctx, "node.details.node-info.public-ip") }</dt>
 					<dd class="key" data-copy={ i.ov().PublicIP }>{ i.ov().PublicIP }</dd>
 				}

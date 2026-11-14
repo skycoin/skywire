@@ -672,7 +672,7 @@ func fetchTPSTransports(rpcClient visorapi.API, srcPK, dstPK cipher.PubKey) ([]*
 				return fmt.Errorf("local transports: %w", err)
 			}
 			for _, s := range sums {
-				if s == nil || s.IsSetup {
+				if s == nil || s.Setup {
 					continue
 				}
 				add(s.ID, s.Local, s.Remote, s.Type)

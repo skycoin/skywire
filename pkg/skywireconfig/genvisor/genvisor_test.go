@@ -50,10 +50,10 @@ func TestGenerate_Hypervisor(t *testing.T) {
 		t.Fatalf("Generate: %v", err)
 	}
 	if v.Hypervisor == nil {
-		t.Fatal("Hypervisor stanza should be populated when IsHypervisor=true")
+		t.Fatal("Hypervisor stanza should be populated when Hypervisor=true")
 	}
 	if !v.Hypervisor.Enable {
-		t.Error("Hypervisor.Enable should be true when IsHypervisor=true")
+		t.Error("Hypervisor.Enable should be true when Hypervisor=true")
 	}
 }
 
@@ -89,7 +89,7 @@ func TestGenerate_IsPublic(t *testing.T) {
 		t.Fatalf("Generate: %v", err)
 	}
 	if !v.Public {
-		t.Error("V1.IsPublic = false; want true")
+		t.Error("V1.Public = false; want true")
 	}
 }
 

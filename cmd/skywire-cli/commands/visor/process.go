@@ -135,7 +135,7 @@ severed call.`,
 		// re-init, so don't treat that as fatal — the state is polled below.
 		go func() { _ = rpcClient.Resume() }() //nolint:errcheck
 
-		// Poll IsSuspended on fresh connections until it clears (resume
+		// Poll Suspended on fresh connections until it clears (resume
 		// finished flipping state) or we give up waiting.
 		deadline := time.Now().Add(45 * time.Second)
 		for time.Now().Before(deadline) {

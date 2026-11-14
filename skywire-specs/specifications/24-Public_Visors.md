@@ -29,11 +29,11 @@ as described in Service Discovery.
 
 ### Configuration
 
-`visorconfig.V1.IsPublic` and `visorconfig.PublicVisorConfig`.
+`visorconfig.V1.Public` and `visorconfig.PublicVisorConfig`.
 
 | JSON key                           | Type     | Default  | Meaning                                  |
 |------------------------------------|----------|----------|------------------------------------------|
-| `is_public`                        | bool     | false (`skyenv.IsPublic`) | enables public visor mode |
+| `is_public`                        | bool     | false (`skyenv.Public`) | enables public visor mode |
 | `public_visor.registration_timeout`| duration | 10 min (`skyenv.PublicVisorRegistrationTimeout`) | time allowed to receive an external `stcpr` connection; 0 disables the check |
 | `public_visor.max_transports`      | int      | 2048 (`visorconfig.PublicVisorMaxTransports`) | distinct peer count that pauses registration; 0 disables the limit |
 

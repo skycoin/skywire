@@ -993,7 +993,7 @@ func (a *visorAPIAdapter) Overview() (*tpviz.VisorOverview, error) {
 			Remote: tp.Remote,
 			Type:   tp.Type,
 			Log:    tp.Log,
-			Setup:  tp.IsSetup,
+			Setup:  tp.Setup,
 			Label:  tp.Label,
 		})
 	}

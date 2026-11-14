@@ -373,6 +373,16 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 			return rpcReply, rpcRcvr.CutAppTunnel(rpcArg, rpcReply)
 		}, nil
 	})
+	rpcSrv.HandleCall(rpcName+".DMSGClientReady", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(struct{})
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.DMSGClientReady(rpcArg, rpcReply)
+		}, nil
+	})
 	rpcSrv.HandleCall(rpcName+".DMSGServers", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
@@ -1833,6 +1843,26 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 			return rpcReply, rpcRcvr.HostStats(rpcArg, rpcReply)
 		}, nil
 	})
+	rpcSrv.HandleCall(rpcName+".HypervisorAuthEnabled", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(struct{})
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.HypervisorAuthEnabled(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".HypervisorEnabled", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(struct{})
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.HypervisorEnabled(rpcArg, rpcReply)
+		}, nil
+	})
 	rpcSrv.HandleCall(rpcName+".HypervisorNotice", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
@@ -1843,64 +1873,14 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 			return rpcReply, rpcRcvr.HypervisorNotice(rpcArg, rpcReply)
 		}, nil
 	})
-	rpcSrv.HandleCall(rpcName+".IsDMSGClientReady", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+	rpcSrv.HandleCall(rpcName+".HypervisorUIServing", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
 			return nil, err
 		}
 		return func() (any, error) {
 			rpcReply := new(bool)
-			return rpcReply, rpcRcvr.IsDMSGClientReady(rpcArg, rpcReply)
-		}, nil
-	})
-	rpcSrv.HandleCall(rpcName+".IsHypervisorAuthEnabled", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
-		rpcArg := new(struct{})
-		if err := rpcDec.Decode(rpcArg); err != nil {
-			return nil, err
-		}
-		return func() (any, error) {
-			rpcReply := new(bool)
-			return rpcReply, rpcRcvr.IsHypervisorAuthEnabled(rpcArg, rpcReply)
-		}, nil
-	})
-	rpcSrv.HandleCall(rpcName+".IsHypervisorEnabled", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
-		rpcArg := new(struct{})
-		if err := rpcDec.Decode(rpcArg); err != nil {
-			return nil, err
-		}
-		return func() (any, error) {
-			rpcReply := new(bool)
-			return rpcReply, rpcRcvr.IsHypervisorEnabled(rpcArg, rpcReply)
-		}, nil
-	})
-	rpcSrv.HandleCall(rpcName+".IsHypervisorUIServing", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
-		rpcArg := new(struct{})
-		if err := rpcDec.Decode(rpcArg); err != nil {
-			return nil, err
-		}
-		return func() (any, error) {
-			rpcReply := new(bool)
-			return rpcReply, rpcRcvr.IsHypervisorUIServing(rpcArg, rpcReply)
-		}, nil
-	})
-	rpcSrv.HandleCall(rpcName+".IsStartupComplete", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
-		rpcArg := new(struct{})
-		if err := rpcDec.Decode(rpcArg); err != nil {
-			return nil, err
-		}
-		return func() (any, error) {
-			rpcReply := new(bool)
-			return rpcReply, rpcRcvr.IsStartupComplete(rpcArg, rpcReply)
-		}, nil
-	})
-	rpcSrv.HandleCall(rpcName+".IsSuspended", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
-		rpcArg := new(struct{})
-		if err := rpcDec.Decode(rpcArg); err != nil {
-			return nil, err
-		}
-		return func() (any, error) {
-			rpcReply := new(bool)
-			return rpcReply, rpcRcvr.IsSuspended(rpcArg, rpcReply)
+			return rpcReply, rpcRcvr.HypervisorUIServing(rpcArg, rpcReply)
 		}, nil
 	})
 	rpcSrv.HandleCall(rpcName+".KillApp", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
@@ -3223,6 +3203,16 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 			return rpcReply, rpcRcvr.StartVPNClient(rpcArg, rpcReply)
 		}, nil
 	})
+	rpcSrv.HandleCall(rpcName+".StartupComplete", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(struct{})
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.StartupComplete(rpcArg, rpcReply)
+		}, nil
+	})
 	rpcSrv.HandleCall(rpcName+".StateSnapshot", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {
@@ -3351,6 +3341,16 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 		return func() (any, error) {
 			rpcReply := new(struct{})
 			return rpcReply, rpcRcvr.Suspend(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".Suspended", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(struct{})
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.Suspended(rpcArg, rpcReply)
 		}, nil
 	})
 	rpcSrv.HandleCall(rpcName+".TPSAddTransport", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
