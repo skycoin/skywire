@@ -125,8 +125,8 @@ The calculation flags default to what the reward script passes (-b -B 0 -p log_b
 	},
 }
 
-// collectAll runs the collection steps of the service. A fatal error in
-// either stops the cycle, as the service's && chain does.
+// collectAll runs the collection steps of the service. A survey cleanup
+// failure stops the cycle. A bandwidth failure does not.
 func collectAll(o rewardOpts) {
 	flags := clilog.RootCmd.Flags()
 	set := func(name, value string) {
@@ -154,7 +154,10 @@ func collectAll(o rewardOpts) {
 
 	log.Info("Collecting bandwidth (bw-collect)")
 	histPath = o.histDir
-	bwCollectCmd.Run(bwCollectCmd, nil)
+	bwSurveyPath = o.surveyPath
+	if err := collectBandwidth(bwCollectCmd.Flags(), logging.MustGetLogger("bw-collect")); err != nil {
+		log.Errorf("Bandwidth collection failed, so a date with no bandwidth file pays pool 2 as pool 1: %v", err)
+	}
 }
 
 // fetchAndSaveUT writes what the reward script gets from

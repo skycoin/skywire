@@ -63,7 +63,7 @@ bytes. See `reward rules` for the human eligibility rules.
   `-s/--loglvl`. Also writes the per-pool files to `--tp-hist` unless `-k`.
 - **`rewards run`** → the hourly cycle of `skywire-reward.service` IN-PROCESS, through the
   same calculation as the bare command: `cli log --no-fetch --prune-below-version auto`
-  (clean pushed surveys) → `bw-collect` (today) → stop if `hist/<date>.txt` exists (paid) →
+  (clean pushed surveys) → `bw-collect` (today; a failure is logged and the cycle goes on, pool 2 then repeats pool 1 for a date with no bandwidth file) → stop if `hist/<date>.txt` exists (paid) →
   UT fetch as `cli ut tpd --since/--until <date>` (`hist/<date>_ut.txt`, `_ut.json`,
   `hist/uptimes.json`) → calculate → write
   `hist/{date}_{ineligible.csv,shares.csv,rewardtxn0.csv,stats.txt}` + per-pool files, byte
@@ -113,6 +113,6 @@ bytes. See `reward rules` for the human eligibility rules.
   happen, just retry (a later attempt succeeded and returned the table).
 - Flag-letter inconsistency across the plural group (backward-compat, do NOT "fix"): `-p` =
   `--lpath` in `rewards`/`svc` but `--hist` in `tp-collect`/`bw-collect`; `--lpath` is `-l` in
-  `bw-collect`. `--lpath` default is `log_collecting` in most, but `log_backups` in `run`.
+  `bw-collect`. `--lpath` default is `log_collecting` in `rewards` and `svc`, but `log_backups` in `run` and `bw-collect`.
 - `rewards run` and the collect commands do REAL network fetches and write to
   `./hist` (gitignored). Run from a scratch dir when testing.
