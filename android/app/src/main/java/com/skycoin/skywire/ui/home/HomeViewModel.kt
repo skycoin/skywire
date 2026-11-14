@@ -47,6 +47,8 @@ data class HomeUiState(
     val metered: Boolean = false,
     /** The user's [MobileData] choice. */
     val useMobileData: Boolean = MobileData.DEFAULT,
+    /** The user has answered the mobile data question once. */
+    val mobileDataAsked: Boolean = false,
 ) {
     val connected: Boolean get() = coreState is CoreState.Running && apiUp
     private val coreOn: Boolean get() =
@@ -56,6 +58,8 @@ data class HomeUiState(
     /** On, but kept off the metered network the phone is using. */
     val waitingForWifi: Boolean get() = online && metered && !useMobileData && coreOn
     val onMobileData: Boolean get() = online && metered && useMobileData && connected
+    /** Held off mobile data and never asked: the question goes on Home. */
+    val offerMobileData: Boolean get() = waitingForWifi && !mobileDataAsked
 }
 
 /**
@@ -78,13 +82,19 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private val batteryOffer = MutableStateFlow(false)
     private val fullScreenOffer = MutableStateFlow(false)
 
-    private data class Net(val online: Boolean, val metered: Boolean, val useMobileData: Boolean)
+    private data class Net(
+        val online: Boolean,
+        val metered: Boolean,
+        val useMobileData: Boolean,
+        val asked: Boolean,
+    )
 
     private fun network(app: Application) = combine(
         Internet.online(app),
         MobileData.metered(app),
         prefs.boolean(MobileData.PREF_KEY, MobileData.DEFAULT),
-    ) { online, metered, allowed -> Net(online, metered == true, allowed) }
+        prefs.boolean(MobileData.PREF_ASKED, false),
+    ) { online, metered, allowed, asked -> Net(online, metered == true, allowed, asked) }
 
     private data class LiveData(
         val apiUp: Boolean = false,
@@ -116,6 +126,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 online = net.online,
                 metered = net.metered,
                 useMobileData = net.useMobileData,
+                mobileDataAsked = net.asked,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
@@ -158,6 +169,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 if (core is CoreState.Running) pollWhileRunning()
             }
         }
+    }
+
+    /** The answer to the mobile data question, asked once. */
+    fun answerMobileData(allowed: Boolean) {
+        viewModelScope.launch { MobileData.choose(getApplication(), allowed) }
     }
 
     /** "Not now" on the Home prompt — silences it here and in Settings. */

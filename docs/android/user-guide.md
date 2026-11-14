@@ -203,11 +203,13 @@ traffic can route through this phone and it can route through them. It costs
 battery and mobile data, which is why it is off. Route lengths above one hop
 need it.
 
-**Use mobile data** is on by default. On mobile data and other metered
-networks Skywire then carries only your own traffic, and the home screen and
-the notification say it is on mobile data. Turned off, Skywire stays on Wi-Fi
-only: it goes offline on mobile data, shows Waiting for Wi-Fi and comes back
-by itself. Changing it restarts the core.
+**Use mobile data** is off until you allow it. Skywire then stays on Wi-Fi
+only: on mobile data it goes offline, shows Waiting for Wi-Fi and comes back
+by itself. The first time that happens the home screen asks whether Skywire
+may use mobile data, and the answer lands in this switch. Turned on, Skywire
+also runs on mobile data and other metered networks, carries only your own
+traffic there, and the home screen and the notification say so. Changing the
+switch restarts the core.
 
 **DNS server** is the resolver SkyVPN and SkyDNS use for ordinary names, over
 DNS-over-TLS where the server offers it. Left empty, SkyVPN uses 1.1.1.1 and

@@ -190,8 +190,13 @@
     <string name="home_hint_disconnected">Conectar inicia el núcleo de Skywire en este teléfono.</string>
     <string name="home_hint_starting">Entrando en la red Skywire. La primera conexión puede tardar unos minutos.</string>
     <string name="home_hint_no_internet">Este teléfono no tiene conexión a internet. Skywire se une a la red por sí solo cuando el teléfono vuelve a estar en línea.</string>
-    <string name="home_hint_waiting_wifi">Los datos móviles están desactivados para Skywire en Ajustes. Se une a la red por sí solo cuando el teléfono está en Wi-Fi.</string>
+    <string name="home_hint_waiting_wifi">Skywire está configurado para usar solo Wi-Fi. Se une a la red por sí solo cuando el teléfono está en Wi-Fi. En Ajustes puedes permitir los datos móviles.</string>
     <string name="home_hint_mobile_data">Usando datos móviles. Aquí Skywire no transporta tráfico de otros nodos, y en Ajustes puedes mantenerlo fuera de los datos móviles.</string>
+    <string name="home_mobile_data_title">¿Usar datos móviles?</string>
+    <string name="home_mobile_data_body">Este teléfono está usando datos móviles, y Skywire no los usa hasta que lo permitas. Con datos móviles Skywire solo transporta tu propio tráfico. Puedes cambiarlo más tarde en Ajustes.</string>
+    <string name="home_mobile_data_deny">Solo Wi-Fi</string>
+    <string name="home_mobile_data_allowed">Skywire ya usa datos móviles. Puedes cambiarlo en Ajustes.</string>
+    <string name="home_mobile_data_denied">Skywire sigue solo con Wi-Fi. Puedes cambiarlo en Ajustes.</string>
     <string name="home_error_start">El núcleo no llegó a arrancar. Revisa el registro del proceso.</string>
     <string name="visor_info_title">Nodo</string>
     <string name="visor_public_key">Clave pública</string>
@@ -652,7 +657,7 @@
     <string name="settings_autoconnect_hint">Mantiene transportes abiertos hacia nodos públicos para que la red pueda enrutar a través de este teléfono, y para que este teléfono pueda enrutar a través de ellos. Cuesta batería y datos móviles, y por eso está desactivado. Las rutas de más de un salto lo necesitan.</string>
     <string name="settings_autoconnect_restart">Se aplica la próxima vez que arranque el núcleo.</string>
     <string name="settings_mobile_data">Usar datos móviles</string>
-    <string name="settings_mobile_data_hint">Con datos móviles y otras redes de uso medido, Skywire solo transporta tu propio tráfico. Desactívalo para usar solo Wi-Fi. Entonces se desconecta con datos móviles y vuelve con Wi-Fi.</string>
+    <string name="settings_mobile_data_hint">Si está desactivado, Skywire usa solo Wi-Fi. Se desconecta con datos móviles y vuelve con Wi-Fi. Si está activado, Skywire también funciona con datos móviles y otras redes de uso medido, y allí solo transporta tu propio tráfico.</string>
     <string name="settings_mobile_data_restart">Cambiarlo reinicia el núcleo.</string>
     <string name="settings_dns">Servidor DNS</string>
     <string name="settings_dns_hint">SkyVPN y SkyDNS le preguntan a este servidor por cada nombre que no sea .dmsg ni .skynet, con DNS sobre TLS cuando el servidor lo ofrece, como hacen Cloudflare, Google y Quad9. Si lo dejas vacío, SkyVPN usa 1.1.1.1 (Cloudflare), porque un servidor VPN no tiene un resolvedor que compartir, y SkyDNS por sí solo usa el DNS de este teléfono.</string>

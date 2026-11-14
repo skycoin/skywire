@@ -110,14 +110,32 @@ fun HomeScreen(
         ConnectButton(state, onConnect = connect, onDisconnect = viewModel::disconnect)
         Spacer(Modifier.height(16.dp))
         StatusCaption(state, onOpenLogs)
-        if (state.offerBatteryExemption) {
+        // One question at a time, and this one decides whether the core runs.
+        if (state.offerMobileData) {
+            Spacer(Modifier.height(20.dp))
+            PermissionPrompt(
+                title = stringResource(R.string.home_mobile_data_title),
+                body = stringResource(R.string.home_mobile_data_body),
+                allow = stringResource(R.string.settings_battery_allow),
+                dismiss = stringResource(R.string.home_mobile_data_deny),
+                onAllow = {
+                    viewModel.answerMobileData(true)
+                    Toast.makeText(context, R.string.home_mobile_data_allowed, Toast.LENGTH_LONG).show()
+                },
+                onDismiss = {
+                    viewModel.answerMobileData(false)
+                    Toast.makeText(context, R.string.home_mobile_data_denied, Toast.LENGTH_LONG).show()
+                },
+            )
+        }
+        if (state.offerBatteryExemption && !state.offerMobileData) {
             Spacer(Modifier.height(20.dp))
             BatteryPrompt(
                 onAllow = viewModel::requestBatteryExemption,
                 onDismiss = viewModel::dismissBatteryPrompt,
             )
         }
-        if (state.offerFullScreenCalls) {
+        if (state.offerFullScreenCalls && !state.offerMobileData) {
             Spacer(Modifier.height(20.dp))
             PermissionPrompt(
                 title = stringResource(R.string.home_calls_title),
@@ -166,6 +184,7 @@ private fun PermissionPrompt(
     allow: String,
     onAllow: () -> Unit,
     onDismiss: () -> Unit,
+    dismiss: String = stringResource(R.string.settings_battery_not_now),
 ) {
     SectionCard {
         Text(title, style = MaterialTheme.typography.titleMedium)
@@ -186,7 +205,7 @@ private fun PermissionPrompt(
                 Text(allow)
             }
             FilledTonalButton(onClick = onDismiss) {
-                Text(stringResource(R.string.settings_battery_not_now))
+                Text(dismiss)
             }
         }
     }

@@ -656,12 +656,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
      * metered mode when it starts, so one that is on restarts.
      */
     fun setUseMobileData(allowed: Boolean) {
-        viewModelScope.launch {
-            prefs.putBoolean(MobileData.PREF_KEY, allowed)
-            val core = CoreServiceState.state.value
-            if (core is CoreState.Stopped || core is CoreState.Failed) return@launch
-            SkywireCoreService.restart(getApplication())
-        }
+        viewModelScope.launch { MobileData.choose(getApplication(), allowed) }
     }
 
     /**

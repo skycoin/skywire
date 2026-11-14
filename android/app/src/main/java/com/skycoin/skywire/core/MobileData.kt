@@ -12,17 +12,32 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 
 /**
- * Whether the visor may use mobile data, on by default. Off, the core goes
- * offline on a metered network, and one not yet running waits to start.
+ * Whether the visor may use mobile data, off until the user allows it. Off,
+ * the core goes offline on a metered network, and one not yet running waits.
  */
 object MobileData {
 
     /** [AppPreferences] key holding the user's choice. */
     const val PREF_KEY = "use_mobile_data"
 
-    const val DEFAULT = true
+    const val DEFAULT = false
+
+    /** Set once the user has answered, on Home or by the Settings switch. */
+    const val PREF_ASKED = "mobile_data_asked"
+
+    /** Saves the choice. A core that is on restarts to read a changed one. */
+    suspend fun choose(context: Context, allowed: Boolean) {
+        val prefs = AppPreferences(context)
+        val was = prefs.boolean(PREF_KEY, DEFAULT).first()
+        prefs.putBoolean(PREF_KEY, allowed)
+        prefs.putBoolean(PREF_ASKED, true)
+        val core = CoreServiceState.state.value
+        if (was == allowed || core is CoreState.Stopped || core is CoreState.Failed) return
+        SkywireCoreService.restart(context)
+    }
 
     /** Field inside the config's `transport.network` object. */
     const val CONFIG_KEY = "metered"

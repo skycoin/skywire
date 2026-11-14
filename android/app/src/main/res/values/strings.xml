@@ -145,8 +145,13 @@
     <string name="home_hint_disconnected">Connect starts the Skywire core on this phone.</string>
     <string name="home_hint_starting">Joining the Skywire network. The first connection can take a few minutes.</string>
     <string name="home_hint_no_internet">This phone has no internet connection. Skywire joins the network by itself once the phone is back online.</string>
-    <string name="home_hint_waiting_wifi">Mobile data is turned off for Skywire in Settings. It joins the network by itself once the phone is on Wi-Fi.</string>
+    <string name="home_hint_waiting_wifi">Skywire is set to Wi-Fi only. It joins the network by itself once the phone is on Wi-Fi. Settings can allow mobile data.</string>
     <string name="home_hint_mobile_data">Using mobile data. Skywire carries no traffic for other visors here, and Settings can keep it off mobile data.</string>
+    <string name="home_mobile_data_title">Use mobile data?</string>
+    <string name="home_mobile_data_body">This phone is on mobile data, and Skywire stays off it until you allow it. On mobile data Skywire carries only your own traffic. You can change this later in Settings.</string>
+    <string name="home_mobile_data_deny">Wi-Fi only</string>
+    <string name="home_mobile_data_allowed">Skywire now uses mobile data. You can change this in Settings.</string>
+    <string name="home_mobile_data_denied">Skywire stays on Wi-Fi only. You can change this in Settings.</string>
     <string name="home_error_start">The core did not come up. Check the process log.</string>
     <string name="visor_info_title">Visor</string>
     <string name="visor_public_key">Public key</string>
@@ -611,7 +616,7 @@
     <string name="settings_autoconnect_hint">Keeps open transports to public visors so the network can route through this phone, and so this phone can route through them. Costs battery and mobile data, which is why it is off. Route lengths above one hop need it.</string>
     <string name="settings_autoconnect_restart">Applies when the core next starts.</string>
     <string name="settings_mobile_data">Use mobile data</string>
-    <string name="settings_mobile_data_hint">On mobile data and other metered networks Skywire carries only your own traffic. Turn this off to keep it on Wi-Fi only. It then goes offline on mobile data and comes back on Wi-Fi.</string>
+    <string name="settings_mobile_data_hint">When this is off Skywire stays on Wi-Fi only. It goes offline on mobile data and comes back on Wi-Fi. When it is on Skywire also runs on mobile data and other metered networks, and carries only your own traffic there.</string>
     <string name="settings_mobile_data_restart">Changing this restarts the core.</string>
     <string name="settings_dns">DNS server</string>
     <string name="settings_dns_hint">SkyVPN and SkyDNS ask this server for every name that is not .dmsg or .skynet, over DNS-over-TLS when the server offers it, as Cloudflare, Google and Quad9 do. Left empty, SkyVPN uses 1.1.1.1 (Cloudflare), because a VPN server has no resolver to share, and SkyDNS on its own uses this phone\'s DNS.</string>

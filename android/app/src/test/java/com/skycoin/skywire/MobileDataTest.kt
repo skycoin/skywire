@@ -12,7 +12,12 @@ import org.junit.Test
 /** What counts as metered, and what Home says about it. */
 class MobileDataTest {
 
-    private val running = HomeUiState(coreState = CoreState.Running(0, 1), apiUp = true, metered = true)
+    private val running = HomeUiState(
+        coreState = CoreState.Running(0, 1),
+        apiUp = true,
+        metered = true,
+        useMobileData = true,
+    )
 
     @Test
     fun aVpnDoesNotAnswerForTheNetworkUnderIt() {
@@ -37,6 +42,22 @@ class MobileDataTest {
         assertTrue(off.copy(coreState = CoreState.Starting(1), apiUp = false).waitingForWifi)
         assertFalse(off.copy(metered = false).waitingForWifi)
         assertFalse(off.copy(coreState = CoreState.Stopped).waitingForWifi)
+    }
+
+    @Test
+    fun mobileDataIsOffUntilTheUserAllowsIt() {
+        assertFalse(MobileData.DEFAULT)
+        assertFalse(HomeUiState().useMobileData)
+    }
+
+    @Test
+    fun theQuestionIsAskedOnceWhileHeldOffMobileData() {
+        val held = running.copy(useMobileData = false)
+        assertTrue(held.offerMobileData)
+        assertFalse(held.copy(mobileDataAsked = true).offerMobileData)
+        assertFalse(held.copy(metered = false).offerMobileData)
+        assertFalse(running.offerMobileData)
+        assertFalse(held.copy(coreState = CoreState.Stopped).offerMobileData)
     }
 
     @Test
