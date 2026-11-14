@@ -1393,8 +1393,8 @@ func (c *Client) StandbyPoolState() (held, standby int, settled bool, settledAt 
 	return held, standby, !settledAt.IsZero(), settledAt, reason
 }
 
-// IsStandby reports whether s is held in the pool rather than carrying streams.
-func (c *Client) IsStandby(s *yamux.Session) bool {
+// Standby reports whether s is held in the pool rather than carrying streams.
+func (c *Client) Standby(s *yamux.Session) bool {
 	c.sessionsMu.Lock()
 	defer c.sessionsMu.Unlock()
 	return c.standby[s]
@@ -1561,12 +1561,12 @@ func (c *Client) promoteFastestStandby(dir spreadDir, reason string) *yamux.Sess
 		if m == nil || m.onBench(now) {
 			continue
 		}
-		bps, _, isPrior := m.capacityOrPrior(now, dir == spreadUp)
+		bps, _, prior := m.capacityOrPrior(now, dir == spreadUp)
 		if bps <= 0 {
 			continue // tier 3: promoteBestStandby's RTT rank owns these
 		}
 		tier := 1
-		if isPrior {
+		if prior {
 			tier = 2
 		}
 		if tier < bestTier || (tier == bestTier && bps > bestBps) {

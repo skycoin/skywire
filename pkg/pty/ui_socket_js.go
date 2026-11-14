@@ -1,6 +1,6 @@
 //go:build js
 
-// Package pty pkg/pty/ui_socket_js.go c2-app-pty
+// Package pty pkg/pty/ui_socket_js.go c3-vis-pty
 package pty
 
 import (
@@ -8,8 +8,9 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/skycoin/skywire/pkg/logging"
 	"golang.org/x/net/websocket"
+
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // uiSocket is the terminal UI's websocket in a browser visor, served with

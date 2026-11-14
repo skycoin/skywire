@@ -289,8 +289,8 @@ Paths per feed:
 			}
 		}
 
-		isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
-		if isJSON {
+		jsonOut, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
+		if jsonOut {
 			out := struct {
 				Feed       string    `json:"feed"`
 				Path       string    `json:"path"`

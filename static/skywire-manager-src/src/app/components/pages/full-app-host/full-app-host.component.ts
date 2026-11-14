@@ -23,7 +23,7 @@ interface AppMount {
 const APP_MOUNTS: Record<string, AppMount> = {
   skychat: { title: 'Skychat', component: SkychatComponent },
   logs: { title: 'Logs', component: LogsComponent },
-  vpn: { title: 'VPN', iframe: (pk) => '/#/vpn/' + pk + '/status' },
+  vpn: { title: 'VPN', iframe: (pk) => '/angular/#/vpn/' + pk + '/status' },
 };
 
 /**

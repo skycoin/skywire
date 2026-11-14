@@ -1,3 +1,5 @@
+// Package explorerui src/explorerui/explorerui.go c3-ui-explorer
+//
 // Package explorerui is the blockchain explorer rendered on the server with
 // templ, with htmx only for paging and refreshing in place. Every page works
 // without JavaScript, so crawlers see the same content people do. It shares
@@ -21,10 +23,7 @@ import (
 var embedded embed.FS
 
 func sub(dir string) fs.FS {
-	s, err := fs.Sub(embedded, dir)
-	if err != nil {
-		panic(err)
-	}
+	s, _ := fs.Sub(embedded, dir) //nolint:errcheck // fails only for an invalid path, and dir is always a literal
 	return s
 }
 

@@ -216,5 +216,5 @@ func (l *Loader) SelfHealTarget() (int, bool) {
 // path or "<noop>"). Used by callers for logging.
 func (l *Loader) Source() string { return l.source }
 
-// IsActive reports whether the loader has an evaluator loaded.
-func (l *Loader) IsActive() bool { return l.current.Load() != nil }
+// Active reports whether the loader has an evaluator loaded.
+func (l *Loader) Active() bool { return l.current.Load() != nil }

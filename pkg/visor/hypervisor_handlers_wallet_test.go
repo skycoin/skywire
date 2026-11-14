@@ -90,8 +90,8 @@ func TestWalletHandlerRouting(t *testing.T) {
 		for _, rest := range []string{"", "index.html"} {
 			w := httptest.NewRecorder()
 			h(w, walletReq(rest))
-			if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "../#/wallet" {
-				t.Errorf("%q: status=%d location=%q, want 303 to ../#/wallet", rest, w.Code, w.Header().Get("Location"))
+			if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "../angular/#/wallet" {
+				t.Errorf("%q: status=%d location=%q, want 303 to ../angular/#/wallet", rest, w.Code, w.Header().Get("Location"))
 			}
 		}
 	})
@@ -159,11 +159,11 @@ func TestWalletRequiresSession(t *testing.T) {
 	}
 }
 
-// TestWalletHandlerUI2 covers the paths of skycoin-web's /ui2 pages, which
-// go to the app only while it runs.
+// TestWalletHandlerUI2 covers skycoin-web's pages under /wallet/web/, which
+// go to the app at its root only while it runs.
 func TestWalletHandlerUI2(t *testing.T) {
 	h := (&Hypervisor{}).walletHandler()
-	paths := []string{"ui2/", "ui2/status", "ui2/static/ui2.css", "assets/scripts/wasm_exec.js", "api/v1/csrf", "favicon.ico"}
+	paths := []string{"web/", "web/send", "web/static/ui2.css", "web/assets/scripts/wasm_exec.js", "web/api/v1/csrf", "web/favicon.ico"}
 
 	for _, rest := range paths {
 		w := httptest.NewRecorder()
@@ -180,16 +180,22 @@ func TestWalletHandlerUI2(t *testing.T) {
 		h(w, walletReq(rest))
 		require.Equal(t, http.StatusTeapot, w.Code, rest)
 	}
-	require.Equal(t, []string{"/ui2/", "/ui2/status", "/ui2/static/ui2.css", "/assets/scripts/wasm_exec.js", "/api/v1/csrf", "/favicon.ico"}, app.got)
+	require.Equal(t, []string{"/", "/send", "/static/ui2.css", "/assets/scripts/wasm_exec.js", "/api/v1/csrf", "/favicon.ico"}, app.got)
+
+	for rest, want := range map[string]string{
+		"web":             "web/",
+		"ui2/send":        "../../wallet/web/send",
+		"web/angular/":    "../../../angular/#/wallet",
+		"web/angular/x/y": "../../../../angular/#/wallet",
+	} {
+		w := httptest.NewRecorder()
+		h(w, walletReq(rest))
+		require.Equal(t, want, w.Header().Get("Location"), rest)
+	}
 
 	w := httptest.NewRecorder()
-	h(w, walletReq("ui2"))
-	require.Equal(t, http.StatusSeeOther, w.Code)
-	require.Equal(t, "ui2/", w.Header().Get("Location"), "relative, so it holds under any prefix")
-
-	w = httptest.NewRecorder()
 	h(w, walletReq(""))
-	require.Equal(t, "../#/wallet", w.Header().Get("Location"), "the wallet page is still the dashboard's")
+	require.Equal(t, "../angular/#/wallet", w.Header().Get("Location"), "the wallet page is still the dashboard's")
 }
 
 // recordingApp stands in for the skycoin-web app, noting each path it gets.

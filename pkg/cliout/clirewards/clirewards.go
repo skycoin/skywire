@@ -1,3 +1,5 @@
+// Package clirewards pkg/cliout/clirewards/clirewards.go c4-vis-cli
+//
 // Package clirewards is the output shape of the `skywire cli rewards`
 // commands, which collect the data the reward system is computed from.
 package clirewards

@@ -488,7 +488,7 @@ func (c *Core) subscribe(conn *node.Conn) bool {
 // Conn.Feeds it cost TPD a fifth of its CPU, all on the node's single feeds
 // loop.
 func alreadySubscribed(conn *node.Conn, feed skycipher.PubKey) bool {
-	return conn.HasFeed(feed)
+	return conn.Subscribed(feed)
 }
 
 // cleanup prunes superseded Roots (keeping only the latest per feed),

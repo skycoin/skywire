@@ -1,3 +1,5 @@
+// Package main cmd/geopatch/main.go c4-vis-cli
+//
 // Command geopatch corrects the country of given IPs in a GeoLite2-City database.
 // An IP is patched when two of GeoLite2, DB-IP and the RIR delegation files agree on a country GeoLite2 does not give.
 package main

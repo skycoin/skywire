@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/filexfer_test.go
+// Package commands cmd/apps/skychat/commands/filexfer_test.go c4-app-chat
 package commands
 
 import (

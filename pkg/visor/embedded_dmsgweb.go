@@ -180,8 +180,8 @@ func (e *EmbeddedDmsgWeb) Stop() error {
 	return nil
 }
 
-// IsRunning reports whether the resolver goroutine is currently alive.
-func (e *EmbeddedDmsgWeb) IsRunning() bool {
+// Running reports whether the resolver goroutine is currently alive.
+func (e *EmbeddedDmsgWeb) Running() bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.running

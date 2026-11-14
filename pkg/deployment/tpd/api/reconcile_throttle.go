@@ -87,7 +87,7 @@ func entryFingerprint(e *transport.Entry) uint64 {
 	h.Write([]byte(e.Type)) //nolint:errcheck,gosec
 	// A local link has one reporter, its host, whose label says whether the
 	// service reads the system feed, so a new label must be written.
-	if types.IsLocal(e.Type) {
+	if types.Local(e.Type) {
 		h.Write([]byte(e.Label)) //nolint:errcheck,gosec
 	}
 	return h.Sum64()

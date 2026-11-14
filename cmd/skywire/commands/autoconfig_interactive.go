@@ -1,3 +1,4 @@
+// Package commands cmd/skywire/commands/autoconfig_interactive.go c4-vis-cli
 package commands
 
 import (

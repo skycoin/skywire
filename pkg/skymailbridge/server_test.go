@@ -22,12 +22,12 @@ func TestParseRecipient_ModeB_StripsHostPart(t *testing.T) {
 	pk := mustPK(t)
 	addr := "user@magnetosphere.net." + pk.DNSLabel() + ".skynet"
 
-	gotPK, fwd, isSkynet, err := ParseRecipient(addr, ".skynet", "b")
+	gotPK, fwd, skynet, err := ParseRecipient(addr, ".skynet", "b")
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if !isSkynet {
-		t.Fatalf("isSkynet=false on .skynet address")
+	if !skynet {
+		t.Fatalf("skynet=false on .skynet address")
 	}
 	if gotPK != pk {
 		t.Errorf("PK mismatch: got %x want %x", gotPK, pk)
@@ -41,12 +41,12 @@ func TestParseRecipient_ModeA_Verbatim(t *testing.T) {
 	pk := mustPK(t)
 	addr := "user@" + pk.DNSLabel() + ".skynet"
 
-	gotPK, fwd, isSkynet, err := ParseRecipient(addr, ".skynet", "a")
+	gotPK, fwd, skynet, err := ParseRecipient(addr, ".skynet", "a")
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if !isSkynet || gotPK != pk {
-		t.Fatalf("isSkynet=%v PK=%x want true, %x", isSkynet, gotPK, pk)
+	if !skynet || gotPK != pk {
+		t.Fatalf("skynet=%v PK=%x want true, %x", skynet, gotPK, pk)
 	}
 	if fwd != addr {
 		t.Errorf("forward = %q, want %q (verbatim in mode A)", fwd, addr)
@@ -63,12 +63,12 @@ func TestParseRecipient_ModeB_BarePKForwardsVerbatim(t *testing.T) {
 	pk := mustPK(t)
 	addr := "user@" + pk.DNSLabel() + ".skynet"
 
-	gotPK, fwd, isSkynet, err := ParseRecipient(addr, ".skynet", "b")
+	gotPK, fwd, skynet, err := ParseRecipient(addr, ".skynet", "b")
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if !isSkynet {
-		t.Fatalf("isSkynet=false on bare-PK .skynet address")
+	if !skynet {
+		t.Fatalf("skynet=false on bare-PK .skynet address")
 	}
 	if gotPK != pk {
 		t.Errorf("PK mismatch: got %x want %x", gotPK, pk)
@@ -79,12 +79,12 @@ func TestParseRecipient_ModeB_BarePKForwardsVerbatim(t *testing.T) {
 }
 
 func TestParseRecipient_NonSkynet_PassThrough(t *testing.T) {
-	gotPK, fwd, isSkynet, err := ParseRecipient("user@example.com", ".skynet", "b")
+	gotPK, fwd, skynet, err := ParseRecipient("user@example.com", ".skynet", "b")
 	if err != nil {
 		t.Errorf("err = %v on non-skynet address", err)
 	}
-	if isSkynet {
-		t.Errorf("isSkynet=true on plain user@example.com")
+	if skynet {
+		t.Errorf("skynet=true on plain user@example.com")
 	}
 	if !gotPK.Null() || fwd != "" {
 		t.Errorf("non-skynet result not zero-valued: pk=%x fwd=%q", gotPK, fwd)
@@ -108,11 +108,11 @@ func TestParseRecipient_CaseInsensitive(t *testing.T) {
 	pk := mustPK(t)
 	addr := "user@MAGNETOSPHERE.NET." + strings.ToUpper(pk.DNSLabel()) + ".SKYNET"
 
-	gotPK, fwd, isSkynet, err := ParseRecipient(addr, ".skynet", "b")
+	gotPK, fwd, skynet, err := ParseRecipient(addr, ".skynet", "b")
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if !isSkynet || gotPK != pk {
+	if !skynet || gotPK != pk {
 		t.Errorf("upper-case address not recognized")
 	}
 	if fwd != "user@magnetosphere.net" {

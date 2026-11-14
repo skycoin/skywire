@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/parked_test.go
+// Package group pkg/skychat/group/parked_test.go c4-app-chat
 package group
 
 import (

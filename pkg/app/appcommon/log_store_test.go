@@ -1,4 +1,4 @@
-// Package appcommon pkg/app/appcommon/log_store_test.go
+// Package appcommon pkg/app/appcommon/log_store_test.go c2-vis-appsvc
 package appcommon
 
 import (

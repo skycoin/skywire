@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/auth_test.go
+// Package commands cmd/apps/skychat/commands/auth_test.go c4-app-chat
 //
 // Unit coverage for the optional HTTP basic-auth gate: password-file
 // loading (present / absent / malformed) and the requireAuth wrapper's

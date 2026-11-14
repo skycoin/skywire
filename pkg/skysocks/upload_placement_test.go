@@ -1,4 +1,4 @@
-// Package skysocks pkg/skysocks/upload_placement_test.go — where a striped
+// Package skysocks pkg/skysocks/upload_placement_test.go c4-app-proxy — where a striped
 // upload's chunks go.
 //
 // The rows these tests are written against, all from

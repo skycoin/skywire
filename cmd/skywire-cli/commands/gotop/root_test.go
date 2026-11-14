@@ -1,6 +1,6 @@
 //go:build !withoutgotop && !tinygo
 
-// Package cligotop root_test.go: unit tests for the gotop CLI's pure
+// Package cligotop cmd/skywire-cli/commands/gotop/root_test.go unit tests for the gotop CLI's pure
 // formatting helpers, the in-memory log capture, the text-mode stats
 // renderer, and the gRPC device data-transform methods.
 package cligotop
@@ -260,10 +260,10 @@ func TestGrpcDevice_UpdateMem(t *testing.T) {
 		}}
 		mems := map[string]devices.MemoryInfo{}
 		g.updateMem(mems) //nolint:errcheck
-		_, hasSwap := mems["Swap"]
-		require.False(t, hasSwap)
-		_, hasMain := mems["Main"]
-		require.True(t, hasMain)
+		_, swapFound := mems["Swap"]
+		require.False(t, swapFound)
+		_, mainFound := mems["Main"]
+		require.True(t, mainFound)
 	})
 }
 

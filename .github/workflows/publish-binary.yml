@@ -57,7 +57,7 @@ jobs:
         run: |
           set -euo pipefail
           BRANCH="${GITHUB_REF##*/}"
-          VERSION="$(git describe --always --match 'v[0-9]*')"
+          VERSION="$(git describe --tags --always --match 'v[0-9]*')"
           DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           COMMIT="$(git rev-list -1 HEAD)"
           BASE="github.com/skycoin/skywire"

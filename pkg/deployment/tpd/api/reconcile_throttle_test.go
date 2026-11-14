@@ -73,9 +73,9 @@ func TestReconcileThrottle_Plan(t *testing.T) {
 	reg, _, _ = th.plan(t0.Add(10*time.Minute), []*transport.Entry{e2})
 	require.Len(t, reg, 1)
 	th.mu.Lock()
-	_, hasE1 := th.marks[e1.ID]
+	_, e1Marked := th.marks[e1.ID]
 	th.mu.Unlock()
-	require.False(t, hasE1, "e1 unseen for 4 gaps must be swept")
+	require.False(t, e1Marked, "e1 unseen for 4 gaps must be swept")
 }
 
 // countingStore counts the two write paths the throttle guards.

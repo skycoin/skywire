@@ -83,12 +83,12 @@ func (hv *Hypervisor) withCtx(vFunc valuesFunc, hFunc handlerFunc) http.HandlerF
 		// and only the winner (handler or timeout) writes to the real ResponseWriter.
 		// Skip the timeout wrapper for WebSocket upgrades — the buffered writer
 		// doesn't implement http.Hijacker, which websocket.Accept requires.
-		isWebSocket := r.Header.Get("Upgrade") == "websocket"
+		webSocket := r.Header.Get("Upgrade") == "websocket"
 		if rv.rec != nil {
 			hv.parkOrRefuse(w, r, rv, hFunc)
 			return
 		}
-		if rv.isRemote && !isWebSocket {
+		if rv.remote && !webSocket {
 			tw := newTimeoutResponseWriter()
 			done := make(chan struct{})
 			go func() {
@@ -134,8 +134,8 @@ func (hv *Hypervisor) visorCtx(w http.ResponseWriter, r *http.Request) (*httpCtx
 		v, ok := hv.visorConn(pk)
 		if ok {
 			return &httpCtx{
-				Conn:     v,
-				isRemote: true,
+				Conn:   v,
+				remote: true,
 			}, true
 		}
 
@@ -148,8 +148,8 @@ func (hv *Hypervisor) visorCtx(w http.ResponseWriter, r *http.Request) (*httpCtx
 		// through the corresponding HVxxx RPCs.
 		if proxyConn, ok := hv.proxiedVisorConn(pk); ok {
 			return &httpCtx{
-				Conn:     proxyConn,
-				isRemote: true,
+				Conn:   proxyConn,
+				remote: true,
 			}, true
 		}
 
@@ -161,9 +161,9 @@ func (hv *Hypervisor) visorCtx(w http.ResponseWriter, r *http.Request) (*httpCtx
 		// found" mid-flap. Caller still gets a clean error message
 		// for the case where the cache itself doesn't know the PK.
 		hv.summaryCacheMx.RLock()
-		cached, hasCache := hv.summaryCache[pk]
+		cached, cacheHit := hv.summaryCache[pk]
 		hv.summaryCacheMx.RUnlock()
-		if hasCache {
+		if cacheHit {
 			if r.Method != http.MethodGet && hv.visor != nil && hv.visor.dmsgC != nil {
 				api, rec := visorapi.NewRecordingRPCClient(hvParkAllows)
 				return &httpCtx{Conn: Conn{Addr: dmsg.Addr{PK: pk, Port: skyenv.DmsgHypervisorPort}, API: api}, rec: rec}, true

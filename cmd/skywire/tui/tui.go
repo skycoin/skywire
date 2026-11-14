@@ -1,6 +1,6 @@
 //go:build !(js && wasm)
 
-// Package tui cmd/skywire/tui/tui.go
+// Package tui cmd/skywire/tui/tui.go c4-vis-cli
 //
 // An interactive console over the skywire command line: a scrollback of
 // everything run so far, a prompt to type the next command into, and the code

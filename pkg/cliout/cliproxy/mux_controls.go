@@ -1,4 +1,4 @@
-// Package cliproxy pkg/cliout/cliproxy/mux_controls.go
+// Package cliproxy pkg/cliout/cliproxy/mux_controls.go c4-vis-cli
 //
 // Output shapes for the per-leg mux controls: the weight override and the
 // negotiated per-group view. Both answer a question rather than reporting a

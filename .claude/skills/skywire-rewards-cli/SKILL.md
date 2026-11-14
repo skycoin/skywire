@@ -59,15 +59,19 @@ bytes. See `reward rules` for the human eligibility rules.
   `-u/--utfile`, pool arch lists `-w/--a1` / `-x/--a2`, `-n/--noarch`, `--sat-exp`/`-S`,
   `--require-bw`/`-b` + `--min-bw`/`-B` + `--bw-sat-exp` + `--no-bw-pool`,
   `--require-tp`/`-t` (DEPRECATED, UT data now gates transports) + `--tp-hist`/`-T`,
-  output-hiding `-0/-1/-2`, `-e/--err`, and `-r/--process` (full processing workflow →
-  writes ut/ineligible/shares/rewardtxn/stats; **fetches real UT data** and writes to
-  `./hist`). `-s/--loglvl`.
-- **`rewards run`** → the whole hourly cycle IN-PROCESS (no bash): collect surveys
-  (`cli log --survey --cleanup`) → `tp-collect` → `bw-collect` → fetch+prune UT → calculate →
-  write `hist/{date}_{ut.txt,ut.json,ineligible.csv,shares.csv,rewardtxn0.csv,stats.txt}`.
-  This is what the systemd unit runs. Flags: `-d/--date` (default yesterday UTC), `-H/--hist`,
-  `-p/--lpath` (default `log_backups`), `--minv`, `--skip-collect`, `--proxy host:port`
-  (collect via a running `skywire dmsg web` SOCKS5 resolving proxy, for example `127.0.0.1:4443`).
+  output-hiding `-0/-1/-2`, `-e/--err` (each prints one section of the same calculation).
+  `-s/--loglvl`. Also writes the per-pool files to `--tp-hist` unless `-k`.
+- **`rewards run`** → the hourly cycle of `skywire-reward.service` IN-PROCESS, through the
+  same calculation as the bare command: `cli log --no-fetch --prune-below-version auto`
+  (clean pushed surveys) → `bw-collect` (today) → stop if `hist/<date>.txt` exists (paid) →
+  UT fetch as `cli ut tpd --since/--until <date>` (`hist/<date>_ut.txt`, `_ut.json`,
+  `hist/uptimes.json`) → calculate → write
+  `hist/{date}_{ineligible.csv,shares.csv,rewardtxn0.csv,stats.txt}` + per-pool files, byte
+  compatible with the four `rewards -b -B 0 ... -e/-20/-10/-12` calls of the reward script.
+  Takes the bare command's calculation flags with the script's defaults (`-b` true, `-B 0`,
+  `-p log_backups`), plus `-H/--hist`, `-u/--utfile` (skip the UT fetch), `--skip-collect`,
+  `--prune-below-version` (default `auto`), and `--fetch` (fetch surveys with `cli log --survey`
+  instead, with `--minv` and `--proxy host:port`). Date defaults to yesterday UTC.
 - **`rewards tp-collect`** → fetch per-key transport stats from TPD
   (`/all-transports/per-key-stats`, cached 5min in `/tmp/tpd.json`), append PKs with
   >= `-m/--min` (default 2) p2p transports (dmsg excluded) to `hist/YYYY-MM-DD_transports.txt`.
@@ -110,5 +114,5 @@ bytes. See `reward rules` for the human eligibility rules.
 - Flag-letter inconsistency across the plural group (backward-compat, do NOT "fix"): `-p` =
   `--lpath` in `rewards`/`svc` but `--hist` in `tp-collect`/`bw-collect`; `--lpath` is `-l` in
   `bw-collect`. `--lpath` default is `log_collecting` in most, but `log_backups` in `run`.
-- `rewards --process` and `run` and the collect commands do REAL network fetches and write to
+- `rewards run` and the collect commands do REAL network fetches and write to
   `./hist` (gitignored). Run from a scratch dir when testing.

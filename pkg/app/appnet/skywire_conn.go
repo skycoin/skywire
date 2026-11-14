@@ -26,12 +26,12 @@ type SkywireConn struct {
 	once       sync.Once
 }
 
-// IsAlive checks whether connection is alive.
-func (c *SkywireConn) IsAlive() bool {
+// Alive checks whether connection is alive.
+func (c *SkywireConn) Alive() bool {
 	if c.nrg == nil {
 		return c.Conn != nil
 	}
-	return c.nrg.IsAlive()
+	return c.nrg.Alive()
 }
 
 // Latency returns latency till remote (ms).

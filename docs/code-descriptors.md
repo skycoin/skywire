@@ -1,7 +1,7 @@
 # Source-file descriptors: `c<layer>-<domain>-<system>`
 
-Nearly every Go file in this repository opens with a package comment carrying a
-short code:
+Every hand-written Go file in this repository opens with a package comment
+carrying a short code:
 
 ```go
 // Package visor pkg/visor/init_dmsg.go c3-vis-core
@@ -14,8 +14,9 @@ without being written down anywhere in the repo, which has repeatedly caught out
 contributors — you cannot apply a standard to a new file if nothing says what
 the standard is. This document is that missing piece.
 
-It is derived from the KCG Go standards adaptation (`domains-golang.txt`,
-v1.2, 2026-07-07), which itself adapts a larger C#/Unity house style to Go under
+It is derived from the KCG Go standards adaptation
+([`docs/sss3/domains-golang.txt`](sss3/domains-golang.txt), v1.2, 2026-07-07),
+which itself adapts a larger C#/Unity house style to Go under
 one governing rule: **idiomatic Go beats transliterated C#.** Where the original
 standard and Go idiom conflict, Go wins and the conflict is recorded rather than
 patched into the code.
@@ -60,7 +61,7 @@ labels should go. Earlier drafts had eight domains; `rte`, `cxo`, `dsc` and
 | `com.log` | `logging` |
 | `com.http` | `httputil`, `httpauth`, `httpauthclient`, `gobrpc` |
 | `com.env` | `skyenv` — shared constants only |
-| `com.util` | `util`, `netutil`, `cmdutil`, `flags`, `metricsutil`, `buildinfo`, `geo`, `geoip`, `pg`, `testhelpers` |
+| `com.util` | `util`, `netutil`, `cmdutil`, `flags`, `metricsutil`, `buildinfo`, `geo`, `geoip`, `pg`, `testhelpers`, `fastjson`, `gcmon`, `flightrec`, `cliout` and `cliout/clihelp` |
 
 ### `net` — the mesh
 
@@ -70,30 +71,54 @@ labels should go. Earlier drafts had eight domains; `rte`, `cxo`, `dsc` and
 | `net.transport` | `transport`, `transport-setup`, `skyquic`, `skyudpbridge`, `stunserver`, `tcpproxy` (c1/c2) |
 | `net.routing` | `routing`, `router`, `rfclient`, `route-finder`, `skyroute` (c1/c2) |
 | `net.cxo` | `cxo` (node, treestore, skyobject, cxosub), `storeconfig` (c2) |
-| `net.discovery` | TPD, AR, SD, UT, `servicedisc`, `utclient`, `serviceuptime`, `uptimestats`, `serviceconfig`, config-bootstrapper (c2/c4) |
+| `net.discovery` | TPD, AR, SD, UT, dmsg discovery's server (`dmsg/discovery/api`), `deployment/charts`, `deployment/netgraph`, `serviceconfig`, config-bootstrapper (c4); the clients `servicedisc`, `utclient`, `serviceuptime`, `uptimestats`, `dmsg/discovery/serverfeed` (c2) |
 | `net.monitor` | `networkmonitor`, `network-monitor` (c2) |
 
 ### `app` — what runs on the mesh
 
 | system | packages |
 |---|---|
-| `app.proxy` | `skysocks` (+ client) |
+| `app.proxy` | `skysocks` (+ client) (c4); `proxyenv`, `proxyfront`, `proxyroute`, `skysocks/skysettings` (c2) |
 | `app.chat` | `skychat` |
-| `app.vpn` | `vpn` (client/server) |
+| `app.vpn` | `vpn` (client/server), `skydns` |
 | `app.skynet` | `skynet`, `skynetweb`, `skynetca` |
-| `app.web` | `dmsgweb` |
-| `app.mail` | `skymailbridge` |
-| `app.rewards` | `rewards`, `tpviz`, `visnetwork` |
+| `app.web` | `dmsgweb`, `proxyinterstitial` (c4); `proxystatus` (c2) |
+| `app.mail` | `skymail`, `skymailbridge` |
+| `app.rewards` | `rewards`, `tpviz` (with `netview`, `wasmgl`, `cmd/netview`), `visnetwork` |
+| `app.wallet` | `wallet`, `btcgateway`, `skycoin-web`, `cmd/skycoin`, skydex client and market |
 
 ### `vis` — the visor platform
 
 | system | packages |
 |---|---|
-| `vis.core` | `visor`, `skywireconfig`/`visorconfig`, `svcmode` (c3) |
+| `vis.core` | `visor` (with `visorapi`), `skywireconfig`/`visorconfig`, `svcmode`, `alerts` (c3) |
 | `vis.appsvc` | `app` (the app-running framework / appserver), `services` (c1/c2) |
-| `vis.wasm` | `wasmhv`, `wasmrpc` (c3) |
+| `vis.wasm` | `wasmhv` (with `deskhost`, `execwasm`), `wasmrpc` (c3) |
 | `vis.pty` | `pty` (c3) |
-| `vis.cli` | `cmd/skywire`, `cmd/skywire-cli`, `cmd/skywire-visor`, `cmd/hvinspect`, `clicache` (c3/c4) |
+| `vis.cli` | `cmd/skywire`, `cmd/skywire-cli`, `cmd/skywire-visor`, `cmd/hvinspect`, `clicache`, the `cliout/cli*` output shapes, `internal/rpcgen` (c3/c4) |
+
+### Choices for packages that carried more than one descriptor
+
+One package, one descriptor. Where files of one package disagreed, the package
+took the descriptor of what it is as a whole. The non-obvious ones:
+
+| package | descriptor | why |
+|---|---|---|
+| `pkg/dmsg/discovery/api` | `c4-net-discovery` | it is the dmsg discovery server, a deployment backend that imports `cxo/treestore` and `deployment/charts`, so it cannot be `c1` |
+| `pkg/dmsgweb` | `c4-app-web` | one file dialing over dmsg does not make the package part of the substrate |
+| `pkg/proxystatus` | `c2-app-web` | it renders proxy status pages, and `pkg/app` (c2) imports it |
+| `pkg/routing` | `c1-net-routing` | it imports only `cipher` and `logging` |
+| `pkg/services` | `c2-vis-appsvc` | the embedded service runner; `keyfile.go` is part of it, not of discovery |
+| `pkg/transport` | `c2-net-transport` | `c1-net-tp` and `c4-net-transport` were stray labels on single files |
+| `pkg/tpviz` | `c4-app-rewards` | `vis.latency` was never a system; `netview` and `wasmgl` follow their parent |
+| `pkg/visor`, `pkg/visor/visorapi` | `c3-vis-core` | `vis.api` and `vis.browse` were never systems, and the hostbridge and pty files are part of the visor |
+| `pkg/visor/visorconfig` | `c3-vis-core` | the wallet section is part of the visor config; config rides with what it configures |
+| `pkg/app/appnet`, `pkg/app/launcher` | `c2-vis-appsvc` | the app framework |
+| `pkg/vpn` | `c4-app-vpn` | the embed and js client files are part of the app |
+| `cmd/skywire-cli/commands/proxy` | `c4-vis-cli` | a CLI command group, whatever it drives |
+
+The others (`pkg/cxo/cxosub`, `pkg/httputil`, `pkg/logging`, `pkg/pty`,
+`pkg/router`) kept the descriptor most of their files already had.
 
 ## Where config goes
 
@@ -131,6 +156,10 @@ So `make check-descriptors` deliberately verifies only two things:
 2. all files in one package agree on it.
 
 It does not, and should not, decide which domain a package belongs to.
+Generated files (those with the Go `// Code generated ... DO NOT EDIT.` header,
+such as the templ output in `pkg/visor/ui2` and the mocks) and `testdata` are
+skipped, since a tag there would be lost on the next generate. The check runs
+in `make check` and in CI through `make check-ci`.
 
 ## Adding a file
 
@@ -141,13 +170,22 @@ if it imports `visor`, it is not `c0`.
 The header convention is the package clause, the path, then the descriptor:
 
 ```go
-// Package proxystatus pkg/proxystatus/routetree.go c3-vis-core
+// Package proxystatus pkg/proxystatus/routetree.go c2-app-web
 ```
+
+Where a file already has prose package documentation, the descriptor line goes
+first and a bare `//` line separates it from the prose.
 
 ## Known drift
 
-As of 2026-09-13: 96 of ~1580 non-test files carry no descriptor, and 12
-packages carry more than one. Both are recorded in
-`scripts/check-descriptors.sh` so the check fails on *new* drift while the
-existing debt is visible and countable rather than silently tolerated. Fixing an
-entry means removing it from that list in the same commit.
+None that the check can see. As of 2026-11-12 every hand-written non-test file
+carries a descriptor and every package carries exactly one, so
+`scripts/check-descriptors.sh` has no allow list and fails on any new drift.
+
+What the check cannot see is the layer. The compiler forbids cycles but not a
+lower-tier label importing a higher one. About 90 imports still do that, mostly
+because `pkg/visor` (c3) embeds app and deployment packages labelled c4 (chat,
+mail, vpn, skynet, wallet, TPD, AR), and the `pkg/services/*` runners (c2)
+import the c4 deployment backends and `pkg/visor`. Fixing that means deciding
+whether those apps sit at c3 or the visor and services sit higher, which is an
+owner's call rather than a relabel.

@@ -99,7 +99,7 @@ func ResourceRows(rows []ResRow, sampled string) templ.Component {
 		}
 		ctx = templ.InitializeContext(ctx)
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div id=\"res-rows\" hx-get=\"ui2/resources/rows\" hx-trigger=\"every 5s [document.visibilityState === 'visible']\" hx-swap=\"outerHTML\"><p class=\"small dim\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div id=\"res-rows\" hx-get=\"resources/rows\" hx-trigger=\"every 5s [document.visibilityState === 'visible']\" hx-swap=\"outerHTML\"><p class=\"small dim\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

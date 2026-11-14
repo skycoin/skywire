@@ -35,7 +35,7 @@ directory unless -o names another; "-o -" writes it to stdout. With
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		if isJSON, _ := cmd.Flags().GetBool(internal.JSONString); isJSON { //nolint:errcheck
+		if jsonOut, _ := cmd.Flags().GetBool(internal.JSONString); jsonOut { //nolint:errcheck
 			internal.PrintOutput(cmd.Flags(), a, "")
 			return
 		}

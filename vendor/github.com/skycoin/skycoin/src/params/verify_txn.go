@@ -1,3 +1,4 @@
+// Package params src/params/verify_txn.go c1-coin-chain
 package params
 
 import (
@@ -33,7 +34,7 @@ type VerifyTxn struct {
 }
 
 // MaxDropletDivisor return the modulus divisor used when checking droplet precision rules
-func (v VerifyTxn) MaxDropletDivisor() uint64 {
+func (v VerifyTxn) MaxDropletDivisor() (uint64, error) {
 	return DropletPrecisionToDivisor(v.MaxDropletPrecision)
 }
 

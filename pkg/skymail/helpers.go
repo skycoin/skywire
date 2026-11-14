@@ -146,7 +146,7 @@ func (mb *Mailbox) carry(peer cipher.PubKey, env skymailbridge.Envelope) (string
 // which a carrier can see without opening it.
 func SealedRecipient(body []byte) (cipher.PubKey, bool) {
 	var none cipher.PubKey
-	if !IsSealed(body) {
+	if !Sealed(body) {
 		return none, false
 	}
 	_, b64, ok := bytes.Cut(body, []byte("\r\n\r\n"))

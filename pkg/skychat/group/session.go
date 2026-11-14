@@ -258,7 +258,7 @@ type Config struct {
 	// periodic no-op heartbeat probe into the group feed. Members
 	// observe the heartbeats via onUpdate, which bumps lastInboundNs
 	// (the unified liveness signal) just as a real message would.
-	// Heartbeats are what keep IsSubscriberAlive true on quiet groups
+	// Heartbeats are what keep SubscriberAlive true on quiet groups
 	// where no chat traffic flows for long stretches. Zero disables
 	// heartbeat emission entirely (useful for tests and for
 	// deployments that want to opt out of the ~1KB/min/group wire
@@ -436,7 +436,7 @@ type Session struct {
 	// session-level mutex.
 	lastInboundNs atomic.Int64
 
-	// closed is set true on Close so IsSubscriberAlive can short-
+	// closed is set true on Close so SubscriberAlive can short-
 	// circuit to false for torn-down sessions without consulting
 	// lastInbound timing. Owner-role sessions ignore this — they're
 	// always alive while the publisher is running.
@@ -581,7 +581,7 @@ type Session struct {
 }
 
 // subscriberStaleThreshold is defined in manager.go (it's used by
-// both Session.IsSubscriberAlive and Manager.detectStaleAndReconnect
+// both Session.SubscriberAlive and Manager.detectStaleAndReconnect
 // so it sits in the package-level const block there).
 
 // HeartbeatMarker is the fixed body of an owner-emitted heartbeat
@@ -597,11 +597,11 @@ type Session struct {
 // logs / pcap dumps without decoding the JSON envelope around it.
 const HeartbeatMarker = "__skychat_group_heartbeat__"
 
-// IsHeartbeat returns true for messages that are owner-emitted
+// Heartbeat returns true for messages that are owner-emitted
 // heartbeat probes rather than chat content. Exposed so the visor's
 // inbox layer (pkg/visor/group.go) can filter heartbeats from the
 // poll ring without re-importing the constant in two places.
-func IsHeartbeat(msg Message) bool { return msg.Text == HeartbeatMarker }
+func Heartbeat(msg Message) bool { return msg.Text == HeartbeatMarker }
 
 // relayPortOffset is the dmsg-port delta from the group's CXO
 // publish port to the relay-submission listener. Members dial
@@ -791,7 +791,7 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 	// fan-in to a single delivery per source leaf.
 	//
 	// Admin-aggregator note (#2685 signed leaves): owners are
-	// always admins by the IsAdmin contract, so they always sit on
+	// always admins by the AdministeredBy contract, so they always sit on
 	// the "subscribe to every member" side of the new topology.
 	// The non-admin filtering applied in openMember does not apply
 	// here — see openMember for the role-conditional rule, and
@@ -987,7 +987,7 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 	//
 	// The legacy `sub` field above stays wired for the owner-relay
 	// fallback path; it subscribes to OwnerPK specifically (the
-	// founder is always an admin by IsAdmin contract), so non-admin
+	// founder is always an admin by AdministeredBy contract), so non-admin
 	// members are always covered for the owner's republished view
 	// even before peerSubs to other admins finish Connect.
 	// desiredPeerSubsForRole encodes the admin-aggregator rule;
@@ -1013,7 +1013,7 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 	// Seed lastInboundNs from the persisted LastMessageAt so a
 	// resumed session doesn't look instantly stale before the first
 	// new inbound arrives. Zero LastMessageAt (brand-new join, no
-	// traffic yet) seeds zero — IsSubscriberAlive will report false
+	// traffic yet) seeds zero — SubscriberAlive will report false
 	// until Connect succeeds or the first inbound lands, both of
 	// which bump the timestamp.
 	if !cfg.Record.LastMessageAt.IsZero() {
@@ -1216,7 +1216,7 @@ func (s *Session) Connect(ctx context.Context) error {
 //
 // Used by Manager.detectStaleAndReconnect to identify subscribers
 // that have silently stopped pulling from the owner, and by
-// IsSubscriberAlive to compute the liveness boolean operators see
+// SubscriberAlive to compute the liveness boolean operators see
 // in /status.
 func (s *Session) LastInbound() time.Time {
 	ns := s.lastInboundNs.Load()
@@ -1247,7 +1247,7 @@ func (s *Session) LegacySubLastInbound() time.Time {
 	return time.Unix(0, ns).UTC()
 }
 
-// HasLegacySub reports whether this session carries an attached
+// LegacySubPresent reports whether this session carries an attached
 // legacy s.sub owner-feed subscriber. True only for member-role
 // sessions where openMember successfully created the legacy
 // subscriber; false on owner sessions and on member sessions whose
@@ -1255,7 +1255,7 @@ func (s *Session) LegacySubLastInbound() time.Time {
 //
 // Used by detectStaleAndReconnect to skip the legacy-sub stale check
 // on sessions that have no legacy subscriber to begin with.
-func (s *Session) HasLegacySub() bool {
+func (s *Session) LegacySubPresent() bool {
 	return s.sub != nil
 }
 
@@ -1478,7 +1478,7 @@ func (s *Session) makeLegacySubOnUpdate() treestore.UpdateCallback {
 	}
 }
 
-// IsSubscriberAlive reports whether the subscriber side of this
+// SubscriberAlive reports whether the subscriber side of this
 // session is currently live. Surfaced through the chat-app's
 // /status endpoint as the per-group `subscriber_alive` field so
 // operators can spot a member session whose Connect failed silently
@@ -1504,7 +1504,7 @@ func (s *Session) makeLegacySubOnUpdate() treestore.UpdateCallback {
 // disagreements one by one (#2530, #2532, #2533, #2534). The fix
 // here removes the disagreement class entirely: there is ONE
 // timestamp, and aliveness is a pure function of it.
-func (s *Session) IsSubscriberAlive() bool {
+func (s *Session) SubscriberAlive() bool {
 	if s.sub == nil {
 		return true // owner role
 	}
@@ -1782,7 +1782,7 @@ func ringSuccessors(candidates []cipher.PubKey, self cipher.PubKey, k int) []cip
 func (s *Session) shouldMirrorLeaves() bool {
 	s.membersMu.RLock()
 	defer s.membersMu.RUnlock()
-	if s.cfg.Record.IsAdmin(s.cfg.MyPK) {
+	if s.cfg.Record.AdministeredBy(s.cfg.MyPK) {
 		return true
 	}
 	return s.cfg.Record.PeerBackfillEnabled() && s.cfg.peerFanout() > 0
@@ -1791,7 +1791,7 @@ func (s *Session) shouldMirrorLeaves() bool {
 // desiredPeerSubsForRole computes the set of peer PKs this visor should
 // hold per-peer CXO subscriptions for:
 //
-//	desired = { pk in r.Members : pk != myPK AND (r.IsAdmin(myPK) OR r.IsAdmin(pk)) }
+//	desired = { pk in r.Members : pk != myPK AND (r.AdministeredBy(myPK) OR r.AdministeredBy(pk)) }
 //	          ∪ ringSuccessors(non-admin members, myPK, fanout)   // non-admins only
 //
 // Admins follow every member (input pipe + mirror). A non-admin follows
@@ -1821,16 +1821,16 @@ func (s *Session) shouldMirrorLeaves() bool {
 // Pure function: no Session state, no CXO. Used at openMember and
 // SetAdminRoster so the rule has one source of truth.
 func desiredPeerSubsForRole(r Record, myPK cipher.PubKey, fanout int) map[cipher.PubKey]struct{} {
-	if r.IsChannel() {
+	if r.Channel() {
 		out := make(map[cipher.PubKey]struct{}, len(r.Admins)+1)
 		for _, pk := range r.Members {
-			if pk != myPK && r.IsAdmin(pk) {
+			if pk != myPK && r.AdministeredBy(pk) {
 				out[pk] = struct{}{}
 			}
 		}
 		return out
 	}
-	iAmAdmin := r.IsAdmin(myPK)
+	iAmAdmin := r.AdministeredBy(myPK)
 	// The group's own setting is the ceiling. An admin turning backfill off
 	// means "members must not carry each other's history", and a member
 	// that kept following its neighbors would keep doing exactly that.
@@ -1843,7 +1843,7 @@ func desiredPeerSubsForRole(r Record, myPK cipher.PubKey, fanout int) map[cipher
 		if pk == myPK {
 			continue
 		}
-		if iAmAdmin || r.IsAdmin(pk) {
+		if iAmAdmin || r.AdministeredBy(pk) {
 			out[pk] = struct{}{}
 			continue
 		}
@@ -1875,11 +1875,11 @@ func desiredPeerSubsForRole(r Record, myPK cipher.PubKey, fanout int) map[cipher
 // admins is the new admin set; cfg.Record.Members is read live so the
 // member-set side of the desired computation reflects whatever the
 // most recent SetAllowlist landed. Founder admin status is implicit
-// — the IsAdmin check uses the union of the founder PK and Admins.
+// — the AdministeredBy check uses the union of the founder PK and Admins.
 //
 // Owner-role sessions: this is a no-op because openOwner already
 // subscribes to every non-self member (owners are always admins by
-// IsAdmin contract, so the rule degenerates to "subscribe to all").
+// AdministeredBy contract, so the rule degenerates to "subscribe to all").
 // Member-role admin status can change at runtime; that's the case
 // this function handles.
 //
@@ -1895,9 +1895,9 @@ func (s *Session) SetAdminRoster(admins []cipher.PubKey) ([]cipher.PubKey, error
 		return nil, errors.New("group: SetAdminRoster: nil session or no publisher attached")
 	}
 	// Cache the snapshot under cfg.Record.Admins so iAmAdmin /
-	// IsAdmin checks elsewhere (publish path, openOwner doc, etc.)
+	// AdministeredBy checks elsewhere (publish path, openOwner doc, etc.)
 	// see the new view too. Founder PK stays where it is on
-	// cfg.Record.OwnerPK; IsAdmin's union semantics handle it.
+	// cfg.Record.OwnerPK; AdministeredBy's union semantics handle it.
 	//
 	// membersMu covers BOTH the write and the Record copy below, and it
 	// has to. cfg.Record is shared mutable state — every reconciler
@@ -1993,7 +1993,7 @@ func (s *Session) SetAdminRoster(admins []cipher.PubKey) ([]cipher.PubKey, error
 //
 // Caller is responsible for ensuring this visor has roster authority
 // to issue the mutation (Manager.AddMember already gates on
-// r.IsAdmin(myPK) before calling this). The envelope's IssuerPK is
+// r.AdministeredBy(myPK) before calling this). The envelope's IssuerPK is
 // always this session's MyPK; signature uses MySK.
 //
 // parentSeq is the highest roster-mutation seq THIS issuer has
@@ -2104,7 +2104,7 @@ func (s *Session) doClose() error {
 	var firstErr error
 	// Mark closed first so any concurrent /status read sees the
 	// session as dead even if Close races with a long Subscriber.Close.
-	// IsSubscriberAlive short-circuits to false on this flag for
+	// SubscriberAlive short-circuits to false on this flag for
 	// member-role sessions, so we don't have to also rewind
 	// lastInboundNs.
 	s.closed.Store(true)
@@ -2127,7 +2127,7 @@ func (s *Session) doClose() error {
 	// pointers in place lets readers keep their nil-checks and get an error
 	// from the closed handle instead of racing a write.
 	//
-	// Dropping the s.sub nil also fixes IsSubscriberAlive: it short-circuits
+	// Dropping the s.sub nil also fixes SubscriberAlive: it short-circuits
 	// `s.sub == nil` to true (owner role), so a CLOSED member session used to
 	// report subscriber_alive=true. It now falls through to the closed flag.
 	if s.relayDmsg != nil {
@@ -2736,7 +2736,7 @@ func (s *Session) ReplayHistoryThrough(handler MessageHandler, cap int) {
 		// The live path drops heartbeats in onUpdate; replay must not
 		// resurrect them as chat. Skipped before the cap window so a
 		// heartbeat-heavy feed cannot displace real history within it.
-		if IsHeartbeat(msg) {
+		if Heartbeat(msg) {
 			continue
 		}
 		out = append(out, decoded{path: l.path, msg: msg})
@@ -2894,7 +2894,7 @@ func (s *Session) applyUpdates(events []treestore.UpdateEvent, ownToo bool) {
 		// Heartbeats bypass the gate — they're per-publisher liveness
 		// probes, and dropping them would make a muted-but-present
 		// member look offline to the stale-subscriber watchdog.
-		if !IsHeartbeat(msg) {
+		if !Heartbeat(msg) {
 			if ok, why := s.senderAllowedToPost(msg.SenderPK, msg.TS); !ok {
 				s.log.WithField("path", ev.Path).WithField("sender_pk", msg.SenderPK.String()).
 					WithField("reason", why).
@@ -2928,7 +2928,7 @@ func (s *Session) applyUpdates(events []treestore.UpdateEvent, ownToo bool) {
 		//   - msg.SenderPK != s.cfg.MyPK — our own publishAs already
 		//     wrote this leaf on our publisher at this path; a second
 		//     Put is a content-equal no-op but skip the round-trip.
-		//   - !IsHeartbeat(msg) — heartbeats are per-publisher liveness
+		//   - !Heartbeat(msg) — heartbeats are per-publisher liveness
 		//     probes; subscribers get liveness from our OWN heartbeats,
 		//     so mirroring someone else's would be misleading as well as
 		//     wasteful.
@@ -2940,7 +2940,7 @@ func (s *Session) applyUpdates(events []treestore.UpdateEvent, ownToo bool) {
 		// Failures are debug-logged, not propagated. The mirror is
 		// opportunistic redundancy — the user-facing inbox fan-out below
 		// MUST NOT be gated on the Put succeeding.
-		if s.pub != nil && !IsHeartbeat(msg) && msg.SenderPK != s.cfg.MyPK && s.shouldMirrorLeaves() {
+		if s.pub != nil && !Heartbeat(msg) && msg.SenderPK != s.cfg.MyPK && s.shouldMirrorLeaves() {
 			if err := s.pub.Put(ev.Path, ev.Value); err != nil {
 				s.log.WithError(err).WithField("path", ev.Path).WithField("sender_pk", msg.SenderPK.String()).
 					Debug("group: peer-mirror put failed")
@@ -2967,7 +2967,7 @@ func (s *Session) applyUpdates(events []treestore.UpdateEvent, ownToo bool) {
 		// bumped above (event count > 0). Don't bubble heartbeats
 		// up to the user handler — they're wire-level liveness
 		// probes, not chat content.
-		if IsHeartbeat(msg) {
+		if Heartbeat(msg) {
 			continue
 		}
 		// Don't deliver our OWN messages back to us. A non-admin member reads an

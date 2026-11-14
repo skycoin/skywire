@@ -1,4 +1,4 @@
-// Package proxyenv pkg/proxyenv/proxyenv.go
+// Package proxyenv pkg/proxyenv/proxyenv.go c2-app-proxy
 //
 // The proxy environment variables as curl reads them, for the command-line
 // fetchers (the desk shell's curl, `skywire cli got`). A browser visor's desk

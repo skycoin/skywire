@@ -1,4 +1,4 @@
-// Package appnet pkg/app/appnet/skywire_networker_router_test.go: tests that
+// Package appnet pkg/app/appnet/skywire_networker_router_test.go tests that
 // drive the SkywireNetworker dial/ping/packet/serve paths through a stub
 // router.Router whose dial methods return errors — exercising the routed
 // fallback paths (and the nil-mux direct-dial shortcuts) without a live stack.

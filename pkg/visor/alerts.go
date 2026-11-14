@@ -65,7 +65,7 @@ func (v *Visor) alertService() (*alerts.Service, error) {
 // whose liveness is a current dmsg discovery client entry.
 func (v *Visor) alertTargets(ctx context.Context, set alerts.Settings) []alerts.Target {
 	out := map[cipher.PubKey]alerts.Target{}
-	if hv := v.hvInstance; hv != nil && hv.IsEnabled() {
+	if hv := v.hvInstance; hv != nil && hv.Enabled() {
 		for _, t := range hv.alertTargets(time.Now()) {
 			out[t.PK] = t
 		}

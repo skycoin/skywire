@@ -56,7 +56,7 @@ func (inc *subnetIPIncrementer) next() (netip.Addr, error) {
 
 					generatedIP[3] = o4
 
-					var isReserved bool
+					var reserved bool
 					// need to check all of the IPs within the generated subnet.
 					// since we're excluding some of the IPs from generation, these
 					// may be within some of the generated ranges.
@@ -64,12 +64,12 @@ func (inc *subnetIPIncrementer) next() (netip.Addr, error) {
 						generatedIP[3] = i
 
 						if _, ok := inc.reserved[generatedIP]; ok {
-							isReserved = true
+							reserved = true
 							break
 						}
 					}
 
-					if !isReserved {
+					if !reserved {
 						generatedIP[3] = o4
 						inc.octets[3] = o4
 						inc.reserved[generatedIP] = struct{}{}

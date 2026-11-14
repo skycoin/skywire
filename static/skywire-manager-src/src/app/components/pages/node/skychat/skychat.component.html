@@ -49,16 +49,16 @@
           @if (pwIsSet) {
             <mat-form-field appearance="outline" class="field-pw">
               <mat-label>{{ 'skychat.password.old' | translate }}</mat-label>
-              <input matInput type="password" [(ngModel)]="pwOld" maxlength="64">
+              <input matInput type="password" [(ngModel)]="pwOld" autocomplete="new-password" maxlength="64">
             </mat-form-field>
           }
           <mat-form-field appearance="outline" class="field-pw">
             <mat-label>{{ 'skychat.password.new' | translate }}</mat-label>
-            <input matInput type="password" [(ngModel)]="pwNew" maxlength="64">
+            <input matInput type="password" [(ngModel)]="pwNew" autocomplete="new-password" maxlength="64">
           </mat-form-field>
           <mat-form-field appearance="outline" class="field-pw">
             <mat-label>{{ 'skychat.password.confirm' | translate }}</mat-label>
-            <input matInput type="password" [(ngModel)]="pwConfirm" maxlength="64">
+            <input matInput type="password" [(ngModel)]="pwConfirm" autocomplete="new-password" maxlength="64">
           </mat-form-field>
           <div class="sc-password-actions">
             <button mat-raised-button color="primary" (click)="applyPassword()" [disabled]="pwBusy || !pwNew">

@@ -1,4 +1,4 @@
-// Package appnet pkg/app/appnet/packet_test.go: tests for the
+// Package appnet pkg/app/appnet/packet_test.go tests for the
 // UDP/datagram app-API surface. Stage 5 of #2607.
 //
 // Stage 5 ships the API; the route-setup integration that actually

@@ -1,4 +1,4 @@
-// Package commands cmd/svc/geoip/commands/root_test.go: unit tests for the
+// Package commands cmd/svc/geoip/commands/root_test.go unit tests for the
 // geoip root command — the JSON example helpers, the exported wrappers
 // (EmbeddedGeoIP / LookupIP), lookupIP against the embedded GeoLite2 DB,
 // ipFromRequest header/remote-addr precedence, the HTTP API server
@@ -22,12 +22,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/cmdutil"
-
-	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/geoip"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // ---- example helpers / exported wrappers -----------------------------------

@@ -56,7 +56,7 @@ const voiceAudioChunkFrames = 2
 // keeping apart: a remote visor is a bad request, while a local visor that
 // opens its own device is a working visor this route simply does not apply to.
 func (hv *Hypervisor) voiceBridge(w http.ResponseWriter, r *http.Request, ctx *httpCtx) *skycall.Bridge {
-	if ctx.isRemote {
+	if ctx.remote {
 		httputil.WriteJSON(w, r, http.StatusBadRequest,
 			map[string]string{"error": "voice audio is local to this visor"})
 		return nil

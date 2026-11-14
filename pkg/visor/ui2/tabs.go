@@ -50,7 +50,7 @@ func TabOf(seg string) (Tab, bool) {
 }
 
 // VisorURL is the ui2 URL of a visor tab, relative to the page's <base>.
-func VisorURL(pk, seg string) string { return "ui2/visors/" + pk + "/" + seg }
+func VisorURL(pk, seg string) string { return "visors/" + pk + "/" + seg }
 
 // ClassicURL is the Angular UI's route for the same visor tab.
 func ClassicURL(pk, seg string) string {

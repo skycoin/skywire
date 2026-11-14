@@ -1,4 +1,4 @@
-// Package router pkg/router/noise_route_group_delegate_test.go
+// Package router pkg/router/noise_route_group_delegate_test.go c2-net-routing
 //
 // Coverage for the NoiseRouteGroup net.Conn/stat delegators (they simply
 // forward to the wrapped RouteGroup but had no direct test), plus the
@@ -30,7 +30,7 @@ func TestNoiseRouteGroupDelegators(t *testing.T) {
 	require.Equal(t, rg.desc.Src(), nrg.RemoteAddr())
 
 	// A freshly-built group is alive and not closed.
-	require.True(t, nrg.IsAlive())
+	require.True(t, nrg.Alive())
 	require.False(t, nrg.isClosed())
 
 	// Stat reads are zero on a group that has not moved data.

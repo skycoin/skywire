@@ -143,7 +143,7 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 	// and get a single direct hop, bypassing the privacy constraint before
 	// route setup was ever reached. A session CARRIER dial is the one thing it
 	// does not apply to; see appnet.WithCarrierDial.
-	if r.directShortcutEligible(opts, IsCarrierDial(ctx)) {
+	if r.directShortcutEligible(opts, CarrierDial(ctx)) {
 		if directConn, ok := r.tryDirectDial(addr, opts.AppName); ok {
 			return &SkywireConn{
 				Conn:     directConn,
@@ -172,7 +172,7 @@ var ErrNoLocalLink = errors.New("no direct link to a peer on the local network")
 // network, which it makes when there is none. It honors min-hops like the
 // shortcut, so a visor set to route through others never takes it.
 func (r *SkywireNetworker) dialLocal(ctx context.Context, addr Addr, opts *router.DialOptions) (net.Conn, error) {
-	if r.appDirectMux == nil || !r.directShortcutEligible(opts, IsCarrierDial(ctx)) {
+	if r.appDirectMux == nil || !r.directShortcutEligible(opts, CarrierDial(ctx)) {
 		return nil, ErrNoLocalLink
 	}
 	if err := r.appDirectMux.EnsureLocalTransport(ctx, addr.PubKey); err != nil {

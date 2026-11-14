@@ -14,11 +14,11 @@ import (
 // through its skyenv API, as `skywire cli visor skyenv` edits it.
 
 func (hv *Hypervisor) ui2SettingsRoutes(r *httputil.Router) {
-	r.Get("/ui2/visors/{pk}/settings", hv.ui2Settings(ui2SettingsPage))
-	r.Get("/ui2/visors/{pk}/settings/panel", hv.ui2Settings(ui2SettingsForm))
-	r.Post("/ui2/visors/{pk}/settings/panel", hv.ui2Settings(ui2SettingsForm))
-	r.Post("/ui2/visors/{pk}/settings/review", hv.ui2Settings(ui2SettingsReview))
-	r.Put("/ui2/visors/{pk}/settings", hv.ui2Settings(ui2SettingsSave))
+	r.Get("/visors/{pk}/settings", hv.ui2Settings(ui2SettingsPage))
+	r.Get("/visors/{pk}/settings/panel", hv.ui2Settings(ui2SettingsForm))
+	r.Post("/visors/{pk}/settings/panel", hv.ui2Settings(ui2SettingsForm))
+	r.Post("/visors/{pk}/settings/review", hv.ui2Settings(ui2SettingsReview))
+	r.Put("/visors/{pk}/settings", hv.ui2Settings(ui2SettingsSave))
 }
 
 type ui2SettingsStep int

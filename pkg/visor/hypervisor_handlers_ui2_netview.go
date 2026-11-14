@@ -16,8 +16,8 @@ import (
 // discovery, transport discovery and uptime tracker.
 
 func (hv *Hypervisor) ui2NetViewRoutes(r *httputil.Router) {
-	r.Get("/ui2/network", hv.ui2NetView(false))
-	r.Get("/ui2/network/body", hv.ui2NetView(true))
+	r.Get("/network", hv.ui2NetView(false))
+	r.Get("/network/body", hv.ui2NetView(true))
 }
 
 func (hv *Hypervisor) ui2NetView(body bool) http.HandlerFunc {

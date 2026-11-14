@@ -59,7 +59,7 @@ func (ch *CascadeHandler) SetNoTransit(v bool) { ch.noTransit = v }
 // install means the route ENDS here, which no_transit does not forbid.
 func (ch *CascadeHandler) refusesTransit(msg *routing.CascadeSetup) bool {
 	paused := ch.transitPaused != nil && ch.transitPaused.Load()
-	return (ch.noTransit || paused) && !msg.IsEdge()
+	return (ch.noTransit || paused) && !msg.Edge()
 }
 
 // NewCascadeHandler creates a new cascade handler. introduceRules is the
@@ -160,7 +160,7 @@ func (ch *CascadeHandler) processReserve(msg *routing.CascadeSetup) (*routing.Ca
 		return nil, fmt.Errorf("reserve IDs: %w", err)
 	}
 
-	if msg.IsTerminal() {
+	if msg.Terminal() {
 		// Terminal hop — ACK with our reserved IDs.
 		return &routing.CascadeAck{
 			SessionID: msg.SessionID,
@@ -208,7 +208,7 @@ func (ch *CascadeHandler) processInstall(msg *routing.CascadeSetup) (*routing.Ca
 		return nil, fmt.Errorf("deserialize rules: %w", err)
 	}
 
-	if msg.IsEdge() && ch.introduceRules != nil {
+	if msg.Edge() && ch.introduceRules != nil {
 		// Responding destination edge: create a route group (and notify the
 		// launcher) rather than only installing forwarding rules — the
 		// cascade equivalent of the legacy AddEdgeRules RPC. RuleData carries
@@ -231,7 +231,7 @@ func (ch *CascadeHandler) processInstall(msg *routing.CascadeSetup) (*routing.Ca
 		}
 	}
 
-	if msg.IsTerminal() {
+	if msg.Terminal() {
 		return &routing.CascadeAck{
 			SessionID: msg.SessionID,
 			Phase:     msg.Phase,

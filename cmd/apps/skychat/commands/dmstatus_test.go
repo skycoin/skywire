@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/dmstatus_test.go
+// Package commands cmd/apps/skychat/commands/dmstatus_test.go c4-app-chat
 //
 // Unit coverage for the DM message-status plumbing: the dm-status control
 // event shape broadcast on /sse, and the /read-receipt handler's validation

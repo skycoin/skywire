@@ -1,4 +1,4 @@
-// Package cliconfig cmd/skywire-cli/commands/config/gen_limits.go
+// Package cliconfig cmd/skywire-cli/commands/config/gen_limits.go c4-vis-cli
 package cliconfig
 
 import (

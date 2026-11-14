@@ -1,4 +1,4 @@
-// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/stats_tui_coverage.go c5-reward-server
+// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/stats_tui_coverage.go c4-vis-cli
 //
 // Service reachability across the dmsg servers.
 //

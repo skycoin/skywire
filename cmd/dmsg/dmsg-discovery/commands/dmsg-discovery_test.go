@@ -1,4 +1,4 @@
-// Package commands cmd/dmsg/dmsg-discovery/commands/dmsg-discovery_test.go
+// Package commands cmd/dmsg/dmsg-discovery/commands/dmsg-discovery_test.go c1-net-dmsg
 //
 // These tests cover the package's pure/deterministic logic: the comma-list
 // splitter, the partial-config merge, the flag+file config assembly

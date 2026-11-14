@@ -1,3 +1,5 @@
+// Package clihelp pkg/cliout/clihelp/clihelp.go c0-com-util
+//
 // Package clihelp is the machine-readable shape of `skywire cli --help`.
 //
 // `--help --json` emits this instead of the rendered help text. The point is

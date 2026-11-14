@@ -1,3 +1,4 @@
+// Package visor pkg/visor/status_visor.go c3-vis-core
 package visor
 
 import (
@@ -154,7 +155,7 @@ func (c *visorCharts) collect(context.Context) (map[string]float64, error) {
 	if v.tpM != nil {
 		var tps []tpSample
 		v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
-			if !tp.IsClosed() {
+			if !tp.Closed() {
 				tps = append(tps, tpSample{id: tp.Entry.ID, typ: string(tp.Entry.Type), remote: tp.Remote(), latency: tp.GetLatency(), bw: *tp.GetBandwidth()})
 			}
 			return true

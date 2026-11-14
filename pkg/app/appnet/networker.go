@@ -87,8 +87,8 @@ func WithCarrierDial(ctx context.Context) context.Context {
 	return context.WithValue(ctx, carrierDialCtxKey{}, true)
 }
 
-// IsCarrierDial reports whether ctx was marked by WithCarrierDial.
-func IsCarrierDial(ctx context.Context) bool {
+// CarrierDial reports whether ctx was marked by WithCarrierDial.
+func CarrierDial(ctx context.Context) bool {
 	if ctx == nil {
 		return false
 	}

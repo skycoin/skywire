@@ -213,11 +213,11 @@ func TestEntryHelpers(t *testing.T) {
 	require.Equal(t, pkA, selfEntry.RemoteEdge(pkA))
 
 	unknown := mustPK(t)
-	require.True(t, entry.HasEdge(pkA))
-	require.False(t, entry.HasEdge(unknown))
+	require.True(t, entry.ContainsEdge(pkA))
+	require.False(t, entry.ContainsEdge(unknown))
 
 	// Exactly one edge is the least-significant edge.
-	require.NotEqual(t, entry.IsLeastSignificantEdge(pkA), entry.IsLeastSignificantEdge(pkB))
+	require.NotEqual(t, entry.LeastSignificantEdge(pkA), entry.LeastSignificantEdge(pkB))
 
 	require.NotEmpty(t, entry.String())
 	require.NotEmpty(t, entry.ToBinary())
@@ -438,14 +438,14 @@ func TestManagedTransportGettersAndClose(t *testing.T) {
 
 	require.Equal(t, mem, mt.getTransport())
 	require.True(t, mt.isServing())
-	require.False(t, mt.IsClosed())
+	require.False(t, mt.Closed())
 	require.Equal(t, "1.2.3.4", mt.RemoteIP())
 
 	bw := mt.GetBandwidth()
 	require.NotNil(t, bw)
 
 	require.NoError(t, mt.Close())
-	require.True(t, mt.IsClosed())
+	require.True(t, mt.Closed())
 	require.False(t, mt.isServing())
 	require.True(t, mem.closed)
 	// getTransport returns nil once not serving.
@@ -507,7 +507,7 @@ func TestManagedTransportCloseWithoutDeregister(t *testing.T) {
 	mem := newMemTransport()
 	mt := NewManagedTransportForTest(mem)
 	mt.closeWithoutDeregister()
-	require.True(t, mt.IsClosed())
+	require.True(t, mt.Closed())
 	require.True(t, mem.closed)
 	// idempotent
 	mt.closeWithoutDeregister()
@@ -535,7 +535,7 @@ func TestManagerGetters(t *testing.T) {
 	require.Nil(t, tm.ARClient())
 	require.Empty(t, tm.Networks())
 	require.Equal(t, 0, tm.TransportCount())
-	require.False(t, tm.IsKnownNetwork(types.STCPR))
+	require.False(t, tm.KnownNetwork(types.STCPR))
 	if _, ok := tm.Stcpr(); ok {
 		t.Error("Stcpr should be absent on a fresh manager")
 	}
@@ -559,7 +559,7 @@ func TestManagerGetters(t *testing.T) {
 
 	// Inserting a nil-valued network client marks the network known.
 	tm.netClients[types.STCPR] = nil
-	require.True(t, tm.IsKnownNetwork(types.STCPR))
+	require.True(t, tm.KnownNetwork(types.STCPR))
 	require.Contains(t, tm.Networks(), types.STCPR)
 	if _, ok := tm.Stcpr(); !ok {
 		t.Error("Stcpr should be present after inserting the client")

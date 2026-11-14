@@ -22,10 +22,10 @@ type RouteHopDetail struct {
 }
 
 // PingResultCallback is called for each ping result received from the stream.
-// routeHopDetails is only set for the setup message (isSetup=true) for skywire route pings.
+// routeHopDetails is only set for the setup message (setup=true) for skywire route pings.
 // dmsgServerPK is only set for DMSG pings and contains the server used for the connection.
-// routeCalcTime is the time spent calculating the route (local route mode only, isSetup=true).
-type PingResultCallback func(seq int32, latency time.Duration, isSetup bool, routeHopDetails []RouteHopDetail, dmsgServerPK string, routeCalcTime time.Duration, err error)
+// routeCalcTime is the time spent calculating the route (local route mode only, setup=true).
+type PingResultCallback func(seq int32, latency time.Duration, setup bool, routeHopDetails []RouteHopDetail, dmsgServerPK string, routeCalcTime time.Duration, err error)
 
 // PingClient provides streaming ping operations via gRPC
 type PingClient struct {
@@ -262,7 +262,7 @@ func (c *PingClient) GetRemoteDmsgServers(ctx context.Context, pk string) ([]str
 }
 
 // BandwidthProgressCallback is called for each bandwidth progress update.
-type BandwidthProgressCallback func(bytesSent, bytesReceived uint64, elapsed time.Duration, uploadSpeed, downloadSpeed float64, isFinal bool, err error)
+type BandwidthProgressCallback func(bytesSent, bytesReceived uint64, elapsed time.Duration, uploadSpeed, downloadSpeed float64, final bool, err error)
 
 // StreamBandwidthTest performs a bandwidth test over skywire route and calls callback for each progress update
 func (c *PingClient) StreamBandwidthTest(ctx context.Context, pk string, duration time.Duration, pcktSize int32, localRoute bool, cb BandwidthProgressCallback) error {

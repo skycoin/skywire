@@ -50,8 +50,8 @@ func TestServiceAliasMap(t *testing.T) {
 	assert.Equal(t, sdPK, m["sd"].Hex())
 	assert.Equal(t, rewardPK, m["rewards"].Hex())
 
-	_, hasUT := m["ut"]
-	assert.False(t, hasUT, "HTTP-only uptime tracker must not be aliased")
+	_, utFound := m["ut"]
+	assert.False(t, utFound, "HTTP-only uptime tracker must not be aliased")
 	assert.Len(t, m, 6, "exactly the 6 resolvable services")
 }
 
@@ -80,8 +80,8 @@ func TestServiceAliasMapSetupNodes(t *testing.T) {
 	assert.Equal(t, tsn0.Hex(), m["tsn"].Hex())
 	assert.Equal(t, tsn0.Hex(), m["tsn0"].Hex())
 
-	_, hasNull := m["tsn1"]
-	assert.False(t, hasNull, "null setup-node PK must not be aliased")
+	_, nullFound := m["tsn1"]
+	assert.False(t, nullFound, "null setup-node PK must not be aliased")
 }
 
 // TestDmsgServerAliases covers dmsg-server aliasing (dmsg0.., sorted by PK for

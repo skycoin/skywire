@@ -1,6 +1,8 @@
+// Package skydexui cmd/skydex-client/skydexui/skydexui.go c3-ui-dex
+//
 // Package skydexui is the SkyDEX trading client rendered on the server with
-// templ, with htmx for the parts the React client polls. It is served beside
-// the React client at /ui2/ until it reaches parity.
+// templ, with htmx for the parts the React client polls. It is served at the
+// root, with the React client at /angular/.
 //
 // Never use html/template or text/template here: they panic under TinyGo.
 package skydexui
@@ -20,10 +22,7 @@ import (
 var embedded embed.FS
 
 func sub(dir string) fs.FS {
-	s, err := fs.Sub(embedded, dir)
-	if err != nil {
-		panic(err)
-	}
+	s, _ := fs.Sub(embedded, dir) //nolint:errcheck // fails only for an invalid path, and dir is always a literal
 	return s
 }
 

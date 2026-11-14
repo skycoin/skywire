@@ -15,7 +15,7 @@ import (
 
 type healthStats struct{ srv *httputil.DmsgServerHealth }
 
-func (healthStats) IsPublicAutoconnectRunning() bool               { return true }
+func (healthStats) PublicAutoconnectRunning() bool                 { return true }
 func (healthStats) GetTransportCounts() (int, int)                 { return 1, 2 }
 func (healthStats) GetTransportTypeCounts() map[string]int         { return map[string]int{"stcpr": 1} }
 func (healthStats) GetNetworkTypes() []string                      { return nil }

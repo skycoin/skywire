@@ -17,14 +17,14 @@ templ BulkBar() {
 }
 
 templ bulkBtn(action, label string) {
-	<button class="btn sm" type="button" hx-get={ "ui2/nodes/bulk?action=" + action } hx-include="#bulk" hx-target="#bulk-panel">{ T(ctx, label) }</button>
+	<button class="btn sm" type="button" hx-get={ "nodes/bulk?action=" + action } hx-include="#bulk" hx-target="#bulk-panel">{ T(ctx, label) }</button>
 }
 
 // BulkPanel is the form of a bulk action, or its result once it ran.
 templ BulkPanel(b Bulk) {
 	<form
 		class="card sub bulk-panel"
-		hx-post="ui2/nodes/bulk"
+		hx-post="nodes/bulk"
 		hx-target="#bulk-panel"
 		if b.Action == BulkRestart && !b.Ran {
 			hx-confirm={ T(ctx, "nodes.bulk.restart-confirmation", "n", itoa(b.Todo())) }
@@ -85,7 +85,7 @@ templ bulkFields(b Bulk) {
 			case BulkAdd, BulkStart, BulkStop:
 				<label>
 					{ T(ctx, "nodes.bulk-apps.app") }
-					<select name="app" hx-get="ui2/nodes/bulk" hx-include="closest form" hx-target="#bulk-panel" hx-trigger="change">
+					<select name="app" hx-get="nodes/bulk" hx-include="closest form" hx-target="#bulk-panel" hx-trigger="change">
 						<option value=""></option>
 						for _, a := range b.Apps {
 							<option value={ a } selected?={ a == b.App }>{ a }</option>
@@ -93,7 +93,7 @@ templ bulkFields(b Bulk) {
 					</select>
 				</label>
 				if b.Action == BulkAdd {
-					<label class="check small"><input type="checkbox" name="start_after" checked?={ b.StartAfter } hx-get="ui2/nodes/bulk" hx-include="closest form" hx-target="#bulk-panel" hx-trigger="change"/> { T(ctx, "nodes.bulk-apps.start-after-add") }</label>
+					<label class="check small"><input type="checkbox" name="start_after" checked?={ b.StartAfter } hx-get="nodes/bulk" hx-include="closest form" hx-target="#bulk-panel" hx-trigger="change"/> { T(ctx, "nodes.bulk-apps.start-after-add") }</label>
 				}
 		}
 		<p>

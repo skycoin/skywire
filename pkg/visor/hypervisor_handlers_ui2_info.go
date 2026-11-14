@@ -15,14 +15,14 @@ import (
 // The info tab of the server rendered UI.
 
 func (hv *Hypervisor) ui2InfoRoutes(r *httputil.Router) {
-	r.Get("/ui2/visors/{pk}/info", hv.ui2Info(false))
-	r.Get("/ui2/visors/{pk}/info/live", hv.ui2Info(true))
-	r.Put("/ui2/visors/{pk}/info/router", hv.ui2RouterSave())
-	r.Get("/ui2/visors/{pk}/info/config", hv.ui2Config(false))
-	r.Get("/ui2/visors/{pk}/info/config/edit", hv.ui2Config(true))
-	r.Put("/ui2/visors/{pk}/info/config", hv.ui2ConfigSave())
-	r.Post("/ui2/visors/{pk}/info/restart", hv.ui2Restart())
-	r.Post("/ui2/visors/{pk}/info/shutdown", hv.ui2Shutdown())
+	r.Get("/visors/{pk}/info", hv.ui2Info(false))
+	r.Get("/visors/{pk}/info/live", hv.ui2Info(true))
+	r.Put("/visors/{pk}/info/router", hv.ui2RouterSave())
+	r.Get("/visors/{pk}/info/config", hv.ui2Config(false))
+	r.Get("/visors/{pk}/info/config/edit", hv.ui2Config(true))
+	r.Put("/visors/{pk}/info/config", hv.ui2ConfigSave())
+	r.Post("/visors/{pk}/info/restart", hv.ui2Restart())
+	r.Post("/visors/{pk}/info/shutdown", hv.ui2Shutdown())
 }
 
 // ui2Summary is the visor's summary as getVisorSummary answers it.

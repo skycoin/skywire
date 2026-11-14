@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skydex-client/commands/skydex-client.go
+// Package commands cmd/apps/skydex-client/commands/skydex-client.go c4-app-wallet
 //
 // Thin skywire wrapper around the SkyDEX trading client, whose engine and UI
 // live in the skycoin repo (github.com/skycoin/skycoin/cmd/skydex-client/

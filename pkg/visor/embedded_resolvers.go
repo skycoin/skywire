@@ -75,7 +75,7 @@ func initEmbeddedResolvers(ctx context.Context, v *Visor, log *logging.Logger) e
 		rlog := v.MasterLogger().PackageLogger("resolver_" + rc.Name)
 		er := &embeddedResolver{name: rc.Name, appName: rc.AppName(), enable: rc.Enable}
 
-		if rc.IsSkynet() {
+		if rc.Skynet() {
 			if v.router == nil {
 				log.WithField("resolver", rc.Name).Warn("skynet resolver configured but router not available; skipping")
 				continue
@@ -138,7 +138,7 @@ func initEmbeddedResolvers(ctx context.Context, v *Visor, log *logging.Logger) e
 // resolverKindLabel renders an entry's kind for logs, spelling the empty
 // (default) kind out as "dmsg" rather than showing a blank field.
 func resolverKindLabel(rc *visorconfig.ResolverConfig) string {
-	if rc.IsSkynet() {
+	if rc.Skynet() {
 		return visorconfig.ResolverKindSkynet
 	}
 	return visorconfig.ResolverKindDmsg
@@ -157,7 +157,7 @@ func applyResolverChain(v *Visor, rc *visorconfig.ResolverConfig, upstream *stri
 	if *upstream != "" || !rc.Chained() {
 		return
 	}
-	if rc.IsSkynet() {
+	if rc.Skynet() {
 		if v.conf.Launcher == nil {
 			return
 		}

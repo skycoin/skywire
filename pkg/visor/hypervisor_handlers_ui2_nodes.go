@@ -16,8 +16,8 @@ import (
 // UI, so only forgetting an offline visor reaches the server.
 
 func (hv *Hypervisor) ui2NodesRoutes(r *httputil.Router) {
-	r.Delete("/ui2/nodes/{pk}", hv.ui2ForgetNodes(false))
-	r.Delete("/ui2/nodes", hv.ui2ForgetNodes(true))
+	r.Delete("/nodes/{pk}", hv.ui2ForgetNodes(false))
+	r.Delete("/nodes", hv.ui2ForgetNodes(true))
 }
 
 // ui2ForgetNodes forgets one offline visor, or with all set every offline

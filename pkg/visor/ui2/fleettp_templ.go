@@ -108,7 +108,7 @@ func latMS(us int64) string {
 }
 
 func (f FleetTps) url(days int, tree, hide, live bool) string {
-	u := "ui2/transports/body?days=" + itoa(days)
+	u := "transports/body?days=" + itoa(days)
 	if tree {
 		u += "&tree=1"
 	}

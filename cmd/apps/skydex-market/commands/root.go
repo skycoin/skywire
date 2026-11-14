@@ -1,6 +1,6 @@
 //go:build !(js && wasm) && !tinygo
 
-// Package commands cmd/apps/skydex-market/commands/root.go
+// Package commands cmd/apps/skydex-market/commands/root.go c4-app-wallet
 //
 // This is the thin skywire wrapper around the SkyDEX market engine, which lives
 // in the skycoin repo (github.com/skycoin/skycoin/cmd/skydex-market/commands and

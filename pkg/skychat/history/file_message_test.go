@@ -1,4 +1,4 @@
-// Package history cmd/apps/skychat/history/file_message_test.go
+// Package history pkg/skychat/history/file_message_test.go c4-app-chat
 //
 // A persisted file message must round-trip its file_* metadata through the
 // store so /history can re-render media (thumbnail/player) on a fresh

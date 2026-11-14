@@ -5,7 +5,7 @@
 // js/wasm counterpart to the platform-gated values_{linux,darwin,
 // windows}.go files. The browser doesn't have a host filesystem or
 // hardware-inventory facility — none of UserConfig, SystemSurvey,
-// or IsRoot make sense in a WASM context. The in-browser config
+// or RunningAsRoot make sense in a WASM context. The in-browser config
 // generator never calls them; they exist here so the package's type
 // surface (Survey) compiles cleanly under GOOS=js for callers that
 // reference it indirectly via visorconfig.V1.
@@ -56,8 +56,8 @@ func SystemSurvey() (Survey, error) {
 	return Survey{Timestamp: time.Now()}, nil
 }
 
-// IsRoot returns false on js. The browser doesn't have a uid
+// RunningAsRoot returns false on js. The browser doesn't have a uid
 // concept that maps to root.
-func IsRoot() bool {
+func RunningAsRoot() bool {
 	return false
 }

@@ -1,3 +1,4 @@
+// Package collection src/wallet/collection/wallet.go c1-coin-wallet
 package collection
 
 import (
@@ -284,8 +285,8 @@ func (w *Wallet) unpackSecrets(ss wallet.Secrets) error {
 
 // Fingerprint returns an empty string; fingerprints are only defined for
 // wallets with a seed
-func (w *Wallet) Fingerprint() string {
-	return ""
+func (w *Wallet) Fingerprint() (string, error) {
+	return "", nil
 }
 
 // Clone clones the wallet a new wallet object

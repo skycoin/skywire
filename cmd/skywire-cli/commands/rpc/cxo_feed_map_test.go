@@ -1,4 +1,4 @@
-// Package clirpc cxo_feed_map_test.go
+// Package clirpc cmd/skywire-cli/commands/rpc/cxo_feed_map_test.go c4-vis-cli
 package clirpc
 
 import (

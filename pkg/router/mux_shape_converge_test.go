@@ -29,7 +29,7 @@ func legTpIDs(rg *RouteGroup) []uuid.UUID {
 	defer rg.mu.Unlock()
 	out := make([]uuid.UUID, 0, len(rg.legs))
 	for _, tp := range legTransports(rg.legs) {
-		if tp != nil && !tp.IsClosed() {
+		if tp != nil && !tp.Closed() {
 			out = append(out, tp.Entry.ID)
 		}
 	}

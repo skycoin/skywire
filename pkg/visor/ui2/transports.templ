@@ -62,7 +62,7 @@ templ TransportsSummary(t Transports, oob bool) {
 			<dt title={ T(ctx, "node.details.transports-info.autoconnect-info") }>{ T(ctx, "node.details.transports-info.autoconnect") }</dt>
 			<dd>@toggle(t.url("/autoconnect"), t.Autoconnect, T(ctx, "node.details.transports-info.autoconnect-info"))</dd>
 			<dt title={ T(ctx, "node.details.transports-info.is-public-info") }>{ T(ctx, "node.details.transports-info.is-public") }</dt>
-			<dd>@toggle(t.url("/public"), t.IsPublic, T(ctx, "node.details.transports-info.is-public-info"))</dd>
+			<dd>@toggle(t.url("/public"), t.Public, T(ctx, "node.details.transports-info.is-public-info"))</dd>
 		</dl>
 	</div>
 }

@@ -173,8 +173,8 @@ const rpcUpgradePoll = 3 * time.Second
 
 // shouldUpgradeToSkynet is the decision behind watchForSkynetUpgrade: a
 // direct transport exists and skynet is not in its failure cooldown.
-func shouldUpgradeToSkynet(hasFast bool, lastSkyFail *atomic.Int64) bool {
-	return hasFast && !inSkynetCooldown(lastSkyFail)
+func shouldUpgradeToSkynet(fast bool, lastSkyFail *atomic.Int64) bool {
+	return fast && !inSkynetCooldown(lastSkyFail)
 }
 
 // watchForSkynetUpgrade closes conn (a dmsg-served RPC conn) once a direct

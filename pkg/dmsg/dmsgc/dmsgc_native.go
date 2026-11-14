@@ -1,5 +1,6 @@
 //go:build !js
 
+// Package dmsgc pkg/dmsg/dmsgc/dmsgc_native.go c1-net-dmsg
 package dmsgc
 
 // browserRelayOnly is false on native builds: a native visor keeps its server

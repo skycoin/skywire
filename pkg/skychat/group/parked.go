@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/parked.go
+// Package group pkg/skychat/group/parked.go c4-app-chat
 package group
 
 import (
@@ -58,7 +58,7 @@ func (m *Manager) parkJoinRequest(targets []cipher.PubKey, req JoinRequestMsg) i
 // not wait on it.
 func (m *Manager) parkDecision(pk cipher.PubKey, resp JoinResponseMsg) {
 	p := m.parker()
-	if p == nil || !resp.Status.IsTerminal() {
+	if p == nil || !resp.Status.Terminal() {
 		return
 	}
 	body, err := encodeJoinResponse(resp)

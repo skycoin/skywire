@@ -1,3 +1,4 @@
+// Package wallet src/wallet/transaction.go c1-coin-wallet
 package wallet
 
 import (
@@ -43,7 +44,7 @@ func validateSignIndexes(x []int, uxOuts []coin.UxOut) error {
 	return nil
 }
 
-func copyTransaction(txn *coin.Transaction) *coin.Transaction {
+func copyTransaction(txn *coin.Transaction) (*coin.Transaction, error) {
 	txnHash := txn.Hash()
 	txnInnerHash := txn.HashInner()
 
@@ -57,13 +58,13 @@ func copyTransaction(txn *coin.Transaction) *coin.Transaction {
 	txn2.PQ = append([]coin.PQInputSig(nil), txn.PQ...)
 
 	if txnInnerHash != txn2.HashInner() {
-		logger.Panic("copyTransaction copy broke InnerHash")
+		return nil, errors.New("copyTransaction copy broke InnerHash")
 	}
 	if txnHash != txn2.Hash() {
-		logger.Panic("copyTransaction copy broke Hash")
+		return nil, errors.New("copyTransaction copy broke Hash")
 	}
 
-	return &txn2
+	return &txn2, nil
 }
 
 // SignTransaction signs a transaction. Specific inputs may be signed by specifying signIndexes.
@@ -77,7 +78,10 @@ func SignTransaction(w Wallet, txn *coin.Transaction, signIndexes []int, uxOuts 
 		return nil, ErrWalletCantSign
 	}
 
-	signedTxn := copyTransaction(txn)
+	signedTxn, err := copyTransaction(txn)
+	if err != nil {
+		return nil, err
+	}
 	txnInnerHash := signedTxn.HashInner()
 
 	if w.IsEncrypted() {

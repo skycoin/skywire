@@ -105,7 +105,7 @@ func (m *Manager) metaRecord(id, op string) (Record, error) {
 	if r.OwnerPK != m.myPK {
 		return Record{}, fmt.Errorf("group: %s: only the founding visor can change this — members take name and picture from it", op)
 	}
-	if r.Status.IsTerminal() {
+	if r.Status.Terminal() {
 		return Record{}, fmt.Errorf("group: %s: this group is over", op)
 	}
 	return r, nil
@@ -127,7 +127,7 @@ func (m *Manager) RefreshMeta(ctx context.Context, id string) (Record, bool, err
 	if !ok {
 		return Record{}, false, fmt.Errorf("group: refresh meta: no record for %s", id)
 	}
-	if r.Status.IsTerminal() || r.OwnerPK == m.myPK || m.dmsgC == nil {
+	if r.Status.Terminal() || r.OwnerPK == m.myPK || m.dmsgC == nil {
 		return r, false, nil
 	}
 	// Straight to the wire, NOT ProbeGroup: its local shortcut would hand

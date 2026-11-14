@@ -1,4 +1,4 @@
-// Package execwasm pkg/wasmhv/execwasm/path_test.go
+// Package execwasm pkg/wasmhv/execwasm/path_test.go c3-vis-wasm
 package execwasm
 
 import (

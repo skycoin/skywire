@@ -19,9 +19,9 @@ import (
 // the JSON handlers the Angular tab calls.
 
 func (hv *Hypervisor) ui2SkynetRoutes(r *httputil.Router) {
-	r.Get("/ui2/visors/{pk}/skynet", hv.ui2Skynet(""))
+	r.Get("/visors/{pk}/skynet", hv.ui2Skynet(""))
 	for _, op := range []string{"ports", "toggle", "whitelist", "remove", "connect", "disconnect"} {
-		r.Post("/ui2/visors/{pk}/skynet/"+op, hv.ui2Skynet(op))
+		r.Post("/visors/{pk}/skynet/"+op, hv.ui2Skynet(op))
 	}
 }
 

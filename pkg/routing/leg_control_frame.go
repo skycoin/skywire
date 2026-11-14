@@ -1,4 +1,4 @@
-// Package routing pkg/routing/leg_control_frame.go c2-net-routing
+// Package routing pkg/routing/leg_control_frame.go c1-net-routing
 //
 // The IN-BAND leg control frame: the re-home / split request, ack, refusal and
 // commit (leg_rehome.go, leg_split.go) carried inside an ordinary DataPacket

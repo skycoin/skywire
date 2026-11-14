@@ -360,7 +360,7 @@ func (c *Container) RootByHash(
 	}
 
 	r.Sig = dr.Sig
-	r.IsFull = true
+	r.Full = true
 	return
 }
 

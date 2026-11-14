@@ -228,7 +228,7 @@ func (s *Store) Get(id string) (Record, bool, error) {
 		return s.decodeRecord(raw, &r)
 	})
 	// Legacy records persisted before the Admins field existed have
-	// Admins == nil. Normalize on every read so IsAdmin and admin-
+	// Admins == nil. Normalize on every read so AdministeredBy and admin-
 	// gated manager ops see a consistent shape. Idempotent for new
 	// records that already have the founder explicit.
 	r.EnsureFounderInAdmins()

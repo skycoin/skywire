@@ -1,3 +1,4 @@
+// Package alerts pkg/alerts/mail.go c3-vis-core
 package alerts
 
 import (

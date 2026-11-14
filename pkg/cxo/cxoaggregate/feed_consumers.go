@@ -209,7 +209,7 @@ func RegistrationLeaves(pack registry.Pack, n *treestore.TreeNode) map[string][]
 		if _, err := n.Children.ValueByIndex(pack, i, &entry); err != nil {
 			continue
 		}
-		if len(entry.Leaf) == 0 || !sysfeed.IsRegistration(entry.Name) {
+		if len(entry.Leaf) == 0 || !sysfeed.Registration(entry.Name) {
 			continue
 		}
 		if out == nil {

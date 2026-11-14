@@ -1,4 +1,4 @@
-// Package dmsgtest pkg/dmsgtest/coldstart_test.go
+// Package dmsgtest pkg/dmsg/dmsgtest/coldstart_test.go c1-net-dmsg
 //
 //nolint:errcheck,gosec
 package dmsgtest

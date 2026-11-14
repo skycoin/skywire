@@ -1,3 +1,4 @@
+// Package visor pkg/visor/hypervisor_json_stream.go c3-vis-core
 package visor
 
 import (

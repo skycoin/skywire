@@ -13,7 +13,7 @@ import (
 // the page rather than a broken response.
 func TestUI2TabsB(t *testing.T) {
 	srv, _, pk := newUI2Server(t, true)
-	base := srv.URL + "/ui2/visors/" + pk.Hex()
+	base := srv.URL + "/visors/" + pk.Hex()
 	for _, p := range []string{
 		"/apps", "/apps/rows",
 		"/transports", "/transports/body",
@@ -25,7 +25,7 @@ func TestUI2TabsB(t *testing.T) {
 		require.NotContains(t, body, `="/`, p+": absolute URL")
 	}
 	_, body := ui2Do(t, ui2Req(t, http.MethodGet, base+"/routing/find", "", ""))
-	require.Contains(t, body, `hx-post="ui2/visors/`+pk.Hex()+`/routing/find"`)
+	require.Contains(t, body, `hx-post="visors/`+pk.Hex()+`/routing/find"`)
 	_, body = ui2Do(t, ui2Req(t, http.MethodGet, base+"/transports", "", ""))
 	require.Contains(t, body, `class="tab active"`)
 	require.Contains(t, body, "Create transport")
@@ -35,7 +35,7 @@ func TestUI2TabsB(t *testing.T) {
 func TestUI2TransportsInput(t *testing.T) {
 	srv, _, pk := newUI2Server(t, true)
 	form := url.Values{"remote": {"nope"}, "type": {"dmsg"}}.Encode()
-	code, _ := ui2Do(t, ui2Req(t, http.MethodPost, srv.URL+"/ui2/visors/"+pk.Hex()+"/transports", "application/x-www-form-urlencoded", form))
+	code, _ := ui2Do(t, ui2Req(t, http.MethodPost, srv.URL+"/visors/"+pk.Hex()+"/transports", "application/x-www-form-urlencoded", form))
 	require.Equal(t, http.StatusBadRequest, code)
 }
 
@@ -43,7 +43,7 @@ func TestUI2TransportsInput(t *testing.T) {
 func TestUI2MinHopsInput(t *testing.T) {
 	srv, _, pk := newUI2Server(t, true)
 	form := url.Values{"min": {"x"}}.Encode()
-	code, body := ui2Do(t, ui2Req(t, http.MethodPost, srv.URL+"/ui2/visors/"+pk.Hex()+"/routing/min-hops", "application/x-www-form-urlencoded", form))
+	code, body := ui2Do(t, ui2Req(t, http.MethodPost, srv.URL+"/visors/"+pk.Hex()+"/routing/min-hops", "application/x-www-form-urlencoded", form))
 	require.Equal(t, http.StatusOK, code)
 	require.Contains(t, body, `class="error"`)
 	require.Contains(t, body, `value="x"`)

@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/remaining_test.go
+// Package commands cmd/apps/skychat/commands/remaining_test.go c4-app-chat
 //
 // The tail of the 0% list: deleteHandler, voiceErrStatus, fileDialFunc,
 // startFileXfer's disabled guard, and RunSkychat's flag-parse failure.

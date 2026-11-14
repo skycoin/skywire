@@ -1,4 +1,4 @@
-// Package pty pkg/pty/dialer_test.go — pins the StreamDialer
+// Package pty pkg/pty/dialer_test.go c3-vis-pty — pins the StreamDialer
 // abstraction added so the outbound proxy-dial side of Host is
 // pluggable. Phase 1 contract: the dialer field is what gets invoked
 // on ExecRemote / handleProxy paths, not the bound *dmsg.Client.

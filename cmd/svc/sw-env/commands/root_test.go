@@ -1,4 +1,4 @@
-// Package commands cmd/svc/sw-env/commands/root_test.go: unit tests for the
+// Package commands cmd/svc/sw-env/commands/root_test.go unit tests for the
 // sw-env root command — the root Run closure for each environment flag
 // (public/local/docker), the visor/dmsg/setup subcommand Run closures (output
 // captured from stdout and asserted as valid JSON), subcommand registration and

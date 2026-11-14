@@ -1,4 +1,4 @@
-// Package dmsgtest pkg/dmsgtest/e2e_test.go
+// Package dmsgtest pkg/dmsg/dmsgtest/e2e_test.go c1-net-dmsg
 //
 //nolint:errcheck
 package dmsgtest

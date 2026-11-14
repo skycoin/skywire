@@ -88,7 +88,7 @@ func releaseClientSysPrivileges(_ int) error {
 // SetupTUN sets the allocated TUN interface up, setting its IP, gateway, netmask and MTU.
 func (c *Client) SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 	if err := c.setSysPrivileges(); err != nil {
-		print(fmt.Sprintf("Failed to setup system privileges for SetupTUN: %v\n", err))
+		c.logger().WithError(err).Error("Failed to setup system privileges for SetupTUN")
 		return err
 	}
 	if err := netctl.AddrAdd(ifcName, ipCIDR); err != nil {
@@ -97,7 +97,7 @@ func (c *Client) SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 	c.releaseSysPrivileges()
 
 	if err := c.setSysPrivileges(); err != nil {
-		print(fmt.Sprintf("Failed to setup system privileges for SetupTUN: %v\n", err))
+		c.logger().WithError(err).Error("Failed to setup system privileges for SetupTUN")
 		return err
 	}
 	if err := netctl.SetMTU(ifcName, mtu); err != nil {
@@ -111,7 +111,7 @@ func (c *Client) SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 	}
 
 	if err := c.setSysPrivileges(); err != nil {
-		print(fmt.Sprintf("Failed to setup system privileges for SetupTUN: %v\n", err))
+		c.logger().WithError(err).Error("Failed to setup system privileges for SetupTUN")
 		return err
 	}
 	if err := netctl.LinkUp(ifcName); err != nil {
@@ -120,7 +120,7 @@ func (c *Client) SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 	c.releaseSysPrivileges()
 	if c.cfg.DNSAddr != "" {
 		if err := c.SetupDNS(); err != nil {
-			fmt.Printf("error setting dns for interface: %s", err)
+			c.logger().WithError(err).Warn("Error setting DNS for interface")
 		}
 	}
 
@@ -141,7 +141,7 @@ func (c *Client) SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 // in the OS routing table.
 func (c *Client) ChangeRoute(ip, gateway string) error {
 	if err := c.setSysPrivileges(); err != nil {
-		print(fmt.Sprintf("Failed to setup system privileges for ChangeRoute: %v\n", err))
+		c.logger().WithError(err).Error("Failed to setup system privileges for ChangeRoute")
 		return err
 	}
 	defer c.releaseSysPrivileges()
@@ -151,7 +151,7 @@ func (c *Client) ChangeRoute(ip, gateway string) error {
 // AddRoute adds route to `ip` with `netmask` through the `gateway` to the OS routing table.
 func (c *Client) AddRoute(ip, gateway string) error {
 	if err := c.setSysPrivileges(); err != nil {
-		print(fmt.Sprintf("Failed to setup system privileges for AddRoute: %v\n", err))
+		c.logger().WithError(err).Error("Failed to setup system privileges for AddRoute")
 		return err
 	}
 	defer c.releaseSysPrivileges()
@@ -161,7 +161,7 @@ func (c *Client) AddRoute(ip, gateway string) error {
 // DeleteRoute removes route to `ip` with `netmask` through the `gateway` from the OS routing table.
 func (c *Client) DeleteRoute(ip, gateway string) error {
 	if err := c.setSysPrivileges(); err != nil {
-		print(fmt.Sprintf("Failed to setup system privileges for DeleteRoute: %v\n", err))
+		c.logger().WithError(err).Error("Failed to setup system privileges for DeleteRoute")
 		return err
 	}
 	defer c.releaseSysPrivileges()
@@ -170,9 +170,9 @@ func (c *Client) DeleteRoute(ip, gateway string) error {
 
 // SetupDNS set dns address for TUN device on tun0
 func (c *Client) SetupDNS() error {
-	fmt.Printf("Set DNS on TUN %s\n", c.tun.Name())
+	c.logger().Infof("Set DNS on TUN %s", c.tun.Name())
 	if err := c.setSysPrivileges(); err != nil {
-		print(fmt.Sprintf("Failed to setup system privileges for AddDNS: %v\n", err))
+		c.logger().WithError(err).Error("Failed to setup system privileges for AddDNS")
 		return err
 	}
 	err := osutil.Run("nmcli", "dev", "mod", c.tun.Name(), "+ipv4.dns", c.cfg.DNSAddr)
@@ -185,12 +185,12 @@ func (c *Client) SetupDNS() error {
 func (c *Client) RevertDNS() {
 	if c.cfg.DNSAddr != "" {
 		if err := c.setSysPrivileges(); err != nil {
-			print(fmt.Sprintf("Failed to setup system privileges for RevertDNS: %v\n", err))
+			c.logger().WithError(err).Error("Failed to setup system privileges for RevertDNS")
 			return
 		}
 		err := osutil.Run("nmcli", "dev", "mod", c.tun.Name(), "-ipv4.dns", "0")
 		if err != nil {
-			print(fmt.Sprintf("Failed to revert DNS: %v\n", err))
+			c.logger().WithError(err).Warn("Failed to revert DNS")
 		}
 		c.releaseSysPrivileges()
 	}

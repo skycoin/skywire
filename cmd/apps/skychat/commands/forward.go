@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/forward.go
+// Package commands cmd/apps/skychat/commands/forward.go c4-app-chat
 //
 // Forwarded messages. Same shape as reply.go — a small JSON envelope riding
 // the ordinary message body — so this needs no new send endpoint and no wire

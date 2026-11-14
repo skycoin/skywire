@@ -1,4 +1,4 @@
-// Package httpauth pkg/httpauth/redis-store_test.go
+// Package httpauth pkg/httpauth/redis-store_test.go c0-com-http
 package httpauth
 
 import (

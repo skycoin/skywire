@@ -1,4 +1,4 @@
-// Package api pkg/dmsg/discovery/api/body_limit_test.go
+// Package api pkg/dmsg/discovery/api/body_limit_test.go c4-net-discovery
 package api
 
 import (

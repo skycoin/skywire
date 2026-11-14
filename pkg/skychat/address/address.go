@@ -108,9 +108,9 @@ func (a Address) Kind() Kind {
 	return KindDM
 }
 
-// IsGroup reports whether this address names a group or channel rather
+// TargetsGroup reports whether this address names a group or channel rather
 // than a person.
-func (a Address) IsGroup() bool { return a.GroupID != "" }
+func (a Address) TargetsGroup() bool { return a.GroupID != "" }
 
 // String renders the canonical form. Lowercase hex, because an address
 // is compared and deduplicated as a string in several places (the UI's
@@ -197,9 +197,9 @@ func Parse(s string) (Address, error) {
 	return Address{PK: pk, GroupID: groupPart}, nil
 }
 
-// IsInvite reports whether s looks like a group invite link. Exported so
+// LooksLikeInvite reports whether s looks like a group invite link. Exported so
 // a caller can route input before parsing, without depending on the
 // error value.
-func IsInvite(s string) bool {
+func LooksLikeInvite(s string) bool {
 	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(s)), inviteScheme)
 }

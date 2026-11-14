@@ -27,9 +27,9 @@ type Coin struct {
 	ServerWallets     bool   `json:"serverWallets"`
 }
 
-// IsBitcoin reports whether the coin is routed to the BTC electrum gateway
+// Bitcoin reports whether the coin is routed to the BTC electrum gateway
 // rather than a skycoin-style node. Mirrors BaseCoin.isBitcoin().
-func (c Coin) IsBitcoin() bool {
+func (c Coin) Bitcoin() bool {
 	return c.CoinType == "bitcoin" || c.CoinType == "bitcoin-segwit"
 }
 

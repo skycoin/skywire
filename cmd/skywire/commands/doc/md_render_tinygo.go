@@ -1,6 +1,6 @@
 //go:build tinygo
 
-// Package doc cmd/skywire/commands/doc/md_render_tinygo.go
+// Package doc cmd/skywire/commands/doc/md_render_tinygo.go c4-vis-cli
 //
 // The TinyGo build carries no markdown renderer, so prose is served as its
 // escaped markdown source.

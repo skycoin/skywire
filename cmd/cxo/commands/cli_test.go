@@ -1,4 +1,4 @@
-// Package commands cmd/cxo/commands/cli_test.go
+// Package commands cmd/cxo/commands/cli_test.go c2-net-cxo
 //
 // These tests cover the CLI's pure parse/validate/dispatch layer — the glue the
 // command package adds on top of pkg/cxo: hex/pubkey parsing, the interactive

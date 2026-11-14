@@ -1,3 +1,5 @@
+// Package commands cmd/explorer/commands/root.go c4-ui-explorer
+//
 // Package commands implements the skycoin explorer.
 package commands
 
@@ -68,7 +70,10 @@ func init() {
 	RootCmd.Flags().BoolVarP(&verify, "verify", "v", false, "Run init() checks and quit")
 	RootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "q", "", "[ cpu | mem | mutex | block | trace | http ]")
 	RootCmd.Flags().StringVarP(&pprofAddr, "pprofaddr", "r", "localhost:6060", "pprof http port")
+}
 
+// buildDocs parses the example responses and renders the API docs page.
+func buildDocs() error {
 	parsedJSONAPIEndpoints = make([]ParsedJSONAPIEndpoint, len(apiEndpoints)+1)
 
 	parsedJSONAPIEndpoints[len(apiEndpoints)] = ParsedJSONAPIEndpoint{
@@ -79,20 +84,16 @@ func init() {
 		parsedJSONAPIEndpoints[i].APIEndpoint = apiEndpoints[i]
 		resp := []byte(apiEndpoints[i].ExampleResponse)
 		if err := json.Unmarshal(resp, &parsedJSONAPIEndpoints[i].ParsedExampleResponse); err != nil {
-			log.Println("Error parsing example response JSON:", err)
-			log.Println("path:", apiEndpoints[i].ExplorerPath)
 			log.Println("Example response:")
 			log.Println(apiEndpoints[i].ExampleResponse)
-			log.Panic(err)
+			return fmt.Errorf("parse example response for %s: %w", apiEndpoints[i].ExplorerPath, err)
 		}
 		if apiEndpoints[i].ExampleVerboseResponse != "" {
 			resp = []byte(apiEndpoints[i].ExampleVerboseResponse)
 			if err := json.Unmarshal(resp, &parsedJSONAPIEndpoints[i].ParsedExampleVerboseResponse); err != nil {
-				log.Println("Error parsing example verbose response JSON:", err)
-				log.Println("path:", apiEndpoints[i].ExplorerPath)
 				log.Println("Example verbose response:")
 				log.Println(apiEndpoints[i].ExampleVerboseResponse)
-				log.Panic(err)
+				return fmt.Errorf("parse example verbose response for %s: %w", apiEndpoints[i].ExplorerPath, err)
 			}
 		}
 	}
@@ -100,7 +101,12 @@ func init() {
 	endpoints = append(endpoints, apiEndpoints...)
 	endpoints = append(endpoints, docEndpoint)
 
-	docTemplateBody = renderDocs(endpoints)
+	body, err := renderDocs(endpoints)
+	if err != nil {
+		return err
+	}
+	docTemplateBody = body
+	return nil
 }
 
 // RootCmd is skycoin blockchain explorer
@@ -129,6 +135,10 @@ var RootCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, _ []string) {
 		stopPProf := initPProf(pprofMode, pprofAddr)
 		defer stopPProf()
+
+		if err := buildDocs(); err != nil {
+			log.Fatalln(err)
+		}
 
 		// Parse the node address flag
 		skycoinAddr = buildNodeURL(skycoinAddrString)
@@ -162,8 +172,8 @@ var RootCmd = &cobra.Command{
 			if uiFilesFolder != "" {
 				log.Printf("Serving the Angular explorer from local folder: %s", uiFilesFolder)
 			}
-			classic := classicHandler()
-			ui := explorerui.Handler(explorerui.NewClient(skycoinAddr.String()), explorerui.Options{Classic: "classic/"})
+			angular := angularHandler()
+			ui := explorerui.Handler(explorerui.NewClient(skycoinAddr.String()), explorerui.Options{Classic: "angular/"})
 
 			// The server rendered explorer has / and the Angular paths. Other
 			// paths are Angular files, kept where its absolute links expect them.
@@ -172,23 +182,25 @@ var RootCmd = &cobra.Command{
 					ui.ServeHTTP(w, r)
 					return
 				}
-				classic.files.ServeHTTP(w, r)
+				angular.files.ServeHTTP(w, r)
 			}))
 			gzipHandle("/app/", ui)
 			gzipHandle("/static/", ui)
-
-			// The Angular explorer stays reachable at /classic/ for one release.
-			gzipHandle("/classic/", classic)
+			gzipHandle(angularPrefix, angular)
 
 			// /ui2/ held the server rendered explorer while it sat beside the
-			// Angular one.
-			gzipHandle("/ui2/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				to := strings.TrimPrefix(r.URL.Path, "/ui2")
-				if r.URL.RawQuery != "" {
-					to += "?" + r.URL.RawQuery
-				}
-				http.Redirect(w, r, to, http.StatusMovedPermanently)
-			}))
+			// Angular one, and /classic/ held the Angular one after.
+			movePrefix := func(from, to string) {
+				gzipHandle(from+"/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					p := to + strings.TrimPrefix(r.URL.Path, from)
+					if r.URL.RawQuery != "" {
+						p += "?" + r.URL.RawQuery
+					}
+					http.Redirect(w, r, p, http.StatusMovedPermanently)
+				}))
+			}
+			movePrefix("/ui2", "")
+			movePrefix("/classic", "/angular")
 
 			// Backwards compatibility redirects
 			gzipHandle("/blocks", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

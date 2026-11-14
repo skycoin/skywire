@@ -1,4 +1,4 @@
-// Package dmsg pkg/dmsg/dmsg/traffic.go c2-dmsg-core
+// Package dmsg pkg/dmsg/dmsg/traffic.go c1-net-dmsg
 package dmsg
 
 import (

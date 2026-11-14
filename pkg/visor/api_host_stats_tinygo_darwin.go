@@ -1,5 +1,6 @@
 //go:build tinygo && darwin
 
+// Package visor pkg/visor/api_host_stats_tinygo_darwin.go c3-vis-core
 package visor
 
 import (

@@ -166,8 +166,8 @@ var pingCmd = &cobra.Command{
 		}()
 
 		// Callback for ping results
-		callback := func(seq int32, latency time.Duration, isSetup bool, routeHops []rpcgrpc.RouteHopDetail, serverPK string, routeCalcTime time.Duration, pingErr error) {
-			if isSetup {
+		callback := func(seq int32, latency time.Duration, setup bool, routeHops []rpcgrpc.RouteHopDetail, serverPK string, routeCalcTime time.Duration, pingErr error) {
+			if setup {
 				if useDmsg {
 					cmdutil.Printf("Dmsg dial: %0.2f ms", 1000*latency.Seconds())
 					if serverPK != "" {

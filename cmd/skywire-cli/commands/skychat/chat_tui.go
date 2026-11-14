@@ -1,4 +1,4 @@
-// Package cliskychat cmd/skywire-cli/commands/skychat/chat_tui.go c5-cli-skychat
+// Package cliskychat cmd/skywire-cli/commands/skychat/chat_tui.go c4-vis-cli
 //
 // The 1:1 chat screen, drawn with progkit. The command spec stays in chat.go.
 // In websh the message line is a real text field and the conversation

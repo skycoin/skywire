@@ -135,8 +135,8 @@ type GroupDescriptor struct {
 	AvatarMime string `json:"avatar_mime,omitempty"`
 }
 
-// IsChannel reports whether the described group is a broadcast channel.
-func (d GroupDescriptor) IsChannel() bool { return d.Kind == KindChannel }
+// Channel reports whether the described group is a broadcast channel.
+func (d GroupDescriptor) Channel() bool { return d.Kind == KindChannel }
 
 // Invite rebuilds the invite this descriptor is equivalent to, so the
 // existing join path — which speaks Invite and nothing else — can be
@@ -176,7 +176,7 @@ func (m *Manager) ProbeGroup(ctx context.Context, host cipher.PubKey, gid string
 	if gid == "" {
 		return GroupDescriptor{}, errors.New("group: ProbeGroup: group id required")
 	}
-	if r, ok, err := m.store.Get(gid); err == nil && ok && !r.Status.IsTerminal() {
+	if r, ok, err := m.store.Get(gid); err == nil && ok && !r.Status.Terminal() {
 		return descriptorFor(r), nil
 	}
 	resp, err := sendProbe(ctx, m.dmsgC, host, gid, m.myPK)
@@ -583,7 +583,7 @@ func (m *Manager) describeGroup(req JoinRequestMsg, asker cipher.PubKey) JoinRes
 		}
 	}
 	r, ok, err := m.store.Get(req.GroupID)
-	if err != nil || !ok || r.Status.IsTerminal() {
+	if err != nil || !ok || r.Status.Terminal() {
 		return JoinResponseMsg{
 			GroupID: req.GroupID,
 			Status:  JoinStatusUnavailable,
@@ -600,7 +600,7 @@ func (m *Manager) describeGroup(req JoinRequestMsg, asker cipher.PubKey) JoinRes
 		Policy:    r.JoinPolicy(),
 		Port:      r.Port,
 	}
-	if r.IsBanned(asker) {
+	if r.Bans(asker) {
 		base.Status = JoinStatusBanned
 		base.Reason = "this public key is banned from the group"
 		return base

@@ -1,4 +1,4 @@
-// Package visor pkg/visor/hypervisor_attached_graph_test.go c3-vis-api
+// Package visor pkg/visor/hypervisor_attached_graph_test.go c3-vis-core
 package visor
 
 import (

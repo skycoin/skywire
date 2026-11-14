@@ -1,4 +1,4 @@
-// Package dmsgweb pkg/dmsgweb/skynet_via.go c1-net-dmsg
+// Package dmsgweb pkg/dmsgweb/skynet_via.go c4-app-web
 package dmsgweb
 
 import (

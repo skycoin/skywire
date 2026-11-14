@@ -1,4 +1,4 @@
-// Package execwasm pkg/wasmhv/execwasm/execwasm.go c3-wasm-embed
+// Package execwasm pkg/wasmhv/execwasm/execwasm.go c3-vis-wasm
 //
 // The full skywire command module for GOOS=js: the desk's `skywire` command
 // and the tab visor. It is not embedded in the native binary, and packages do

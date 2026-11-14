@@ -1,4 +1,4 @@
-// Package cxosub pkg/cxo/cxosub/cycle_done_test.go c1-net-cxo
+// Package cxosub pkg/cxo/cxosub/cycle_done_test.go c2-net-cxo
 package cxosub
 
 import (

@@ -1,4 +1,4 @@
-// Package transport pkg/transport/stream_digest.go c4-net-transport
+// Package transport pkg/transport/stream_digest.go c2-net-transport
 package transport
 
 import (

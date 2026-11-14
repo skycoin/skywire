@@ -82,19 +82,19 @@ func latencyTone(ms int64) string {
 
 // RSNRow is one route setup node's remote /stats.
 type RSNRow struct {
-	PK          string
-	Err         string
-	HasStats    bool
-	Rate        float64
-	Successful  uint64
-	Failed      uint64
-	Active      int
-	P50         int64
-	P95         int64
-	P99         int64
-	LastSuccess string
-	LastFailure string
-	Failures    []RSNFailure
+	PK             string
+	Err            string
+	StatsAvailable bool
+	Rate           float64
+	Successful     uint64
+	Failed         uint64
+	Active         int
+	P50            int64
+	P95            int64
+	P99            int64
+	LastSuccess    string
+	LastFailure    string
+	Failures       []RSNFailure
 }
 
 // RSNFailure is a failure reason and how often it happened.

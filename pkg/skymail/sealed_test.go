@@ -21,7 +21,7 @@ func TestSealedEnvelopeRoundTrips(t *testing.T) {
 		env, err := Seal([]byte(msg), ssk, rpk)
 		require.NoError(t, err)
 		require.Equal(t, SealedSize(int64(len(msg))), int64(len(env)), "SealedSize is exact")
-		require.True(t, IsSealed(env))
+		require.True(t, Sealed(env))
 		require.NotContains(t, string(env), "only for b")
 		for line := range strings.SplitSeq(string(env), "\r\n") {
 			require.LessOrEqual(t, len(line), 998, "RFC 5322 line limit")
@@ -31,7 +31,7 @@ func TestSealedEnvelopeRoundTrips(t *testing.T) {
 		require.Equal(t, msg, string(got))
 		require.Equal(t, spk, signer)
 	}
-	require.False(t, IsSealed([]byte(sealedMsg)))
+	require.False(t, Sealed([]byte(sealedMsg)))
 	_, _, err := OpenSealed([]byte(sealedMsg), rsk)
 	require.ErrorIs(t, err, ErrNotSealed)
 }

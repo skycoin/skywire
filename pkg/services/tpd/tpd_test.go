@@ -1,4 +1,4 @@
-// Package tpd tpd_test.go: unit tests for config loading (ParseBlock /
+// Package tpd pkg/services/tpd/tpd_test.go unit tests for config loading (ParseBlock /
 // LoadFile), the service factory + New,
 // the aggregatorSink delegation wrappers, and the early-return / error
 // paths of Run (invalid mode, listener start failure, and the canceled-ctx

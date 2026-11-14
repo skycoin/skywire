@@ -1,4 +1,4 @@
-// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/stats_tui_uptime.go c5-reward-server
+// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/stats_tui_uptime.go c4-vis-cli
 //
 // `skywire cli ut tpd graph`, folded into the statistics panel.
 //

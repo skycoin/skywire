@@ -85,7 +85,7 @@ func pairPort(a, b cipher.PubKey, reserved map[uint16]struct{}) (uint16, error) 
 
 	for offset := range PortSpan {
 		port := PortBase + ((candidate-PortBase)+offset)%PortSpan
-		if _, isReserved := reserved[port]; !isReserved {
+		if _, ok := reserved[port]; !ok {
 			return port, nil
 		}
 	}

@@ -1,4 +1,4 @@
-// Package commands cmd/svc/route-finder/commands/root_test.go: unit tests for
+// Package commands cmd/svc/route-finder/commands/root_test.go unit tests for
 // the testable surface of the route-finder root command — the JSON example
 // helpers, buildConfig (flags + --config overlay), mergeFile, the command
 // metadata/flags, and Execute's help path. The tiny RootCmd.Run closure boots a

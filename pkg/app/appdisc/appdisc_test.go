@@ -170,9 +170,9 @@ func TestAppUpdater(t *testing.T) {
 			if ok != tc.wantOK {
 				t.Errorf("ok = %v, want %v", ok, tc.wantOK)
 			}
-			_, isSvc := u.(*serviceUpdater)
-			if isSvc != tc.wantSvc {
-				t.Errorf("isServiceUpdater = %v, want %v", isSvc, tc.wantSvc)
+			_, service := u.(*serviceUpdater)
+			if service != tc.wantSvc {
+				t.Errorf("isServiceUpdater = %v, want %v", service, tc.wantSvc)
 			}
 		})
 	}
@@ -299,15 +299,15 @@ func TestServiceUpdater_ResumeWithoutStart(t *testing.T) {
 func TestPublicVisorUpdater_Validation(t *testing.T) {
 	ml := testLog()
 	u := NewPublicVisorUpdater(&ml, newServiceUpdater(&ml, liveClient(), time.Hour), 0, 0, nil)
-	if u.IsValidated() {
+	if u.Validated() {
 		t.Error("should not be validated before any external connection")
 	}
 	u.OnExternalSTCPR()
-	if !u.IsValidated() {
+	if !u.Validated() {
 		t.Error("should be validated after external STCPR")
 	}
 	u.OnExternalSTCPR() // already validated: no-op path
-	if !u.IsValidated() {
+	if !u.Validated() {
 		t.Error("should remain validated")
 	}
 }

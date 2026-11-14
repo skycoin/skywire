@@ -1,4 +1,4 @@
-// Package skysocks pkg/skysocks/upload_stripe.go — striped, resumable uploads.
+// Package skysocks pkg/skysocks/upload_stripe.go c4-app-proxy — striped, resumable uploads.
 //
 // The download direction survives losing a tunnel because a byte range
 // addresses a chunk INDEPENDENTLY: a chunk whose stream dies is re-fetched on a

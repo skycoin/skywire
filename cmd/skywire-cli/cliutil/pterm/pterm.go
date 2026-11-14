@@ -1,4 +1,4 @@
-// Package pterm cmd/skywire-cli/cliutil/pterm/pterm.go c5-cli-util
+// Package pterm cmd/skywire-cli/cliutil/pterm/pterm.go c4-vis-cli
 //
 // The ANSI colors and box-drawing tree the CLI used from github.com/pterm/pterm,
 // with the same output. pterm's keyboard dependency does not build for js.

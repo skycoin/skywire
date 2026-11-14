@@ -1,6 +1,6 @@
 //go:build !tinygo && !(js && wasm)
 
-// Package network ws_transport_test.go: transport-level end-to-end tests for the
+// Package network pkg/transport/network/ws_transport_test.go transport-level end-to-end tests for the
 // WS (swsr) skywire transport. Unlike ws_native_test.go (which exercises only the
 // raw WS carrier — wsDial/wsListener bytes) these drive the full wsClient path:
 // PK/AR endpoint resolution → wsDial → initTransport (Noise + yamux) → a real

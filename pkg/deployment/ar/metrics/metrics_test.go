@@ -1,4 +1,4 @@
-// Package armetrics pkg/deployment/ar/metrics/metrics_test.go: unit tests
+// Package armetrics pkg/deployment/ar/metrics/metrics_test.go unit tests
 // for the address-resolver metrics implementations.
 package armetrics
 

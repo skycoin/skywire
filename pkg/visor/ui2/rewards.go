@@ -10,7 +10,7 @@ import (
 type Rewards struct {
 	PK      string
 	Address string
-	IsXpub  bool
+	Xpub    bool
 	// Addresses are the first the xpub derives, where its rewards go.
 	Addresses []string
 	XpubErr   string

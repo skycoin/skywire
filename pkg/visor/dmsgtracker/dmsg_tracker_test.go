@@ -1,4 +1,4 @@
-// Package dmsgtracker pkg/visor/dmsgtracker/dmsg_tracker_test.go
+// Package dmsgtracker pkg/visor/dmsgtracker/dmsg_tracker_test.go c3-vis-core
 package dmsgtracker
 
 import (

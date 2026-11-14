@@ -308,7 +308,7 @@ func (g *SetupRPCGateway) RelayPeers(_ *RelayPeersArgs, reply *RelayPeersReply) 
 	}
 	var peers []cipher.PubKey
 	g.Cascade.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
-		if !tp.IsClosed() {
+		if !tp.Closed() {
 			peers = append(peers, tp.Remote())
 		}
 		return true

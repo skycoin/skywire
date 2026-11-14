@@ -11,7 +11,7 @@ import (
 func TestBuildSkycoinDaemonApps_Legacy(t *testing.T) {
 	resetSkycoinFlags(t)
 	skycoinDaemonInstances = ""
-	isSkycoinDaemonEnable = true
+	skycoinDaemonEnable = true
 	skycoinDaemonFiber = "/etc/aix.toml"
 	skycoinDaemonAPISets = "READ,STATUS"
 	skycoinDaemonUser = "skycoin"
@@ -50,7 +50,7 @@ func TestBuildSkycoinDaemonApps_Multi(t *testing.T) {
 	skycoinDaemonInstances = "skycoin,/etc/skywire/fibercoins/aix.toml,/etc/skywire/fibercoins/privateness.toml"
 	skycoinDaemonFlags = "--enable-gui-api-sets READ,STATUS"
 	skycoinDaemonUser = "skycoin"
-	isSkycoinDaemonEnable = true
+	skycoinDaemonEnable = true
 	conf = &visorconfig.V1{}
 	conf.LocalPath = "/opt/skywire/local"
 
@@ -131,7 +131,7 @@ func resetSkycoinFlags(t *testing.T) {
 	skycoinDaemonFiber = ""
 	skycoinDaemonAPISets = ""
 	skycoinDaemonUser = ""
-	isSkycoinDaemonEnable = false
+	skycoinDaemonEnable = false
 }
 
 func slicesEq(a, b []string) bool {

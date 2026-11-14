@@ -67,8 +67,21 @@ func TestNativeDeskServing(t *testing.T) {
 	}
 
 	t.Run("the dashboard listener's root is the dashboard; the desk listener's is the desk with a command module, the dashboard without", func(t *testing.T) {
-		if w := get("/"); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "ANGULAR") || strings.Contains(w.Body.String(), "skywireDeskBoot(") {
-			t.Errorf("the dashboard listener's root must serve the injected dashboard and never the desk (status=%d)", w.Code)
+		if w := get("/angular/"); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "ANGULAR") || strings.Contains(w.Body.String(), "skywireDeskBoot(") {
+			t.Errorf("the Angular UI must be served at /angular/ and never the desk (status=%d)", w.Code)
+		}
+		for path, want := range map[string]string{"/?embed=1": "angular/?embed=1", "/index.html": "angular/", "/angular": "angular/"} {
+			if w := get(path); w.Header().Get("Location") != want {
+				t.Errorf("%s redirects to %q, want %q", path, w.Header().Get("Location"), want)
+			}
+		}
+		if !haveModule {
+			// No module, no desk host. The Angular UI is still served beside it.
+			body := getDesk("/angular/").Body.String()
+			if !strings.Contains(body, "ANGULAR") || strings.Contains(body, "skywireDeskBoot(") {
+				t.Error("without a command module the dashboard must be served and no desk")
+			}
+			return
 		}
 		w := getDesk("/")
 		if w.Code != http.StatusOK {
@@ -104,7 +117,7 @@ func TestNativeDeskServing(t *testing.T) {
 		// RELATIVE and rooted: an absolute URL escapes the /vnet/<port>/ prefix
 		// onto the outer server's root (the trap #4499 fixed for /desk), and the
 		// dashboard lives at the framed root now, not a /dashboard path.
-		if !strings.Contains(body, "dashboardURL: './?embed=1#/?embed=1'") {
+		if !strings.Contains(body, "dashboardURL: './angular/?embed=1#/?embed=1'") {
 			t.Error("page lacks the relative framed-root dashboard window URL")
 		}
 		if strings.Contains(body, "dashboardURL: '/") {
@@ -168,10 +181,10 @@ func TestNativeDeskServing(t *testing.T) {
 		// finishes loading — which is why desk-boot.js stopped pointing at
 		// /dashboard. The root serves the dashboard whenever the request is framed.
 		for _, framed := range []func() *httptest.ResponseRecorder{
-			func() *httptest.ResponseRecorder { return get("/?embed=1") },
+			func() *httptest.ResponseRecorder { return get("/angular/?embed=1") },
 			func() *httptest.ResponseRecorder {
 				w := httptest.NewRecorder()
-				r := httptest.NewRequest(http.MethodGet, "/", nil)
+				r := httptest.NewRequest(http.MethodGet, "/angular/", nil)
 				r.Header.Set("Sec-Fetch-Dest", "iframe")
 				h.ServeHTTP(w, r)
 				return w
@@ -183,7 +196,7 @@ func TestNativeDeskServing(t *testing.T) {
 			}
 			body := w.Body.String()
 			if !strings.Contains(body, "ANGULAR") {
-				t.Error("Angular index not served at the framed root")
+				t.Error("Angular index not served framed at /angular/")
 			}
 			if !strings.Contains(body, "__SKYWIRE_UI_VERSION__") {
 				t.Error("build stamp missing on the framed root")
@@ -313,7 +326,7 @@ func TestServedUIVersionTracksExecWasm(t *testing.T) {
 	if v0 == "" {
 		t.Fatal("/api/ui-version is empty with UI assets present")
 	}
-	if !strings.Contains(get("/"), `window.__SKYWIRE_UI_VERSION__="`+v0+`"`) {
+	if !strings.Contains(get("/angular/"), `window.__SKYWIRE_UI_VERSION__="`+v0+`"`) {
 		t.Errorf("desk page does not boot with the polled version %q", v0)
 	}
 
@@ -331,7 +344,7 @@ func TestServedUIVersionTracksExecWasm(t *testing.T) {
 	if v1 == v0 {
 		t.Fatalf("version %q did not change when a command module appeared", v1)
 	}
-	if !strings.Contains(get("/"), `window.__SKYWIRE_UI_VERSION__="`+v1+`"`) {
+	if !strings.Contains(get("/angular/"), `window.__SKYWIRE_UI_VERSION__="`+v1+`"`) {
 		t.Errorf("desk page does not boot with the polled version %q", v1)
 	}
 
@@ -405,7 +418,7 @@ func TestNativeDeskAttachedVisor(t *testing.T) {
 			"execWorkerURL: '/skywire-worker.js'",
 			"attach: { pk: '" + pk.Hex() + "', path: '/tp/ws' }",
 			// Still the ONE desk: dashboard and pty are the host's.
-			"dashboardURL: './?embed=1#/?embed=1'",
+			"dashboardURL: './angular/?embed=1#/?embed=1'",
 			"terminalURL: './pty/" + pk.Hex() + "'",
 		} {
 			if !strings.Contains(body, want) {

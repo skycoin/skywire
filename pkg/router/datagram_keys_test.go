@@ -1,4 +1,4 @@
-// Package router pkg/router/datagram_keys_test.go: tests for the
+// Package router pkg/router/datagram_keys_test.go tests for the
 // faithful-UDP master-key derivation (#2607 stage-4b).
 package router
 

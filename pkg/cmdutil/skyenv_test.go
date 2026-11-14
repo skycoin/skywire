@@ -1,4 +1,4 @@
-// Package cmdutil pkg/cmdutil/skyenv_test.go
+// Package cmdutil pkg/cmdutil/skyenv_test.go c0-com-util
 //
 // Coverage for the SKYENV native-Go parser. The expressions exercised
 // here are exactly those that `cli config gen` issues at flag-binding

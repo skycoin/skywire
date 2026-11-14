@@ -9,7 +9,7 @@
 //
 // Rule under test:
 //
-//	desired = { pk in Members : pk != myPK AND (IsAdmin(myPK) OR IsAdmin(pk)) }
+//	desired = { pk in Members : pk != myPK AND (AdministeredBy(myPK) OR AdministeredBy(pk)) }
 //	          ∪ ringSuccessors(non-admin members, myPK, fanout)  // non-admins
 //
 // Admins follow every member. A non-admin follows every admin PLUS a
@@ -107,7 +107,7 @@ func TestDesiredPeerSubsForRole_NonAdminFollowsOnlyAdmins(t *testing.T) {
 func TestDesiredPeerSubsForRole_OwnerOnly_NoAdmins_BootstrapCase(t *testing.T) {
 	// Group with just an owner + one non-admin member (the
 	// founder-only-admin bootstrap case). Non-admin still gets the
-	// owner since the owner is implicitly admin via IsAdmin's
+	// owner since the owner is implicitly admin via AdministeredBy's
 	// founder rule, regardless of the explicit Admins slice.
 	owner, _ := cipher.GenerateKeyPair()
 	member, _ := cipher.GenerateKeyPair()
@@ -250,7 +250,7 @@ func TestDesiredPeerSubsForRole_NonAdminAlsoFollowsPeers(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("fanout 1: desired = %v, want the owner + 1 peer", sortedPKHexes(got))
 	}
-	if _, hasOwner := got[owner]; !hasOwner {
+	if _, ownerFound := got[owner]; !ownerFound {
 		t.Error("fanout 1: the admin must always be followed")
 	}
 	if _, self := got[m1]; self {

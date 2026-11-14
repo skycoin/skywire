@@ -36,7 +36,7 @@ var (
 	noFilterOnline bool
 	country        string
 	version        string
-	isStats        bool
+	stats          bool
 	showTransports bool
 	showVersion    bool
 	showByType     bool
@@ -111,7 +111,7 @@ func init() {
 	RootCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "refetch cached data older than n minutes (0 = always fetch fresh, e.g. for 'watch')")
 	RootCmd.Flags().StringVarP(&country, "country", "c", "", "filter by country code")
 	RootCmd.Flags().StringVarP(&version, "version", "v", "", "filter by version")
-	RootCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the results")
+	RootCmd.Flags().BoolVarP(&stats, "stats", "s", false, "return only a count of the results")
 	RootCmd.Flags().BoolVarP(&showTransports, "transports", "t", false, "show transport count per visor")
 	RootCmd.Flags().BoolVarP(&showVersion, "showversion", "V", false, "show version per visor (implies -t; from the TPD-integrated uptime data pv already fetches)")
 	RootCmd.Flags().BoolVarP(&showByType, "bytype", "y", false, "break the transport count down by type (implies -t): total + per-type columns")
@@ -176,7 +176,7 @@ Set cache dir to "" to disable caching for that service.`, getDeployment().Servi
 			sdJQ += ` | .address | split(":")[0]`
 
 			if !showTransports {
-				if isStats {
+				if stats {
 					count, err := script.Echo(sds).JQ(sdJQ).Replace(`"`, "").CountLines()
 					if err != nil {
 						internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
@@ -218,7 +218,7 @@ Set cache dir to "" to disable caching for that service.`, getDeployment().Servi
 			`
 
 			if !showTransports {
-				if isStats {
+				if stats {
 					count, err := script.Echo(joinedJSON).JQ(jqFilter).Replace(`"`, "").CountLines()
 					if err != nil {
 						internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error: %w", err))
@@ -294,7 +294,7 @@ Set cache dir to "" to disable caching for that service.`, getDeployment().Servi
 			return cmp.Compare(b.count, a.count)
 		})
 
-		if isStats {
+		if stats {
 			internal.PrintOutput(cmd.Flags(), struct {
 				Count int `json:"count"`
 			}{Count: len(results)}, fmt.Sprintf("%d\n", len(results)))

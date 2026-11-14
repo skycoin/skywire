@@ -144,7 +144,7 @@ severed call.`,
 			if e != nil {
 				continue
 			}
-			suspended, e := rc.IsSuspended()
+			suspended, e := rc.Suspended()
 			if e == nil && !suspended {
 				internal.PrintOutput(cmd.Flags(), "Visor resumed", fmt.Sprintln("Visor resumed"))
 				return
@@ -163,7 +163,7 @@ var isSuspendedCmd = &cobra.Command{
 		if err != nil {
 			cmdutil.Exit(1)
 		}
-		suspended, err := rpcClient.IsSuspended()
+		suspended, err := rpcClient.Suspended()
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error querying suspend state: %v", err))
 		}

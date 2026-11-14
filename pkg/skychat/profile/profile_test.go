@@ -280,10 +280,10 @@ func TestIsZeroAndHasAvatar(t *testing.T) {
 	if (Profile{Name: "x"}).IsZero() {
 		t.Fatal("named profile reported as zero")
 	}
-	if (Profile{Avatar: []byte{1}}).HasAvatar() {
+	if (Profile{Avatar: []byte{1}}).AvatarSet() {
 		t.Fatal("avatar with no mime reported as usable")
 	}
-	if !(Profile{Avatar: []byte{1}, AvatarMime: MimePNG}).HasAvatar() {
+	if !(Profile{Avatar: []byte{1}, AvatarMime: MimePNG}).AvatarSet() {
 		t.Fatal("complete avatar reported as absent")
 	}
 }

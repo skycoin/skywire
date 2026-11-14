@@ -115,7 +115,7 @@ type GroupInfo struct {
 	LastMessageAt time.Time           `json:"last_message_at,omitempty"`
 	// SubscriberAlive is the live health of this visor's subscriber
 	// side. Populated by GroupList; left zero by other accessors that
-	// don't need it. See group.Manager.IsSubscriberAlive for semantics.
+	// don't need it. See group.Manager.SubscriberAlive for semantics.
 	SubscriberAlive bool `json:"subscriber_alive"`
 
 	// PeerLastInbound is the per-peer last-inbound time, keyed by

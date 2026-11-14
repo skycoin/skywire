@@ -1,4 +1,4 @@
-// Package main cmd/apps/skydex-market/main.go
+// Package main cmd/apps/skydex-market/main.go c4-app-wallet
 package main
 
 import (

@@ -1,4 +1,4 @@
-// Package visor pkg/visor/skychat_async.go
+// Package visor pkg/visor/skychat_async.go c3-vis-core
 package visor
 
 import (

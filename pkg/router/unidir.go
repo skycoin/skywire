@@ -439,7 +439,7 @@ func (m *routeMux) forwardFanoutLegs(legs []groupLeg, cur int) []int {
 			continue
 		}
 		tp := legs[idx].tp
-		if tp == nil || tp.IsClosed() || !m.legReadyAt(idx) {
+		if tp == nil || tp.Closed() || !m.legReadyAt(idx) {
 			continue
 		}
 		cand = append(cand, idx)
@@ -583,7 +583,7 @@ func (m *routeMux) selectByDirection(legs []groupLeg, wantDirect bool, dst, src 
 	// end's send direction. The tiers below layer readiness/standby on top.
 	classOK := func(idx int) bool {
 		tp := legs[idx].tp
-		return tp != nil && !tp.IsClosed() &&
+		return tp != nil && !tp.Closed() &&
 			legIsDirect(tp, dst, src) == wantDirect
 	}
 	start := int(m.tpIndex.Add(1) - 1)

@@ -247,7 +247,7 @@ func (rg *RouteGroup) legLivenessServiceFn(_ time.Duration) {
 	probes := make([]legProbe, 0, len(rg.legs))
 	for _, lg := range rg.legs {
 		tp := lg.tp
-		if tp == nil || tp.IsClosed() || lg.fwd == nil {
+		if tp == nil || tp.Closed() || lg.fwd == nil {
 			continue
 		}
 		probes = append(probes, legProbe{tp: tp, rule: lg.fwd, id: tp.Entry.ID})
@@ -316,7 +316,7 @@ func (rg *RouteGroup) legLivenessServiceFn(_ time.Duration) {
 	}
 	baseMs := time.Now().UTC().UnixNano() / int64(time.Millisecond)
 	for offset, p := range probes {
-		if _, isDead := deadSet[p.id]; isDead {
+		if _, ok := deadSet[p.id]; ok {
 			continue
 		}
 		ts := baseMs + int64(offset)

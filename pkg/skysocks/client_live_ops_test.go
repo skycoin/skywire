@@ -1,4 +1,4 @@
-// Package skysocks pkg/skysocks/client_live_ops_test.go
+// Package skysocks pkg/skysocks/client_live_ops_test.go c4-app-proxy
 package skysocks
 
 import (

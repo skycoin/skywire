@@ -1,3 +1,4 @@
+// Package charts pkg/deployment/charts/page.go c4-net-discovery
 package charts
 
 import (

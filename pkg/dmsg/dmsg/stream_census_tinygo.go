@@ -1,5 +1,6 @@
 //go:build tinygo
 
+// Package dmsg pkg/dmsg/dmsg/stream_census_tinygo.go c1-net-dmsg
 package dmsg
 
 type censusEntry struct{}

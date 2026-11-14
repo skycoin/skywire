@@ -41,6 +41,8 @@ func (a *ui2FakeAPI) Apps() ([]*appserver.AppState, error) { return nil, nil }
 
 func (a *ui2FakeAPI) SkychatPasswordIsSet() (bool, error) { return false, nil }
 
+func (a *ui2FakeAPI) VoiceActive() ([]string, error) { return nil, ErrVoiceDisabled }
+
 func (a *ui2FakeAPI) RuntimeLogsSince(since int64) (visorapi.RuntimeLogsDelta, error) {
 	var d visorapi.RuntimeLogsDelta
 	if int(since) < len(a.logs) {
@@ -99,7 +101,7 @@ func newUI2FakeServer(t *testing.T, api visorapi.API) string {
 	hv.ui2Routes(r)
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
-	return srv.URL + "/ui2/visors/" + pk.Hex()
+	return srv.URL + "/visors/" + pk.Hex()
 }
 
 func ui2HX(t *testing.T, method, u, ct, body string) (int, string) {
@@ -246,10 +248,10 @@ func TestUI2Islands(t *testing.T) {
 
 func TestUI2CatalogPage(t *testing.T) {
 	srv, _, pk := newUI2Server(t, true)
-	code, body := ui2Do(t, ui2Req(t, http.MethodGet, srv.URL+"/ui2/visors/"+pk.Hex()+"/apps/catalog", "", ""))
+	code, body := ui2Do(t, ui2Req(t, http.MethodGet, srv.URL+"/visors/"+pk.Hex()+"/apps/catalog", "", ""))
 	require.Equal(t, http.StatusOK, code, body)
 	require.Contains(t, body, `id="catalog"`)
-	require.Contains(t, body, `hx-get="ui2/visors/`+pk.Hex()+`/apps/catalog/body"`)
+	require.Contains(t, body, `hx-get="visors/`+pk.Hex()+`/apps/catalog/body"`)
 }
 
 // TestUI2WalletHostsSkycoinWeb frames skycoin-web's own wallet once the app
@@ -258,13 +260,13 @@ func TestUI2WalletHostsSkycoinWeb(t *testing.T) {
 	base := newUI2FakeServer(t, &ui2FakeAPI{})
 	_, body := ui2Do(t, ui2Req(t, http.MethodGet, base+"/wallet", "", ""))
 	require.Contains(t, body, "Skycoin wallet app not configured")
-	require.NotContains(t, body, `src="wallet/ui2/"`)
+	require.NotContains(t, body, `src="wallet/web/"`)
 	require.NotContains(t, body, `#/wallet`, "no link to the Angular wallet")
 
 	launcher.RegisterHTTPHandler(skyenv.SkycoinWebName, http.NotFoundHandler())
 	t.Cleanup(func() { launcher.RegisterHTTPHandler(skyenv.SkycoinWebName, nil) })
 	_, body = ui2Do(t, ui2Req(t, http.MethodGet, base+"/wallet", "", ""))
-	require.Contains(t, body, `src="wallet/ui2/"`)
+	require.Contains(t, body, `src="wallet/web/"`)
 }
 
 // TestUI2ChatIsNative renders the chat tab without the Angular UI.

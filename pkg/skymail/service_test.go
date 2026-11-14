@@ -120,7 +120,7 @@ func TestServiceOverRealDmsg(t *testing.T) {
 	st, err := b.ctl.Status()
 	require.NoError(t, err)
 	require.Equal(t, "mail@"+pkB.DNSLabel()+".skynet", st.Address)
-	require.True(t, st.HasOutbox)
+	require.True(t, st.OutboxEnabled)
 	require.True(t, st.Sealing)
 
 	res, err := a.ctl.Send(Outgoing{From: "alice", To: []string{bobAt(pkB)}, Subject: "over dmsg", Body: "hello"})

@@ -13,9 +13,9 @@ import (
 // cursor every two seconds, as the Angular tab does, and appends what is new.
 
 func (hv *Hypervisor) ui2LogsRoutes(r *httputil.Router) {
-	r.Get("/ui2/visors/{pk}/logs", hv.ui2Logs(false))
-	r.Get("/ui2/visors/{pk}/logs/list", hv.ui2Logs(true))
-	r.Get("/ui2/visors/{pk}/logs/more", hv.ui2LogsMore())
+	r.Get("/visors/{pk}/logs", hv.ui2Logs(false))
+	r.Get("/visors/{pk}/logs/list", hv.ui2Logs(true))
+	r.Get("/visors/{pk}/logs/more", hv.ui2LogsMore())
 }
 
 // ui2Logs serves the page, or with part set the list a filter change swaps.

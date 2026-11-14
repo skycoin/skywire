@@ -238,12 +238,12 @@ func (p *visorStatusProvider) chainTargetState(addr string) string {
 	}
 	if rt := p.v.embeddedSkynetWeb; rt != nil {
 		if _, p2, e := net.SplitHostPort(rt.ListenAddr()); e == nil && p2 == port {
-			return "skynet_web resolving proxy · " + runLabel(rt.IsRunning())
+			return "skynet_web resolving proxy · " + runLabel(rt.Running())
 		}
 	}
 	if rt := p.v.embeddedDmsgWeb; rt != nil {
 		if _, p2, e := net.SplitHostPort(rt.ListenAddr()); e == nil && p2 == port {
-			return "dmsg_web resolving proxy · " + runLabel(rt.IsRunning())
+			return "dmsg_web resolving proxy · " + runLabel(rt.Running())
 		}
 	}
 	// skysocks-client binds SkysocksClientAddr, so its port alone
@@ -365,7 +365,7 @@ func (p *visorStatusProvider) fillLayerBounded(snap *proxystatus.Snapshot, name 
 func (p *visorStatusProvider) fillDmsgLayer(snap *proxystatus.Snapshot) {
 	rt := p.v.embeddedDmsgWeb
 	if rt != nil {
-		snap.Running = rt.IsRunning()
+		snap.Running = rt.Running()
 		st := rt.Stats()
 		upstream := rt.Upstream()
 		snap.Layer = layerFromStats(rt.ListenAddr(), rt.Suffix(), upstream,
@@ -423,7 +423,7 @@ func (p *visorStatusProvider) dmsgSessions() []proxystatus.DmsgSession {
 func (p *visorStatusProvider) fillSkynetLayer(snap *proxystatus.Snapshot) {
 	rt := p.v.embeddedSkynetWeb
 	if rt != nil {
-		snap.Running = rt.IsRunning()
+		snap.Running = rt.Running()
 		st := rt.Stats()
 		upstream := rt.Upstream()
 		snap.Layer = layerFromStats(rt.ListenAddr(), rt.Suffix(), upstream,

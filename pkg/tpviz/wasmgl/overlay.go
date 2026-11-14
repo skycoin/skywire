@@ -1,6 +1,7 @@
 //go:build js && wasm
 
-// Package main pkg/tpviz/wasmgl/overlay.go
+// Package wasmgl pkg/tpviz/wasmgl/overlay.go c4-app-rewards
+//
 // The group-boundary overlay: the circles and labels drawn around country / IP
 // groups when grouping is on.
 //

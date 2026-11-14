@@ -1,4 +1,4 @@
-// Package cliroute pkg/cliout/cliroute/dial_settings.go
+// Package cliroute pkg/cliout/cliroute/dial_settings.go c4-vis-cli
 //
 // Output shape of `skywire cli route settings dial` — the visor's DIAL-TIME
 // router knobs. Separate from Settings (the live-group knobs) so each command

@@ -1,4 +1,4 @@
-// Package httputil pkg/httputil/limit.go c0-com-util
+// Package httputil pkg/httputil/limit.go c0-com-http
 package httputil
 
 import (

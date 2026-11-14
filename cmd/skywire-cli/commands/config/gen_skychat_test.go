@@ -1,4 +1,4 @@
-// Package cliconfig cmd/skywire-cli/commands/config/gen_skychat_test.go c2-cli
+// Package cliconfig cmd/skywire-cli/commands/config/gen_skychat_test.go c4-vis-cli
 //
 // What skychat is launched with, pinned.
 //

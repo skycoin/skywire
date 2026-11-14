@@ -1,4 +1,4 @@
-// Package commands cmd/svc/transport-setup/commands/root_test.go: unit tests
+// Package commands cmd/svc/transport-setup/commands/root_test.go unit tests
 // for the transport-setup command tree — the JSON example helpers, the command
 // metadata/flags wired up in init(), the add/rm/list subcommand happy paths
 // (driven against an httptest server), and Execute's help path. The RootCmd.Run

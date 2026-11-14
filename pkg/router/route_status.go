@@ -79,7 +79,7 @@ func (r *router) ActiveRouteStatuses() []RouteStatus {
 			LocalPort:         desc.DstPort(),
 			RemotePort:        desc.SrcPort(),
 			Initiator:         rg.Initiator(),
-			Alive:             nrg.IsAlive(),
+			Alive:             nrg.Alive(),
 			Latency:           nrg.Latency(),
 			BandwidthSent:     nrg.BandwidthSent(),
 			BandwidthReceived: nrg.BandwidthReceived(),

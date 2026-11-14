@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/link_test.go
+// Package commands cmd/apps/skychat/commands/link_test.go c4-app-chat
 //
 // Coverage for /link, the endpoint the UI asks "is there a way to this person
 // right now" before it lets a message leave the composer. The contract it

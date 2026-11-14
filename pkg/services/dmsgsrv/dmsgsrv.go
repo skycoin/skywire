@@ -340,7 +340,7 @@ func (s *service) Run(ctx context.Context) error {
 		// third party running this binary never advertises the deployment's domain
 		// for a PK that has no DNS record.
 		suffix := strings.TrimPrefix(cfg.WSSDomainSuffix, ".")
-		if suffix == "" && deployment.Prod.IsKnownDmsgServer(cfg.PubKey) {
+		if suffix == "" && deployment.Prod.KnownDmsgServer(cfg.PubKey) {
 			suffix = strings.TrimPrefix(deployment.Prod.WSSDomainSuffix, ".")
 			wssAliases = deployment.Prod.WSSAliasHosts(cfg.PubKey.DNSLabel())
 		}

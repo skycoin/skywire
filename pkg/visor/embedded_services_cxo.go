@@ -89,13 +89,13 @@ func (v *Visor) embeddedServices() []*embeddedService {
 					i, es.label, b.Type, services.RegisteredTypes())
 				continue
 			}
-			raw, pk, hasKey, err := services.OwnKey(b.Raw)
+			raw, pk, keyFound, err := services.OwnKey(b.Raw)
 			if err != nil {
 				es.err = fmt.Errorf("block #%d (%s): key: %w", i, es.label, err)
 				continue
 			}
 			es.log = v.MasterLogger().PackageLogger(es.label)
-			if hasKey && pk != v.conf.PK {
+			if keyFound && pk != v.conf.PK {
 				// Its own key: run as the standalone service would, inside
 				// this process (init_embedded_services.go).
 				es.setStandalone(pk, raw, factory)
@@ -108,7 +108,7 @@ func (v *Visor) embeddedServices() []*embeddedService {
 			}
 			emb, ok := svc.(services.Embeddable)
 			if !ok {
-				if hasKey {
+				if keyFound {
 					es.err = fmt.Errorf("block #%d (%s): type %q cannot be mounted under the visor's key", i, es.label, b.Type)
 					continue
 				}

@@ -1,3 +1,4 @@
+// Package transaction src/transaction/verify.go c1-coin-chain
 package transaction
 
 import (
@@ -178,7 +179,11 @@ func verifyTxnSoftConstraints(txn coin.Transaction, headTime uint64, uxIn coin.U
 		return err
 	}
 
-	if TransactionIsLocked(distParams, uxIn) {
+	locked, err := TransactionIsLocked(distParams, uxIn)
+	if err != nil {
+		return err
+	}
+	if locked {
 		return ErrTxnIsLocked
 	}
 
@@ -298,7 +303,7 @@ func verifyTxnHardConstraints(txn coin.Transaction, head coin.BlockHeader, uxIn 
 			return err
 		}
 	default:
-		logger.Panic("Invalid TxnSignedFlag")
+		return fmt.Errorf("invalid TxnSignedFlag %d", signed)
 	}
 
 	uxOut := coin.CreateUnspents(head, txn)

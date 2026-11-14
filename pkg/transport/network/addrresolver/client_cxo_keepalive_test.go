@@ -1,4 +1,4 @@
-// Package addrresolver pkg/transport/network/addrresolver/client_cxo_keepalive_test.go:
+// Package addrresolver pkg/transport/network/addrresolver/client_cxo_keepalive_test.go
 // an unchanged re-bind skips the HTTP POST while the CXO keepalive is healthy
 // on the epoch of the last accepted bind, and never on a timer.
 package addrresolver

@@ -47,7 +47,7 @@ when the main visor is healthy.`,
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		if isJSON, _ := cmd.Flags().GetBool(internal.JSONString); isJSON { //nolint:errcheck
+		if jsonOut, _ := cmd.Flags().GetBool(internal.JSONString); jsonOut { //nolint:errcheck
 			internal.PrintOutput(cmd.Flags(), result, "")
 			return
 		}

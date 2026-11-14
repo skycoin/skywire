@@ -1,4 +1,4 @@
-// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/stats_tui.go c5-reward-server
+// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/stats_tui.go c4-vis-cli
 //
 // Terminal rendering of the network statistics, exported to HTML.
 //

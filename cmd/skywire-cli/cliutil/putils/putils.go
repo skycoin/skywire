@@ -1,4 +1,4 @@
-// Package putils cmd/skywire-cli/cliutil/putils/putils.go c5-cli-util
+// Package putils cmd/skywire-cli/cliutil/putils/putils.go c4-vis-cli
 package putils
 
 import "github.com/skycoin/skywire/cmd/skywire-cli/cliutil/pterm"

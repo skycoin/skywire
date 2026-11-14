@@ -1,4 +1,4 @@
-// Package deskhost pkg/wasmhv/deskhost/settings_rows.go c4-wasm-desk
+// Package deskhost pkg/wasmhv/deskhost/settings_rows.go c3-vis-wasm
 package deskhost
 
 import (

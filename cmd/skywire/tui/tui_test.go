@@ -1,4 +1,4 @@
-// Package tui cmd/skywire/tui/tui_test.go: the console's pure helpers — the
+// Package tui cmd/skywire/tui/tui_test.go the console's pure helpers — the
 // quote-aware argument splitter and the tree walk install builds on — exercised
 // directly. The draw loop is left to run against a real
 // terminal; there is nothing to assert about it without one.

@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/tcp_direct_test.go
+// Package commands cmd/apps/skychat/commands/tcp_direct_test.go c4-app-chat
 //
 // Unit coverage for the noise-TCP entry point's pure parsing +
 // identity-resolution helpers: peer-spec parsing, whitelist-set

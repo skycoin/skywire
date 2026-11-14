@@ -432,7 +432,7 @@ func PasswordForm(errMsg string) templ.Component {
 		}
 		ctx = templ.InitializeContext(ctx)
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "<form id=\"pw-form\" class=\"form narrow-form\" hx-post=\"ui2/settings/password\" hx-swap=\"outerHTML\"><p class=\"small dim\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "<form id=\"pw-form\" class=\"form narrow-form\" hx-post=\"settings/password\" hx-swap=\"outerHTML\"><p class=\"small dim\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

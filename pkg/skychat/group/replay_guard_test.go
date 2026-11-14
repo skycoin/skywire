@@ -182,16 +182,16 @@ func TestReplayedPromoteCannotRestoreDemotedAdmin(t *testing.T) {
 	promoteLeaf := signedAdmin(t, gid, AdminOpPromote, peer, adminSK, promoteAt)
 
 	s.applyAdminLeaf(promoteLeaf)
-	if !s.cfg.Record.IsAdmin(peer) {
+	if !s.cfg.Record.AdministeredBy(peer) {
 		t.Fatal("setup: the promote did not apply")
 	}
 	s.applyAdminLeaf(signedAdmin(t, gid, AdminOpDemote, peer, adminSK, promoteAt.Add(time.Minute)))
-	if s.cfg.Record.IsAdmin(peer) {
+	if s.cfg.Record.AdministeredBy(peer) {
 		t.Fatal("setup: the demote did not apply")
 	}
 
 	s.applyAdminLeaf(promoteLeaf)
-	if s.cfg.Record.IsAdmin(peer) {
+	if s.cfg.Record.AdministeredBy(peer) {
 		t.Fatal("REPLAY: a demoted admin regained authority by replaying the original promote")
 	}
 }
@@ -208,17 +208,17 @@ func TestReplayedUnbanCannotLiftStandingBan(t *testing.T) {
 	s.applyModLeaf(signedMod(t, gid, ModOpBan, victim, adminSK, base))
 	unbanLeaf := signedMod(t, gid, ModOpUnban, victim, adminSK, base.Add(time.Minute))
 	s.applyModLeaf(unbanLeaf)
-	if s.cfg.Record.IsBanned(victim) {
+	if s.cfg.Record.Bans(victim) {
 		t.Fatal("setup: the unban did not apply")
 	}
 	// Banned again, later.
 	s.applyModLeaf(signedMod(t, gid, ModOpBan, victim, adminSK, base.Add(2*time.Minute)))
-	if !s.cfg.Record.IsBanned(victim) {
+	if !s.cfg.Record.Bans(victim) {
 		t.Fatal("setup: the re-ban did not apply")
 	}
 
 	s.applyModLeaf(unbanLeaf)
-	if !s.cfg.Record.IsBanned(victim) {
+	if !s.cfg.Record.Bans(victim) {
 		t.Fatal("REPLAY: a standing ban was lifted by replaying an older unban")
 	}
 }
@@ -262,7 +262,7 @@ func TestRosterAddRefusedForBannedPeer(t *testing.T) {
 	gid := s.cfg.Record.ID
 
 	s.applyModLeaf(signedMod(t, gid, ModOpBan, victim, adminSK, time.Now().UTC().Add(-time.Hour)))
-	if !s.cfg.Record.IsBanned(victim) {
+	if !s.cfg.Record.Bans(victim) {
 		t.Fatal("setup: ban did not apply")
 	}
 

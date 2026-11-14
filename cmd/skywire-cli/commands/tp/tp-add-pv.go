@@ -102,7 +102,7 @@ var addPvCmd = &cobra.Command{
 			logger.Fatal("Invalid transport type (use one of "+knownTypes()+"): ", pvTransportType)
 		}
 
-		isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
+		jsonOut, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
@@ -215,7 +215,7 @@ var addPvCmd = &cobra.Command{
 			totalSuccess := 0
 			totalFail := 0
 
-			if !isJSON {
+			if !jsonOut {
 				cmdutil.Printf("Requesting transports to %d public visors on %d remote visor(s) via TPS...\n\n", len(candidates), len(remotePKs))
 			}
 
@@ -279,7 +279,7 @@ var addPvCmd = &cobra.Command{
 				totalFail += failCount
 
 				// Stream output immediately
-				if !isJSON {
+				if !jsonOut {
 					if skipped {
 						cmdutil.Printf("[%d/%d] %s: unreachable (skipped)\n", i+1, len(remotePKs), remotePK.String())
 					} else {
@@ -289,11 +289,11 @@ var addPvCmd = &cobra.Command{
 			}
 
 			// Print final results
-			if !isJSON {
+			if !jsonOut {
 				cmdutil.Printf("\nTotal Summary: %d/%d transports established via TPS\n", totalSuccess, totalSuccess+totalFail)
 			}
 
-			if isJSON {
+			if jsonOut {
 				internal.PrintOutput(cmd.Flags(), tpsResults, "")
 			} else if len(tpsResults) > 0 {
 				cmdutil.Printf("\nEstablished %d transports total\n", len(tpsResults))
@@ -321,7 +321,7 @@ var addPvCmd = &cobra.Command{
 		successCount := 0
 		failCount := 0
 
-		if !isJSON {
+		if !jsonOut {
 			cmdutil.Printf("Adding transports to %d public visors (sorted by transport count)...\n\n", len(candidates))
 		}
 
@@ -329,20 +329,20 @@ var addPvCmd = &cobra.Command{
 			pk := candidate.pk
 			var cipherPK cipher.PubKey
 			if err := cipherPK.Set(pk); err != nil {
-				if !isJSON {
+				if !jsonOut {
 					logger.Warnf("[%d/%d] Invalid PK %s: %v", i+1, len(candidates), pk, err)
 				}
 				failCount++
 				continue
 			}
 
-			if !isJSON {
+			if !jsonOut {
 				cmdutil.Printf("[%d/%d] %s (%d transports)...\n", i+1, len(candidates), pk, candidate.count)
 			}
 
 			// Check dmsg availability if dmsg is explicitly requested
 			if !pvForceAttempt && pvTransportType == "dmsg" && !contains(dmsgkeys, pk) {
-				if !isJSON {
+				if !jsonOut {
 					logger.Warnf("  Skipping: not found in dmsg discovery")
 				}
 				failCount++
@@ -357,17 +357,17 @@ var addPvCmd = &cobra.Command{
 				for attempt := 1; attempt <= pvRetries; attempt++ {
 					tp, tpErr = rpcClient.AddTransport(cipherPK, pvTransportType, pvTimeout, "", false, false)
 					if tpErr == nil {
-						if !isJSON {
+						if !jsonOut {
 							logger.Infof("  Established %v transport", pvTransportType)
 						}
 						break
 					}
-					if !isJSON && attempt < pvRetries {
+					if !jsonOut && attempt < pvRetries {
 						logger.WithError(tpErr).Warnf("  Failed %v to %s (attempt %d/%d), retrying...", pvTransportType, pk, attempt, pvRetries)
 					}
 				}
 				if tpErr != nil {
-					if !isJSON {
+					if !jsonOut {
 						logger.WithError(tpErr).Warnf("  Failed %v to %s after %d attempts", pvTransportType, pk, pvRetries)
 					}
 					failCount++
@@ -389,12 +389,12 @@ var addPvCmd = &cobra.Command{
 					for attempt := 1; attempt <= pvRetries; attempt++ {
 						tp, tpErr = rpcClient.AddTransport(cipherPK, string(tpType), pvTimeout, "", false, false)
 						if tpErr == nil {
-							if !isJSON {
+							if !jsonOut {
 								logger.Infof("  Established %v transport", tpType)
 							}
 							break typeLoop
 						}
-						if !isJSON {
+						if !jsonOut {
 							if attempt < pvRetries {
 								logger.WithError(tpErr).Warnf("  Failed %v to %s (attempt %d/%d), retrying...", tpType, pk, attempt, pvRetries)
 							} else {
@@ -417,11 +417,11 @@ var addPvCmd = &cobra.Command{
 		}
 
 		// Print results
-		if !isJSON {
+		if !jsonOut {
 			cmdutil.Printf("\nSummary: %d/%d transports established\n", successCount, len(candidates))
 		}
 
-		if isJSON {
+		if jsonOut {
 			internal.PrintOutput(cmd.Flags(), results, "")
 		} else if len(results) > 0 {
 			cmdutil.Println("\nEstablished transports:")

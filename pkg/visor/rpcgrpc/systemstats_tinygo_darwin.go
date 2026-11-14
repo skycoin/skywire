@@ -1,5 +1,6 @@
 //go:build tinygo && darwin
 
+// Package rpcgrpc pkg/visor/rpcgrpc/systemstats_tinygo_darwin.go c3-vis-core
 package rpcgrpc
 
 import (

@@ -40,15 +40,15 @@ func TestEveryGenFlagHasAConfVariable(t *testing.T) {
 // TestRegenKeepsKeyringAndResolverRules. The keyring and the resolvers'
 // per-domain rules are written by the visor and the CLI, not by config gen.
 func TestRegenKeepsKeyringAndResolverRules(t *testing.T) {
-	restoreRegen, restoreOld, restoreConf := isRegen, oldConfCache, conf
+	restoreRegen, restoreOld, restoreConf := regenerate, oldConfCache, conf
 	restoreDW, restoreSW := enableDmsgWeb, enableSkynetWeb
 	t.Cleanup(func() {
-		isRegen, oldConfCache, conf = restoreRegen, restoreOld, restoreConf
+		regenerate, oldConfCache, conf = restoreRegen, restoreOld, restoreConf
 		enableDmsgWeb, enableSkynetWeb = restoreDW, restoreSW
 	})
 
 	rules := []proxyroute.Rule{{Suffix: "example.com", Upstream: proxyroute.Direct}}
-	isRegen = true
+	regenerate = true
 	oldConfCache = &visorconfig.V1{
 		KeyRing:   &visorconfig.KeyRing{Type: "hd", NextIndex: 3},
 		DmsgWeb:   &visorconfig.DmsgWebConfig{Enable: true, UpstreamRules: rules},

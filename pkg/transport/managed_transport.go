@@ -61,10 +61,10 @@ type ManagedTransportConfig struct {
 	// QueueDeletion, when set, defers TPD deregistration to the manager's batch
 	// deletion loop instead of making an HTTP call per transport close.
 	QueueDeletion func(id uuid.UUID)
-	// IsInitiator records whether this visor originated the transport (dialed
+	// Initiator records whether this visor originated the transport (dialed
 	// out) rather than accepting an inbound dial. Used only for reporting
 	// (outgoing vs incoming counts); the transport itself is bidirectional.
-	IsInitiator bool
+	Initiator bool
 }
 
 // ManagedTransport manages a direct line of communication between two visor nodes.
@@ -73,12 +73,12 @@ type ManagedTransportConfig struct {
 type ManagedTransport struct {
 	log *logging.Logger
 
-	rPK         cipher.PubKey
-	Entry       Entry
-	LogEntry    *LogEntry
-	logMx       sync.Mutex
-	logUpdates  atomic.Uint32
-	isInitiator bool // we dialed out (outgoing) vs accepted an inbound dial (incoming)
+	rPK        cipher.PubKey
+	Entry      Entry
+	LogEntry   *LogEntry
+	logMx      sync.Mutex
+	logUpdates atomic.Uint32
+	initiator  bool // we dialed out (outgoing) vs accepted an inbound dial (incoming)
 
 	// openedAt and onClose feed the manager's transport event ring; see
 	// transport_events.go.
@@ -271,14 +271,14 @@ func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 		done:          make(chan struct{}),
 		timeout:       conf.InactiveTimeout,
 		queueDeletion: conf.QueueDeletion,
-		isInitiator:   conf.IsInitiator,
+		initiator:     conf.Initiator,
 	}
 	return mt
 }
 
-// IsInitiator reports whether this visor originated the transport (dialed
+// Initiator reports whether this visor originated the transport (dialed
 // out, "outgoing") rather than accepting an inbound dial ("incoming").
-func (mt *ManagedTransport) IsInitiator() bool { return mt.isInitiator }
+func (mt *ManagedTransport) Initiator() bool { return mt.initiator }
 
 // GetLatency returns the average inter-visor ping latency in milliseconds.
 // For backwards compatibility, returns the average latency.
@@ -964,9 +964,9 @@ func (mt *ManagedTransport) Close() (err error) {
 	return nil
 }
 
-// IsClosed returns true when the transport is closed
+// Closed returns true when the transport is closed
 // This instance cannot be used anymore and should be discarded
-func (mt *ManagedTransport) IsClosed() bool {
+func (mt *ManagedTransport) Closed() bool {
 	select {
 	case <-mt.done:
 		return true
@@ -1062,7 +1062,7 @@ func (mt *ManagedTransport) accept(ctx context.Context, transport network.Transp
 
 	// Skip settlement handshake for self-connections (noopDiscoveryClient)
 	// Self-connections don't register to TPD and would deadlock during settlement
-	if _, isNoop := mt.dc.(*noopDiscoveryClient); !isNoop {
+	if _, ok := mt.dc.(*noopDiscoveryClient); !ok {
 		mt.log.Debug("Performing settlement handshake...")
 		receivedLabel, err := makeSettlementRespHS(gate).Do(ctx, mt.dc, transport, mt.client.SK())
 		if err != nil {
@@ -1115,7 +1115,7 @@ func (mt *ManagedTransport) dial(ctx context.Context) error {
 
 	// Skip settlement handshake for self-connections (noopDiscoveryClient)
 	// Self-connections don't register to TPD and would deadlock during settlement
-	if _, isNoop := mt.dc.(*noopDiscoveryClient); !isNoop {
+	if _, ok := mt.dc.(*noopDiscoveryClient); !ok {
 		if _, err := MakeSettlementHS(true, mt.log, mt.Entry.Label).Do(ctx, mt.dc, transport, mt.client.SK()); err != nil {
 			return fmt.Errorf("settlement handshake failed: %w", err)
 		}

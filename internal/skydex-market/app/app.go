@@ -1,4 +1,4 @@
-// Package app internal/app/app.go
+// Package app internal/skydex-market/app/app.go c4-app-wallet
 package app
 
 import (

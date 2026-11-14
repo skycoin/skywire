@@ -207,12 +207,12 @@ func TestStreamPing(t *testing.T) {
 
 	var got []int32
 	err := client.StreamPing(context.Background(), validPK(t), 3, 2, true, 0, 0,
-		func(seq int32, _ time.Duration, isSetup bool, _ []RouteHopDetail, _ string, _ time.Duration, perr error) {
+		func(seq int32, _ time.Duration, setup bool, _ []RouteHopDetail, _ string, _ time.Duration, perr error) {
 			if perr != nil {
 				t.Errorf("ping err: %v", perr)
 			}
 			got = append(got, seq)
-			_ = isSetup
+			_ = setup
 		})
 	if err != nil {
 		t.Fatalf("StreamPing: %v", err)
@@ -329,11 +329,11 @@ func TestStreamBandwidthTest(t *testing.T) {
 	// the periodic and the final BandwidthProgress branches run.
 	var finals int
 	err := client.StreamBandwidthTest(context.Background(), validPK(t), 600*time.Millisecond, 16, true,
-		func(_, _ uint64, _ time.Duration, _, _ float64, isFinal bool, perr error) {
+		func(_, _ uint64, _ time.Duration, _, _ float64, final bool, perr error) {
 			if perr != nil {
 				t.Errorf("bw err: %v", perr)
 			}
-			if isFinal {
+			if final {
 				finals++
 			}
 		})
@@ -350,8 +350,8 @@ func TestStreamDmsgBandwidthTest(t *testing.T) {
 	defer cleanup()
 	got := false
 	err := client.StreamDmsgBandwidthTest(context.Background(), validPK(t), 50*time.Millisecond, 16,
-		func(_, _ uint64, _ time.Duration, _, _ float64, isFinal bool, _ error) {
-			if isFinal {
+		func(_, _ uint64, _ time.Duration, _, _ float64, final bool, _ error) {
+			if final {
 				got = true
 			}
 		})

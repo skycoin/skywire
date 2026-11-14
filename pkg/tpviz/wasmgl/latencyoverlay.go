@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package wasmgl pkg/tpviz/wasmgl/latencyoverlay.go c4-vis-latency
+// Package wasmgl pkg/tpviz/wasmgl/latencyoverlay.go c4-app-rewards
 // Draws the spherical Voronoi cells over the latency view.
 //
 // It borrows the compositing approach of overlay.go, a transparent 2D

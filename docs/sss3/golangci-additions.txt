@@ -1,0 +1,136 @@
+================================================================================
+Proposed .golangci.yml additions (golangci-lint v2) — PROPOSAL, evaluate first
+================================================================================
+
+date: 2026-07-06  ·  target: skywire .golangci.yml (currently version: "2")
+
+These stanzas mechanize the review-only principles from standards-golang.txt
+(KG1 layering direction, KG9 no-globals, KG14 one-lib-per-purpose). They CHANGE
+CI for every contributor — adopt deliberately, in a dedicated PR, ideally
+edge-by-edge. See skywire-application.txt §2 for the risk discussion. Do not
+paste all of this in at once.
+
+golangci-lint v2 schema: linters live under `linters:` with `enable:`,
+per-linter config under `linters.settings:`. Verify against the installed
+version (skywire pins golangci-lint v2.12.2 per project notes) — the depguard
+rule schema in particular is version-sensitive; run `golangci-lint linters` and
+`golangci-lint run --enable-only depguard` on a throwaway branch first.
+
+--------------------------------------------------------------------------------
+TIER 1 — lowest risk, safe to adopt first (KG14 + no-claude guard)
+--------------------------------------------------------------------------------
+
+# add to linters.enable:
+#   - gomodguard
+
+linters:
+  settings:
+    gomodguard:
+      blocked:
+        modules:
+          # Pin the ONE chosen lib per purpose. skywire already uses these
+          # de-facto; this just prevents a second one creeping in via a new dep.
+          - github.com/gorilla/websocket:
+              reason: "use coder/websocket (nhooyr) — the chosen WS lib"
+          # add competing json / quic / uuid libs here as they are ruled out.
+        # Example version guard (optional):
+        # versions:
+        #   - github.com/some/dep:
+        #       version: "< 2.0.0"
+        #       reason: "v1 API only"
+
+# .gitignore (separate, not golangci) — KG "no-claude-files-in-repos":
+#   CLAUDE.md
+#   .claude/
+
+--------------------------------------------------------------------------------
+TIER 2 — high value, MEDIUM risk: KG1 import direction. Roll out NON-BLOCKING.
+--------------------------------------------------------------------------------
+
+# add to linters.enable:
+#   - depguard
+#
+# Start with 2-3 edges everyone agrees on. The compiler already bans CYCLES;
+# depguard bans the non-cycle UPWARD / PEER / core->UI edges the corpus targets.
+# Write the layer map by hand and keep it small at first.
+
+linters:
+  settings:
+    depguard:
+      rules:
+        # core network/transport layer must not depend on the visor assembly
+        # (KG1: specific data/transport layer is BELOW the visor composition root)
+        transport-below-visor:
+          files:
+            - "**/pkg/transport/**"
+            - "**/pkg/transport/network/**"
+          deny:
+            - pkg: github.com/skycoin/skywire/pkg/visor
+              desc: "transport is a lower layer; the visor wires transport, not vice-versa (KG1)"
+
+        # core daemon packages must not import the hypervisor-UI / serve layer
+        # (KG1 / sts-sim-no-client-import: core must not import presentation)
+        core-not-import-ui:
+          files:
+            - "**/pkg/router/**"
+            - "**/pkg/transport/**"
+            - "**/pkg/dmsg/**"
+          deny:
+            - pkg: github.com/skycoin/skywire/pkg/wasmhv
+              desc: "core must not import the UI/serve layer; UI depends on core (KG1)"
+
+        # dmsg (transport substrate) must not import routing (a higher layer)
+        dmsg-below-router:
+          files:
+            - "**/pkg/dmsg/**"
+          deny:
+            - pkg: github.com/skycoin/skywire/pkg/router
+              desc: "dmsg is below routing; router rides dmsg, not vice-versa (KG1)"
+
+# ROLLOUT: first run these as a report only —
+#   golangci-lint run --enable-only depguard
+# — fix or refine the edges (a deny that fires on legitimate code means the
+# layer map is wrong, not the code), THEN add depguard to enable: so it gates.
+# Verify each `files:`/`pkg:` path against the actual import graph first:
+#   go list -deps ./pkg/transport/... | grep skycoin/skywire/pkg/visor   # expect empty
+
+--------------------------------------------------------------------------------
+TIER 3 — DEFER: KG9 no-globals/no-init. NOISY on an established daemon.
+--------------------------------------------------------------------------------
+
+# add to linters.enable ONLY with appetite for the churn + an allowlist:
+#   - gochecknoglobals
+#   - gochecknoinits
+#
+# These will flag many PRE-EXISTING, ACCEPTABLE cases: package-level loggers,
+# sentinel errors (var ErrX = errors.New(...)), lookup tables, cobra command
+# vars, and legitimate init()s. Expect dozens of hits requiring //nolint or
+# exclusions. Only worth it as a deliberate "globals audit", not a background
+# default.
+
+linters:
+  settings:
+    # gochecknoglobals has no allowlist; sentinel errors and cobra vars need
+    # //nolint:gochecknoglobals or path exclusions. Budget for that before
+    # enabling. gochecknoinits is stricter still (any init() fails).
+  exclusions:
+    rules:
+      # example: allow globals/init in cmd/ (cobra command trees live there)
+      - path: "cmd/"
+        linters:
+          - gochecknoglobals
+          - gochecknoinits
+
+--------------------------------------------------------------------------------
+VERIFY BEFORE MERGING ANY TIER
+--------------------------------------------------------------------------------
+  1. golangci-lint run                      # full run stays green (or only the
+                                            #   intended new findings appear)
+  2. golangci-lint run --enable-only depguard   # inspect KG1 findings in isolation
+  3. keep it a SEPARATE PR from feature work; it changes every contributor's CI.
+  4. prefer non-blocking (report) first for depguard; flip to blocking once the
+     layer map is proven against `go list -deps`.
+
+================================================================================
+END
+================================================================================

@@ -1,4 +1,4 @@
-// Package metrics pkg/dmsg/disc/metrics/metrics_test.go: covers both
+// Package metrics pkg/dmsg/disc/metrics/metrics_test.go covers both
 // Metrics implementations — the no-op Empty and the VictoriaMetrics
 // gauge wrapper. Both are pure (the gauge wrapper just holds in-memory
 // VictoriaMetrics counters), so no external metrics backend is needed.

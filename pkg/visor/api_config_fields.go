@@ -474,14 +474,14 @@ func (v *Visor) SetConfigFields(fields map[string]json.RawMessage) ([]visorapi.C
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", p, err)
 		}
-		_, isLive := liveConfigFieldByPath[tgt.tmpl]
-		if !isLive {
+		_, ok := liveConfigFieldByPath[tgt.tmpl]
+		if !ok {
 			needFlush = true
 		}
 		plan = append(plan, pending{
 			target: tgt,
 			newVal: nv,
-			change: visorapi.ConfigFieldChange{Path: p, Old: oldJSON, New: newJSON, Live: isLive},
+			change: visorapi.ConfigFieldChange{Path: p, Old: oldJSON, New: newJSON, Live: ok},
 		})
 	}
 
@@ -561,9 +561,9 @@ type configTarget struct {
 
 // configSeg is one "name" or "name[index]" element of a dotted config path.
 type configSeg struct {
-	name   string
-	idx    string
-	hasIdx bool
+	name    string
+	idx     string
+	indexed bool
 }
 
 // parseConfigPath splits a dotted path into segments, pulling out any
@@ -586,7 +586,7 @@ func parseConfigPath(path string) ([]configSeg, error) {
 			}
 			seg.name = part[:open]
 			seg.idx = part[open+1 : len(part)-1]
-			seg.hasIdx = true
+			seg.indexed = true
 			if seg.name == "" || seg.idx == "" {
 				return nil, fmt.Errorf("malformed config path %q: empty name or index in %q", path, part)
 			}
@@ -641,7 +641,7 @@ func resolveConfigTarget(root reflect.Value, path string) (*configTarget, error)
 			return nil, fmt.Errorf("unknown config path %q (no field %q)", path, seg.name)
 		}
 		cur = field
-		if !seg.hasIdx {
+		if !seg.indexed {
 			tmpl = append(tmpl, seg.name)
 			continue
 		}
@@ -951,7 +951,7 @@ func (v *Visor) setEmbeddedProxyRulesPersist(kind string, rules []proxyroute.Rul
 // its own JSON in Raw, which is what the config writes, so the key is edited
 // there. Services read their block at start, so it is never live.
 func blockConfigTarget(list reflect.Value, label string, rest []configSeg, path, tmpl string) (*configTarget, error) {
-	if len(rest) != 1 || rest[0].hasIdx {
+	if len(rest) != 1 || rest[0].indexed {
 		return nil, fmt.Errorf("%s: name one key of the service block, as embedded_services[<name>].<key>", path)
 	}
 	key := rest[0].name

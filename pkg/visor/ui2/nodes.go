@@ -20,7 +20,7 @@ type Node struct {
 	Online   bool
 	// State is the hypervisor's state for the visor, see alerts.State.
 	State       string
-	IsHV        bool
+	HV          bool
 	PublicIP    string
 	LocalIP     string
 	Location    string
@@ -47,7 +47,7 @@ type Node struct {
 
 // NodeOf turns a visor summary into a row.
 func NodeOf(s visorapi.Summary) Node {
-	n := Node{Online: s.Online, State: s.State, IsHV: s.IsHypervisor, Reward: s.RewardAddress, Routes: len(s.Routes)}
+	n := Node{Online: s.Online, State: s.State, HV: s.IsHypervisor, Reward: s.RewardAddress, Routes: len(s.Routes)}
 	if o := s.Overview; o != nil {
 		n.PK = o.PubKey.Hex()
 		n.Hostname = o.Hostname
@@ -97,8 +97,8 @@ func (n Node) Held() bool {
 func SortNodes(ns []Node) {
 	sort.SliceStable(ns, func(i, j int) bool {
 		a, b := ns[i], ns[j]
-		if a.IsHV != b.IsHV {
-			return a.IsHV
+		if a.HV != b.HV {
+			return a.HV
 		}
 		if a.Online != b.Online {
 			return a.Online

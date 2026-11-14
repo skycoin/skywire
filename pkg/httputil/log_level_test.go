@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // collectHook records every entry the logger emits.

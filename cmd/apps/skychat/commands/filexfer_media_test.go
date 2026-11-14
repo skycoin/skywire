@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/filexfer_media_test.go
+// Package commands cmd/apps/skychat/commands/filexfer_media_test.go c4-app-chat
 //
 // Unit coverage for two media helpers the render-in-chat feature added:
 // saveSentCopy (the sender keeps an id-named served copy so its own UI can

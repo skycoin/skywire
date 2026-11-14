@@ -1,4 +1,4 @@
-// Package deskhost pkg/wasmhv/deskhost/desk_tour_text.go c4-wasm-desk
+// Package deskhost pkg/wasmhv/deskhost/desk_tour_text.go c3-vis-wasm
 package deskhost
 
 import (
@@ -38,8 +38,8 @@ var tourApps = map[string][]string{
 // The dashboard's addresses on the virtual loopback. embed=1 in the query tells
 // the hypervisor the page is framed, and in the hash it drops the tab chrome.
 const (
-	dashboardURL  = "http://vnet:8001/?embed=1#/?embed=1"
-	mailURL       = "http://vnet:8001/?embed=1#/nodes/local/mail?embed=1"
+	dashboardURL  = "http://vnet:8001/angular/?embed=1#/?embed=1"
+	mailURL       = "http://vnet:8001/angular/?embed=1#/nodes/local/mail?embed=1"
 	hostBridgeURL = "http://vnet:8001/hostbridge/"
 )
 

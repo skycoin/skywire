@@ -172,14 +172,14 @@ func TestMuteEffectiveFrom(t *testing.T) {
 func TestStatusIsTerminal(t *testing.T) {
 	terminal := []Status{StatusLeft, StatusRevoked, StatusDenied, StatusBanned}
 	for _, s := range terminal {
-		if !s.IsTerminal() {
+		if !s.Terminal() {
 			t.Errorf("%q should be terminal", s)
 		}
 	}
 	// Awaiting approval is explicitly NOT terminal: it is unfinished,
 	// not over, and the retry loop depends on that distinction.
 	for _, s := range []Status{StatusPending, StatusActive, StatusAwaitingApproval} {
-		if s.IsTerminal() {
+		if s.Terminal() {
 			t.Errorf("%q should not be terminal", s)
 		}
 	}
@@ -187,11 +187,11 @@ func TestStatusIsTerminal(t *testing.T) {
 
 func TestJoinStatusIsTerminal(t *testing.T) {
 	for _, s := range []JoinStatus{JoinStatusAdmitted, JoinStatusDenied, JoinStatusBanned} {
-		if !s.IsTerminal() {
+		if !s.Terminal() {
 			t.Errorf("%q should stop the requester re-asking", s)
 		}
 	}
-	if JoinStatusPending.IsTerminal() {
+	if JoinStatusPending.Terminal() {
 		t.Error("pending must keep the requester asking")
 	}
 }

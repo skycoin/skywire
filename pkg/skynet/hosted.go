@@ -1,4 +1,4 @@
-// Package skynet pkg/skynet/hosted.go
+// Package skynet pkg/skynet/hosted.go c2-app-skynet
 package skynet
 
 import (

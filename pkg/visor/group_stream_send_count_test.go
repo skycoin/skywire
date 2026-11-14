@@ -1,4 +1,4 @@
-// Package visor pkg/visor/group_stream_send_count_test.go
+// Package visor pkg/visor/group_stream_send_count_test.go c3-vis-core
 //
 // Pins the visor-wide stream_send_count counter added in #2665. The
 // merged code shipped without test coverage; this file backfills

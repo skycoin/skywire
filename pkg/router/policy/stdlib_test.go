@@ -1,4 +1,4 @@
-// Package policy pkg/router/policy/stdlib_test.go — tests for
+// Package policy pkg/router/policy/stdlib_test.go c2-net-routing — tests for
 // the geo / transports / peers / logging stdlib modules.
 package policy
 
@@ -175,19 +175,19 @@ def decide_route(ctx, candidates):
 	// Two log entries: info + warn. Both go through logger with
 	// the source name and message embedded; we just check we
 	// captured both kinds.
-	hasInfo, hasWarn := false, false
+	sawInfo, sawWarn := false, false
 	for _, m := range captured {
 		if strings.Contains(m, "info") {
-			hasInfo = true
+			sawInfo = true
 		}
 		if strings.Contains(m, "warn") {
-			hasWarn = true
+			sawWarn = true
 		}
 	}
-	if !hasInfo {
+	if !sawInfo {
 		t.Error("expected an info log entry")
 	}
-	if !hasWarn {
+	if !sawWarn {
 		t.Error("expected a warn log entry")
 	}
 }

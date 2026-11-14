@@ -162,7 +162,7 @@ var tpCmd = &cobra.Command{
 
 		// Handle --remote flag: list transports on remote visor(s) via TPS
 		if len(listRemoteVisors) > 0 {
-			isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
+			jsonOut, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
 
 			// Parse all target PKs
 			var targetPKs []cipher.PubKey
@@ -208,7 +208,7 @@ var tpCmd = &cobra.Command{
 					if tpsNodesErr != nil || len(tpsNodes) == 0 {
 						result := remoteResult{TargetPK: targetPK, Error: "no TPS nodes available"}
 						allResults = append(allResults, result)
-						if !isJSON {
+						if !jsonOut {
 							cmdutil.Printf("[%d/%d] %s (error: %s)\n", i+1, len(targetPKs), targetPK.String(), result.Error)
 						}
 						continue
@@ -243,7 +243,7 @@ var tpCmd = &cobra.Command{
 				allResults = append(allResults, result)
 
 				// Stream output immediately (non-JSON mode)
-				if !isJSON {
+				if !jsonOut {
 					if result.Error != "" {
 						cmdutil.Printf("[%d/%d] %s (error: %s)\n", i+1, len(targetPKs), targetPK.String(), result.Error)
 					} else {
@@ -263,7 +263,7 @@ var tpCmd = &cobra.Command{
 			}
 
 			// Print JSON output at the end if requested
-			if isJSON {
+			if jsonOut {
 				internal.PrintOutput(cmd.Flags(), allResults, "")
 			}
 			return

@@ -99,8 +99,8 @@ func TestPassesFilters(t *testing.T) {
 			if tc.grepRe != "" {
 				grepRE = regexp.MustCompile(tc.grepRe)
 			}
-			minRank, hasMinLevel := levelOrder[tc.minLevel]
-			got := passesFilters(tc.line, minRank, hasMinLevel, modRE, grepRE, tc.strictLevel)
+			minRank, minLevelSet := levelOrder[tc.minLevel]
+			got := passesFilters(tc.line, minRank, minLevelSet, modRE, grepRE, tc.strictLevel)
 			if got != tc.wantPass {
 				t.Fatalf("passesFilters(%q, level=%q, mod=%q, grep=%q) = %v, want %v",
 					tc.line, tc.minLevel, tc.moduleRe, tc.grepRe, got, tc.wantPass)

@@ -1,4 +1,4 @@
-// Package visorapi pkg/visor/visorapi/hostbridge.go c3-vis-wasm
+// Package visorapi pkg/visor/visorapi/hostbridge.go c3-vis-core
 package visorapi
 
 // HostBridgeStatus is the visor's session to a host bridge, which lends a

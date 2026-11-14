@@ -153,7 +153,7 @@ func (p *Proc) Logs() appcommon.LogStore {
 
 // StartTime returns app start time.
 func (p *Proc) StartTime() (time.Time, bool) {
-	if !p.IsRunning() {
+	if !p.Running() {
 		return time.Time{}, false
 	}
 
@@ -429,8 +429,8 @@ func (p *Proc) Wait() error {
 	return p.waitErr
 }
 
-// IsRunning checks whether application cmd is running.
-func (p *Proc) IsRunning() bool {
+// Running checks whether application cmd is running.
+func (p *Proc) Running() bool {
 	return p.isRunning.Load() == 1
 }
 
@@ -606,15 +606,15 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 
 		wrappedConn := conn.(*appnet.WrappedConn)
 
-		skywireConn, isSkywireConn := wrappedConn.Conn.(*appnet.SkywireConn)
-		if !isSkywireConn {
+		skywireConn, skywireOK := wrappedConn.Conn.(*appnet.SkywireConn)
+		if !skywireOK {
 			summaries = append(summaries, ConnectionSummary{
 				Error: "Can't get such info from this conn",
 			})
 			return true
 		}
 		summaries = append(summaries, ConnectionSummary{
-			IsAlive: skywireConn.IsAlive(),
+			IsAlive: skywireConn.Alive(),
 			// Latency in summary is expected to be in ms and not ns so we change the base to ms
 			Latency:            time.Duration(skywireConn.Latency().Milliseconds()),
 			UploadSpeed:        skywireConn.UploadSpeed(),

@@ -1,4 +1,4 @@
-// Package visor pkg/visor/browseorigins.go
+// Package visor pkg/visor/browseorigins.go c3-vis-core
 // Untagged, dependency-free string work, so the rule it encodes is covered by
 // a test that runs in CI: which app origins a browse origin will accept
 // content from. Getting it wrong does not fail loudly — the browse frame just

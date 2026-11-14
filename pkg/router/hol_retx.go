@@ -173,7 +173,7 @@ func (m *routeMux) fastestLegLatency(legs []groupLeg) float64 {
 	best := 0.0
 	for idx := range legs {
 		tp := legs[idx].tp
-		if tp == nil || tp.IsClosed() || !m.legReadyAt(idx) {
+		if tp == nil || tp.Closed() || !m.legReadyAt(idx) {
 			continue
 		}
 		lat := tp.GetLatency()
@@ -203,7 +203,7 @@ func (m *routeMux) legLatencyByTp(legs []groupLeg) map[uuid.UUID]float64 {
 	out := make(map[uuid.UUID]float64, len(legs))
 	for _, lg := range legs {
 		tp := lg.tp
-		if tp == nil || tp.IsClosed() {
+		if tp == nil || tp.Closed() {
 			continue
 		}
 		lat := tp.GetLatency()

@@ -1,4 +1,4 @@
-// Package appevent pkg/app/appevent/appevent_more_test.go: unit tests for the
+// Package appevent pkg/app/appevent/appevent_more_test.go unit tests for the
 // event value type, the typed event data, the Broadcaster send helpers, the
 // Subscriber push/subscribe machinery, the RPC gateway/client, and the
 // request/response handshakes.

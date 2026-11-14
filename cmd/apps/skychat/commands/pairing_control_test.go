@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/pairing_control_test.go
+// Package commands cmd/apps/skychat/commands/pairing_control_test.go c4-app-chat
 //
 // Unit coverage for the pair-control envelope handling on the legacy
 // direct path: the pending-invite bookkeeping helpers, the PK/whitespace

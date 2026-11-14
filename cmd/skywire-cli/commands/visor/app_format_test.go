@@ -1,4 +1,4 @@
-// Package visor cmd/skywire-cli/commands/visor/app_format_test.go
+// Package clivisor cmd/skywire-cli/commands/visor/app_format_test.go
 //
 // Pins the formatAppList AppStatus → display-string mapping. Pre-fix
 // the switch had cases only for Running and Errored, so an app in

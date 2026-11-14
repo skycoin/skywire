@@ -79,15 +79,15 @@ func (tm *Manager) makeLocalTransport(ctx context.Context, remote cipher.PubKey)
 	if err != nil {
 		return notLocalBackoff, fmt.Errorf("%w: %w", ErrNotLocal, err)
 	}
-	if !data.IsLocal && !sameIP(data.RemoteAddr, ar.LocalPublicIP()) &&
+	if !data.Local && !sameIP(data.RemoteAddr, ar.LocalPublicIP()) &&
 		len(netutil.OnNetworks(data.Addresses, localNetworks())) == 0 {
 		return notLocalBackoff, ErrNotLocal
 	}
 	t := types.STCPR
-	if !tm.IsKnownNetwork(t) {
+	if !tm.KnownNetwork(t) {
 		t = types.QUIC
 	}
-	if !tm.IsKnownNetwork(t) {
+	if !tm.KnownNetwork(t) {
 		return notLocalBackoff, ErrNotLocal
 	}
 	dctx, cancel := context.WithTimeout(ctx, localDialTimeout)
@@ -107,7 +107,7 @@ var localNetworks = netutil.LocalNetworks
 func (tm *Manager) hasDirectTransport(remote cipher.PubKey) bool {
 	found := false
 	tm.WalkTransports(func(tp *ManagedTransport) bool {
-		found = tp.Remote() == remote && !tp.IsClosed() && tp.Type() != types.DMSG
+		found = tp.Remote() == remote && !tp.Closed() && tp.Type() != types.DMSG
 		return !found
 	})
 	return found

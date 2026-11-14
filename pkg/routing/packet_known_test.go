@@ -1,4 +1,4 @@
-// Package routing pkg/routing/packet_known_test.go c2-net-routing
+// Package routing pkg/routing/packet_known_test.go c1-net-routing
 package routing
 
 import (

@@ -257,7 +257,7 @@ func dmsgProxyInfo(cfg *visorconfig.DmsgWebConfig, runtime *EmbeddedDmsgWeb) *vi
 		UpstreamRules: cfg.UpstreamRules,
 	}
 	if runtime != nil {
-		info.Running = runtime.IsRunning()
+		info.Running = runtime.Running()
 		info.Stats = dmsgStatsToAPI(runtime.Stats())
 		info.UpstreamRules = runtime.UpstreamRules()
 		if u := runtime.Upstream(); u != "" {
@@ -288,7 +288,7 @@ func skymailBridgeInfo(cfg *visorconfig.SkymailBridgeConfig, runtime *EmbeddedSk
 		info.Suffix = ".skynet"
 	}
 	if runtime != nil {
-		info.Running = runtime.IsRunning()
+		info.Running = runtime.Running()
 		if a := runtime.Addr(); a != "" {
 			info.Addr = a
 		}
@@ -308,7 +308,7 @@ func skynetProxyInfo(cfg *visorconfig.SkynetWebConfig, runtime *EmbeddedSkynetWe
 		UpstreamRules: cfg.UpstreamRules,
 	}
 	if runtime != nil {
-		info.Running = runtime.IsRunning()
+		info.Running = runtime.Running()
 		info.Stats = skynetStatsToAPI(runtime.Stats())
 		info.UpstreamRules = runtime.UpstreamRules()
 		if u := runtime.Upstream(); u != "" {
@@ -340,7 +340,7 @@ func (v *Visor) autoStartSkynetWeb() {
 		v.embeddedSkynetWeb = runtime
 	}
 	v.initLock.Unlock()
-	if !runtime.IsRunning() {
+	if !runtime.Running() {
 		_ = runtime.Start() //nolint:errcheck
 	}
 }

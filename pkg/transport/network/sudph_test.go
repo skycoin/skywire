@@ -1,4 +1,4 @@
-// Package network sudph_test.go: unit tests for the non-network slices of
+// Package network pkg/transport/network/sudph_test.go unit tests for the non-network slices of
 // the SUDPH client — Start/listen/serve guards and cleanup, the Dial/dial
 // availability guards, dialWithTimeout context handling, and Close. These
 // deliberately avoid real UDP hole-punching / kcp traffic, which is

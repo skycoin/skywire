@@ -1,4 +1,4 @@
-// Package doc cmd/skywire/commands/doc/serve.go c1-cli-doc
+// Package doc cmd/skywire/commands/doc/serve.go c4-vis-cli
 // `skywire doc serve` — the documentation, served by the thing it documents.
 //
 // Two sources, one site:

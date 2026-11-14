@@ -1,3 +1,4 @@
+// Package cipher src/cipher/hash.go c0-com-crypto
 package cipher
 
 import (
@@ -70,7 +71,7 @@ func HashRipemd160(data []byte) Ripemd160 {
 	ripemd160HashPool <- ripemd160Hash
 
 	h := Ripemd160{}
-	h.MustSet(sum)
+	copy(h[:], sum)
 	return h
 }
 
@@ -127,7 +128,7 @@ func SHA256FromHex(hs string) (SHA256, error) {
 	if len(b) != len(h) {
 		return h, ErrInvalidHexLength
 	}
-	h.MustSet(b)
+	copy(h[:], b)
 	return h, nil
 }
 
@@ -164,7 +165,7 @@ func SumSHA256(b []byte) SHA256 {
 	sha256HashPool <- sha256Hash
 
 	h := SHA256{}
-	h.MustSet(sum)
+	copy(h[:], sum)
 	return h
 }
 

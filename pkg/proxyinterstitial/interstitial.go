@@ -70,7 +70,7 @@ func mechanismLabel(mechanism string) string {
 // the browser was trying to reach (shown verbatim, HTML-escaped); detail is an
 // optional one-line status/error string; mechanism names the forwarding surface
 // ("skysocks" / "dmsg" / "skynet") so the fetch step is specific rather than a
-// generic "over skywire". When isError is true the page renders the
+// generic "over skywire". When failed is true the page renders the
 // hard-failure variant (error styling, manual retry button plus a slow
 // auto-retry); otherwise it renders the transient variant (spinner + a fast
 // auto-retry).
@@ -88,7 +88,7 @@ func mechanismLabel(mechanism string) string {
 // back WITHOUT this package's marker header means the route is warm and the
 // real content is there, so the page reloads exactly once, into it. The
 // meta-refresh survives inside <noscript> as the no-JS fallback.
-func Page(target, detail, mechanism string, isError bool) string {
+func Page(target, detail, mechanism string, failed bool) string {
 	target = html.EscapeString(strings.TrimSpace(target))
 	detail = html.EscapeString(strings.TrimSpace(detail))
 	mech := mechanismLabel(mechanism)
@@ -98,7 +98,7 @@ func Page(target, detail, mechanism string, isError bool) string {
 	msg := "Establishing a private route to this site. This can take a few seconds on first use."
 	cls := ""
 	every := transientRefreshSeconds
-	if isError {
+	if failed {
 		title = "Couldn’t reach this site over skywire"
 		heading = "Couldn’t build a route"
 		msg = "The page did not load through the skywire mesh proxy."
@@ -120,7 +120,7 @@ func Page(target, detail, mechanism string, isError bool) string {
 	}
 
 	retry := ""
-	if isError {
+	if failed {
 		retry = `<button class="btn" onclick="location.reload()">Retry</button>`
 	}
 
@@ -265,14 +265,14 @@ const MarkerHeader = "X-Skywire-Interstitial"
 // markerHeaderLine is MarkerHeader as a ready-to-write response header line.
 const markerHeaderLine = MarkerHeader + ": 1\r\n"
 
-// IsSyntheticResponse reports whether raw HTTP response bytes were synthesized
+// SyntheticResponse reports whether raw HTTP response bytes were synthesized
 // by this package rather than relayed from a real exit. It checks MarkerHeader
 // first and falls back to sniffing the two page bodies for their distinctive
 // markup, so a NEWER verifier still recognizes a page served by an OLDER
 // skysocks-client build that predates the header. raw may be a prefix of the
 // response (callers commonly read a bounded first chunk), so the sniff runs
 // over whatever was supplied.
-func IsSyntheticResponse(raw []byte) bool {
+func SyntheticResponse(raw []byte) bool {
 	head := raw
 	if before, _, ok := bytes.Cut(raw, []byte("\r\n\r\n")); ok {
 		head = before
@@ -292,10 +292,10 @@ func IsSyntheticResponse(raw []byte) bool {
 // httpResponse wraps the HTML in a minimal HTTP/1.1 response. Connection:close
 // so the browser tears the socket down and honors the meta-refresh cleanly;
 // no-store so a transient page is never cached in place of the real content.
-func httpResponse(target, detail, mechanism string, isError bool) []byte {
-	bodyStr := Page(target, detail, mechanism, isError)
+func httpResponse(target, detail, mechanism string, failed bool) []byte {
+	bodyStr := Page(target, detail, mechanism, failed)
 	status := "200 OK"
-	if isError {
+	if failed {
 		status = "502 Bad Gateway"
 	}
 	var b bytes.Buffer
@@ -325,8 +325,8 @@ const noStoreHeaderLines = "Cache-Control: no-store, no-cache, must-revalidate, 
 // request) are discarded. LocalAddr/RemoteAddr return *net.TCPAddr so it can
 // be handed straight to go-socks5, which unconditionally type-asserts the
 // address to *net.TCPAddr when building its BND reply.
-func Conn(target, detail, mechanism string, isError bool) net.Conn {
-	return &interstitialConn{r: bytes.NewReader(httpResponse(target, detail, mechanism, isError))}
+func Conn(target, detail, mechanism string, failed bool) net.Conn {
+	return &interstitialConn{r: bytes.NewReader(httpResponse(target, detail, mechanism, failed))}
 }
 
 type interstitialConn struct {

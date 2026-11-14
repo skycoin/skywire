@@ -53,12 +53,12 @@ func TestHypervisorParkedChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, hvC.LocalPK(), host)
 
-	require.False(t, mv.conf.IsPublic)
+	require.False(t, mv.conf.Public)
 	require.NoError(t, mv.DmsgAsyncSync())
-	require.True(t, mv.conf.IsPublic, "the parked change did not apply")
+	require.True(t, mv.conf.Public, "the parked change did not apply")
 
 	// A key that is not one of the visor's hypervisors cannot leave changes.
-	mv.conf.IsPublic = false
+	mv.conf.Public = false
 	_, strangerSK := cipher.GenerateKeyPair()
 	body := []byte(`{"id":"x1","frames":[]}`)
 	sealed, err := skymail.Seal(body, strangerSK, mvC.LocalPK())
@@ -149,5 +149,5 @@ func TestParkedFrameHoldsOneCall(t *testing.T) {
 
 	_, err := mv.serveParkedCall(hvC.LocalPK(), frame.Bytes())
 	require.Error(t, err)
-	require.False(t, mv.conf.IsPublic, "no call in a refused frame may apply")
+	require.False(t, mv.conf.Public, "no call in a refused frame may apply")
 }

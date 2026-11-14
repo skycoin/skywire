@@ -1,4 +1,4 @@
-// Package clirewards cmd/skywire-cli/commands/rewards/uptime.go
+// Package clirewards cmd/skywire-cli/commands/rewards/uptime.go c4-vis-cli
 package clirewards
 
 import (

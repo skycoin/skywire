@@ -192,7 +192,7 @@ func (g *Gateway) parse(scheme, name string) (cipher.PubKey, []skynetweb.RouteLa
 func routeKey(route []skynetweb.RouteLabel) string {
 	var b strings.Builder
 	for _, rl := range route {
-		if rl.IsTpID {
+		if rl.ByTpID {
 			b.WriteString(rl.TpID.String())
 		} else {
 			b.WriteString(rl.PK.Hex())

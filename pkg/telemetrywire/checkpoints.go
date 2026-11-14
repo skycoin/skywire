@@ -62,8 +62,8 @@ type CheckpointEntry struct {
 	Sent, Recv DirCheckpoints
 }
 
-// HasAny reports whether either direction has reached a checkpoint.
-func (e CheckpointEntry) HasAny() bool { return e.Sent.Epoch != 0 || e.Recv.Epoch != 0 }
+// Populated reports whether either direction has reached a checkpoint.
+func (e CheckpointEntry) Populated() bool { return e.Sent.Epoch != 0 || e.Recv.Epoch != 0 }
 
 // CheckpointLeafPath is the CXO leaf path of a checkpoint shard.
 func CheckpointLeafPath(shard uint8) string {

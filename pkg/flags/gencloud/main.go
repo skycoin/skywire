@@ -1,3 +1,5 @@
+// Package main pkg/flags/gencloud/main.go c0-com-util
+//
 // Command gencloud turns the Skycoin cloud logo into stencil rows for the
 // help screen's backdrop mask.
 //

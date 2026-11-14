@@ -1,4 +1,4 @@
-// Package visor pkg/visor/api_state_roles.go c3-vis-api
+// Package visor pkg/visor/api_state_roles.go c3-vis-core
 //
 // The `roles` section of `visor state`: what this visor is FOR the rest of the
 // network, as opposed to what it is doing for itself. Three answers an operator
@@ -183,14 +183,14 @@ func dmsgServerSessions(srv *dmsg.Server) (total, peers int, clients []visorapi.
 		if ses == nil {
 			continue
 		}
-		isPeer := srv.IsPeerPK(pk)
-		if isPeer {
+		peer := srv.PeerServer(pk)
+		if peer {
 			peers++
 		}
 		clients = append(clients, visorapi.DmsgServerClient{
 			PK:      pk,
 			Streams: ses.NumStreams(),
-			Peer:    isPeer,
+			Peer:    peer,
 		})
 	}
 	// Stable order: a caller diffing two snapshots must not see map iteration

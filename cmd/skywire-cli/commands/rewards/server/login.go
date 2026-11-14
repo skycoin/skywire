@@ -45,7 +45,7 @@ type pendingLogin struct {
 	Visors        []string  `json:"visors"`
 	Challenge     string    `json:"challenge"`   // random challenge string
 	FundedTxID    string    `json:"funded_txid"` // txid of coins sent to user
-	IsXpub        bool      `json:"is_xpub"`
+	Xpub          bool      `json:"is_xpub"`
 	CreatedAt     time.Time `json:"created_at"`
 	ExpiresAt     time.Time `json:"expires_at"`
 }
@@ -137,11 +137,11 @@ type rewardHistoryEntry struct {
 func findRewardHistory(histDir, address string) []rewardHistoryEntry {
 	// Build set of addresses to match against
 	matchAddrs := make(map[string]bool)
-	_, isXpub, vaErr := rewardconfig.ValidateRewardAddress(address)
+	_, xpub, vaErr := rewardconfig.ValidateRewardAddress(address)
 	if vaErr != nil {
 		return nil
 	}
-	if isXpub {
+	if xpub {
 		// Match the xpub itself (in case it appears in the CSV)
 		matchAddrs[address] = true
 		// Derive the first 20 external chain addresses, or up to the highest index paid.
@@ -397,13 +397,13 @@ func registerLoginRoutes(mux *http.ServeMux, wd string, loginEnabled bool) {
 		// Determine the login verification address.
 		// For xpub keys: derive change chain address (m/account'/1/0)
 		// For single addresses: use the address directly
-		_, isXpub, vaErr := rewardconfig.ValidateRewardAddress(address)
+		_, xpub, vaErr := rewardconfig.ValidateRewardAddress(address)
 		if vaErr != nil {
 			http.Redirect(w, r, "/login?msg="+url.QueryEscape("Invalid address: "+vaErr.Error()), http.StatusFound)
 			return
 		}
 		loginAddress := address
-		if isXpub {
+		if xpub {
 			// Check xpub depth before attempting derivation
 			if warning := rewardconfig.CheckXpubDepth(address); warning != "" {
 				cmdutil.Printf("Login chain: xpub depth error for %s...\n", address[:20])
@@ -478,7 +478,7 @@ func registerLoginRoutes(mux *http.ServeMux, wd string, loginEnabled bool) {
 			Visors:        visors,
 			Challenge:     challenge,
 			FundedTxID:    fundedTxID,
-			IsXpub:        isXpub,
+			Xpub:          xpub,
 			CreatedAt:     time.Now(),
 			ExpiresAt:     time.Now().Add(10 * time.Minute),
 		}
@@ -528,7 +528,7 @@ func registerLoginRoutes(mux *http.ServeMux, wd string, loginEnabled bool) {
 		l += "<p>Then open <a href='http://127.0.0.1:8006' target='_blank'>http://127.0.0.1:8006</a></p>"
 
 		l += "<h3>Step 2: Send coins to the verification address</h3>"
-		if pending.IsXpub {
+		if pending.Xpub {
 			l += "<p>From the <strong>change chain</strong> address in your wallet:</p>"
 			l += "<p><strong>From:</strong> <code>" + pending.LoginAddress + "</code></p>"
 		} else {

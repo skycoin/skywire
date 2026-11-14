@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/group_extra_test.go
+// Package commands cmd/apps/skychat/commands/group_extra_test.go c4-app-chat
 //
 // Unit coverage for two group helpers that don't need a live mesh: parsePKList
 // (the hex-PK list parser) and collectGroupHealth (the /status group-health

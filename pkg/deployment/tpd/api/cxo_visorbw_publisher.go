@@ -108,8 +108,8 @@ func settledDates(now time.Time) []string {
 }
 
 func (p *VisorBWCXOPublisher) publishOnce(ctx context.Context, now time.Time) {
-	ls, isLeafStore := p.api.store.(leafStore)
-	if !isLeafStore {
+	ls, ok := p.api.store.(leafStore)
+	if !ok {
 		p.recordError(fmt.Errorf("store keeps no settled metrics days"))
 		return
 	}

@@ -16,6 +16,7 @@ type Alerts struct {
 	Watched     int
 	Offline     int
 	Push        []AlertPush
+	PushKey     string // the VAPID public key a browser subscribes with
 	Results     []AlertResult
 	Err         string
 	Unavailable bool
@@ -111,12 +112,31 @@ templ AlertsPanel(a Alerts) {
 			}
 			<h3 class="small">{ T(ctx, "ui2.alerts.push") }</h3>
 			<p class="small dim">{ T(ctx, "ui2.alerts.push-help") }</p>
+			<form
+				class="bar"
+				data-push
+				data-push-key={ a.PushKey }
+				data-again={ T(ctx, "ui2.alerts.push-again") }
+				data-busy={ T(ctx, "ui2.alerts.push-busy") }
+				data-ios={ T(ctx, "ui2.alerts.push-ios") }
+				data-insecure={ T(ctx, "ui2.alerts.push-insecure") }
+				data-unsupported={ T(ctx, "ui2.alerts.push-unsupported") }
+				data-blocked={ T(ctx, "ui2.alerts.push-blocked") }
+				hx-post={ VisorURL(a.PK, "settings/alerts/push") }
+				hx-target="#alerts"
+				hx-swap="outerHTML"
+			>
+				<input type="hidden" name="sub"/>
+				<button class="btn sm" type="button" data-push-add disabled?={ a.PushKey == "" }><span class="mi">notifications_active</span><span data-push-label>{ T(ctx, "ui2.alerts.push-add") }</span></button>
+				<span class="small dim" data-push-hint hidden></span>
+			</form>
 			if len(a.Push) == 0 {
 				<p class="small dim">{ T(ctx, "ui2.alerts.push-none") }</p>
 			}
 			for _, p := range a.Push {
-				<div class="bar small">
+				<div class="bar small" data-push-endpoint={ p.Endpoint }>
 					<span>{ orDash(p.Label) }</span>
+					<span class="badge on small" data-push-this hidden>{ T(ctx, "ui2.alerts.push-this") }</span>
 					<span class="mono dim pk-text" title={ p.Endpoint }>{ p.Endpoint }</span>
 					<button class="btn sm" type="button" hx-delete={ VisorURL(a.PK, "settings/alerts/push/"+p.ID) } hx-target="#alerts" hx-swap="outerHTML">{ T(ctx, "ui2.alerts.remove") }</button>
 				</div>

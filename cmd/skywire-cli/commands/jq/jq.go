@@ -94,7 +94,7 @@ flag instead of piping through this:  skywire cli pv --stats --jq '.count'.`,
 		}
 
 		// Process each input
-		hasError := false
+		failed := false
 		for _, input := range inputs {
 			iter := code.Run(input)
 			for {
@@ -107,17 +107,17 @@ flag instead of piping through this:  skywire cli pv --stats --jq '.count'.`,
 						break
 					}
 					cmdutil.Eprintf("jq: %v\n", err)
-					hasError = true
+					failed = true
 					continue
 				}
 				if err := outputValue(v); err != nil {
 					cmdutil.Eprintf("jq: %v\n", err)
-					hasError = true
+					failed = true
 				}
 			}
 		}
 
-		if hasError {
+		if failed {
 			cmdutil.Exit(1)
 		}
 	},

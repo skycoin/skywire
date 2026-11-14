@@ -1,7 +1,9 @@
+// Package transaction src/transaction/hours.go c1-coin-chain
 package transaction
 
 import (
 	"errors"
+	"fmt"
 	"math/big"
 
 	"github.com/skycoin/skycoin/src/params"
@@ -20,7 +22,7 @@ import (
 // Returns the number of hours to send to the change address,
 // an array of length nAddrs with the hours to give to each destination address,
 // and a sum of these values.
-func DistributeSpendHours(inputHours, nAddrs uint64, haveChange bool) (uint64, []uint64, uint64) {
+func DistributeSpendHours(inputHours, nAddrs uint64, haveChange bool) (uint64, []uint64, uint64, error) {
 	feeHours := fee.RequiredFee(inputHours, params.UserVerifyTxn.BurnFactor)
 	remainingHours := inputHours - feeHours
 
@@ -61,10 +63,10 @@ func DistributeSpendHours(inputHours, nAddrs uint64, haveChange bool) (uint64, [
 	}
 	spendHours += changeHours
 	if spendHours != remainingHours {
-		logger.Panicf("spendHours != remainingHours (%d != %d), calculation error", spendHours, remainingHours)
+		return 0, nil, 0, fmt.Errorf("spendHours != remainingHours (%d != %d), calculation error", spendHours, remainingHours)
 	}
 
-	return changeHours, addrHours, spendHours
+	return changeHours, addrHours, spendHours, nil
 }
 
 // DistributeCoinHoursProportional distributes hours amongst coins proportional to the coins amount

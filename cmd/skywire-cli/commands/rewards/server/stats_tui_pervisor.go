@@ -1,4 +1,4 @@
-// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/stats_tui_pervisor.go c5-reward-server
+// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/stats_tui_pervisor.go c4-vis-cli
 //
 // How many transports each visor holds, as a histogram.
 //

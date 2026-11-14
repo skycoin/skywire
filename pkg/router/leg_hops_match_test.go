@@ -1,4 +1,4 @@
-// Package router pkg/router/leg_hops_match_test.go
+// Package router pkg/router/leg_hops_match_test.go c2-net-routing
 //
 // leg.hops_match: a packet-level group only takes pool chains of its own
 // length. The rig of 2026-09-24 showed the failure it stops — a two-hop tunnel

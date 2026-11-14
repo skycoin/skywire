@@ -334,7 +334,7 @@ func (m *VStreamMux) Dial(remotePK cipher.PubKey, appName string) (*VStream, err
 	var targetTp *ManagedTransport
 	bestRank := math.MaxInt
 	m.tm.WalkTransports(func(tp *ManagedTransport) bool {
-		if tp.Remote() != remotePK || tp.IsClosed() || tp.Type() == "dmsg" {
+		if tp.Remote() != remotePK || tp.Closed() || tp.Type() == "dmsg" {
 			return true
 		}
 		if rank := types.TypePreference(tp.Type()); rank < bestRank {
@@ -384,7 +384,7 @@ func (m *VStreamMux) EnsureLocalTransport(ctx context.Context, remotePK cipher.P
 func (m *VStreamMux) DialByTransportID(remotePK cipher.PubKey, tpID uuid.UUID) (*VStream, error) {
 	var targetTp *ManagedTransport
 	m.tm.WalkTransports(func(tp *ManagedTransport) bool {
-		if tp.Entry.ID == tpID && tp.Remote() == remotePK && !tp.IsClosed() && tp.Type() != "dmsg" {
+		if tp.Entry.ID == tpID && tp.Remote() == remotePK && !tp.Closed() && tp.Type() != "dmsg" {
 			targetTp = tp
 			return false
 		}

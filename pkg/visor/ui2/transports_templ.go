@@ -409,7 +409,7 @@ func TransportsSummary(t Transports, oob bool) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = toggle(t.url("/public"), t.IsPublic, T(ctx, "node.details.transports-info.is-public-info")).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = toggle(t.url("/public"), t.Public, T(ctx, "node.details.transports-info.is-public-info")).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

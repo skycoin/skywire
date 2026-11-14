@@ -1,9 +1,11 @@
 # ui2 parity with the Angular hypervisor UI
 
-The server rendered UI at `/ui2/` (templ and htmx, `pkg/visor/ui2` and
-`pkg/visor/hypervisor_handlers_ui2*.go`) is being brought level with the
-Angular UI in `static/skywire-manager-src`. Angular stays the default until
-this table has no gaps the owner cares about.
+The server rendered UI (templ and htmx, `pkg/visor/ui2` and
+`pkg/visor/hypervisor_handlers_ui2*.go`) is the default at the root of the
+hypervisor. The Angular UI in `static/skywire-manager-src` is served at
+`/angular/`, and the desk windows still open it there. Old `/ui2/...` URLs
+redirect to the same path at the root. The Angular routes below are hash
+routes under `/angular/#`.
 
 Status is **yes** (present), **partial** (some of it), **no** (missing) or
 **n/a** (the Angular feature has no backend to call).
@@ -13,8 +15,8 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 
 | Angular route | Feature | ui2 | Notes |
 |---|---|---|---|
-| `/` start, `/login` | login, first account creation | yes | `ui2/login` |
-| `/nodes/list` | visor list with nested sub-hypervisor visors | yes | `ui2/` |
+| `/` start, `/login` | login, first account creation | yes | `login` |
+| `/nodes/list` | visor list with nested sub-hypervisor visors | yes | `/` |
 | | search, online, offline, outdated and no-reward chips | yes | |
 | | app filter, apps column, compact view | no | |
 | | column sorting | yes | in the browser, since labels live there |
@@ -22,23 +24,23 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 | | edit label, remove visor, remove all offline | yes | labels in the same localStorage entry as Angular |
 | | bulk select: restart, reward address, add, start and stop app | yes | |
 | | update one or all visors | n/a | Angular calls visors/{pk}/update/..., which the hypervisor does not serve |
-| `/nodes/rewards` | reward address and last seven days of rewards per visor | yes | `ui2/rewards` |
-| `/nodes/services-health` | deployment service health, /health payload, RSN stats | yes | `ui2/services` |
-| `/nodes/network` | network view (SD, TPD and UT), filters, refresh | yes | `ui2/network`, paged 100 to a page |
+| `/nodes/rewards` | reward address and last seven days of rewards per visor | yes | `rewards` |
+| `/nodes/services-health` | deployment service health, /health payload, RSN stats | yes | `services` |
+| `/nodes/network` | network view (SD, TPD and UT), filters, refresh | yes | `network`, paged 100 to a page |
 | `/nodes/visualizer` | network graph | partial | cosmos-go WebGL page, linked as tp-viz and route-viz, not reimplemented |
-| `/nodes/resources` | CPU, memory, disk and traffic of every visor | yes | `ui2/resources` |
-| `/nodes/uptime` | uptime of every visor | yes | `ui2/uptime` |
+| `/nodes/resources` | CPU, memory, disk and traffic of every visor | yes | `resources` |
+| `/nodes/uptime` | uptime of every visor | yes | `uptime` |
 | | version history chart | yes | |
-| `/nodes/transports` | transports across the network: compact and tree views, window, edges, offline | yes | `ui2/transports`, paged; seen live only in the "feed still syncing" state |
-| `/settings` | change password | yes | `ui2/settings` |
+| `/nodes/transports` | transports across the network: compact and tree views, window, edges, offline | yes | `transports`, paged; seen live only in the "feed still syncing" state |
+| `/settings` | change password | yes | `settings` |
 | | refresh rate, theme, language | yes | the refresh rate sets the visor list poll |
 | | updater config | n/a | only feeds the update action, which has no backend |
 | | auto update, reload worker | n/a | the Angular in-browser visor's service worker |
 | | visor switcher row | n/a | an Angular navigation option |
-| `/settings/labels` | label list, edit, delete | yes | on `ui2/settings` |
+| `/settings/labels` | label list, edit, delete | yes | on `settings` |
 | `/app/:name/:key` | full page app host | no | |
 | `/vpn/...` | VPN client UI | no | |
-| `/wallet` | wallet | yes | the wallet tab frames skycoin-web's own ui2 at `wallet/ui2/` |
+| `/wallet` | wallet | yes | the wallet tab frames skycoin-web's own pages, forwarded at `wallet/web/` |
 | | language list en, es, de, pt, zh | yes | |
 
 ## Visor tabs
@@ -65,7 +67,7 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 | chat | direct messages: peers, history, send, reply, delete | yes | polls every 3 s instead of SSE; read receipts not shown |
 | | rooms: list, messages, send, create, join, invite, add member, pending and declined state, ask again | yes | moderation is CLI only, Angular has none either |
 | | skychat password | yes | |
-| | voice calls | no | needs browser audio capture and playback |
+| | voice calls: call, ring, answer, decline, hang up, mute, level meter, timer | yes | the visor plays the audio, as for Angular; the spectrogram is not ported |
 | mail | mailbox, compose, settings | yes | |
 | contacts | list, add, edit, delete, import | yes | |
 | rewards | address, history, rules | yes | |
@@ -78,4 +80,4 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 | wallet | wallet | yes | frames skycoin-web's ui2 when the app runs, else says how to start it |
 | logs | runtime logs with filter and search | yes | |
 | settings | skyenv editor | yes | |
-| | offline alerts: emails, delay, webhook, sender, SMTP relay, test, push device list and removal | partial | a push device cannot be added from ui2; new ui2 keys are English only |
+| | offline alerts: emails, delay, webhook, sender, SMTP relay, test, push devices (add this device, list, remove) | yes | new ui2 keys are English only |

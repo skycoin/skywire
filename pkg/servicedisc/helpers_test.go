@@ -1,4 +1,4 @@
-// Package servicedisc pkg/servicedisc/helpers_test.go: unit tests for the
+// Package servicedisc pkg/servicedisc/helpers_test.go unit tests for the
 // query parsers (query.go), the HTTPError helpers (error.go) and the SWAddr
 // / Service type methods (types.go) not already covered by types_test.go.
 package servicedisc

@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package appevent pkg/app/appevent/broadcaster_test.go
+// Package appevent pkg/app/appevent/broadcaster_test.go c2-vis-appsvc
 package appevent
 
 import (

@@ -49,7 +49,7 @@
 	// The JSON handlers answer errors as {"error": "..."}.
 	document.addEventListener('htmx:responseError', function (e) {
 		var x = e.detail.xhr, msg = x.status + ' ' + x.statusText;
-		if (x.status === 401) { window.location.href = 'ui2/login'; return; }
+		if (x.status === 401) { window.location.href = 'login'; return; }
 		try { msg = JSON.parse(x.responseText).error || msg; } catch (_) { /* not JSON */ }
 		toast(msg, true);
 	});
@@ -653,4 +653,153 @@ document.addEventListener('DOMContentLoaded', function () {
 	}
 	document.addEventListener('htmx:afterSettle', draw);
 	document.addEventListener('DOMContentLoaded', draw);
+})();
+
+// Voice call: the timer ticks between polls, and the level meter draws the
+// call's send and receive levels (you violet, peer green) as the Angular tab.
+(function () {
+	'use strict';
+	var sent = [], recv = [], max = 90, busy = false, clock = null, base = 0, secs = 0;
+	function draw(c) {
+		var ctx = c.getContext('2d'), w = c.width, h = c.height, bw = w / max;
+		ctx.clearRect(0, 0, w, h);
+		function bars(hist, color, wf) {
+			ctx.fillStyle = color;
+			hist.forEach(function (v, i) {
+				var bh = Math.max(1, Math.pow(v, 0.6) * h);
+				ctx.fillRect(i * bw + bw * (1 - wf) / 2, (h - bh) / 2, Math.max(1, bw * wf - 1), bh);
+			});
+		}
+		bars(sent, 'rgba(157,124,255,0.55)', 1);
+		bars(recv, 'rgba(158,206,106,0.95)', 0.6);
+	}
+	function tick() {
+		var t = document.querySelector('[data-voice-secs]');
+		if (t !== clock) { clock = t; base = Date.now(); secs = t ? parseInt(t.getAttribute('data-voice-secs'), 10) || 0 : 0; }
+		if (t) {
+			var s = secs + Math.floor((Date.now() - base) / 1000);
+			t.textContent = Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2);
+		}
+		var c = document.querySelector('canvas[data-voice-levels]');
+		if (!c) { sent = []; recv = []; return; }
+		if (busy || document.visibilityState !== 'visible') return;
+		busy = true;
+		fetch(c.getAttribute('data-voice-levels'), { credentials: 'same-origin' })
+			.then(function (r) { return r.ok ? r.json() : null; })
+			.then(function (l) {
+				busy = false;
+				if (!l) return;
+				sent.push(Math.min(1, l.sent || 0));
+				recv.push(Math.min(1, l.recv || 0));
+				if (sent.length > max) sent.shift();
+				if (recv.length > max) recv.shift();
+				var cur = document.querySelector('canvas[data-voice-levels]');
+				if (cur) draw(cur);
+			})
+			.catch(function () { busy = false; });
+	}
+	setInterval(tick, 150);
+	document.addEventListener('htmx:afterSettle', function () {
+		var c = document.querySelector('canvas[data-voice-levels]');
+		if (c) draw(c);
+	});
+})();
+
+// Push alerts: "Notify this device" subscribes this browser as the Angular
+// panel does (utils/web-push.ts) and posts the subscription in the form.
+(function () {
+	'use strict';
+	var nav = navigator;
+	function hint(f) {
+		var ios = /iPad|iPhone|iPod/.test(nav.userAgent) || (nav.platform === 'MacIntel' && nav.maxTouchPoints > 1);
+		var standalone = nav.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+		if (ios && !standalone) return f.dataset.ios;
+		if (!window.isSecureContext) return f.dataset.insecure;
+		if (!('serviceWorker' in nav) || !('PushManager' in window)) return f.dataset.unsupported;
+		return '';
+	}
+	function keyBytes(b64url) {
+		var raw = atob(b64url.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - b64url.length % 4) % 4));
+		var out = new Uint8Array(raw.length);
+		for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+		return out;
+	}
+	function label(ua) {
+		var os = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' :
+			/Windows/.test(ua) ? 'Windows' : /Mac OS X|Macintosh/.test(ua) ? 'Mac' : /Linux/.test(ua) ? 'Linux' : 'Device';
+		var br = /Edg\//.test(ua) ? 'Edge' : /Firefox\//.test(ua) ? 'Firefox' : /(Chrome|CriOS)\//.test(ua) ? 'Chrome' :
+			/Safari\//.test(ua) ? 'Safari' : '';
+		return br ? os + ' ' + br : os;
+	}
+	// Under a desk the root worker (pkg/wasmhv/sw.js) carries the push
+	// handlers, and registering another would replace it.
+	function registration() {
+		var sw = nav.serviceWorker;
+		return sw.getRegistration('/').then(function (r) {
+			return r || sw.register('push-sw.js').then(function () { return sw.ready; });
+		});
+	}
+	function sameKey(a, b) {
+		if (!a) return false;
+		var x = new Uint8Array(a);
+		return x.length === b.length && x.every(function (v, i) { return v === b[i]; });
+	}
+	function subscribe(f) {
+		return Notification.requestPermission().then(function (perm) {
+			if (perm !== 'granted') throw new Error(f.dataset.blocked);
+			return registration();
+		}).then(function (reg) {
+			var key = keyBytes(f.dataset.pushKey);
+			return reg.pushManager.getSubscription().then(function (sub) {
+				if (sub && !sameKey(sub.options.applicationServerKey, key)) return sub.unsubscribe().then(function () { return null; });
+				return sub;
+			}).then(function (sub) {
+				return sub || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+			});
+		});
+	}
+	function endpoint() {
+		if (!('serviceWorker' in nav)) return Promise.resolve('');
+		return nav.serviceWorker.getRegistration('/').then(function (reg) {
+			return reg && reg.pushManager ? reg.pushManager.getSubscription() : null;
+		}).then(function (sub) { return sub ? sub.endpoint : ''; }).catch(function () { return ''; });
+	}
+	function mark() {
+		var f = document.querySelector('form[data-push]');
+		if (!f) return;
+		var h = hint(f), hb = f.querySelector('[data-push-hint]');
+		hb.textContent = h;
+		hb.hidden = !h;
+		if (h) f.querySelector('[data-push-add]').disabled = true;
+		endpoint().then(function (ep) {
+			var mine = false;
+			document.querySelectorAll('[data-push-endpoint]').forEach(function (row) {
+				var me = !!ep && row.getAttribute('data-push-endpoint') === ep;
+				row.querySelector('[data-push-this]').hidden = !me;
+				mine = mine || me;
+			});
+			if (mine) f.querySelector('[data-push-label]').textContent = f.dataset.again;
+		});
+	}
+	document.addEventListener('click', function (e) {
+		var b = e.target.closest && e.target.closest('[data-push-add]');
+		if (!b) return;
+		var f = b.form, lab = f.querySelector('[data-push-label]'), was = lab.textContent;
+		b.disabled = true;
+		lab.textContent = f.dataset.busy;
+		subscribe(f).then(function (sub) {
+			var j = sub.toJSON();
+			j.label = label(nav.userAgent);
+			f.querySelector('input[name=sub]').value = JSON.stringify(j);
+			f.requestSubmit();
+		}).catch(function (err) {
+			b.disabled = false;
+			lab.textContent = was;
+			var hb = f.querySelector('[data-push-hint]');
+			hb.textContent = (err && err.message) || String(err);
+			hb.hidden = false;
+		});
+	});
+	document.addEventListener('htmx:afterSettle', mark);
+	document.addEventListener('DOMContentLoaded', mark);
 })();

@@ -1,4 +1,4 @@
-// Package visorinit module_test.go: covers the concurrent dependency-graph
+// Package visorinit pkg/visor/visorinit/module_test.go covers the concurrent dependency-graph
 // module initializer. Everything here is in-process (hooks + goroutines), so
 // no network or visor runtime is involved.
 package visorinit

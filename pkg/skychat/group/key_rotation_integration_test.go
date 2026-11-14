@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/key_rotation_integration_test.go
+// Package group pkg/skychat/group/key_rotation_integration_test.go c4-app-chat
 //
 // The dmsg-backed lane for key rotation: the property that a ban stops
 // being "loses network access" and becomes "actually cut off".
@@ -53,7 +53,7 @@ func TestKeyRotation_BanCutsOffTheBannedMember(t *testing.T) {
 	// Ban B. The moderation command rotates as its last step.
 	banned, err := a.mgr.BanMember(rec.ID, b.pk)
 	require.NoError(t, err, "BanMember")
-	require.True(t, banned.IsBanned(b.pk))
+	require.True(t, banned.Bans(b.pk))
 	require.NotContains(t, banned.Members, b.pk)
 
 	afterBan, ok, err := a.mgr.Get(rec.ID)
@@ -252,7 +252,7 @@ func TestSealedGovernance_ConvergesAcrossVisors(t *testing.T) {
 	_, err = a.mgr.BanMember(rec.ID, b.pk)
 	require.NoError(t, err, "BanMember")
 
-	waitMember(t, c, rec.ID, func(r Record) bool { return r.IsBanned(b.pk) },
+	waitMember(t, c, rec.ID, func(r Record) bool { return r.Bans(b.pk) },
 		"C never applied the sealed ban")
 	waitMember(t, c, rec.ID, func(r Record) bool { return r.KeyEpoch == 1 },
 		"C never adopted the post-ban key")

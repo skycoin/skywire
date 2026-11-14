@@ -1,3 +1,5 @@
+// Package serverfeed pkg/dmsg/discovery/serverfeed/serverfeed.go c2-net-discovery
+//
 // Package serverfeed reads the dmsg servers dmsg discovery publishes on its
 // clients-by-server CXO feed, for the visor's server cache, the dmsg servers'
 // peer discovery and TPD's marking of dmsg server visors.

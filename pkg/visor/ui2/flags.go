@@ -59,13 +59,13 @@ func BuildFlagArgs(args []string, flags []visorapi.AppFlag, values map[string]st
 	}
 	for ; i < len(args); i++ {
 		t := args[i]
-		key, _, hasEq := strings.Cut(strings.TrimLeft(t, "-"), "=")
+		key, _, found := strings.Cut(strings.TrimLeft(t, "-"), "=")
 		f, ok := lookupFlag(flags, key)
 		if !strings.HasPrefix(t, "-") || !ok {
 			out = append(out, t)
 			continue
 		}
-		if !hasEq && f.Type != visorapi.FlagTypeBool && i+1 < len(args) {
+		if !found && f.Type != visorapi.FlagTypeBool && i+1 < len(args) {
 			i++
 		}
 	}

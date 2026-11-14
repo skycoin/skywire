@@ -1,3 +1,4 @@
+// Package visorapi pkg/visor/visorapi/client_reward.go c3-vis-core
 package visorapi
 
 import (

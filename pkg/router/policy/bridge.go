@@ -73,13 +73,13 @@ func peersModule(p Provider) *starlarkstruct.Module {
 		Name: "peers",
 		Members: starlark.StringDict{
 			"is_trusted": starlark.NewBuiltin("is_trusted", oneStringArg(func(pk string) starlark.Value {
-				return starlark.Bool(p.IsTrusted(pk))
+				return starlark.Bool(p.Trusted(pk))
 			})),
 			"is_hypervisor": starlark.NewBuiltin("is_hypervisor", oneStringArg(func(pk string) starlark.Value {
-				return starlark.Bool(p.IsHypervisor(pk))
+				return starlark.Bool(p.Hypervisor(pk))
 			})),
 			"has_transport": starlark.NewBuiltin("has_transport", oneStringArg(func(pk string) starlark.Value {
-				return starlark.Bool(p.HasTransport(pk))
+				return starlark.Bool(p.Connected(pk))
 			})),
 		},
 	}
@@ -196,7 +196,7 @@ func buildContextValue(rctx RoutingContext) starlark.Value {
 			}),
 			"cli_overrides":      cliOverrides,
 			"reverse_candidates": buildCandidatesValue(rctx.ReverseCandidates),
-			"is_direct_dial":     starlark.Bool(rctx.IsDirectDial),
+			"is_direct_dial":     starlark.Bool(rctx.DirectDial),
 			"transport_kind":     starlark.String(rctx.TransportKind),
 		},
 	)
@@ -361,7 +361,7 @@ func parseRouteSpec(v starlark.Value) (RouteSpec, error) {
 	out := RouteSpec{}
 
 	if chosen, err := s.Attr("chosen"); err == nil && chosen != nil {
-		if _, isNone := chosen.(starlark.NoneType); !isNone {
+		if _, ok := chosen.(starlark.NoneType); !ok {
 			cand, err := parseCandidate(chosen)
 			if err != nil {
 				return RouteSpec{}, fmt.Errorf("chosen: %w", err)
@@ -370,7 +370,7 @@ func parseRouteSpec(v starlark.Value) (RouteSpec, error) {
 		}
 	}
 	if rev, err := s.Attr("reverse_chosen"); err == nil && rev != nil {
-		if _, isNone := rev.(starlark.NoneType); !isNone {
+		if _, ok := rev.(starlark.NoneType); !ok {
 			cand, err := parseCandidate(rev)
 			if err != nil {
 				return RouteSpec{}, fmt.Errorf("reverse_chosen: %w", err)
@@ -408,7 +408,7 @@ func parseRotationAction(v starlark.Value) (RotationAction, error) {
 		ExcludeHops:   readStrListField(s, "exclude_hops"),
 	}
 	if drops, err := s.Attr("drop_legs"); err == nil && drops != nil {
-		if _, isNone := drops.(starlark.NoneType); !isNone {
+		if _, ok := drops.(starlark.NoneType); !ok {
 			if lst, ok := drops.(*starlark.List); ok {
 				it := lst.Iterate()
 				defer it.Done()

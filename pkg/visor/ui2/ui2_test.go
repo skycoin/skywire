@@ -52,7 +52,7 @@ func TestNodesRender(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
 	ns := []Node{
 		{PK: "b", Hostname: "zeta", Online: true},
-		{PK: pk.Hex(), Hostname: "hv", Online: true, IsHV: true, Transports: 3, Apps: 4, AppsRunning: 2, Reward: "x"},
+		{PK: pk.Hex(), Hostname: "hv", Online: true, HV: true, Transports: 3, Apps: 4, AppsRunning: 2, Reward: "x"},
 		{PK: "a", Hostname: "alpha", LastSeen: "2026-11-03 10:00:00"},
 	}
 	SortNodes(ns)
@@ -63,16 +63,16 @@ func TestNodesRender(t *testing.T) {
 	require.NoError(t, NodesPage(ns, "").Render(ctx, &b))
 	out := b.String()
 	require.Contains(t, out, `<base href="../">`)
-	require.Contains(t, out, `data-href="ui2/visors/`+pk.Hex()+`/info"`)
+	require.Contains(t, out, `data-href="visors/`+pk.Hex()+`/info"`)
 	require.Contains(t, out, pk.Hex(), "keys are shown whole")
 	require.Contains(t, out, "2 / 4")
-	require.Contains(t, out, `hx-get="ui2/nodes"`)
+	require.Contains(t, out, `hx-get="nodes"`)
 }
 
 func TestBaseFor(t *testing.T) {
-	require.Equal(t, "../", BaseFor("/ui2/"))
-	require.Equal(t, "../", BaseFor("/ui2/login"))
-	require.Equal(t, "../../../", BaseFor("/ui2/visors/pk/info"))
+	require.Equal(t, "./", BaseFor("/"))
+	require.Equal(t, "./", BaseFor("/login"))
+	require.Equal(t, "../../", BaseFor("/visors/pk/info"))
 	require.Equal(t, "./", BaseFor("/"))
 }
 

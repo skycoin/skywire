@@ -62,7 +62,7 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*visorapi.StateSnapshot
 		}
 	}
 
-	if susp, err := v.IsSuspended(); err != nil {
+	if susp, err := v.Suspended(); err != nil {
 		note("suspended", err)
 	} else {
 		snap.Suspended = susp

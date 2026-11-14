@@ -1,4 +1,4 @@
-// Package router pkg/router/datagram_dispatch_test.go: integration
+// Package router pkg/router/datagram_dispatch_test.go integration
 // tests for the router-side DatagramPacket dispatch wired in stage 4
 // of #2607. Unlike datagram_route_group_test.go (which calls Handle
 // directly), these drive a real DatagramPacket through

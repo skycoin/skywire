@@ -1,5 +1,6 @@
 //go:build !(tinygo && js)
 
+// Package alerts pkg/alerts/mx.go c3-vis-core
 package alerts
 
 import (

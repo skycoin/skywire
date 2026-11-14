@@ -100,7 +100,7 @@ func (td *mockDiscoveryClient) GetTransportsByEdge(_ context.Context, pk cipher.
 	td.Lock()
 	res := make([]*Entry, 0)
 	for _, entry := range td.entries {
-		if entry.HasEdge(pk) {
+		if entry.ContainsEdge(pk) {
 			e := &Entry{}
 			*e = entry
 			res = append(res, e)
@@ -133,7 +133,7 @@ func (td *mockDiscoveryClient) GetTransportStats(_ context.Context, pk cipher.Pu
 	byType := make(map[string]int)
 	count := 0
 	for _, entry := range td.entries {
-		if entry.HasEdge(pk) {
+		if entry.ContainsEdge(pk) {
 			count++
 			byType[string(entry.Type)]++
 		}

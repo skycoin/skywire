@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/filebackfill_test.go
+// Package commands cmd/apps/skychat/commands/filebackfill_test.go c4-app-chat
 //
 // Unit coverage for the file-backfill request/re-send protocol: the
 // outstanding-request registry, locating a held file by id, the holder-side

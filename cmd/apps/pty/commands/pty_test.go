@@ -1,4 +1,4 @@
-// Package commands cmd/apps/pty/commands/pty_test.go
+// Package commands cmd/apps/pty/commands/pty_test.go c3-vis-pty
 //
 // Covers the two command constructors: newDelegateCmd (which forwards args to a
 // target command) and newTCPCmd's required-flag validation. The happy path of

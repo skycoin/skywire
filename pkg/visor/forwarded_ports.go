@@ -100,25 +100,25 @@ func (fp *ForwardedPorts) LandingPagePorts() []visorapi.ForwardedPort {
 	return out
 }
 
-// IsSkynetAllowed checks if the given port is forwarded over skynet.
-func (fp *ForwardedPorts) IsSkynetAllowed(port int) bool {
+// SkynetAllowed checks if the given port is forwarded over skynet.
+func (fp *ForwardedPorts) SkynetAllowed(port int) bool {
 	fp.mu.RLock()
 	defer fp.mu.RUnlock()
 	p, ok := fp.ports[port]
 	return ok && p.Skynet
 }
 
-// IsDMSGAllowed checks if the given port is forwarded over DMSG.
-func (fp *ForwardedPorts) IsDMSGAllowed(port int) bool {
+// DMSGAllowed checks if the given port is forwarded over DMSG.
+func (fp *ForwardedPorts) DMSGAllowed(port int) bool {
 	fp.mu.RLock()
 	defer fp.mu.RUnlock()
 	p, ok := fp.ports[port]
 	return ok && p.DMSG
 }
 
-// IsWhitelisted checks if the given PK is allowed to access the port.
+// Whitelisted checks if the given PK is allowed to access the port.
 // Returns true if the whitelist is empty (open to all) or the PK is in the list.
-func (fp *ForwardedPorts) IsWhitelisted(port int, pk cipher.PubKey) bool {
+func (fp *ForwardedPorts) Whitelisted(port int, pk cipher.PubKey) bool {
 	fp.mu.RLock()
 	defer fp.mu.RUnlock()
 	p, ok := fp.ports[port]

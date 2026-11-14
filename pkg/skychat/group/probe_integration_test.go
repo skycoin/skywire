@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/probe_integration_test.go
+// Package group pkg/skychat/group/probe_integration_test.go c4-app-chat
 //
 // The dmsg-backed lane for the describe port: what a short
 // skychat://<pk>/<group-id> address can be turned into, and what it must
@@ -149,7 +149,7 @@ func TestProbe_JoinByAddressKeepsChannelAdminsOnly(t *testing.T) {
 	joined, err := b.mgr.JoinByAddress(ctx, a.pk, rec.ID)
 	require.NoError(t, err, "JoinByAddress")
 	require.Equal(t, KindChannel, joined.Kind, "the joined record must remember it is a channel")
-	require.True(t, joined.IsChannel())
+	require.True(t, joined.Channel())
 
 	canPost, reason := joined.CanPost(b.pk)
 	require.False(t, canPost, "a plain member must not be able to post to a channel")

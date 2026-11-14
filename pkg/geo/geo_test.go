@@ -1,4 +1,4 @@
-// Package geo pkg/geo/geo_test.go: unit tests for the IP geolocation
+// Package geo pkg/geo/geo_test.go unit tests for the IP geolocation
 // closure built by MakeIPDetails and the roundTwoDigits helper.
 package geo
 

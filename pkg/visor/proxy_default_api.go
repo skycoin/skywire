@@ -84,7 +84,7 @@ func (proxyDefaultAPI) Health() (*visorapi.HealthInfo, error) {
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) IsStartupComplete() bool {
+func (proxyDefaultAPI) StartupComplete() bool {
 	return false
 }
 
@@ -104,7 +104,7 @@ func (proxyDefaultAPI) DisableHypervisorPersist(_ bool) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) IsHypervisorEnabled() bool {
+func (proxyDefaultAPI) HypervisorEnabled() bool {
 	return false
 }
 
@@ -120,11 +120,11 @@ func (proxyDefaultAPI) SetHypervisorAuthPersist(_, _ bool) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) IsHypervisorAuthEnabled() bool {
+func (proxyDefaultAPI) HypervisorAuthEnabled() bool {
 	return false
 }
 
-func (proxyDefaultAPI) IsHypervisorUIServing() bool {
+func (proxyDefaultAPI) HypervisorUIServing() bool {
 	return false
 }
 
@@ -200,7 +200,7 @@ func (proxyDefaultAPI) DmsgPtyExec(_ visorapi.DmsgPtyExecArgs) (*pty.CommandExec
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) IsDMSGClientReady() (bool, error) {
+func (proxyDefaultAPI) DMSGClientReady() (bool, error) {
 	return false, ErrProxyNotSupported
 }
 

@@ -1,3 +1,5 @@
+// Package file src/util/file/file.go c0-com-util
+//
 // Package file provides filesystem related utilities
 package file
 
@@ -172,10 +174,10 @@ func SaveBinary(filename string, data []byte, mode os.FileMode) error {
 //TODO: require file named after application and then hashcode, in static directory
 
 // ResolveResourceDirectory searches locations for a research directory and returns absolute path
-func ResolveResourceDirectory(path string) string {
+func ResolveResourceDirectory(path string) (string, error) {
 	workDir, err := filepath.Abs(filepath.Dir(os.Args[0]))
 	if err != nil {
-		logger.Panic(err)
+		return "", fmt.Errorf("resolve executable directory: %w", err)
 	}
 
 	_, rtFilename, _, _ := runtime.Caller(1)
@@ -183,35 +185,17 @@ func ResolveResourceDirectory(path string) string {
 
 	pathAbs, err := filepath.Abs(path)
 	if err != nil {
-		logger.Panic(err)
+		return "", fmt.Errorf("resolve %s: %w", path, err)
 	}
-	fmt.Println("abs path:", pathAbs)
-
-	fmt.Printf("runtime.Caller= %s \n", rtFilename)
-	//fmt.Printf("Filepath Raw= %s \n")
-	fmt.Printf("Filepath Directory= %s \n", filepath.Dir(path))
-	fmt.Printf("Filepath Absolute Directory= %s \n", pathAbs)
-
-	fmt.Printf("Working Directory= %s \n", workDir)
-	fmt.Printf("Runtime Filename= %s \n", rtFilename)
-	fmt.Printf("Runtime Directory= %s \n", rtDirectory)
-
-	//dir1 := filepath.Join(workDir, filepath.Dir(path))
-	//fmt.Printf("Dir1= %s \n", dir1)
 
 	dirs := []string{
 		pathAbs, //try direct path first
 		filepath.Join(workDir, filepath.Dir(path)), //default
-		//filepath.Join(rt_directory, "./", filepath.Dir(path)),
 		filepath.Join(rtDirectory, "./", filepath.Dir(path)),
 		filepath.Join(rtDirectory, "../", filepath.Dir(path)),
 		filepath.Join(rtDirectory, "../../", filepath.Dir(path)),
 		filepath.Join(rtDirectory, "../../../", filepath.Dir(path)),
 	}
-
-	//for i, dir := range dirs {
-	//	fmt.Printf("Dir[%d]= %s \n", i, dir)
-	//}
 
 	//must be an absolute path
 	//error and problem and crash if not absolute path
@@ -227,11 +211,10 @@ func ResolveResourceDirectory(path string) string {
 	for _, dir := range dirs {
 		if _, err := os.Stat(dir); !os.IsNotExist(err) { //nolint:gosec // the data directory is chosen by the operator, not by request input
 			fmt.Printf("ResolveResourceDirectory: static resource dir= %s \n", dir)
-			return dir
+			return dir, nil
 		}
 	}
-	logger.Panic("GUI directory not found")
-	return ""
+	return "", fmt.Errorf("resource directory %s not found", path)
 }
 
 // DetermineResourcePath DEPRECATE

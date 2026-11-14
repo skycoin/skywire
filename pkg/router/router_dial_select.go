@@ -423,14 +423,14 @@ fetchRoutesAgain:
 	// the existing latency-ranked pick. Failure-safe — any error
 	// from the hook falls through to pickDisjointPath.
 	if sh, ok := r.conf.DialHook.(RouteSelectingHook); ok && sh != nil && len(paths[forward]) > 0 {
-		toHookCandidates := func(hopsList [][]routing.Hop, isForward bool) []CandidateInfo {
+		toHookCandidates := func(hopsList [][]routing.Hop, forward bool) []CandidateInfo {
 			out := make([]CandidateInfo, 0, len(hopsList))
 			endpoint := src
-			if !isForward {
+			if !forward {
 				endpoint = dst
 			}
 			otherEnd := dst
-			if !isForward {
+			if !forward {
 				otherEnd = src
 			}
 			for _, hops := range hopsList {

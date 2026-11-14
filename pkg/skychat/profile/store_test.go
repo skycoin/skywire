@@ -149,7 +149,7 @@ func TestOpenStoreSalvagesNameFromBadAvatar(t *testing.T) {
 	if p.Name != "Alice" {
 		t.Fatalf("name lost: %+v", p)
 	}
-	if p.HasAvatar() {
+	if p.AvatarSet() {
 		t.Fatalf("an undecodable avatar was kept: %+v", p)
 	}
 }

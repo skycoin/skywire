@@ -26,9 +26,9 @@ func (nrg *NoiseRouteGroup) RemoteAddr() net.Addr {
 	return nrg.rg.RemoteAddr()
 }
 
-// IsAlive checks if connection is alive.
-func (nrg *NoiseRouteGroup) IsAlive() bool {
-	return nrg.rg.IsAlive()
+// Alive checks if connection is alive.
+func (nrg *NoiseRouteGroup) Alive() bool {
+	return nrg.rg.Alive()
 }
 
 // Latency returns latency till remote (ms).

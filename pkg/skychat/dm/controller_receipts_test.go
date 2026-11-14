@@ -1,4 +1,4 @@
-// Package dm controller_receipts_test.go — the delivery-status half of the
+// Package dm pkg/skychat/dm/controller_receipts_test.go c4-app-chat — the delivery-status half of the
 // controller: chat-ack / chat-read receipts reported to the app (OnReceipt),
 // and the non-blocking RequestAck send that backs a UI's "sent → received →
 // read" ticks, including its stale-conn recovery.
@@ -126,7 +126,7 @@ func TestController_RequestAckDoesNotBlock(t *testing.T) {
 	}
 	// The peer still acks (ack=true went out on the wire), and the conn stays.
 	time.Sleep(300 * time.Millisecond)
-	if !ctrlA.HasConn(pkB) {
+	if !ctrlA.Connected(pkB) {
 		t.Error("an acked conn must stay cached")
 	}
 }
@@ -149,7 +149,7 @@ func TestController_RequestAckEvictsSilentConn(t *testing.T) {
 	never := make(chan struct{})
 	c.watchAck(pk, conn, nil, "", never, nil, c.cfg.StaleAckWindow)
 
-	if c.HasConn(pk) {
+	if c.Connected(pk) {
 		t.Error("a conn whose ack never came back should be evicted after the window")
 	}
 }
@@ -207,7 +207,7 @@ func TestController_WatchAckKeepsAckedConn(t *testing.T) {
 	if took := time.Since(start); took > time.Second {
 		t.Errorf("watchAck returned after %v — an ack should release it at once", took)
 	}
-	if !c.HasConn(pk) {
+	if !c.Connected(pk) {
 		t.Error("an acked conn must stay cached")
 	}
 	if !unregistered {

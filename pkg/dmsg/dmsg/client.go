@@ -1599,8 +1599,9 @@ func (ce *Client) RelayedSince(t time.Time) bool {
 type reapDecision int
 
 const (
+	_ reapDecision = iota
 	// reapWait: under the threshold. Count it and look again next tick.
-	reapWait reapDecision = iota
+	reapWait
 	// reapKeep: over the threshold, but the session is still relaying. New
 	// dials should prefer another server; this one keeps its streams.
 	reapKeep

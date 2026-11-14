@@ -21,20 +21,20 @@ import (
 // handler, so start, stop and settings behave exactly as in the Angular tab.
 
 func (hv *Hypervisor) ui2AppsRoutes(r *httputil.Router) {
-	r.Get("/ui2/visors/{pk}/apps", hv.ui2Apps(false))
-	r.Get("/ui2/visors/{pk}/apps/rows", hv.ui2Apps(true))
-	r.Post("/ui2/visors/{pk}/apps/bulk", hv.ui2AppsBulk())
-	r.Get("/ui2/visors/{pk}/apps/catalog", hv.ui2Catalog(false))
-	r.Get("/ui2/visors/{pk}/apps/catalog/body", hv.ui2Catalog(true))
-	r.Post("/ui2/visors/{pk}/apps/catalog/add", hv.ui2CatalogAdd())
-	r.Get("/ui2/visors/{pk}/apps/{app}/settings", hv.ui2AppSettings())
-	r.Put("/ui2/visors/{pk}/apps/{app}/settings", hv.ui2AppSettingsSave())
-	r.Get("/ui2/visors/{pk}/apps/{app}/logs", hv.ui2AppLogs())
-	r.Get("/ui2/visors/{pk}/apps/{app}/help", hv.ui2AppHelp())
-	r.Get("/ui2/visors/{pk}/apps/{app}/flags", hv.ui2AppFlags())
-	r.Put("/ui2/visors/{pk}/apps/{app}/flags", hv.ui2AppFlagsSave())
-	r.Put("/ui2/visors/{pk}/apps/{app}/state", hv.ui2AppPut("run", "status"))
-	r.Put("/ui2/visors/{pk}/apps/{app}/autostart", hv.ui2AppPut("autostart", "autostart"))
+	r.Get("/visors/{pk}/apps", hv.ui2Apps(false))
+	r.Get("/visors/{pk}/apps/rows", hv.ui2Apps(true))
+	r.Post("/visors/{pk}/apps/bulk", hv.ui2AppsBulk())
+	r.Get("/visors/{pk}/apps/catalog", hv.ui2Catalog(false))
+	r.Get("/visors/{pk}/apps/catalog/body", hv.ui2Catalog(true))
+	r.Post("/visors/{pk}/apps/catalog/add", hv.ui2CatalogAdd())
+	r.Get("/visors/{pk}/apps/{app}/settings", hv.ui2AppSettings())
+	r.Put("/visors/{pk}/apps/{app}/settings", hv.ui2AppSettingsSave())
+	r.Get("/visors/{pk}/apps/{app}/logs", hv.ui2AppLogs())
+	r.Get("/visors/{pk}/apps/{app}/help", hv.ui2AppHelp())
+	r.Get("/visors/{pk}/apps/{app}/flags", hv.ui2AppFlags())
+	r.Put("/visors/{pk}/apps/{app}/flags", hv.ui2AppFlagsSave())
+	r.Put("/visors/{pk}/apps/{app}/state", hv.ui2AppPut("run", "status"))
+	r.Put("/visors/{pk}/apps/{app}/autostart", hv.ui2AppPut("autostart", "autostart"))
 }
 
 // ui2CallAPI runs a JSON handler on body. On failure it passes the JSON error

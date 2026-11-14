@@ -1,3 +1,4 @@
+// Package ui2 src/ui2/node.go c3-ui-wallet
 package ui2
 
 import (
@@ -181,8 +182,10 @@ type Wallet struct {
 	Accounts []AccountView
 	// AccountIDs are every account index, for the new address form.
 	AccountIDs []uint32
-	Disabled   bool
-	Err        string
+	// BrowserAddrs are every address of a browser wallet, in its order.
+	BrowserAddrs []string
+	Disabled     bool
+	Err          string
 }
 
 // LoadWallet reads wallet id, its balance and the page of addresses q asks for.
@@ -370,7 +373,7 @@ func LoadStatus(n Node) Status {
 				Outgoing: x.Outgoing,
 				Height:   x.Height,
 				Agent:    agent(x.UserAgent.Coin, x.UserAgent.Version),
-				Trusted:  x.IsTrustedPeer,
+				Trusted:  x.TrustedPeer,
 				Sent:     ago(now, x.LastSent),
 				Received: ago(now, x.LastReceived),
 			})

@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/manager_state_test.go
+// Package group pkg/skychat/group/manager_state_test.go c4-app-chat
 //
 // Unit coverage for the parts of manager.go that do NOT need a dmsg mesh: the
 // session-level reconnect backoff, the warm-up cadence decision, the
@@ -471,7 +471,7 @@ func TestMarkMessageDelivered(t *testing.T) {
 
 func TestIsSubscriberAlive_NoSession(t *testing.T) {
 	m := newStateTestManager(t, mustPK(t))
-	if m.IsSubscriberAlive("nope") {
+	if m.SubscriberAlive("nope") {
 		t.Error("no live session → not alive")
 	}
 }
@@ -584,7 +584,7 @@ func TestPersistRoster_WritesConvergedRoster(t *testing.T) {
 	// EnsureFounderInAdmins runs on the way in, so the founder is always
 	// explicitly present even though the reconciler didn't list them.
 	assertPKSet(t, "persisted admins", r.Admins, []cipher.PubKey{founder, a})
-	if !r.IsAdmin(founder) {
+	if !r.AdministeredBy(founder) {
 		t.Error("the founder must remain an admin after a roster persist")
 	}
 }

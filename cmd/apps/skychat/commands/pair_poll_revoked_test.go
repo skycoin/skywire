@@ -1,4 +1,4 @@
-// Package commands pair_poll_revoked_test.go
+// Package commands cmd/apps/skychat/commands/pair_poll_revoked_test.go c4-app-chat
 package commands
 
 import (

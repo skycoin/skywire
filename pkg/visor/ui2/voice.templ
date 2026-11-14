@@ -1,0 +1,63 @@
+package ui2
+
+// ChatVoice is the call strip above the conversation: ringing calls, the
+// call being placed, and the call in progress with its level meter, mute
+// buttons and timer. It polls itself; a visor without voice shows nothing.
+templ ChatVoice(v Voice) {
+	if v.Off {
+		<div id="chat-voice" hidden></div>
+	} else {
+		<div id="chat-voice" class="chat-voice" hx-get={ v.pollURL() } hx-trigger="every 2s [document.visibilityState === 'visible']" hx-swap="outerHTML">
+			@ErrorBox(v.Err)
+			for _, c := range v.Incoming {
+				<div class="voice-row ring">
+					<span class="mi">ring_volume</span>
+					<span class="small">{ T(ctx, "skychat.voice.incoming") }</span>
+					<span class="mono small pk-text" data-label-for={ c.From }>{ c.From }</span>
+					<span class="spacer"></span>
+					<button class="btn sm primary" type="button" hx-post={ v.url("/answer") } hx-vals={ jsonVals(v.vals(map[string]string{"call_id": c.ID})) } hx-target="#chat-voice" hx-swap="outerHTML"><span class="mi">call</span>{ T(ctx, "skychat.voice.answer") }</button>
+					<button class="btn sm warn" type="button" hx-post={ v.url("/decline") } hx-vals={ jsonVals(v.vals(map[string]string{"call_id": c.ID})) } hx-target="#chat-voice" hx-swap="outerHTML">{ T(ctx, "skychat.voice.decline") }</button>
+				</div>
+			}
+			for _, d := range v.Dialing {
+				<div class="voice-row">
+					<span class="mi">phone_forwarded</span>
+					<span class="mono small pk-text" data-label-for={ d.Peer }>{ d.Peer }</span>
+					<span class="small dim">{ dialState(d) }</span>
+					<span class="spacer"></span>
+					<button class="btn sm warn" type="button" hx-post={ v.url("/hangup") } hx-vals={ jsonVals(v.vals(map[string]string{"call_id": d.CallID})) } hx-target="#chat-voice" hx-swap="outerHTML" title={ T(ctx, "skychat.voice.hangup-tip") }><span class="mi">call_end</span>{ T(ctx, "skychat.voice.hangup") }</button>
+				</div>
+			}
+			if v.Call != "" {
+				<div class="voice-row incall">
+					<span class="mi">graphic_eq</span>
+					<span class="mono small" data-voice-secs={ itoa(int(v.Secs)) }>{ voiceClock(v.Secs) }</span>
+					<canvas class="voice-meter" width="360" height="44" data-voice-levels={ v.levelsURL() } title={ T(ctx, "skychat.voice.viz-levels") }></canvas>
+					<button class="btn sm" type="button" aria-pressed={ pressed(v.Mic) } hx-post={ v.url("/mute") } hx-vals={ jsonVals(v.vals(map[string]string{"call_id": v.Call, "mic": b01(!v.Mic)})) } hx-target="#chat-voice" hx-swap="outerHTML" title={ muteTip(ctx, v.Mic, "mic") }>
+						if v.Mic {
+							<span class="mi">mic_off</span>{ T(ctx, "skychat.voice.mic-muted") }
+						} else {
+							<span class="mi">mic</span>{ T(ctx, "skychat.voice.mute-mic") }
+						}
+					</button>
+					<button class="btn sm" type="button" aria-pressed={ pressed(v.Spk) } hx-post={ v.url("/mute") } hx-vals={ jsonVals(v.vals(map[string]string{"call_id": v.Call, "spk": b01(!v.Spk)})) } hx-target="#chat-voice" hx-swap="outerHTML" title={ muteTip(ctx, v.Spk, "caller") }>
+						if v.Spk {
+							<span class="mi">volume_off</span>{ T(ctx, "skychat.voice.caller-muted") }
+						} else {
+							<span class="mi">volume_up</span>{ T(ctx, "skychat.voice.mute-caller") }
+						}
+					</button>
+					<button class="btn sm warn" type="button" hx-post={ v.url("/hangup") } hx-vals={ jsonVals(v.vals(map[string]string{"call_id": v.Call})) } hx-target="#chat-voice" hx-swap="outerHTML" title={ T(ctx, "skychat.voice.hangup-tip") }><span class="mi">call_end</span>{ T(ctx, "skychat.voice.hangup") }</button>
+				</div>
+			} else if v.CanCall && len(v.Dialing) == 0 {
+				<div class="voice-row">
+					if v.Peer != "" {
+						<button class="btn sm" type="button" hx-post={ v.url("/call") } hx-vals={ jsonVals(v.vals(nil)) } hx-target="#chat-voice" hx-swap="outerHTML" title={ T(ctx, "skychat.voice.call-tip") }><span class="mi">call</span>{ T(ctx, "skychat.voice.call") }</button>
+					} else {
+						<button class="btn sm" type="button" hx-post={ v.url("/call") } hx-vals={ jsonVals(v.vals(nil)) } hx-include="#chat-form [name=to]" hx-target="#chat-voice" hx-swap="outerHTML" title={ T(ctx, "skychat.voice.call-tip") }><span class="mi">call</span>{ T(ctx, "skychat.voice.call") }</button>
+					}
+				</div>
+			}
+		</div>
+	}
+}

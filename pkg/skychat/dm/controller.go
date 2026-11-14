@@ -261,8 +261,8 @@ func (c *Controller) Start(ctx context.Context) error {
 //
 // The caching is the point. An accepted conn is a live connection to that peer
 // exactly as much as a dialed one is, but leaving it out of the cache made
-// HasConn mean "a peer we have dialed" rather than "a peer we are connected
-// to" — and the file-transfer accept policy reads HasConn as the latter (see
+// Connected mean "a peer we have dialed" rather than "a peer we are connected
+// to" — and the file-transfer accept policy reads Connected as the latter (see
 // isEstablishedPeer in the skychat app). A peer who had only ever connected TO
 // us therefore had every file offer declined until we happened to dial them
 // back, while their text messages went through the whole time, since those
@@ -743,8 +743,8 @@ func (c *Controller) Conns() int {
 	return len(c.conns)
 }
 
-// HasConn reports whether a live cached connection to pk exists.
-func (c *Controller) HasConn(pk cipher.PubKey) bool {
+// Connected reports whether a live cached connection to pk exists.
+func (c *Controller) Connected(pk cipher.PubKey) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	_, ok := c.conns[pk]

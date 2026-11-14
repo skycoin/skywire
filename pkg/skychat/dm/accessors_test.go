@@ -1,4 +1,4 @@
-// Package dm pkg/skychat/dm/accessors_test.go
+// Package dm pkg/skychat/dm/accessors_test.go c4-app-chat
 //
 // The /status-facing accessors and the network predicate that the controller's
 // send/receive tests never reach directly.
@@ -109,8 +109,8 @@ func TestConnsAndPeers(t *testing.T) {
 	if len(peers) != 1 || peers[0] != peer.Hex() {
 		t.Errorf("Peers() = %v, want [%s]", peers, peer.Hex())
 	}
-	if !c.HasConn(peer) {
-		t.Error("HasConn should agree with Peers")
+	if !c.Connected(peer) {
+		t.Error("Connected should agree with Peers")
 	}
 
 	// Close drops the cache, so /status stops advertising dead peers.

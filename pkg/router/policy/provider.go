@@ -37,26 +37,26 @@ type Provider interface {
 	// when unknown.
 	Kind(pk string) string
 
-	// IsTrusted reports whether the peer's PK is in the
+	// Trusted reports whether the peer's PK is in the
 	// operator-configured trust list. Used by policies that want
 	// "trusted peers get direct routes, untrusted peers go
 	// through 2+ hops" style rules.
-	IsTrusted(pk string) bool
+	Trusted(pk string) bool
 
-	// IsHypervisor reports whether the peer's PK is one of the
+	// Hypervisor reports whether the peer's PK is one of the
 	// visor's configured hypervisors. Policies typically want to
 	// dial hypervisors with minimum hops + maximum mux for low-
 	// latency control-plane traffic.
-	IsHypervisor(pk string) bool
+	Hypervisor(pk string) bool
 
-	// HasTransport reports whether the visor already holds a live
+	// Connected reports whether the visor already holds a live
 	// transport to this peer (of any type). Policies use it to
 	// prefer routing over peers we're already connected to —
 	// reusing existing plumbing instead of paying the setup cost of
 	// a fresh transport (handshake + AR register + route-finder) on
 	// the dial hot path. False when the peer is only reachable
 	// through intermediates, or unknown.
-	HasTransport(pk string) bool
+	Connected(pk string) bool
 }
 
 // NopProvider returns a Provider that knows nothing — Geo
@@ -67,12 +67,12 @@ func NopProvider() Provider { return nopProvider{} }
 
 type nopProvider struct{}
 
-func (nopProvider) Geo(string) string        { return "??" }
-func (nopProvider) Latency(string) int       { return 0 }
-func (nopProvider) Kind(string) string       { return "" }
-func (nopProvider) IsTrusted(string) bool    { return false }
-func (nopProvider) IsHypervisor(string) bool { return false }
-func (nopProvider) HasTransport(string) bool { return false }
+func (nopProvider) Geo(string) string      { return "??" }
+func (nopProvider) Latency(string) int     { return 0 }
+func (nopProvider) Kind(string) string     { return "" }
+func (nopProvider) Trusted(string) bool    { return false }
+func (nopProvider) Hypervisor(string) bool { return false }
+func (nopProvider) Connected(string) bool  { return false }
 
 // FakeProvider is a test helper. Construct via NewFakeProvider
 // with the visor state the test wants to simulate.
@@ -172,22 +172,22 @@ func (p *FakeProvider) Kind(pk string) string {
 	return p.kind[pk]
 }
 
-// IsTrusted implements Provider.
-func (p *FakeProvider) IsTrusted(pk string) bool {
+// Trusted implements Provider.
+func (p *FakeProvider) Trusted(pk string) bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.trusted[pk]
 }
 
-// IsHypervisor implements Provider.
-func (p *FakeProvider) IsHypervisor(pk string) bool {
+// Hypervisor implements Provider.
+func (p *FakeProvider) Hypervisor(pk string) bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.hypervisors[pk]
 }
 
-// HasTransport implements Provider.
-func (p *FakeProvider) HasTransport(pk string) bool {
+// Connected implements Provider.
+func (p *FakeProvider) Connected(pk string) bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.hasTransport[pk]

@@ -45,30 +45,30 @@ func TestDynamic_String(t *testing.T) {
 }
 
 func TestDynamic_IsBlank(t *testing.T) {
-	// IsBlank() bool
+	// Blank() bool
 
 	var dr Dynamic
 
-	if true != dr.IsBlank() {
+	if true != dr.Blank() {
 		t.Error("blank is not blank")
 	}
 
 	dr.Schema = SchemaRef{1, 2, 3}
 
-	if true == dr.IsBlank() {
+	if true == dr.Blank() {
 		t.Error("not blank is blank")
 	}
 
 	dr.Schema = SchemaRef{}
 	dr.Hash = cipher.SHA256{1, 2, 3}
 
-	if true == dr.IsBlank() {
+	if true == dr.Blank() {
 		t.Error("not blank is blank")
 	}
 
 	dr.Schema = SchemaRef{1, 2, 3}
 
-	if true == dr.IsBlank() {
+	if true == dr.Blank() {
 		t.Error("not blank is blank")
 	}
 

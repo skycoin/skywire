@@ -1,3 +1,5 @@
+// Package charts pkg/deployment/charts/store.go c4-net-discovery
+//
 // Package charts records a deployment service's own counts over time and
 // renders them as a self-contained HTML page of SVG charts.
 package charts

@@ -141,8 +141,8 @@ type ResolverConfig struct {
 	TLSCAKeyPath    string `json:"tls_ca_key_path,omitempty"`
 }
 
-// IsSkynet reports whether this entry resolves over skywire routing.
-func (r *ResolverConfig) IsSkynet() bool { return r.Kind == ResolverKindSkynet }
+// Skynet reports whether this entry resolves over skywire routing.
+func (r *ResolverConfig) Skynet() bool { return r.Kind == ResolverKindSkynet }
 
 // Chained reports whether an unset UpstreamSOCKS should inherit the matching
 // primary's auto-chain. Nil (the common case, and every entry written before
@@ -308,7 +308,7 @@ func (v *V1) ValidateResolvers() error {
 		default:
 			return fmt.Errorf("%s: unknown kind %q (want %q or %q)", label, r.Kind, ResolverKindDmsg, ResolverKindSkynet)
 		}
-		if !r.IsSkynet() && r.RouteTimeout != 0 {
+		if !r.Skynet() && r.RouteTimeout != 0 {
 			return fmt.Errorf("%s: route_timeout only applies to a skynet resolver", label)
 		}
 		if r.ProxyPort == 0 {

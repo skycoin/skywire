@@ -1,4 +1,4 @@
-// Package visor pkg/visor/rpc_client_timeout_test.go
+// Package visorapi pkg/visor/visorapi/client_timeout_test.go
 package visorapi
 
 import (

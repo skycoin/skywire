@@ -139,7 +139,7 @@ func (v *Visor) liveTransportCount(now time.Time) int {
 	}
 	n := 0
 	tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
-		if tp.IsClosed() {
+		if tp.Closed() {
 			return true
 		}
 		if at := tp.LastRecvAt(); at.IsZero() || now.Sub(at) < liveTransportWindow {

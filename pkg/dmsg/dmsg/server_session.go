@@ -267,7 +267,7 @@ func (ss *ServerSession) serveStream(log logging.FieldLogger, yStr io.ReadWriteC
 	// against the session's noise-authenticated PK is treated as one,
 	// everything else falls through to the StreamRequest path.
 	//
-	// This runs whether or not the session is already marked isPeer. With
+	// This runs whether or not the session is already marked peer. With
 	// mutual configs both sides dial and both pre-mark the other as a peer;
 	// before, an announce on an already-peer session was skipped here, fell
 	// through to the StreamRequest parser, failed and closed the session.
@@ -278,7 +278,7 @@ func (ss *ServerSession) serveStream(log logging.FieldLogger, yStr io.ReadWriteC
 	if ss.entity.acceptPeerAnnouncements {
 		if ann, aErr := obj.ObtainPeerAnnounce(); aErr == nil && ann.Verify(ss.rPK) == nil {
 			ss.settleFiling(notFiled)
-			accepted := ss.isPeer || ss.entity.peerAnnounceAllowed(ss.rPK)
+			accepted := ss.peer || ss.entity.peerAnnounceAllowed(ss.rPK)
 			if accepted {
 				ss.entity.promoteToPeer(ss.rPK, ss.SessionCommon)
 			}
@@ -335,7 +335,7 @@ func (ss *ServerSession) serveStream(log logging.FieldLogger, yStr io.ReadWriteC
 	} else {
 		ss.settleFiling(filedClient)
 	}
-	if relayed && !ss.isPeer && !ss.entity.acceptRelayedRequests {
+	if relayed && !ss.peer && !ss.entity.acceptRelayedRequests {
 		ss.m.RecordStream(metrics.DeltaFailed) // record failed stream
 		return ErrReqInvalidSrcPK
 	}
@@ -408,7 +408,7 @@ func (ss *ServerSession) serveStream(log logging.FieldLogger, yStr io.ReadWriteC
 		// Destination not connected locally. If this request came from a
 		// client (not a peer), try forwarding through peer servers (1-hop).
 		// If this request already came from a peer, do NOT forward further.
-		if ss.isPeer {
+		if ss.peer {
 			ss.m.RecordStream(metrics.DeltaFailed)
 			return ErrReqNoNextSession
 		}
@@ -433,7 +433,7 @@ func (ss *ServerSession) bridge(log logging.FieldLogger, yStr io.ReadWriteCloser
 	// this server carrying traffic for someone that is not its own client.
 	// Bound the concurrent count so an always-open relay can't be amplified. A
 	// plain local client↔client bridge is normal operation and is never gated.
-	if !ss.relayLocal && (ss.isPeer || dst.isPeer || ss.relayInbound || req.SrcAddr.PK != ss.rPK) {
+	if !ss.relayLocal && (ss.peer || dst.peer || ss.relayInbound || req.SrcAddr.PK != ss.rPK) {
 		if !ss.entity.tryAcquireRelaySlot(ss.rPK) {
 			ss.m.RecordStream(metrics.DeltaFailed)
 			ss.entity.relayRefused.Add(1)

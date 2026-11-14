@@ -1,4 +1,4 @@
-// Package netutil pkg/netutil/retrier_test.go
+// Package netutil pkg/netutil/retrier_test.go c0-com-util
 package netutil
 
 import (
@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 func TestRetrier_Do(t *testing.T) {

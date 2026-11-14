@@ -110,7 +110,7 @@ func TestSkywireConnNoRouteGroup(t *testing.T) {
 
 	// With nrg == nil the metric accessors return zero values, and
 	// IsAlive reflects whether the underlying conn is set.
-	require.True(t, c.IsAlive())
+	require.True(t, c.Alive())
 	require.Zero(t, c.Latency())
 	require.Zero(t, c.UploadSpeed())
 	require.Zero(t, c.DownloadSpeed())

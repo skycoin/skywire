@@ -1,5 +1,6 @@
 //go:build js
 
+// Package visor pkg/visor/autoconnect_wsgate_js.go c3-vis-core
 package visor
 
 import "syscall/js"

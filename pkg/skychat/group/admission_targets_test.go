@@ -1,4 +1,4 @@
-// Package group pkg/skychat/group/admission_targets_test.go
+// Package group pkg/skychat/group/admission_targets_test.go c4-app-chat
 //
 // Unit coverage for the multi-admin admission fan-out's pure half: which
 // PKs a joiner will ask, in what order, and what the invite carries to
@@ -179,14 +179,14 @@ func TestInviteRoundTripCarriesAdmins(t *testing.T) {
 // "Ask someone else" must not read as "no" anywhere in the requester's
 // decision logic — that distinction is the whole point of the status.
 func TestJoinStatusUnavailableIsNotADecision(t *testing.T) {
-	if JoinStatusUnavailable.IsTerminal() {
+	if JoinStatusUnavailable.Terminal() {
 		t.Error("unavailable must not be terminal — another admin may still admit")
 	}
-	if JoinStatusUnavailable.IsDecision() {
+	if JoinStatusUnavailable.Decision() {
 		t.Error("unavailable is an answer about the responder, not a decision about the requester")
 	}
 	for _, s := range []JoinStatus{JoinStatusAdmitted, JoinStatusPending, JoinStatusDenied, JoinStatusBanned} {
-		if !s.IsDecision() {
+		if !s.Decision() {
 			t.Errorf("%q should count as a decision", s)
 		}
 	}

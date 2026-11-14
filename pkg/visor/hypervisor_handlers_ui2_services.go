@@ -15,10 +15,10 @@ import (
 // service, a service's /health payload, and the route setup nodes' stats.
 
 func (hv *Hypervisor) ui2ServicesRoutes(r *httputil.Router) {
-	r.Get("/ui2/services", hv.ui2Services(false))
-	r.Get("/ui2/services/body", hv.ui2Services(true))
-	r.Get("/ui2/services/drill", hv.ui2ServiceDrill())
-	r.Get("/ui2/services/rsn", hv.ui2RSN())
+	r.Get("/services", hv.ui2Services(false))
+	r.Get("/services/body", hv.ui2Services(true))
+	r.Get("/services/drill", hv.ui2ServiceDrill())
+	r.Get("/services/rsn", hv.ui2RSN())
 }
 
 func (hv *Hypervisor) ui2Services(body bool) http.HandlerFunc {
@@ -76,7 +76,7 @@ func (hv *Hypervisor) ui2RSN() http.HandlerFunc {
 		for _, s := range stats {
 			row := ui2.RSNRow{PK: s.PK.Hex(), Err: s.Error}
 			if sn := s.Snapshot; sn != nil {
-				row.HasStats = true
+				row.StatsAvailable = true
 				row.Rate, row.Successful, row.Failed, row.Active = sn.SuccessRatePct, sn.Successful, sn.Failed, sn.ActiveRequests
 				row.P50, row.P95, row.P99 = sn.LatencyMs.P50, sn.LatencyMs.P95, sn.LatencyMs.P99
 				if sn.LastSuccessAt != nil && !sn.LastSuccessAt.IsZero() {

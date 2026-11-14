@@ -1,4 +1,4 @@
-// Package router pkg/router/router_mux_ops_test.go
+// Package router pkg/router/router_mux_ops_test.go c2-net-routing
 //
 // Regression coverage for the per-leg hop-chain telemetry on RUNTIME-added mux
 // legs. Every runtime add path — GrowMuxRoute / `cli proxy mux add` (both via

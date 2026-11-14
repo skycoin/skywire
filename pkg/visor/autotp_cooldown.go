@@ -1,4 +1,4 @@
-// Package visor pkg/visor/autotp_cooldown.go
+// Package visor pkg/visor/autotp_cooldown.go c3-vis-core
 package visor
 
 import (

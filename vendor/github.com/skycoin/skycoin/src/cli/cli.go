@@ -1,3 +1,5 @@
+// Package cli src/cli/cli.go c3-coin-cli
+//
 /*
 Package cli implements the CLI cmd's methods.
 
@@ -23,6 +25,7 @@ import (
 
 	"github.com/skycoin/skycoin/src/api"
 	"github.com/skycoin/skycoin/src/fiber"
+	"github.com/skycoin/skycoin/src/params"
 	"github.com/skycoin/skycoin/src/util/file"
 	"github.com/skycoin/skycoin/src/wallet"
 )
@@ -177,6 +180,10 @@ func resolveDBPath(cfg Config, db string) (string, error) {
 
 // NewCLI creates a cli instance
 func NewCLI(cfg Config) (*cobra.Command, error) {
+	if err := params.CheckEnv(); err != nil {
+		return nil, err
+	}
+
 	apiClient = api.NewClient(cfg.RPCAddress)
 	apiClient.SetAuth(cfg.RPCUsername, cfg.RPCPassword)
 

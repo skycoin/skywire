@@ -99,7 +99,7 @@ func (r *RPC) Feeds(_ struct{}, fs *[]cipher.PubKey) (_ error) {
 
 // IsSharing is RPC method
 func (r *RPC) IsSharing(pk cipher.PubKey, yep *bool) (_ error) {
-	*yep = r.n.IsSharing(pk)
+	*yep = r.n.Sharing(pk)
 	return
 }
 

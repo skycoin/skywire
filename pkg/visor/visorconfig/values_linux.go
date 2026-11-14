@@ -45,7 +45,7 @@ type Survey struct {
 	DmsgServers    []string         `json:"dmsg_servers,omitempty"`
 }
 
-// IsRoot checks for root permissions.
+// RunningAsRoot checks for root permissions.
 //
 // It resolves the effective UID FIRST (0 == root), which never needs a passwd
 // lookup. On a static (musl) build running under a UID with no /etc/passwd
@@ -53,7 +53,7 @@ type Survey struct {
 // and dereferenced the nil user, panicking in this package's init() — which
 // crashed EVERY skywire command on such hosts (seen on the prod hv-serve unit,
 // crash-looping v1.3.86). Geteuid is both safer and the canonical root test.
-func IsRoot() bool {
+func RunningAsRoot() bool {
 	if os.Geteuid() == 0 {
 		return true
 	}

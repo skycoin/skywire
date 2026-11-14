@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/group_delete_test.go
+// Package commands cmd/apps/skychat/commands/group_delete_test.go c4-app-chat
 //
 // Coverage for group "delete for everyone": the tombstone envelope, the
 // DELETE /group/<id>/message endpoint (publishes a tombstone + prunes the
