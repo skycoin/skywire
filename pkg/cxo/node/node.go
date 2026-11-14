@@ -94,6 +94,12 @@ type Node struct {
 	// fact that it died was only visible in WARN logs.
 	sendMsgTimeoutCount atomic.Uint64
 
+	// objectRequests counts RqObject requests served, deltas aside.
+	objectRequests atomic.Uint64
+
+	// noDelta makes the node act like one from before RqDelta (tests).
+	noDelta bool
+
 	// deadConnsClosed counts Conn instances that sendMsg closed due to
 	// the timeout path. Always == sendMsgTimeoutCount today (one
 	// timeout = one close), kept separate so a future refactor that

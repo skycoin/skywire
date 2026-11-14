@@ -41,6 +41,8 @@ func TestRoundTrip(t *testing.T) {
 			TCPAddr:  "1.2.3.4:5550",
 			UDPAddr:  "1.2.3.4:5551",
 		}}},
+		&RqDelta{Feed: pk, Nonce: 7, Since: 2, Seq: 3},
+		&Objects{Values: [][]byte{{1}, {2, 3}}},
 	}
 
 	for _, m := range msgs {

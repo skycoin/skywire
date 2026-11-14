@@ -25,6 +25,8 @@ type Filler struct {
 	incs map[cipher.SHA256]int
 	pre  map[cipher.SHA256]struct{} // prerequested by RC
 
+	fetched []cipher.SHA256 // got from peers, recorded as the delta of r
+
 	limit chan struct{} // max
 
 	errq chan error
@@ -91,6 +93,7 @@ func (f *Filler) get(
 		} else {
 			rc = obj.RC
 		}
+		f.addFetched(key)
 	case <-f.closeq:
 		// The object may have been stored for this want as the filler
 		// closed, which counted its inc. Record it so a reject gives it back.
@@ -178,6 +181,14 @@ func (f *Filler) inc(key cipher.SHA256, drc int) (rc int) {
 
 	f.incs[key] = finc + 1 // +1 want (+1 finc)
 	return
+}
+
+func (f *Filler) addFetched(key cipher.SHA256) {
+	f.mx.Lock()
+	defer f.mx.Unlock()
+	if len(f.fetched) < DeltaMaxKeys {
+		f.fetched = append(f.fetched, key)
+	}
 }
 
 func (f *Filler) requset(key cipher.SHA256) (ok bool) {
@@ -358,7 +369,11 @@ func (f *Filler) Run() (err error) {
 	case err = <-f.errq:
 	case <-done:
 		f.r.Full = true // full!
-		_, err = f.c.AddRoot(f.r)
+		if _, err = f.c.AddRoot(f.r); err == nil {
+			f.mx.Lock()
+			f.c.RecordDelta(f.r.Pub, f.r.Nonce, f.r.Seq, f.fetched)
+			f.mx.Unlock()
+		}
 	}
 
 	f.Close() //nolint:errcheck,gosec
