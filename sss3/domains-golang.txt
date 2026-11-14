@@ -1,0 +1,248 @@
+================================================================================
+skywire Domains + Layer Prefixes (Go) — the c<layer>-<domain>-<system> taxonomy
+================================================================================
+
+version 1.2  ·  2026-07-07  ·  companion to standards-golang.txt (KG1/KG15)
+
+--------------------------------------------------------------------------------
+0. HOW MANY DOMAINS  (the headline answer)
+--------------------------------------------------------------------------------
+
+THREE functional domains + a c0 `com` base. (Revised down from an earlier 8 per
+Synth: "1 to 3 domains is enough — use fewer domains and push the detail into
+SYSTEMS; only make a domain if a thing can't be a system.") skywire has ~60
+packages, but they cluster into just three broad areas; the differentiation lives
+in the SYSTEM level, not in a long domain list:
+
+    com   cross-cutting c0 primitives (the base every domain sits on)
+    net   the mesh + everything network: transports, routing, object-sync,
+          discovery services
+    app   what runs ON the mesh: user apps + the reward/viz surfaces
+    vis   the visor platform that assembles net+app into a running peer + control
+
+Each domain holds several SYSTEMS (the middle level Synth asked for), and each
+system holds Go packages. So the earlier "domains" rte / cxo / dsc / rwd were
+really SYSTEMS — rte -> net.routing, cxo -> net.cxo, dsc -> net.discovery,
+rwd -> app.rewards.
+
+--------------------------------------------------------------------------------
+1. THE SCHEME:  c<layer>-<domain>-<system>
+--------------------------------------------------------------------------------
+
+    c<layer>   c0..c4 — the dependency tier (KG1). Lower = more generic; a lower
+               tier NEVER imports a higher one (compiler-enforced: import cycles
+               don't build).
+    <domain>   3-letter, ONE OF FOUR:  com | net | app | vis
+    <system>   the subsystem inside the domain (net.dmsg, net.routing, net.cxo,
+               net.discovery, net.transport, app.chat, app.proxy, vis.core …).
+               A system groups a few related packages; the Go package name is the
+               leaf beneath it.
+
+    examples:  c0-com-crypto (cipher)      c1-net-dmsg (dmsg)
+               c2-net-transport (transport) c2-net-routing (router, routing)
+               c2-net-cxo (treestore)       c4-net-discovery (tpd, ar, sd, ut)
+               c4-app-proxy (skysocks)      c4-app-chat (skychat)
+               c4-app-rewards (rewards)     c3-vis-core (visor)   c4-vis-cli
+
+A TAXONOMY overlaid on the existing packages — NOT a rename. `<layer>`/`<domain>`/
+`<system>` are labels you read and grep, never part of an identifier. The layer is
+a compiler fact (import direction); the domain/system are a documentation grouping
+with no Go analogue (an `app` package importing `net` is normal), so they must NOT
+become a lint rule.
+
+--------------------------------------------------------------------------------
+2. THE DOMAINS -> SYSTEMS -> PACKAGES
+--------------------------------------------------------------------------------
+
+=== com — c0 cross-cutting foundation ==========================================
+Primitives with no domain logic; imported by everyone, imports nothing internal.
+  com.crypto   cipher
+  com.log      logging
+  com.http     httputil, httpauth, httpauthclient, gobrpc
+  com.env      skyenv — SHARED constants only (default service addrs, well-known
+               ports, app names, paths). NOT per-thing config; genuinely global
+               and imported by every domain, so it earns a com system.
+  com.util     util, netutil, cmdutil, flags, metricsutil, buildinfo, geo,
+               geoip, pg, testhelpers
+  tag: c0-com-<system>   e.g. c0-com-crypto (cipher), c0-com-env (skyenv)
+
+  NOTE — there is deliberately NO `com.cfg`. Per Synth ("split config by the thing
+  being configured, one per application, not mixed"), config is NOT a cross-cutting
+  system. Each config package rides with the DOMAIN/SYSTEM of what it configures,
+  tagged accordingly (see §2b). Only skyenv's shared constants stay in com, because
+  they configure nothing in particular — they're the vocabulary everyone shares.
+
+=== net — the mesh + everything network ========================================
+Transports, routing, object-sync, and the discovery services. The biggest
+domain — skywire is a router. [net.dmsg/transport/routing TAGGED — see §4]
+  net.dmsg       dmsg, dmsgc                              (c1)  the substrate
+  net.transport  transport, transport-setup, skyquic, skyudpbridge, stunserver,
+                 tcpproxy                                 (c1/c2) carriers + mgr
+  net.routing    routing, router, rfclient, route-finder, skyroute (c1/c2)
+  net.cxo        cxo (node, treestore, skyobject, cxosub) (c2)  object sync
+                 + storeconfig (configures the CXDS/idx backing stores — DB/
+                 redis/memory selection; rides with the store it configures)
+  net.discovery  transport-discovery=TPD, address-resolver=AR,
+                 service-discovery=SD, uptime-tracker=UT,
+                 servicedisc, utclient, serviceuptime, uptimestats (c2/c4)
+                 + serviceconfig (the common deployment-service config: dmsg,
+                 logging, launch — configures THESE services, so it lives here),
+                 + config-bootstrapper=conf (the service that SERVES visor
+                 configs; a deployment service alongside tpd/ar/sd/ut)
+  net.monitor    networkmonitor, network-monitor          (c2)
+  tag: c<L>-net-<system>  e.g. c1-net-dmsg, c2-net-transport, c2-net-routing,
+                               c2-net-cxo, c4-net-discovery
+
+=== app — what runs ON the mesh ================================================
+User apps + the reward/viz surfaces.
+  app.proxy    skysocks (+ client)                        (c4)
+  app.chat     skychat                                    (c4)
+  app.vpn      vpn (client/server)                        (c4)
+  app.skynet   skynet, skynetweb, skynetca                (c2/c4)
+  app.web      dmsgweb                                    (c4)
+  app.mail     skymailbridge                              (c4)
+  app.rewards  rewards, tpviz, visnetwork                 (c2/c4)
+  tag: c<L>-app-<system>  e.g. c4-app-proxy, c4-app-chat, c4-app-rewards
+
+=== vis — the visor platform + control ========================================
+Assembles net+app into a running peer, plus the CLI / hypervisor / wasm shells.
+  vis.core     visor                                      (c3)
+               + skywireconfig/visorconfig (configures the VISOR: keys, tps,
+               apps, hypervisor — rides with the thing it configures),
+               + svcmode (visor service-mode selection)
+  vis.appsvc   app (the app-running framework / appserver), services (registry) (c1/c2)
+  vis.wasm     wasmhv, wasmrpc                             (c3)
+  vis.pty      pty                                         (c3)
+  vis.cli      cmd/skywire, cmd/skywire-cli, cmd/skywire-visor, cmd/wasm-visor,
+               cmd/hvinspect, skywire (top lib)           (c3/c4)
+               + clicache (caches the CLI's RPC address — CLI-only config)
+  tag: c<L>-vis-<system>  e.g. c3-vis-core (visor), c4-vis-cli
+
+--------------------------------------------------------------------------------
+2b. CONFIG PLACEMENT — "one per application, not mixed" (Synth)
+--------------------------------------------------------------------------------
+
+Synth: "Split config by the thing being configured, one per application, not
+mixed." So config is NEVER its own catch-all system. The rule:
+
+  A config package is tagged with the DOMAIN/SYSTEM of the thing it configures —
+  it sits NEXT TO its subject, not in a shared `cfg` pile.
+
+The one exception is skyenv, which configures nothing specific: it's the shared
+vocabulary of constants (ports, default addrs, app names, paths) that every domain
+reads. That earns com.env. Everything else moves out to its subject:
+
+  package               configures …            -> system (tag)
+  ------------------    --------------------     --------------------------------
+  skyenv                everyone (constants)     -> com.env      (c0-com-env)
+  skywireconfig/            the visor            -> vis.core     (c3-vis-core)
+    visorconfig
+  svcmode               visor service mode       -> vis.core     (c3-vis-core)
+  clicache              the CLI (RPC addr)       -> vis.cli      (c4-vis-cli)
+  serviceconfig         deployment services      -> net.discovery(c4-net-discovery)
+  config-bootstrapper   serves visor configs     -> net.discovery(c4-net-discovery)
+  storeconfig           a service's backing store-> net.cxo /    (c2-net-cxo /
+                                                    net.discovery  c4-net-discovery)
+
+Result: the old `com.cfg` (which mixed seven unrelated configs) is GONE. Each
+config now lives with, and is tagged like, the application/system it belongs to —
+so `grep c3-vis-core` shows the visor AND its config together, and no single "cfg"
+system pretends unrelated apps share configuration. This is the same principle as
+KG15 "cohesive package": config cohesion follows the SUBJECT, not the word "config".
+
+--------------------------------------------------------------------------------
+3. LAYER × DOMAIN MATRIX (domain rows, layer columns; cells list SYSTEMS)
+--------------------------------------------------------------------------------
+
+          c0            c1              c2                    c3          c4
+  com   crypto,log,     —               —                     —           —
+        http,cfg,util
+  net   —               dmsg,           transport, routing,   —           discovery
+                        (routing types) cxo, monitor                      (tpd/ar/sd/ut)
+  app   —               —               skynet, rewards       —           proxy, chat,
+                                                                          vpn, web, mail
+  vis   —               appsvc(services) appsvc(appserver)    core, wasm, cli
+                                                               pty
+
+Reading: the SPINE is com -> net -> vis -> cli. app + net.discovery hang off at
+c4 (standalone binaries) with thin c2 clients. Nothing in a lower LAYER imports a
+higher one — verified: `go list -deps ./pkg/transport | grep visor` is empty;
+`./pkg/dmsg/dmsg` imports neither router nor transport.
+
+Enforcement: `go build` guarantees the acyclic graph for free; add depguard rules
+(golangci-additions.txt) to pin the DIRECTION on a few agreed edges (e.g.
+"pkg/transport must not import pkg/visor", "net must not import app"). The
+domain/system are a coarse reading aid and get NO linter — cross-domain imports
+(app->net, vis->net) are normal and correct.
+
+--------------------------------------------------------------------------------
+4. CARRYING THE c1/c2 PREFIX IN CODE — the Go-idiomatic way (+ current status)
+--------------------------------------------------------------------------------
+
+Synth: "start with just putting the c1,c2 prefix." In C# that prefixes the
+assembly/namespace NAME. In Go you CANNOT prefix the package name — the compiler
+and linter forbid it. Demonstrated live:
+
+  $ printf 'package c2-net-transport\n' | gofmt
+  1:11: expected ';', found '-'          <- hyphen = invalid identifier, SYNTAX ERROR
+
+  package c2_net_transport                <- parses, but stylecheck ST1003 rejects
+                                             underscores / non-lowercase pkg names
+  package c2nettransport                  <- compiles, but stutters at EVERY call
+                                             site: c2nettransport.Manager{}
+  renaming pkg/transport -> pkg/c2-net-transport breaks every importer (the import
+  path IS the directory) — a hard compile error across the whole tree.
+
+So the tag lives where Go already documents packages: the package doc comment,
+which revive `package-comments` + stylecheck ST1000 REQUIRE to begin with
+"Package <name>". skywire already leads each file with a per-file locator —
+`// Package <name> <path>` — and that path is worth keeping (it shows where the
+file sits without opening the rest of the tree). So the CHOSEN CONVENTION keeps
+that line and APPENDS the tag:
+
+  // Package transport pkg/transport/manager.go c2-net-transport
+  package transport
+
+  form:  // Package <name> <path> c<layer>-<domain>-<system>
+
+  - lints CLEAN (starts with "Package transport", so revive is satisfied),
+  - keeps the existing per-file <path> locator,
+  - is greppable:  grep -rn 'c[0-9]-\(net\|rte\|cxo\|dsc\|app\|vis\|rwd\|com\)' pkg/
+    -> the live layer/domain map, and
+  - keeps the package name short/lowercase/idiomatic (transport.Manager, not
+    c2nettransport.Manager).
+  (A few files led with a description — `// Package router implements …` — instead
+  of a path; those are normalized to the `<name> <path> <tag>` form when tagging.)
+
+STATUS (this pass): the c1/c2 net spine is DONE — the net.dmsg / net.transport /
+net.routing systems, EVERY non-test file, 91 files: dmsg/dmsgc (c1-net-dmsg),
+skyquic/transport/transport-setup/skyudpbridge/stunserver/tcpproxy
+(c1|c2-net-transport), networkmonitor (c2-net-monitor), routing (c1-net-routing),
+router/rfclient/skyroute (c2-net-routing). `go build ./...` + gofmt +
+golangci-lint all clean. Remaining net systems (cxo, discovery) + the app / vis /
+com domains are a straightforward mechanical follow-up using the same tagger and
+the §2 mapping.
+
+--------------------------------------------------------------------------------
+5. WHAT NOT TO DO (so this stays idiomatic)
+--------------------------------------------------------------------------------
+
+- Do NOT rename packages/dirs to carry the prefix (syntax error / broken imports /
+  stutter — §4).
+- Do NOT turn the DOMAIN into a lint/depguard rule. Domains are a coarse reading
+  aid; cross-domain imports (app->net, vis->cxo) are normal. Only the LAYER
+  direction is worth enforcing (depguard), and only on a few agreed edges.
+- Do NOT split a cohesive package to fit one matrix cell. A package that spans
+  (e.g. `transport` has c1 wire types + a c2 manager) is tagged by its PRIMARY
+  role (`c2-net`); Go's "cohesive package" wins over a tidy grid (KG15).
+- Keep the DOMAINS at 3 (+com), but don't starve the SYSTEMS. skywire earns its
+  ~20 systems because it's a real multi-subsystem daemon; a package that seems like
+  a new domain almost always belongs in an existing one AS A SYSTEM (rides the mesh
+  -> app/net; assembles the peer -> vis; syncs objects -> net.cxo). Push the detail
+  DOWN into systems, per Synth — not out into new domains.
+- Do NOT make config its own system. Config follows its SUBJECT (§2b): one config
+  per application, tagged like that application — never a mixed `cfg` bag.
+
+================================================================================
+END — domains + layer prefixes
+================================================================================
