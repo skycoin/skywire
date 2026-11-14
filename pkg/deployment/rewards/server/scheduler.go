@@ -192,3 +192,23 @@ func cycleStatusText() string {
 	}
 	return txt
 }
+
+// CycleConfig is a reward cycle for a host without a command line. The
+// calculation takes the defaults of `rewards run`.
+type CycleConfig struct {
+	// WorkDir holds hist/, log_backups/ and xpub_index.json.
+	WorkDir     string
+	SkycoinNode string
+	SkipCollect bool
+	// Fetch collects surveys from the visors, through Proxy when set,
+	// instead of only cleaning the surveys they push.
+	Fetch      bool
+	Proxy      string
+	MinVersion string
+	// PruneBelow is --prune-below-version, "auto" when empty.
+	PruneBelow string
+}
+
+// NewCycle returns the reward cycle for c. The skywire cli rewards package
+// sets it, so a binary without that package has no cycle.
+var NewCycle func(c CycleConfig) func(context.Context) error

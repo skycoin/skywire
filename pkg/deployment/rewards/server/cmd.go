@@ -2,6 +2,8 @@
 package rewardsserver
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -144,6 +146,10 @@ type RewardConfig struct {
 	LoginNode       string
 	HealthOnly      bool
 	DisableTpVizAPI bool // prevent tp-viz from mounting /api/* routes
+	// SecKey, DmsgPort and SurveyMinVersion are for Serve.
+	SecKey           cipher.SecKey
+	DmsgPort         uint16
+	SurveyMinVersion string
 }
 
 // ConfigureAndBuild sets the reward system's internal state from the
@@ -170,6 +176,22 @@ func ConfigureAndBuild(cfg RewardConfig) http.Handler {
 	disableTpVizAPI = cfg.DisableTpVizAPI
 	startTime = time.Now()
 	return buildRouter()
+}
+
+// Serve builds the server from cfg and runs it under cfg.SecKey until ctx
+// ends. An empty bind serves dmsg only.
+func Serve(ctx context.Context, cfg RewardConfig, bind string, l *logging.Logger) error {
+	if cfg.SecKey.Null() {
+		return errors.New("the reward service needs a secret key")
+	}
+	sk = cfg.SecKey
+	if cfg.DmsgPort != 0 {
+		dmsgPort = cfg.DmsgPort
+	}
+	if cfg.SurveyMinVersion != "" {
+		surveyPushMinVersion = cfg.SurveyMinVersion
+	}
+	return serve(ctx, ConfigureAndBuild(cfg), bind, l)
 }
 
 func scriptExecString(s string) string {
