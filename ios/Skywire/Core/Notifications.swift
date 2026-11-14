@@ -159,7 +159,8 @@ final class NotificationBridge: NSObject, ObservableObject {
         if event.app == SkychatProfile.app && !Self.chatAllows(event, ChatRepository.shared.store.notif) { return }
         let style = Self.presentation(of: event.app)
         let content = UNMutableNotificationContent()
-        content.title = event.title.isEmpty ? style.label : event.title
+        let title = Self.shownTitle(event)
+        content.title = title.isEmpty ? style.label : title
         content.body = Self.shownBody(event, ChatRepository.shared.store.notif)
         content.sound = style.sound ? .default : nil
         content.interruptionLevel = style.level
@@ -190,11 +191,33 @@ final class NotificationBridge: NSObject, ObservableObject {
         return !prefs.isMuted(event.tag)
     }
 
-    /// A message's text, or a plain "new message" with previews off. Calls and join requests keep theirs.
+    /// SkyChat titles these two in English (group.go scanPendingJoins, skychat.go onChatEvent).
+    static func shownTitle(_ event: NotifyEvent) -> String {
+        guard event.app == SkychatProfile.app else { return event.title }
+        return switch event.title {
+        case "Group join request": L10n.text("chat_notif_join_request")
+        case "Message request": L10n.text("chat_notif_message_request")
+        default: event.title
+        }
+    }
+
+    /// A message's text, or a plain "new message" with previews off. A missed call and a join
+    /// request arrive in English (voice_missed.go callRecordText, group.go scanPendingJoins).
     static func shownBody(_ event: NotifyEvent, _ prefs: NotifPrefs) -> String {
-        guard event.app == SkychatProfile.app, !prefs.preview else { return event.body }
+        guard event.app == SkychatProfile.app else { return event.body }
+        if event.body == "📞 Missed call" { return "📞 " + L10n.text("call_missed_title") }
+        if event.tag.hasPrefix("join:"), let waiting = joinWaiting(event.body) {
+            return L10n.format("chat_notif_join_waiting", waiting.count, waiting.group)
+        }
         let message = !event.tag.isEmpty && !event.tag.hasPrefix("join:") && !event.body.hasPrefix("📞")
-        return message ? L10n.text("chat_notif_new_message") : event.body
+        return message && !prefs.preview ? L10n.text("chat_notif_new_message") : event.body
+    }
+
+    /// The parts of "<n> waiting to join <group name>".
+    private static func joinWaiting(_ body: String) -> (count: Int, group: String)? {
+        let marker = " waiting to join "
+        guard let at = body.range(of: marker), let count = Int(body[..<at.lowerBound]) else { return nil }
+        return (count, String(body[at.upperBound...]))
     }
 
     /// How one app's notifications are presented. An unknown app is never

@@ -121,9 +121,9 @@ enum ChatText {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if t == "🎤 Voice message" { return "🎤 " + L10n.text("chat_voice_message") }
         if t == "📹 Video message" { return "📹 " + L10n.text("chat_video_message") }
-        if let match = t.range(of: #"^📞 (Missed call|Incoming call|Outgoing call)( · \d+:\d\d)?$"#, options: .regularExpression) {
+        if let match = t.range(of: #"^📞 (Missed call|Incoming call|Outgoing call|Unanswered call)( · \d+:\d\d)?$"#, options: .regularExpression) {
             let body = String(t[match].dropFirst(2))
-            for outcome in ["Missed call", "Incoming call", "Outgoing call"] where body.hasPrefix(outcome) {
+            for outcome in ["Missed call", "Incoming call", "Outgoing call", "Unanswered call"] where body.hasPrefix(outcome) {
                 return "📞 " + outcomeLabel(outcome) + body.dropFirst(outcome.count)
             }
         }
@@ -135,6 +135,7 @@ enum ChatText {
         case "Missed call": L10n.text("call_missed_title")
         case "Incoming call": L10n.text("chat_call_incoming")
         case "Outgoing call": L10n.text("chat_call_outgoing")
+        case "Unanswered call": L10n.text("chat_call_unanswered")
         default: outcome
         }
     }
