@@ -30,6 +30,8 @@ import Foundation
 ///  - `hypervisor.tp_viz.enable = false`;
 ///  - `routing.transport_preference` from the user's primary, and
 ///    `routing.mux_routes` = 2: the phone's policy, not a setting;
+///  - `transport.network.metered`: the mode on mobile data (`MobileData`),
+///    "offline" until the user allows mobile data;
 ///  - `transport.public_autoconnect`, `log_level` and `hypervisors` (the
 ///    remote-management grant, pinned to exactly the granted key: a key
 ///    planted by a hand edit or a persisted `hv add` must not outlive the
@@ -95,6 +97,10 @@ public enum PhoneProfile {
                 var transport = try object(value, key)
                 transport["public_autoconnect"] = settings.publicAutoconnect
                 transport["log_store"] = merged(transport["log_store"], ["location": paths.transportLogs.path])
+                // Unset leaves the core its own default, lean.
+                var network = transport["network"] as? [String: Any] ?? [:]
+                network[MobileData.configKey] = settings.useMobileData ? nil : MobileData.meteredOffline
+                transport["network"] = network.isEmpty ? nil : network
                 out[key] = transport
             case "hypervisor":
                 var hypervisor = try object(value, key)

@@ -32,6 +32,18 @@ final class AppSettings: ObservableObject {
         set { set(newValue, Keys.publicAutoconnect) }
     }
 
+    /// Whether the visor may use mobile data, off until the user allows it (Android: MobileData).
+    var useMobileData: Bool {
+        get { defaults.object(forKey: Keys.useMobileData) as? Bool ?? MobileData.defaultAllowed }
+        set { set(newValue, Keys.useMobileData) }
+    }
+
+    /// The mobile data question was answered, on Home or by the Settings switch.
+    var mobileDataAsked: Bool {
+        get { defaults.bool(forKey: Keys.mobileDataAsked) }
+        set { set(newValue, Keys.mobileDataAsked) }
+    }
+
     /// The visor's log level (Android: CoreLogLevel.PREF_KEY).
     var logLevel: String {
         get { CoreLogLevel.sanitize(defaults.string(forKey: Keys.logLevel)) }
@@ -110,7 +122,8 @@ final class AppSettings: ObservableObject {
             remoteManagementPK: remoteManagementPK,
             memoryLimit: ConfigProfile.launchMemoryLimit,
             skyDnsInVpn: skyDnsInVpn,
-            dnsServer: dnsServer
+            dnsServer: dnsServer,
+            useMobileData: useMobileData
         )
     }
 
@@ -128,6 +141,8 @@ final class AppSettings: ObservableObject {
         static let transportPrimary = "transport_primary"
         static let fleetEnabled = "fleet_enabled"
         static let publicAutoconnect = "public_autoconnect"
+        static let useMobileData = MobileData.prefKey
+        static let mobileDataAsked = MobileData.prefAsked
         static let logLevel = "core_log_level"
         static let remoteManagementPK = "remote_management_pk"
         static let skyDnsInVpn = SkyDNS.prefInVpn

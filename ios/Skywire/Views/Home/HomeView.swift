@@ -15,6 +15,10 @@ struct HomeView: View {
                 StatusLine()
                 ConnectButton().padding(.top, 20)
                 StatusCaption(pollError: model.error).padding(.top, 16)
+                // This question decides whether the core runs.
+                if app.standing.offerMobileData {
+                    MobileDataPrompt().padding(.top, 20)
+                }
                 if app.connected, let summary = model.summary {
                     VisorCard(summary: summary, health: model.health).padding(.top, 24)
                 }
@@ -41,10 +45,20 @@ private struct StatusLine: View {
         .accessibilityElement(children: .combine)
         // For UI tests: the state in words no translation changes.
         .accessibilityIdentifier("core-state")
-        .accessibilityValue(Text(verbatim: app.connected ? "connected" : app.restartAttempt != nil ? "restarting" : app.coreState.description))
+        .accessibilityValue(Text(verbatim: word))
+    }
+
+    private var word: String {
+        let net = app.standing
+        if net.waitingForInternet { return "no-internet" }
+        if net.waitingForWifi { return "waiting-wifi" }
+        return app.connected ? "connected" : app.restartAttempt != nil ? "restarting" : app.coreState.description
     }
 
     private var status: (Text, Color) {
+        let net = app.standing
+        if net.waitingForInternet { return (Text(L10n.key("state_no_internet")), .skyError) }
+        if net.waitingForWifi { return (Text(L10n.key("state_waiting_wifi")), .skyWarning) }
         if let attempt = app.restartAttempt {
             return (Text(verbatim: L10n.format("state_restarting", attempt)), .skyWarning)
         }
@@ -53,6 +67,8 @@ private struct StatusLine: View {
         case .starting, .running: (Text(L10n.key("state_starting")), .skyWarning)
         case .stopping: (Text(L10n.key("state_stopping")), .skyOnSurfaceVariant)
         case .failed: (Text(L10n.key("home_error_start")), .skyError)
+        // A start held until the network says whether it is metered.
+        case .stopped where app.heldForWifi: (Text(L10n.key("state_starting")), .skyWarning)
         case .stopped: (Text(L10n.key("state_disconnected")), .skyOnSurfaceVariant)
         }
     }
@@ -66,11 +82,13 @@ private struct ConnectButton: View {
     var body: some View {
         let state = app.coreState
         // A start can take a minute on a slow network: Disconnect aborts it (Android's Running-not-up),
-        // and it stops a failed core that waits to start again.
-        let tonal = state == .starting || state == .running || app.restartAttempt != nil
+        // and it stops a failed core that waits to start again, or one held back for Wi-Fi.
+        let tonal = state == .starting || state == .running || app.restartAttempt != nil || app.heldForWifi
         let busy = state == .stopping
+        // A wait for the network can last hours: nothing spins for it.
+        let waiting = app.standing.waiting
         ZStack {
-            if app.connecting {
+            if app.connecting && !waiting {
                 PulseRing(size: 180)
             }
             Button {
@@ -90,7 +108,7 @@ private struct ConnectButton: View {
                     }
                     if busy {
                         MaterialSpinner(size: 44, stroke: 4, color: .white)
-                    } else if tonal && !app.connected {
+                    } else if tonal && !app.connected && !waiting {
                         VStack(spacing: 10) {
                             MaterialSpinner(size: 28, stroke: 3)
                             Text("disconnect").skyText(.titleMedium).foregroundStyle(Color.skyOnSecondaryContainer)
@@ -118,8 +136,13 @@ private struct StatusCaption: View {
     @EnvironmentObject private var navigator: Navigator
 
     var body: some View {
+        let net = app.standing
         VStack(spacing: 0) {
-            if app.restartAttempt != nil {
+            if net.waitingForInternet, app.coreState != .stopping {
+                Text("home_hint_no_internet").skyText(.bodyMedium).foregroundStyle(Color.skyError)
+            } else if net.waitingForWifi, app.coreState != .stopping {
+                Text("home_hint_waiting_wifi").skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant)
+            } else if app.restartAttempt != nil || app.heldForWifi {
                 startingHint
             } else if let error = app.lastError ?? (app.coreState == .failed ? "" : nil) {
                 if !error.isEmpty {
@@ -137,6 +160,8 @@ private struct StatusCaption: View {
                 case .running:
                     if let pollError {
                         Text(verbatim: pollError).skyText(.bodySmall).foregroundStyle(Color.skyError)
+                    } else if net.onMobileData {
+                        Text("home_hint_mobile_data").skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant)
                     }
                 default:
                     EmptyView()
@@ -155,6 +180,36 @@ private struct StatusCaption: View {
     private var viewLogs: some View {
         Button { navigator.push(.logs(.process)) } label: { Text("view_logs") }
             .buttonStyle(.tonal)
+    }
+}
+
+/// Whether Skywire may use mobile data, asked once while it is held off it (Android: Home's
+/// PermissionPrompt). Either answer says where the choice can be changed.
+private struct MobileDataPrompt: View {
+    @EnvironmentObject private var app: AppModel
+    @EnvironmentObject private var dialogs: SkyDialogs
+
+    var body: some View {
+        SectionCard {
+            Text("home_mobile_data_title").skyText(.titleMedium)
+            Text("home_mobile_data_body").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 6)
+            HStack(spacing: 12) {
+                Button { answer(true) } label: { Text("settings_battery_allow") }
+                    .buttonStyle(.tonal)
+                    .accessibilityIdentifier("mobile-data-allow")
+                Button { answer(false) } label: { Text("home_mobile_data_deny") }
+                    .buttonStyle(.tonal)
+                    .accessibilityIdentifier("mobile-data-deny")
+            }
+            .padding(.top, 12)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("mobile-data-prompt")
+    }
+
+    private func answer(_ allowed: Bool) {
+        app.chooseMobileData(allowed)
+        dialogs.toast(Text(allowed ? L10n.key("home_mobile_data_allowed") : L10n.key("home_mobile_data_denied")), long: true)
     }
 }
 

@@ -35,7 +35,8 @@ final class PhoneProfileTests: XCTestCase {
             logLevel: config["log_level"] as? String ?? "",
             remoteManagementPK: (config["hypervisors"] as? [String])?.first,
             skyDnsInVpn: SkyDNS.inVpnArgs(vpn),
-            dnsServer: DnsServer.current(vpn) ?? ""
+            dnsServer: DnsServer.current(vpn) ?? "",
+            useMobileData: (transport?["network"] as? [String: Any])?[MobileData.configKey] as? String != MobileData.meteredOffline
         )
     }
 
@@ -105,6 +106,24 @@ final class PhoneProfileTests: XCTestCase {
             value(config, ".routing.transport_preference") as? [String],
             ["stcpr", "squicr", "sudph", "stcp", "webrtc", "swsr", "swtr", "dmsg"]
         )
+    }
+
+    /// Mobile data off pins the core's offline metered mode, and on leaves the core its own (Android:
+    /// ConfigManager's `network` edit). The object's other fields stay.
+    func testMobileDataOffPinsTheOfflineMeteredMode() throws {
+        var generated = try Self.fixture("config-gen-mac")
+        var transport = try XCTUnwrap(generated["transport"] as? [String: Any])
+        XCTAssertNil(transport["network"], "the generator writes no network object")
+        let off = try PhoneProfile.edit(generated, settings: ProfileSettings(), paths: Self.iosPaths)
+        XCTAssertEqual(value(off, ".transport.network.metered") as? String, "offline")
+        let on = try PhoneProfile.edit(off, settings: ProfileSettings(useMobileData: true), paths: Self.iosPaths)
+        XCTAssertNil(value(on, ".transport.network"), "an emptied object is dropped")
+
+        transport["network"] = ["metered": "offline", "metered_interfaces": ["en5"]]
+        generated["transport"] = transport
+        let kept = try PhoneProfile.edit(generated, settings: ProfileSettings(useMobileData: true), paths: Self.iosPaths)
+        XCTAssertNil(value(kept, ".transport.network.metered"))
+        XCTAssertEqual(value(kept, ".transport.network.metered_interfaces") as? [String], ["en5"])
     }
 
     func testUnusableSettingsFallBackToTheDefaults() throws {

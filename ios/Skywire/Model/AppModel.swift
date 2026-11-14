@@ -1,3 +1,4 @@
+import Combine
 import CoreBridge
 import CoreClient
 import Foundation
@@ -24,6 +25,9 @@ final class AppModel: ObservableObject {
     @Published private(set) var footprint: UInt64?
     /// The next start's number while a failed core waits to start again (Android: CoreState.Restarting).
     @Published private(set) var restartAttempt: Int?
+    /// A start held back: mobile data is off and the phone is on no unmetered network. Android's
+    /// service waits the same way, in its Starting state.
+    @Published private(set) var heldForWifi = false
 
     /// The core runs and its API answers.
     var connected: Bool { coreState == .running && apiUp }
@@ -31,6 +35,21 @@ final class AppModel: ObservableObject {
     /// waiting to start again.
     var connecting: Bool { coreState == .starting || (coreState == .running && !apiUp) || restartAttempt != nil }
 
+    /// What Home says about the network under the core.
+    var standing: NetworkStanding {
+        NetworkStanding(
+            coreOn: coreState == .starting || coreState == .running || restartAttempt != nil || heldForWifi,
+            connected: connected, online: internet.online, metered: internet.metered == true,
+            useMobileData: settings.useMobileData, asked: settings.mobileDataAsked
+        )
+    }
+
+    private var networkAllowed: Bool {
+        NetworkStanding.startAllowed(metered: internet.metered, useMobileData: settings.useMobileData)
+    }
+
+    let internet = Internet()
+    private var internetWatch: AnyCancellable?
     let settings: AppSettings
     let client: CoreClient
     let log: CoreLog
@@ -98,6 +117,12 @@ final class AppModel: ObservableObject {
         guard !launched, ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
         launched = true
         publicKey = readPublicKey()
+        internet.start()
+        internetWatch = internet.objectWillChange.sink { [weak self] in
+            self?.objectWillChange.send()
+            // The change lands after this call returns.
+            Task { @MainActor in self?.startIfReleased() }
+        }
         Task { [weak self, host] in
             for await state in host.state {
                 guard let self else { return }
@@ -122,14 +147,51 @@ final class AppModel: ObservableObject {
         settings.wantsConnected = true
         cancelRestart()
         restarts.connected()
+        start()
+    }
+
+    /// Starts the core, or holds the start until the network may be used.
+    private func start() {
+        heldForWifi = !networkAllowed
+        guard !heldForWifi else {
+            lastError = nil
+            return
+        }
         perform { [host] in try await host.start() }
+    }
+
+    /// The network or the user's choice changed: a held start goes ahead once it may.
+    private func startIfReleased() {
+        guard heldForWifi, networkAllowed, settings.wantsConnected else { return }
+        start()
+    }
+
+    /// Starts the core again after work that stopped it, through the same gate as a Connect.
+    private func resume() async throws {
+        heldForWifi = !networkAllowed
+        if !heldForWifi { try await host.start() }
     }
 
     func disconnect() {
         settings.wantsConnected = false
+        heldForWifi = false
         cancelRestart()
         perform { [host] in try await host.stop() }
         sealAfterStop = true
+    }
+
+    /// Saves the mobile data choice. A core that is on restarts to read a changed one (Android:
+    /// MobileData.choose), and a held start goes ahead when the answer allows it.
+    func chooseMobileData(_ allowed: Bool) {
+        let was = settings.useMobileData
+        settings.useMobileData = allowed
+        settings.mobileDataAsked = true
+        objectWillChange.send()
+        if heldForWifi {
+            startIfReleased()
+        } else if was != allowed {
+            applyPinnedSettingNow()
+        }
     }
 
     /// Runs an identity change with the core stopped, then starts it again if it ran (Android:
@@ -149,7 +211,7 @@ final class AppModel: ObservableObject {
         await client.forgetIdentity()
         publicKey = readPublicKey()
         if wasRunning {
-            try await host.start()
+            try await resume()
         } else {
             try vault.seal(enabled: settings.configEncrypted)
         }
@@ -168,7 +230,7 @@ final class AppModel: ObservableObject {
             if wasRunning { try? await host.start() }
             throw error
         }
-        if wasRunning { try await host.start() }
+        if wasRunning { try await resume() }
         return result
     }
 
@@ -188,6 +250,12 @@ final class AppModel: ObservableObject {
     /// Stops the core and starts it again. The start re-applies the profile,
     /// so this is also how a pinned setting (log level, Fleet) takes effect.
     func restartCore() {
+        guard networkAllowed else {
+            // Android's restart passes the same gate as a start: the core stops and waits.
+            heldForWifi = true
+            perform { [host] in try await host.stop() }
+            return
+        }
         perform { [host] in try await host.restart() }
     }
 
@@ -290,6 +358,10 @@ final class AppModel: ObservableObject {
     }
 
     private func restartFailedCore() async {
+        guard networkAllowed else {
+            heldForWifi = true
+            return
+        }
         restarts.starting()
         busy = true
         lastError = nil

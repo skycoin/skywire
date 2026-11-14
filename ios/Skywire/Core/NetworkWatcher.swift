@@ -58,6 +58,12 @@ final class NetworkWatcher {
         }
         monitor.start(queue: DispatchQueue(label: "com.skycoin.skywire.network-watcher"))
         self.monitor = monitor
+        #if DEBUG
+        NetworkOverride.onChange { [weak self] in
+            guard let self, let path = self.monitor?.currentPath else { return }
+            self.note(NetworkPath(path))
+        }
+        #endif
     }
 
     func stop() {
@@ -145,6 +151,12 @@ struct NetworkPath: Sendable {
     }
 
     init(_ path: NWPath) {
+        #if DEBUG
+        if let stand = NetworkOverride.path {
+            self = stand
+            return
+        }
+        #endif
         let usable = path.availableInterfaces.filter { $0.type != .loopback }
         // The network under a VPN, where the sockets are. The Simulator shows only the
         // host's route, a host VPN's utun included, and calls it Wi-Fi.

@@ -75,6 +75,20 @@ public enum RemoteManagement {
     }
 }
 
+/// Whether the visor may use mobile data, off until the user allows it. Off, the core goes
+/// offline on a metered network. The port of Android's core/MobileData.kt.
+public enum MobileData {
+    /// The user's choice (Android: PREF_KEY).
+    public static let prefKey = "use_mobile_data"
+    public static let defaultAllowed = false
+    /// Set once the user has answered, on Home or by the Settings switch (Android: PREF_ASKED).
+    public static let prefAsked = "mobile_data_asked"
+    /// Field inside the config's `transport.network` object.
+    public static let configKey = "metered"
+    /// The core's metered mode that dials nothing, `visorapi.ModeOffline`.
+    public static let meteredOffline = "offline"
+}
+
 /// What the user decides about the core, applied to the config on every
 /// start (the visor reads each once, while it builds its modules, so a change
 /// means a core restart).
@@ -100,6 +114,8 @@ public struct ProfileSettings: Sendable, Equatable {
     public var skyDnsInVpn: Bool
     /// The resolver for ordinary names, blank for each app's default (`DnsServer`).
     public var dnsServer: String
+    /// Whether the visor may use mobile data (`MobileData`).
+    public var useMobileData: Bool
 
     /// The Go memory limit the iOS core runs under (playbook item 1.7): the
     /// packet-tunnel extension's budget is about 50 MB of phys_footprint, and
@@ -115,7 +131,8 @@ public struct ProfileSettings: Sendable, Equatable {
         remoteManagementPK: String? = nil,
         memoryLimit: String? = ProfileSettings.iosMemoryLimit,
         skyDnsInVpn: Bool = SkyDNS.defaultInVpn,
-        dnsServer: String = ""
+        dnsServer: String = "",
+        useMobileData: Bool = MobileData.defaultAllowed
     ) {
         self.transportPrimary = transportPrimary
         self.fleetEnabled = fleetEnabled
@@ -125,5 +142,6 @@ public struct ProfileSettings: Sendable, Equatable {
         self.memoryLimit = memoryLimit
         self.skyDnsInVpn = skyDnsInVpn
         self.dnsServer = dnsServer
+        self.useMobileData = useMobileData
     }
 }

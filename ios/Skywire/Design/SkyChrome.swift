@@ -129,12 +129,12 @@ final class SkyDialogs: ObservableObject {
         withAnimation(.easeIn(duration: 0.1)) { current = nil }
     }
 
-    /// Android's short Toast: a pill near the bottom for about two seconds.
-    func toast(_ text: Text) {
+    /// Android's Toast: a pill near the bottom for about two seconds, or 3.5 s for a long one.
+    func toast(_ text: Text, long: Bool = false) {
         toastTask?.cancel()
         withAnimation(.easeOut(duration: 0.15)) { toastText = text }
         toastTask = Task {
-            try? await Task.sleep(for: .seconds(2))
+            try? await Task.sleep(for: long ? .milliseconds(3500) : .seconds(2))
             guard !Task.isCancelled else { return }
             withAnimation(.easeIn(duration: 0.2)) { toastText = nil }
         }

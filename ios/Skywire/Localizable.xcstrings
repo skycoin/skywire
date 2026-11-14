@@ -22186,6 +22186,64 @@
         }
       }
     },
+    "home_hint_mobile_data" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Using mobile data. Skywire carries no traffic for other visors here, and Settings can keep it off mobile data."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usando datos móviles. Aquí Skywire no transporta tráfico de otros nodos, y en Ajustes puedes mantenerlo fuera de los datos móviles."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Données mobiles en cours d’utilisation. Ici, Skywire ne transporte pas le trafic des autres visors, et les Paramètres permettent de le tenir à l’écart des données mobiles."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在使用移动数据。此时 Skywire 不会为其他节点转发流量，你也可以在设置中让它不使用移动数据。"
+          }
+        }
+      }
+    },
+    "home_hint_no_internet" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This phone has no internet connection. Skywire joins the network by itself once the phone is back online."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este teléfono no tiene conexión a internet. Skywire se une a la red por sí solo cuando el teléfono vuelve a estar en línea."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce téléphone n’a pas de connexion internet. Skywire rejoint le réseau tout seul dès que le téléphone est de nouveau en ligne."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这部手机没有网络连接。手机恢复联网后，Skywire 会自动加入网络。"
+          }
+        }
+      }
+    },
     "home_hint_starting" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -22211,6 +22269,180 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在加入 Skywire 网络。首次连接可能需要几分钟。"
+          }
+        }
+      }
+    },
+    "home_hint_waiting_wifi" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire is set to Wi-Fi only. It joins the network by itself once the phone is on Wi-Fi. Settings can allow mobile data."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire está configurado para usar solo Wi-Fi. Se une a la red por sí solo cuando el teléfono está en Wi-Fi. En Ajustes puedes permitir los datos móviles."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire est réglé sur Wi-Fi uniquement. Il rejoint le réseau tout seul dès que le téléphone est en Wi-Fi. Les Paramètres permettent d’autoriser les données mobiles."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire 已设为仅使用 Wi-Fi。手机连上 Wi-Fi 后，Skywire 会自动加入网络。你可以在设置中允许使用移动数据。"
+          }
+        }
+      }
+    },
+    "home_mobile_data_allowed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire now uses mobile data. You can change this in Settings."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire ya usa datos móviles. Puedes cambiarlo en Ajustes."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire utilise maintenant les données mobiles. Vous pouvez changer ce choix dans les Paramètres."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire 现在会使用移动数据。可以在设置中更改。"
+          }
+        }
+      }
+    },
+    "home_mobile_data_body" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This phone is on mobile data, and Skywire stays off it until you allow it. On mobile data Skywire carries only your own traffic. You can change this later in Settings."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este teléfono está usando datos móviles, y Skywire no los usa hasta que lo permitas. Con datos móviles Skywire solo transporta tu propio tráfico. Puedes cambiarlo más tarde en Ajustes."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce téléphone utilise les données mobiles, et Skywire ne s’en sert pas tant que vous ne l’autorisez pas. Sur les données mobiles, Skywire ne transporte que votre propre trafic. Vous pourrez changer ce choix plus tard dans les Paramètres."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这部手机正在使用移动数据，在你允许之前 Skywire 不会使用它。使用移动数据时，Skywire 只传输你自己的流量。之后可以在设置中更改。"
+          }
+        }
+      }
+    },
+    "home_mobile_data_denied" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire stays on Wi-Fi only. You can change this in Settings."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire sigue solo con Wi-Fi. Puedes cambiarlo en Ajustes."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire reste en Wi-Fi uniquement. Vous pouvez changer ce choix dans les Paramètres."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire 仍仅使用 Wi-Fi。可以在设置中更改。"
+          }
+        }
+      }
+    },
+    "home_mobile_data_deny" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wi-Fi only"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Solo Wi-Fi"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wi-Fi uniquement"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅 Wi-Fi"
+          }
+        }
+      }
+    },
+    "home_mobile_data_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use mobile data?"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Usar datos móviles?"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Utiliser les données mobiles ?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用移动数据？"
           }
         }
       }
@@ -27104,6 +27336,35 @@
         }
       }
     },
+    "settings_battery_allow" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Permitir"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autoriser"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许"
+          }
+        }
+      }
+    },
     "settings_config" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -28318,6 +28579,93 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "开启应用锁"
+          }
+        }
+      }
+    },
+    "settings_mobile_data" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use mobile data"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usar datos móviles"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Utiliser les données mobiles"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用移动数据"
+          }
+        }
+      }
+    },
+    "settings_mobile_data_hint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "When this is off Skywire stays on Wi-Fi only. It goes offline on mobile data and comes back on Wi-Fi. When it is on Skywire also runs on mobile data and other metered networks, and carries only your own traffic there."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Si está desactivado, Skywire usa solo Wi-Fi. Se desconecta con datos móviles y vuelve con Wi-Fi. Si está activado, Skywire también funciona con datos móviles y otras redes de uso medido, y allí solo transporta tu propio tráfico."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Désactivé, Skywire reste en Wi-Fi uniquement. Il passe hors ligne sur les données mobiles et revient en Wi-Fi. Activé, Skywire fonctionne aussi sur les données mobiles et les autres réseaux limités, et n’y transporte que votre propre trafic."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭时，Skywire 仅使用 Wi-Fi：使用移动数据时离线，连上 Wi-Fi 后恢复。开启时，Skywire 也会在移动数据和其他按流量计费的网络上运行，并且只传输你自己的流量。"
+          }
+        }
+      }
+    },
+    "settings_mobile_data_restart" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Changing this restarts the core."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cambiarlo reinicia el núcleo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modifier ce réglage redémarre le cœur."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更改此项会重启核心。"
           }
         }
       }
@@ -30700,6 +31048,35 @@
         }
       }
     },
+    "state_no_internet" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No internet connection"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sin conexión a internet"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pas de connexion internet"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无网络连接"
+          }
+        }
+      }
+    },
     "state_restarting" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -30783,6 +31160,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在停止…"
+          }
+        }
+      }
+    },
+    "state_waiting_wifi" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting for Wi-Fi"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esperando Wi-Fi"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En attente du Wi-Fi"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在等待 Wi-Fi"
           }
         }
       }

@@ -273,6 +273,12 @@ Notes:
 - **Language.** The app follows iOS's per-app language (Settings > Skywire >
   Language). To launch in one: `xcrun simctl launch "iPhone 18 Pro" com.skycoin.skywire
   -AppleLanguages '(zh-Hans)'`.
+- **The network.** A Simulator has no radio, so a debug build takes a stand-in:
+  launch with `-NetworkOverride wifi`, `metered` or `offline`, or change it
+  while the app runs with `xcrun simctl spawn "iPhone 18 Pro" notifyutil -p
+  com.skycoin.skywire.network.metered` (`none` ends it). Home, the start gate
+  and the report to the core all follow it. Mobile data is off until allowed,
+  so `metered` on a fresh install holds the core and Home asks.
 - **Debugging from Xcode.** The Go runtime uses signals (`SIGURG` for
   preemption, `SIGPIPE`). If LLDB stops on them, run `process handle SIGURG
   SIGPIPE -n false -p true -s false` in the debugger console.

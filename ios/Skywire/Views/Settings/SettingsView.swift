@@ -25,17 +25,18 @@ struct SettingsView: View {
                     IdentityCard(model: model).scrollPlaceItem(0)
                     ConfigCard(model: model) { askExport() }.scrollPlaceItem(1)
                     AutoconnectCard().scrollPlaceItem(2)
-                    DnsCard(model: model).scrollPlaceItem(3)
-                    RewardCard(model: model).scrollPlaceItem(4)
-                    RemoteCard(model: model).scrollPlaceItem(5)
-                    AppLockCard().scrollPlaceItem(6)
-                    WalletPricesCard().scrollPlaceItem(7)
-                    PhoneContactsCard().scrollPlaceItem(8)
-                    ThemeCard().scrollPlaceItem(9)
-                    LanguageCard().scrollPlaceItem(10)
-                    DiagnosticsRow { navigator.push(.diagnostics) }.scrollPlaceItem(11)
-                    UpdatesCard().scrollPlaceItem(12)
-                    AboutCard(model: model).scrollPlaceItem(13)
+                    MobileDataCard().scrollPlaceItem(3)
+                    DnsCard(model: model).scrollPlaceItem(4)
+                    RewardCard(model: model).scrollPlaceItem(5)
+                    RemoteCard(model: model).scrollPlaceItem(6)
+                    AppLockCard().scrollPlaceItem(7)
+                    WalletPricesCard().scrollPlaceItem(8)
+                    PhoneContactsCard().scrollPlaceItem(9)
+                    ThemeCard().scrollPlaceItem(10)
+                    LanguageCard().scrollPlaceItem(11)
+                    DiagnosticsRow { navigator.push(.diagnostics) }.scrollPlaceItem(12)
+                    UpdatesCard().scrollPlaceItem(13)
+                    AboutCard(model: model).scrollPlaceItem(14)
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
@@ -402,6 +403,21 @@ private struct AutoconnectCard: View {
                       isOn: Binding(get: { settings.publicAutoconnect }, set: { settings.publicAutoconnect = $0 }),
                       identifier: "settings-autoconnect")
             Note(text: L10n.key("settings_autoconnect_restart")).padding(.top, 10)
+        }
+    }
+}
+
+/// Mobile data on or off (Android: MobileDataCard, see MobileData).
+private struct MobileDataCard: View {
+    @EnvironmentObject private var settings: AppSettings
+    @EnvironmentObject private var app: AppModel
+
+    var body: some View {
+        SectionCard {
+            SwitchRow(title: L10n.key("settings_mobile_data"), hint: L10n.key("settings_mobile_data_hint"),
+                      isOn: Binding(get: { settings.useMobileData }, set: { app.chooseMobileData($0) }),
+                      identifier: "settings-mobile-data")
+            Note(text: L10n.key("settings_mobile_data_restart")).padding(.top, 10)
         }
     }
 }
