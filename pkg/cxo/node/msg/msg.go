@@ -64,6 +64,10 @@ var (
 	// peer exchange
 	_ Msg = &RqPeers{}
 	_ Msg = &Peers{}
+
+	// root deltas, sent only to a peer that answered DeltaProbe
+	_ Msg = &RqDelta{} // <- RqDelta (feed, nonce, since, seq)
+	_ Msg = &Objects{} // -> Objects (vals)
 )
 
 //
@@ -339,6 +343,47 @@ func (ps *Peers) Type() Type { return PeersType }
 func (ps *Peers) Encode() []byte { return encode(ps) }
 
 //
+// root deltas
+//
+
+// DeltaProbe is the key of an RqObject that asks whether the peer serves
+// RqDelta. A peer that does answers Err{DeltaProbeReply}. An older one
+// answers an empty Err, and closes the connection on an RqDelta, which
+// it cannot decode. Version stays the same so both still connect.
+var DeltaProbe = cipher.SumSHA256([]byte("cxo/rqdelta/1"))
+
+// DeltaProbeReply is the Err text that answers DeltaProbe.
+const DeltaProbeReply = "rqdelta/1"
+
+// RqDelta asks for the objects new in the Roots Since..Seq of a head, the
+// ones the peer saved or fetched for them, so a fill needs one round trip
+// instead of one per object.
+type RqDelta struct {
+	Feed  cipher.PubKey
+	Nonce uint64
+	Since uint64
+	Seq   uint64
+}
+
+// Type implements Msg interface
+func (*RqDelta) Type() Type { return RqDeltaType }
+
+// Encode the RqDelta
+func (r *RqDelta) Encode() []byte { return encode(r) }
+
+// Objects is the reply to RqDelta. The receiver checks every value by its
+// hash, so it trusts nothing it did not ask for.
+type Objects struct {
+	Values [][]byte
+}
+
+// Type implements Msg interface
+func (*Objects) Type() Type { return ObjectsType }
+
+// Encode the Objects
+func (o *Objects) Encode() []byte { return encode(o) }
+
+//
 // Type / Encode / Deocode / String()
 //
 
@@ -371,6 +416,9 @@ const (
 
 	RqPeersType // 15
 	PeersType   // 16
+
+	RqDeltaType // 17
+	ObjectsType // 18
 )
 
 // Type to string mapping
@@ -399,6 +447,9 @@ var msgTypeString = [...]string{
 
 	RqPeersType: "RqPeers",
 	PeersType:   "Peers",
+
+	RqDeltaType: "RqDelta",
+	ObjectsType: "Objects",
 }
 
 // String implements fmt.Stringer interface
@@ -434,6 +485,9 @@ var forwardRegistry = [...]reflect.Type{
 
 	RqPeersType: reflect.TypeFor[RqPeers](),
 	PeersType:   reflect.TypeFor[Peers](),
+
+	RqDeltaType: reflect.TypeFor[RqDelta](),
+	ObjectsType: reflect.TypeFor[Objects](),
 }
 
 // An InvalidTypeError represents decoding error when
