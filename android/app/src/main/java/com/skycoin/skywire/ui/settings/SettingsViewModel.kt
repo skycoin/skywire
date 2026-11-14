@@ -21,6 +21,7 @@ import com.skycoin.skywire.core.CoreServiceState
 import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.DnsServer
 import com.skycoin.skywire.core.RewardXpub
+import com.skycoin.skywire.core.MobileData
 import com.skycoin.skywire.core.PublicAutoconnect
 import com.skycoin.skywire.core.RemoteManagement
 import com.skycoin.skywire.core.SecretStore
@@ -86,6 +87,8 @@ data class SettingsUiState(
     val appLockEnabled: Boolean = AppLock.DEFAULT,
     /** Automatic transports to public visors — see [PublicAutoconnect]. */
     val publicAutoconnect: Boolean = PublicAutoconnect.DEFAULT,
+    /** Whether the visor may use mobile data, see [MobileData]. */
+    val useMobileData: Boolean = MobileData.DEFAULT,
     /** The resolver for ordinary names, blank for [DnsServer.DEFAULT]. */
     val dnsServer: String = "",
     /** The visor's reward address, as [VisorApi.rewardAddress] reads it; empty while the core is down. */
@@ -175,6 +178,11 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                 .collectLatest { enabled ->
                     mutable.update { it.copy(publicAutoconnect = enabled) }
                 }
+        }
+        viewModelScope.launch {
+            prefs.boolean(MobileData.PREF_KEY, MobileData.DEFAULT).collectLatest { allowed ->
+                mutable.update { it.copy(useMobileData = allowed) }
+            }
         }
         viewModelScope.launch {
             prefs.string(DnsServer.PREF_KEY).collectLatest { stored ->
@@ -641,6 +649,14 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun setPublicAutoconnect(enabled: Boolean) {
         viewModelScope.launch { prefs.putBoolean(PublicAutoconnect.PREF_KEY, enabled) }
+    }
+
+    /**
+     * Let the visor use mobile data or keep it off. The core reads its
+     * metered mode when it starts, so one that is on restarts.
+     */
+    fun setUseMobileData(allowed: Boolean) {
+        viewModelScope.launch { MobileData.choose(getApplication(), allowed) }
     }
 
     /**

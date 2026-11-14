@@ -73,9 +73,29 @@ func (mb *Mailbox) Limits() Limits {
 	return mb.lim.limits
 }
 
-// MaxMessageSize is what the SMTP session advertises and enforces.
+// MaxMessageSize is the largest message the mailbox takes, counting each
+// attachment at its file size.
 func (mb *Mailbox) MaxMessageSize() int64 {
 	return mb.Limits().MaxMessageSize
+}
+
+// maxWireSize is what the SMTP session advertises and enforces.
+func (mb *Mailbox) maxWireSize() int64 {
+	return WireSize(mb.MaxMessageSize())
+}
+
+// mimeAllowance is the room a message gets over its files as sent, for the
+// headers, the text and each attachment's part header.
+const mimeAllowance = 64 << 10
+
+// WireSize is the most a message with n bytes of files takes as sent.
+// compose writes attachments base64 in 76 column lines, about 37% more.
+func WireSize(n int64) int64 {
+	if n <= 0 {
+		return n
+	}
+	enc := (n + 2) / 3 * 4
+	return enc + (enc+b64Line-1)/b64Line*2 + mimeAllowance
 }
 
 // Usage is the bytes held by every folder.

@@ -142,6 +142,8 @@
     <string name="core_notification_starting">Démarrage du visor…</string>
     <string name="core_notification_running">Connecté au réseau Skywire.</string>
     <string name="core_notification_offline">En attente d’une connexion internet.</string>
+    <string name="core_notification_mobile_data">Connecté via les données mobiles.</string>
+    <string name="core_notification_waiting_wifi">Les données mobiles sont désactivées pour Skywire. En attente du Wi-Fi.</string>
     <string name="core_notification_restarting">Le visor a planté — redémarrage (tentative %1$d).</string>
 
     <!-- Voice calls -->
@@ -179,12 +181,20 @@
     <string name="state_disconnected">Déconnecté</string>
     <string name="state_starting">Démarrage…</string>
     <string name="state_no_internet">Pas de connexion internet</string>
+    <string name="state_waiting_wifi">En attente du Wi-Fi</string>
     <string name="state_connected">Connecté</string>
     <string name="state_stopping">Arrêt…</string>
     <string name="state_restarting">Redémarrage (tentative %1$d)…</string>
     <string name="home_hint_disconnected">Connecter démarre le cœur Skywire sur ce téléphone.</string>
     <string name="home_hint_starting">Connexion au réseau Skywire. La première connexion peut prendre quelques minutes.</string>
     <string name="home_hint_no_internet">Ce téléphone n’a pas de connexion internet. Skywire rejoint le réseau tout seul dès que le téléphone est de nouveau en ligne.</string>
+    <string name="home_hint_waiting_wifi">Skywire est réglé sur Wi-Fi uniquement. Il rejoint le réseau tout seul dès que le téléphone est en Wi-Fi. Les Paramètres permettent d’autoriser les données mobiles.</string>
+    <string name="home_hint_mobile_data">Données mobiles en cours d’utilisation. Ici, Skywire ne transporte pas le trafic des autres visors, et les Paramètres permettent de le tenir à l’écart des données mobiles.</string>
+    <string name="home_mobile_data_title">Utiliser les données mobiles ?</string>
+    <string name="home_mobile_data_body">Ce téléphone utilise les données mobiles, et Skywire ne s’en sert pas tant que vous ne l’autorisez pas. Sur les données mobiles, Skywire ne transporte que votre propre trafic. Vous pourrez changer ce choix plus tard dans les Paramètres.</string>
+    <string name="home_mobile_data_deny">Wi-Fi uniquement</string>
+    <string name="home_mobile_data_allowed">Skywire utilise maintenant les données mobiles. Vous pouvez changer ce choix dans les Paramètres.</string>
+    <string name="home_mobile_data_denied">Skywire reste en Wi-Fi uniquement. Vous pouvez changer ce choix dans les Paramètres.</string>
     <string name="home_error_start">Le cœur n’a pas démarré. Consultez le journal du processus.</string>
     <string name="visor_info_title">Visor</string>
     <string name="visor_public_key">Clé publique</string>
@@ -644,6 +654,9 @@
     <string name="settings_autoconnect">Connecter aux visors publics</string>
     <string name="settings_autoconnect_hint">Garde des transports ouverts vers des visors publics pour que le réseau puisse router à travers ce téléphone, et que ce téléphone puisse router à travers eux. Coûte batterie et données mobiles, voilà pourquoi c’est désactivé. Les longueurs de route au-delà d’un saut en ont besoin.</string>
     <string name="settings_autoconnect_restart">S’applique au prochain démarrage du cœur.</string>
+    <string name="settings_mobile_data">Utiliser les données mobiles</string>
+    <string name="settings_mobile_data_hint">Désactivé, Skywire reste en Wi-Fi uniquement. Il passe hors ligne sur les données mobiles et revient en Wi-Fi. Activé, Skywire fonctionne aussi sur les données mobiles et les autres réseaux limités, et n’y transporte que votre propre trafic.</string>
+    <string name="settings_mobile_data_restart">Modifier ce réglage redémarre le cœur.</string>
     <string name="settings_dns">Serveur DNS</string>
     <string name="settings_dns_hint">SkyVPN et SkyDNS demandent à ce serveur chaque nom qui n’est ni .dmsg ni .skynet, via DNS-over-TLS quand le serveur l’offre, comme le font Cloudflare, Google et Quad9. Laissé vide, SkyVPN utilise 1.1.1.1 (Cloudflare), parce qu’un serveur VPN n’a pas de résolveur à partager, et SkyDNS seul utilise le DNS de ce téléphone.</string>
     <string name="settings_dns_invalid">Entrez une adresse IPv4, par exemple 9.9.9.9.</string>
@@ -1218,7 +1231,7 @@
     <string name="mail_attachment_failed">Impossible d’enregistrer la pièce jointe : %1$s</string>
     <string name="mail_compose_title">Nouveau message</string>
     <string name="mail_to_hint">Une adresse SkyMail, ou la clé publique d’un visor</string>
-    <string name="mail_via_hint">Toutes les adresses de À et Cc passent par ce réseau. dmsg n’exige pas de route ; skynet est plus rapide quand il en existe une.</string>
+    <string name="mail_via_hint">Toutes les adresses de À et Cc passent par ce réseau. Un destinataire sur votre réseau local passe par un lien direct. dmsg n’exige pas de route ; skynet est plus rapide quand il en existe une.</string>
     <string name="mail_contacts">Contacts</string>
     <string name="mail_no_contacts">Pas encore de contacts. Ajoutez-en un, ou enregistrez un expéditeur depuis un message.</string>
     <string name="mail_contacts_shared">Le carnet de contacts du visor. SkyChat y prend aussi les noms.</string>
@@ -1236,7 +1249,7 @@
     <string name="mail_body">Message</string>
     <string name="mail_attach">Joindre des fichiers</string>
     <string name="mail_remove">Retirer</string>
-    <string name="mail_send_note">Le courrier part maintenant, via dmsg pour une adresse .dmsg. Un destinataire dont le visor est hors ligne ne le reçoit pas, et rien ne réessaie.</string>
+    <string name="mail_send_note">Le courrier part maintenant. Un destinataire dont le visor est hors ligne ne le reçoit pas, et rien ne réessaie.</string>
     <string name="mail_send">Envoyer</string>
     <string name="mail_sending">Envoi…</string>
     <string name="mail_sent">Envoyé</string>
@@ -1244,8 +1257,8 @@
     <string name="mail_send_unknown">Livraison en cours : le visor n’a pas encore répondu. Vérifiez Envoyés dans quelques minutes avant de renvoyer.</string>
     <string name="mail_bad_address">Ce n’est pas une adresse SkyMail : %1$s</string>
     <string name="mail_no_recipient">Ajoutez un destinataire.</string>
-    <string name="mail_attachments_too_big">Ces pièces jointes deviennent %1$s en transit — un message peut faire environ %2$s.</string>
-    <string name="mail_sent_size">Environ %1$s à l’envoi, sur %2$s autorisés. Le courrier transporte les fichiers sous forme de texte, ce qui les grossit d’environ un tiers.</string>
+    <string name="mail_attachments_too_big">Ces fichiers font %1$s au total, et un message peut en porter %2$s.</string>
+    <string name="mail_attachments_size">Pièces jointes : %1$s sur %2$s.</string>
     <string name="mail_result_title">Tout le monde ne l’a pas reçu</string>
     <string name="mail_result_delivered">Livré via %1$s</string>
     <string name="mail_result_failed">Non livré : %1$s</string>

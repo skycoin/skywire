@@ -966,7 +966,7 @@ private fun ComposeView(state: MailUiState, viewModel: MailViewModel) {
         }
         if (draft.attachments.isNotEmpty()) {
             Text(
-                stringResource(R.string.mail_sent_size, formatBytes(draftWireSize(draft.attachments)), formatBytes(state.messageLimit)),
+                stringResource(R.string.mail_attachments_size, formatBytes(draftFilesSize(draft.attachments)), formatBytes(state.messageLimit)),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

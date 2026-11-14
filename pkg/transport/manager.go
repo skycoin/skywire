@@ -110,6 +110,9 @@ type Manager struct {
 	// builds). Typed `any` so addrresolver — which pulls net/http — stays out of
 	// the TinyGo graph; recover it via the build-tagged ARClient() getter.
 	arClient any
+	// localMiss holds, per peer, until when EnsureLocalTransport answers
+	// ErrNotLocal without asking again.
+	localMiss sync.Map
 	// ebc is the app-event broadcaster (*appevent.Broadcaster on native builds).
 	// Typed `any` so appevent (net/rpc) stays out of the TinyGo graph; it is only
 	// stored and forwarded, never method-called here.

@@ -695,3 +695,36 @@ func TestDialVisor_LANFailsFallsBackToPublic(t *testing.T) {
 	// LAN attempt first, then the public v4 fallback.
 	require.Equal(t, []string{"192.168.1.2:5", "1.2.3.4:5"}, dialed)
 }
+
+// TestDialVisor_SameLANBehindVPN: the two public IPs differ, as a VPN on one
+// side makes them, so only a dial marked WithSameLAN tries the peer's address
+// on our subnet, and only that one of its LAN addresses.
+func TestDialVisor_SameLANBehindVPN(t *testing.T) {
+	lPK, _ := keyPair(t)
+	remote, _ := keyPair(t)
+	ar := &addrresolver.MockAPIClient{}
+	ar.On("LocalPublicIP").Return("45.56.79.245")
+	ar.On("Resolve", mock.Anything, mock.Anything, remote).Return(addrresolver.VisorData{
+		RemoteAddr: "94.24.86.242:5",
+		LocalAddresses: addrresolver.LocalAddresses{
+			Port:      "5",
+			Addresses: []string{"10.8.0.2", "192.168.1.117"},
+		},
+	}, nil)
+	_, home, err := net.ParseCIDR("192.168.1.133/24")
+	require.NoError(t, err)
+	prev := localNetworks
+	localNetworks = func() []*net.IPNet { return []*net.IPNet{home} }
+	t.Cleanup(func() { localNetworks = prev })
+
+	c := newTestResolvedClient(types.STCPR, lPK, ar)
+	var dialed []string
+	_, err = c.dialVisor(context.Background(), remote, recordDial(&dialed, nil))
+	require.NoError(t, err)
+	require.Equal(t, []string{"94.24.86.242:5"}, dialed, "an ordinary dial goes to the public address")
+
+	dialed = nil
+	_, err = c.dialVisor(WithSameLAN(context.Background()), remote, recordDial(&dialed, nil))
+	require.NoError(t, err)
+	require.Equal(t, []string{"192.168.1.117:5"}, dialed)
+}

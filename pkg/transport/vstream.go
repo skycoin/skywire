@@ -28,6 +28,7 @@ package transport
 import (
 	"bytes"
 	"cmp"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -365,6 +366,12 @@ func (m *VStreamMux) Dial(remotePK cipher.PubKey, appName string) (*VStream, err
 		Debug("VStreamMux: dialing on transport")
 
 	return m.DialOnTransportAs(targetTp, appName)
+}
+
+// EnsureLocalTransport makes a transport Dial can use to a peer on the local
+// network, as Manager.EnsureLocalTransport does.
+func (m *VStreamMux) EnsureLocalTransport(ctx context.Context, remotePK cipher.PubKey) error {
+	return m.tm.EnsureLocalTransport(ctx, remotePK)
 }
 
 // DialByTransportID opens a virtual stream to remotePK pinned to a

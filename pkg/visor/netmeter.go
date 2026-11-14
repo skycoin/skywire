@@ -33,6 +33,7 @@ type meterLevers interface {
 	closeDirect() int
 	capDmsgSessions(n int) // n <= 0 restores the configured count
 	pauseDmsgDial(on bool)
+	closeDmsg() int
 }
 
 // meterState is what the visor knows about the network being metered and
@@ -190,6 +191,10 @@ func applyLevers(l meterLevers, old, want int) bool {
 		l.capDmsgSessions(0)
 	}
 	l.pauseDmsgDial(want >= 3)
+	// After the pause, so nothing dials the sessions back.
+	if want >= 3 {
+		l.closeDmsg()
+	}
 	if vl, ok := l.(visorLevers); ok {
 		return vl.ready()
 	}
@@ -289,6 +294,16 @@ func (l visorLevers) pauseDmsgDial(on bool) {
 	if c := l.v.dmsgC; c != nil {
 		c.SetDialPaused(on)
 	}
+}
+
+func (l visorLevers) closeDmsg() int {
+	c := l.v.dmsgC
+	if c == nil {
+		return 0
+	}
+	n := c.ForceReconnect()
+	l.v.netMoveLog().Infof("Closed %d dmsg sessions", n)
+	return n
 }
 
 func (v *Visor) routerLocked() any {

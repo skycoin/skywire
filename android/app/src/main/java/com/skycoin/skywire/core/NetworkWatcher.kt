@@ -218,7 +218,7 @@ internal class NetworkWatcher(context: Context) {
         val reports = Channel<Unit>(Channel.CONFLATED)
         val state = NetworkMoves()
 
-        val callback = object : ConnectivityManager.NetworkCallback() {
+        fun callback() = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 note(network, cm.getLinkProperties(network))
             }
@@ -287,7 +287,10 @@ internal class NetworkWatcher(context: Context) {
         // networks are skipped (see [NetworkMoves.observe]), and a move made
         // while SkyVPN is up waits for the core's own keepalives, as it did
         // before this class existed.
+        // The default is followed there too: an Android 17 preview image told
+        // the best matching listener about cellular 100 s after Wi-Fi dropped.
         var callbacks: HandlerThread? = null
+        val registered = mutableListOf<ConnectivityManager.NetworkCallback>()
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 val underVpn = NetworkRequest.Builder()
@@ -296,15 +299,18 @@ internal class NetworkWatcher(context: Context) {
                     .build()
                 val thread = HandlerThread(TAG).apply { start() }
                 callbacks = thread
-                cm.registerBestMatchingNetworkCallback(underVpn, callback, Handler(thread.looper))
+                val handler = Handler(thread.looper)
+                registered += callback().also { cm.registerBestMatchingNetworkCallback(underVpn, it, handler) }
+                registered += callback().also { cm.registerDefaultNetworkCallback(it, handler) }
             } else {
-                cm.registerDefaultNetworkCallback(callback)
+                registered += callback().also { cm.registerDefaultNetworkCallback(it) }
             }
         } catch (e: SecurityException) {
             // ACCESS_NETWORK_STATE is in the manifest, but a hardened ROM can
             // still refuse. The visor's own keepalives remain the fallback —
             // slower, not absent.
             Log.w(TAG, "cannot watch the default network: ${e.message}")
+            registered.forEach { runCatching { cm.unregisterNetworkCallback(it) } }
             callbacks?.quitSafely()
             return@launch
         }
@@ -328,7 +334,7 @@ internal class NetworkWatcher(context: Context) {
             // The framework holds this registration past our scope; unregister
             // even when the scope is already cancelled.
             withContext(NonCancellable) {
-                runCatching { cm.unregisterNetworkCallback(callback) }
+                registered.forEach { runCatching { cm.unregisterNetworkCallback(it) } }
                 callbacks?.quitSafely()
             }
         }

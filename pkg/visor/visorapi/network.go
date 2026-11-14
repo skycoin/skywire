@@ -79,8 +79,8 @@ const (
 	// ModeDmsgOnly is lean, closes every direct transport, refuses new ones
 	// and keeps at most two dmsg sessions.
 	ModeDmsgOnly = "dmsg-only"
-	// ModeOffline is dmsg-only that also stops dialing anything, dmsg
-	// sessions and dmsg transports included.
+	// ModeOffline is dmsg-only that also closes its dmsg sessions and stops
+	// dialing anything, dmsg sessions and dmsg transports included.
 	ModeOffline = "offline"
 )
 

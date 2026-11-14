@@ -71,6 +71,7 @@ class ConfigManager(
         skyDnsStandalone: Boolean,
         skyDnsInVpn: Boolean,
         dnsServer: String,
+        useMobileData: Boolean,
     ): Result<File> = withContext(Dispatchers.IO) {
         paths.ensureDirs()
         // Before the existence check below, which is what decides whether to
@@ -113,6 +114,7 @@ class ConfigManager(
                 skyDnsStandalone,
                 skyDnsInVpn,
                 dnsServer,
+                useMobileData,
                 skychatPasswordFile = ensureGatePassword(
                     SkychatProfile.passwordFile(paths),
                     secrets.skychatPassword(),
@@ -234,6 +236,8 @@ class ConfigManager(
      *    the field whenever the router settings are saved live.
      *  - `log_level` — the same arrangement, for the same reason (see
      *    [CoreLogLevel]).
+     *  - `transport.network.metered` — the mode on mobile data (see
+     *    [MobileData]), pinned every launch like the others.
      *  - `hypervisors` — the remote-management grant (see
      *    [RemoteManagement]). Pinned to exactly the granted key, or empty:
      *    this list is what admits another machine to the visor's RPC
@@ -250,6 +254,7 @@ class ConfigManager(
         skyDnsStandalone: Boolean,
         skyDnsInVpn: Boolean,
         dnsServer: String,
+        useMobileData: Boolean,
         skychatPasswordFile: File,
         skydexPasswordFile: File,
     ) {
@@ -281,6 +286,12 @@ class ConfigManager(
                                     JsonPrimitive(File(paths.localDir, "transport_logs").absolutePath),
                                 )
                             }
+                            // Unset leaves the core its own default, lean.
+                            putObject("network") {
+                                if (useMobileData) remove(MobileData.CONFIG_KEY)
+                                else put(MobileData.CONFIG_KEY, JsonPrimitive(MobileData.METERED_OFFLINE))
+                            }
+                            if ((this["network"] as? JsonObject)?.isEmpty() == true) remove("network")
                         },
                     )
                     "hypervisor" -> put(

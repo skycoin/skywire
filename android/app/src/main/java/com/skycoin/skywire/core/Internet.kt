@@ -25,8 +25,10 @@ object Internet {
                 trySend(has(caps))
             }
 
+            // A default network callback hears onLost only when no network is
+            // left, and activeNetwork can still name the lost one at that moment.
             override fun onLost(network: Network) {
-                trySend(has(cm.getNetworkCapabilities(cm.activeNetwork)))
+                trySend(false)
             }
         }
         cm.registerDefaultNetworkCallback(callback)

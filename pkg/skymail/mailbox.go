@@ -47,6 +47,9 @@ type Config struct {
 	// Dialers reach a peer's port 25, keyed by address suffix. A
 	// suffix with no dialer cannot be sent to.
 	Dialers map[string]skymailbridge.Dialer
+	// Local, when set, reaches a peer on this visor's local network over a
+	// direct link and fails at once for any other. Delivery tries it first.
+	Local skymailbridge.Dialer
 	// Limits bound what the mailbox keeps; zero fields take defaults.
 	Limits Limits
 	// Outbox queues mail for a recipient that cannot take it yet and
@@ -247,16 +250,16 @@ func (mb *Mailbox) Serve(ctx context.Context, lis net.Listener) error {
 // set so Rcpt/Deliver read as SMTP verbs, not mailbox operations.
 type receiver struct{ mb *Mailbox }
 
-// MaxMessageSize makes the session enforce the mailbox's own limit.
-func (r receiver) MaxMessageSize() int64 { return r.mb.MaxMessageSize() }
+// MaxMessageSize makes the session enforce the mailbox's own limit, as sent.
+func (r receiver) MaxMessageSize() int64 { return r.mb.maxWireSize() }
 
 // MaxDataSize lets in a sealed envelope that holds a message of the
 // largest size. Deliver checks what the body holds.
 func (r receiver) MaxDataSize() int64 {
-	if n := r.mb.MaxMessageSize(); r.mb.sealing() && n > 0 {
+	if n := r.mb.maxWireSize(); r.mb.sealing() && n > 0 {
 		return SealedSize(n)
 	}
-	return r.mb.MaxMessageSize()
+	return r.mb.maxWireSize()
 }
 
 // Extensions tells senders this mailbox opens sealed envelopes.
@@ -354,7 +357,7 @@ func (mb *Mailbox) file(peer cipher.PubKey, body []byte, sealedOnly bool) (strin
 	if !r.mb.allowed(sender) {
 		return "", errNotWhitelisted
 	}
-	if limit := r.mb.MaxMessageSize(); limit > 0 && int64(len(body)) > limit {
+	if limit := r.mb.maxWireSize(); limit > 0 && int64(len(body)) > limit {
 		return "", &skymailbridge.Reply{Code: 552, Enhanced: "5.3.4", Text: fmt.Sprintf("message exceeds the limit of %d octets", limit)}
 	}
 	key := seenKey(sender, body)

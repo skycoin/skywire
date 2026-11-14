@@ -531,6 +531,9 @@ type DialOptionsReq struct {
 	// 1-hop over it, bypassing the route-finder. The `--direct` skynet flag
 	// sets this. In spirit mutually exclusive with MinHops >= 2.
 	Direct bool
+	// Local, when true, dials only over a direct link to a peer on this
+	// visor's local network, made on demand, and fails otherwise. Skynet only.
+	Local bool
 	// DiversifyTransports opts this dial into visor-side auto-diversification
 	// for multi-tunnel bandwidth aggregation (docs/mux_aggregation_rfc.md
 	// step 3). Set by the skysocks-client for its extra tunnels (2..N): the
@@ -573,7 +576,7 @@ type DialOptionsReq struct {
 // (MuxRoutes=1 / MinHops=1 lets an app force a single / direct route out from
 // under a visor-global min_hops or mux_routes > 1).
 func (r DialOptionsReq) Explicit() bool {
-	return r.Direct || r.DiversifyTransports || r.RequireDisjointFirstHop ||
+	return r.Direct || r.Local || r.DiversifyTransports || r.RequireDisjointFirstHop ||
 		len(r.ExcludeFirstHopPKs) > 0 ||
 		r.MuxRoutes != 0 || r.MinHops != 0 ||
 		r.ForwardMinHops != 0 || r.ReverseMinHops != 0 ||
@@ -741,6 +744,9 @@ func dialWithMuxRoutes(ctx context.Context, remote appnet.Addr, req *DialOptions
 		return nil, err
 	}
 	sw, ok := nw.(*appnet.SkywireNetworker)
+	if !ok && req.Local {
+		return nil, appnet.ErrNoLocalLink
+	}
 	if !ok {
 		// Non-skynet networker (e.g. dmsg) — per-call opts are no-op
 		// concepts at this layer. Fall through to the default dial.
@@ -764,6 +770,7 @@ func dialWithMuxRoutes(ctx context.Context, remote appnet.Addr, req *DialOptions
 		opts.ExcludeFirstHopPeers = append(opts.ExcludeFirstHopPeers, excl...)
 		opts.ExcludeIntermediatePKs = append(opts.ExcludeIntermediatePKs, excl...)
 	}
+	opts.LocalOnly = req.Local
 	if req.Direct {
 		// Force a 1-hop direct dial that creates the transport on demand and
 		// bypasses the route-finder. Mirrors the policy-layer Fallback="direct"

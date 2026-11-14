@@ -228,6 +228,7 @@ fun SettingsScreen(
                     onToggle = viewModel::setPublicAutoconnect,
                 )
             }
+            item { MobileDataCard(state, viewModel::setUseMobileData) }
             item { DnsCard(state, viewModel::setDnsServer) }
             item { RewardCard(state, viewModel::setRewardAddress) }
             item {
@@ -634,6 +635,35 @@ private fun PublicAutoconnectCard(
         Spacer(Modifier.height(10.dp))
         Text(
             stringResource(R.string.settings_autoconnect_restart),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** Mobile data on or off, see [com.skycoin.skywire.core.MobileData]. */
+@Composable
+private fun MobileDataCard(state: SettingsUiState, onToggle: (Boolean) -> Unit) {
+    SectionCard {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    stringResource(R.string.settings_mobile_data),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    stringResource(R.string.settings_mobile_data_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Switch(checked = state.useMobileData, onCheckedChange = onToggle)
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            stringResource(R.string.settings_mobile_data_restart),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
