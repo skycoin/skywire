@@ -1868,9 +1868,13 @@ func (ce *Client) reapOrphanPorts() {
 		Debug("Reaped orphaned ephemeral port reservations")
 }
 
-// SetDialPaused stops the client dialing server sessions while p is true.
-// Sessions already up stay up and are not redialed when they drop. False
-// resumes dialing.
+// ErrDialPaused is the answer to a server session dial while SetDialPaused
+// is in force.
+var ErrDialPaused = errors.New("dmsg: dialing server sessions is paused")
+
+// SetDialPaused stops the client dialing server sessions while p is true,
+// from the serve loop and for a stream alike. Sessions already up stay up
+// and are not redialed when they drop. False resumes dialing.
 func (ce *Client) SetDialPaused(p bool) {
 	ce.dialPaused.Store(p)
 }

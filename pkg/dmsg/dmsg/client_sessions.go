@@ -569,6 +569,9 @@ func isSecureURL(addr string) bool {
 }
 
 func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs ClientSession, err error) {
+	if ce.dialPaused.Load() {
+		return ClientSession{}, ErrDialPaused
+	}
 	ce.log.WithField("remote_pk", entry.Static).Debug("Dialing session...")
 
 	if srv := inProcessServer(entry.Static); srv != nil && ce.conf.Callbacks.OnSessionDial(CarrierInProcess, "pipe") == nil {
@@ -750,6 +753,9 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 // whenever the preferred carrier was unreachable, churning every session the
 // converge ticker touched.
 func (ce *Client) dialSessionOn(ctx context.Context, entry *disc.Entry, carrier string) (ClientSession, error) {
+	if ce.dialPaused.Load() {
+		return ClientSession{}, ErrDialPaused
+	}
 	var (
 		dSes     ClientSession
 		err      error
@@ -820,6 +826,12 @@ func (ce *Client) finishDialedSession(ctx context.Context, dSes ClientSession, n
 		ce.sessionsMx.Unlock()
 		_ = dSes.Close() //nolint:errcheck
 		return ClientSession{}, errors.New("client closed")
+	}
+	// A dial that was in flight when the pause began leaves no session up.
+	if ce.dialPaused.Load() {
+		ce.sessionsMx.Unlock()
+		_ = dSes.Close() //nolint:errcheck
+		return ClientSession{}, ErrDialPaused
 	}
 	old, hadOld := ce.sessions[dSes.RemotePK()]
 	ce.sessions[dSes.RemotePK()] = dSes.SessionCommon
