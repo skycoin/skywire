@@ -1,4 +1,4 @@
-// Package cmdutil pkg/cmdutil/skyenv.go c0-com-util
+// Package cmdutil pkg/cmdutil/skyenv.go c1-com-util
 //
 // Shared SKYENV config file evaluation helpers. Used by
 // `skywire cli config gen` and the dmsg commands.

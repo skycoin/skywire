@@ -1,6 +1,6 @@
 //go:build js
 
-// Package cmdutil pkg/cmdutil/terminal_js.go c0-com-util
+// Package cmdutil pkg/cmdutil/terminal_js.go c1-com-util
 package cmdutil
 
 import (

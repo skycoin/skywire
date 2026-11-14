@@ -63,15 +63,19 @@ labels should go. Earlier drafts had eight domains; `rte`, `cxo`, `dsc` and
 | `com.env` | `skyenv` — shared constants only |
 | `com.util` | `util`, `netutil`, `cmdutil`, `flags`, `metricsutil`, `buildinfo`, `geo`, `geoip`, `pg`, `testhelpers`, `fastjson`, `gcmon`, `flightrec`, `cliout` and `cliout/clihelp` |
 
+Three of these are not c0. `cmdutil` and `flags` are c1 because they import
+the dmsg client, and `httpauth` is c2 because it imports `cxo/storeconfig`.
+`skywireconfig/skyenvfile` is `c0-com-env`, since it imports nothing.
+
 ### `net` — the mesh
 
 | system | packages |
 |---|---|
-| `net.dmsg` | `dmsg`, `dmsgc` (c1) — the substrate |
+| `net.dmsg` | `dmsg` (c1) — the substrate; `dmsgc` (c2), which imports `app/appevent` |
 | `net.transport` | `transport`, `transport-setup`, `skyquic`, `skyudpbridge`, `stunserver`, `tcpproxy` (c1/c2) |
 | `net.routing` | `routing`, `router`, `rfclient`, `route-finder`, `skyroute` (c1/c2) |
 | `net.cxo` | `cxo` (node, treestore, skyobject, cxosub), `storeconfig` (c2) |
-| `net.discovery` | TPD, AR, SD, UT, dmsg discovery's server (`dmsg/discovery/api`), `deployment/charts`, `deployment/netgraph`, `serviceconfig`, config-bootstrapper (c4); the clients `servicedisc`, `utclient`, `serviceuptime`, `uptimestats`, `dmsg/discovery/serverfeed` (c2) |
+| `net.discovery` | UT, `serviceconfig`, config-bootstrapper (c4); the TPD, AR, SD, RF and conf backends, `deployment/charts`, `deployment/netgraph`, `cxo/cxoaggregate` and `dmsg/discovery/api`, which the visor embeds (c3); the clients `servicedisc`, `utclient`, `serviceuptime`, `uptimestats`, `dmsg/discovery/serverfeed` (c2) |
 | `net.monitor` | `networkmonitor`, `network-monitor` (c2) |
 
 ### `app` — what runs on the mesh
@@ -82,9 +86,9 @@ labels should go. Earlier drafts had eight domains; `rte`, `cxo`, `dsc` and
 | `app.chat` | `skychat` |
 | `app.vpn` | `vpn` (client/server), `skydns` |
 | `app.skynet` | `skynet`, `skynetweb`, `skynetca` |
-| `app.web` | `dmsgweb`, `proxyinterstitial` (c4); `proxystatus` (c2) |
+| `app.web` | `dmsgweb`, `proxyinterstitial` (c3); `proxystatus` (c2) |
 | `app.mail` | `skymail`, `skymailbridge` |
-| `app.rewards` | `rewards`, `tpviz` (with `netview`, `wasmgl`, `cmd/netview`), `visnetwork` |
+| `app.rewards` | `rewards` (with the reward system server `deployment/rewards/server`), `tpviz` (with `netview`, `wasmgl`, `cmd/netview`), `visnetwork` |
 | `app.wallet` | `wallet`, `btcgateway`, `skycoin-web`, `cmd/skycoin`, skydex client and market |
 
 ### `vis` — the visor platform
@@ -92,7 +96,7 @@ labels should go. Earlier drafts had eight domains; `rte`, `cxo`, `dsc` and
 | system | packages |
 |---|---|
 | `vis.core` | `visor` (with `visorapi`), `skywireconfig`/`visorconfig`, `svcmode`, `alerts` (c3) |
-| `vis.appsvc` | `app` (the app-running framework / appserver), `services` (c1/c2) |
+| `vis.appsvc` | `app` (the app-running framework / appserver) (c2); `services` (c3) |
 | `vis.wasm` | `wasmhv` (with `deskhost`, `execwasm`), `wasmrpc` (c3) |
 | `vis.pty` | `pty` (c3) |
 | `vis.cli` | `cmd/skywire`, `cmd/skywire-cli`, `cmd/skywire-visor`, `cmd/hvinspect`, `clicache`, the `cliout/cli*` output shapes, `internal/rpcgen` (c3/c4) |
@@ -104,17 +108,17 @@ took the descriptor of what it is as a whole. The non-obvious ones:
 
 | package | descriptor | why |
 |---|---|---|
-| `pkg/dmsg/discovery/api` | `c4-net-discovery` | it is the dmsg discovery server, a deployment backend that imports `cxo/treestore` and `deployment/charts`, so it cannot be `c1` |
-| `pkg/dmsgweb` | `c4-app-web` | one file dialing over dmsg does not make the package part of the substrate |
+| `pkg/dmsg/discovery/api` | `c3-net-discovery` | it is the dmsg discovery server, a deployment backend that imports `cxo/treestore` and `deployment/charts`, so it cannot be `c1`, and the visor embeds it |
+| `pkg/dmsgweb` | `c3-app-web` | one file dialing over dmsg does not make the package part of the substrate |
 | `pkg/proxystatus` | `c2-app-web` | it renders proxy status pages, and `pkg/app` (c2) imports it |
 | `pkg/routing` | `c1-net-routing` | it imports only `cipher` and `logging` |
-| `pkg/services` | `c2-vis-appsvc` | the embedded service runner; `keyfile.go` is part of it, not of discovery |
+| `pkg/services` | `c3-vis-appsvc` | the embedded service runner, which imports `svcmode` and the c3 backends; `keyfile.go` is part of it, not of discovery |
 | `pkg/transport` | `c2-net-transport` | `c1-net-tp` and `c4-net-transport` were stray labels on single files |
-| `pkg/tpviz` | `c4-app-rewards` | `vis.latency` was never a system; `netview` and `wasmgl` follow their parent |
+| `pkg/tpviz` | `c3-app-rewards` | `vis.latency` was never a system; `netview` and `wasmgl` follow their parent |
 | `pkg/visor`, `pkg/visor/visorapi` | `c3-vis-core` | `vis.api` and `vis.browse` were never systems, and the hostbridge and pty files are part of the visor |
 | `pkg/visor/visorconfig` | `c3-vis-core` | the wallet section is part of the visor config; config rides with what it configures |
 | `pkg/app/appnet`, `pkg/app/launcher` | `c2-vis-appsvc` | the app framework |
-| `pkg/vpn` | `c4-app-vpn` | the embed and js client files are part of the app |
+| `pkg/vpn` | `c3-app-vpn` | the embed and js client files are part of the app |
 | `cmd/skywire-cli/commands/proxy` | `c4-vis-cli` | a CLI command group, whatever it drives |
 
 The others (`pkg/cxo/cxosub`, `pkg/httputil`, `pkg/logging`, `pkg/pty`,
@@ -183,9 +187,9 @@ carries a descriptor and every package carries exactly one, so
 `scripts/check-descriptors.sh` has no allow list and fails on any new drift.
 
 What the check cannot see is the layer. The compiler forbids cycles but not a
-lower-tier label importing a higher one. About 90 imports still do that, mostly
-because `pkg/visor` (c3) embeds app and deployment packages labelled c4 (chat,
-mail, vpn, skynet, wallet, TPD, AR), and the `pkg/services/*` runners (c2)
-import the c4 deployment backends and `pkg/visor`. Fixing that means deciding
-whether those apps sit at c3 or the visor and services sit higher, which is an
-owner's call rather than a relabel.
+lower tier label importing a higher one. As of 2026-11-14 no package does
+that. The visor-launched apps and the deployment backends the visor embeds
+are c3, the layer they are used at, and the reward system server lives in
+`pkg/deployment/rewards/server` rather than under `cmd/`. When a new import
+points upward, retag the package to the layer of what it imports, or move
+the code, rather than leaving the label wrong.

@@ -1,4 +1,4 @@
-// Package dmsgscp pkg/dmsg/dmsgscp/protocol.go c1-net-dmsg
+// Package dmsgscp pkg/dmsg/dmsgscp/protocol.go c3-net-dmsg
 // header parsing + serialization, plus the tiny ack helpers that
 // drive the framing. The protocol mirrors OpenSSH's scp on-wire
 // format — a single header line per record, a single ack byte after

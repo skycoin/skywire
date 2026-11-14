@@ -1,4 +1,4 @@
-// Package cmdutil pkg/cmdutil/svcconfig.go c0-com-util
+// Package cmdutil pkg/cmdutil/svcconfig.go c1-com-util
 package cmdutil
 
 import (

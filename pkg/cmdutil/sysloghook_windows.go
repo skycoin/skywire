@@ -1,6 +1,6 @@
 //go:build windows
 
-// Package cmdutil pkg/cmdutil/sysloghook_windows.go c0-com-util
+// Package cmdutil pkg/cmdutil/sysloghook_windows.go c1-com-util
 package cmdutil
 
 import (

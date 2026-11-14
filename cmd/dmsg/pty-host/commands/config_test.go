@@ -1,4 +1,4 @@
-// Package commands cmd/dmsg/pty-host/commands/config_test.go c1-net-dmsg
+// Package commands cmd/dmsg/pty-host/commands/config_test.go c3-net-dmsg
 //
 // Covers the config-assembly helpers: env, flag, JSON-file and visor-config-SK
 // sourcing. These read environment/flag globals/files with no network, so they

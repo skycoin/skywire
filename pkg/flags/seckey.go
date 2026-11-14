@@ -1,4 +1,4 @@
-// Package flags pkg/flags/seckey.go c0-com-util
+// Package flags pkg/flags/seckey.go c1-com-util
 //
 // Secret keys given on the command line are visible to every other process on
 // the machine — `ps` shows a full argv — and they land in shell history. The

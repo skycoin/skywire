@@ -1,6 +1,6 @@
 //go:build js
 
-// Package dmsgc pkg/dmsg/dmsgc/dmsgc_js.go c1-net-dmsg
+// Package dmsgc pkg/dmsg/dmsgc/dmsgc_js.go c2-net-dmsg
 package dmsgc
 
 // browserRelayOnly: a browser visor served by a hypervisor rides that host's

@@ -1,4 +1,4 @@
-// Package dmsgscp pkg/dmsg/dmsgscp/client.go c1-net-dmsg
+// Package dmsgscp pkg/dmsg/dmsgscp/client.go c3-net-dmsg
 // scp-over-dmsg. A Client wraps a single dmsg.Stream and exposes
 // Download / Upload methods that drive the same wire framing the
 // Host serves.

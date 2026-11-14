@@ -1,4 +1,4 @@
-// Package dmsgscp pkg/dmsg/dmsgscp/copyidle.go c1-net-dmsg
+// Package dmsgscp pkg/dmsg/dmsgscp/copyidle.go c3-net-dmsg
 package dmsgscp
 
 import (

@@ -1,4 +1,4 @@
-// Package regcxo pkg/dmsg/discovery/regcxo/aggregator.go c1-net-dmsg
+// Package regcxo pkg/dmsg/discovery/regcxo/aggregator.go c3-net-dmsg
 //
 // Registration-over-CXO aggregator — the dmsg-discovery side of the
 // fan-in path. Visors that opt into registration_cxo publish their own

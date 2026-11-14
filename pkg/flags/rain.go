@@ -1,4 +1,4 @@
-// Package flags pkg/flags/rain.go c0-com-util
+// Package flags pkg/flags/rain.go c1-com-util
 //
 // InitRain prints the help screen over a still frame of the Matrix code rain,
 // seeded from the clock so it is different every time. It is decoration and

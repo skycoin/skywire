@@ -1,4 +1,4 @@
-// Package flags pkg/flags/flagblock.go c0-com-util
+// Package flags pkg/flags/flagblock.go c1-com-util
 //
 // The flag block of the help screen, rendered here rather than by
 // pflag.FlagUsages, for three reasons that all come back to the same one: the

@@ -1,4 +1,4 @@
-// Package commands cmd/svc/geoip/commands/root.go c0-com-util
+// Package commands cmd/svc/geoip/commands/root.go c1-com-util
 package commands
 
 import (

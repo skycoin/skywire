@@ -1,4 +1,4 @@
-// Package dmsgc pkg/dmsg/dmsgc/relay_cap_test.go c1-net-dmsg
+// Package dmsgc pkg/dmsg/dmsgc/relay_cap_test.go c2-net-dmsg
 package dmsgc
 
 import (

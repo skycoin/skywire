@@ -1,6 +1,6 @@
 //go:build tinygo && !js
 
-// Package cmdutil pkg/cmdutil/terminal_tinygo.go c0-com-util
+// Package cmdutil pkg/cmdutil/terminal_tinygo.go c1-com-util
 package cmdutil
 
 import (

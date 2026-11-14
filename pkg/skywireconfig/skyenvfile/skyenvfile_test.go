@@ -1,4 +1,4 @@
-// Package skyenvfile pkg/skywireconfig/skyenvfile/skyenvfile_test.go c4-vis-cli
+// Package skyenvfile pkg/skywireconfig/skyenvfile/skyenvfile_test.go c0-com-env
 package skyenvfile
 
 import (

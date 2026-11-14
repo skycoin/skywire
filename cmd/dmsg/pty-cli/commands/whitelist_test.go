@@ -1,4 +1,4 @@
-// Package commands cmd/dmsg/pty-cli/commands/whitelist_test.go c1-net-dmsg
+// Package commands cmd/dmsg/pty-cli/commands/whitelist_test.go c3-net-dmsg
 //
 // Covers pksFromArgs, the pure pubkey-parsing helper behind whitelist-add and
 // whitelist-remove. The surrounding RunE closures call cli.WhitelistClient,
