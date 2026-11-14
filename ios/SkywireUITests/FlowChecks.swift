@@ -30,6 +30,8 @@ final class FlowChecks: XCTestCase {
         let diagnostics = app.buttons["diagnostics-link"]
         scroll(to: diagnostics, in: app)
         diagnostics.tap()
+        // The screen fades in for 0.7 s, and a tap during the fade is lost.
+        usleep(1_000_000)
         app.buttons["logs-source-process"].tap()
         // A line's level is its letter, as on Android.
         let debugLine = app.staticTexts["D"].firstMatch
