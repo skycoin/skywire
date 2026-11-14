@@ -75,7 +75,7 @@ jobs:
             v="${TAG#v}"
             set -- ANDROID_SH_VERSION="${v%%-*}" VERSION="$TAG"
           else
-            apk="skywire-$(git describe --always --match 'v[0-9]*')-android.apk"
+            apk="skywire-$(git describe --tags --always --match 'v[0-9]*')-android.apk"
             set --
           fi
           make android-sh-apk ANDROID_NDK_ROOT="$ANDROID_NDK_LATEST_HOME" \
