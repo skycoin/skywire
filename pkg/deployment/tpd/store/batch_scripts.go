@@ -1,4 +1,4 @@
-// Package store pkg/deployment/tpd/store/batch_scripts.go c4-net-discovery
+// Package store pkg/deployment/tpd/store/batch_scripts.go c3-net-discovery
 //
 // The batched forms of bandwidthScript and latencyScript. A batch of rows
 // from one reporter on one day shares that reporter's visor totals and the

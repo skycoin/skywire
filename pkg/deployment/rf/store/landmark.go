@@ -1,4 +1,4 @@
-// Package store pkg/deployment/rf/store/landmark.go c2-net-routing
+// Package store pkg/deployment/rf/store/landmark.go c3-net-routing
 //
 // Landmark (transit-node) routing for the route-finder. The base route-finder
 // answers each (src,dst) with a bounded but EXHAUSTIVE BFS over the whole dense

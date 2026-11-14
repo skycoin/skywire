@@ -1,4 +1,4 @@
-// Package store pkg/deployment/ar/store/address_test.go c4-net-discovery
+// Package store pkg/deployment/ar/store/address_test.go c3-net-discovery
 package store
 
 import (

@@ -1,4 +1,4 @@
-// Package regcxo pkg/deployment/ar/regcxo/aggregator.go c4-net-discovery
+// Package regcxo pkg/deployment/ar/regcxo/aggregator.go c3-net-discovery
 //
 // AR-bind-over-CXO aggregator — the address-resolver side of the fan-in
 // path. Visors publish their AR bindings (the stcpr/sudph/quic/wt

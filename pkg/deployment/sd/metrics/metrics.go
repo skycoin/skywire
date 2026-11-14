@@ -1,4 +1,4 @@
-// Package sdmetrics pkg/deployment/sd/metrics/metrics.go c4-net-discovery
+// Package sdmetrics pkg/deployment/sd/metrics/metrics.go c3-net-discovery
 package sdmetrics
 
 // Metrics collects metrics for metrics tracking system.

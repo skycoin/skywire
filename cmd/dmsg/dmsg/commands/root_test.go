@@ -1,4 +1,4 @@
-// Package commands cmd/dmsg/dmsg/commands/root_test.go c1-net-dmsg
+// Package commands cmd/dmsg/dmsg/commands/root_test.go c3-net-dmsg
 //
 // Covers modifySubcommands, the package's one pure helper. init() wires the
 // whole dmsg command tree (run on load), PersistentPreRun installs a signal

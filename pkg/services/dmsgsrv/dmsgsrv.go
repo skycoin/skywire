@@ -1,4 +1,4 @@
-// Package dmsgsrv pkg/services/dmsgsrv/dmsgsrv.go c2-vis-appsvc
+// Package dmsgsrv pkg/services/dmsgsrv/dmsgsrv.go c3-vis-appsvc
 //
 // dmsg-server as a pkg/services.Service. Wraps the existing
 // pkg/dmsg/dmsgserver primitives (Config, ServerAPI) so the

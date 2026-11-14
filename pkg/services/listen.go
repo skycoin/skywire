@@ -1,4 +1,4 @@
-// Package services pkg/services/listen.go c2-vis-appsvc
+// Package services pkg/services/listen.go c3-vis-appsvc
 //
 // The startup steps every discovery-type service shares: its dmsg identity,
 // its HTTP and dmsghttp listeners, its charts page, and its run loop.

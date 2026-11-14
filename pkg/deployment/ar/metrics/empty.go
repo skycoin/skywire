@@ -1,4 +1,4 @@
-// Package armetrics pkg/deployment/ar/metrics/empty.go c4-net-discovery
+// Package armetrics pkg/deployment/ar/metrics/empty.go c3-net-discovery
 package armetrics
 
 // NewEmpty constructs new empty metrics.

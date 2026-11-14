@@ -1,4 +1,4 @@
-// Package store pkg/deployment/tpd/store/tp_timeline_archive.go c4-net-discovery
+// Package store pkg/deployment/tpd/store/tp_timeline_archive.go c3-net-discovery
 //
 // Settled per-transport uptime timelines on disk. The tp-uptime:<id>:<date>:
 // timeline bitmaps were kept in redis for eight days, 1.67M keys and 48% of

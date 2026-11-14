@@ -1,4 +1,4 @@
-// Package api pkg/dmsg/discovery/api/registration_ingest.go c4-net-discovery
+// Package api pkg/dmsg/discovery/api/registration_ingest.go c3-net-discovery
 //
 // Registration-over-CXO ingest: the server side of the fan-in path where
 // visors publish their own signed discovery entry as a CXO feed instead

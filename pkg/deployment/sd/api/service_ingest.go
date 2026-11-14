@@ -1,4 +1,4 @@
-// Package api pkg/deployment/sd/api/service_ingest.go c4-net-discovery
+// Package api pkg/deployment/sd/api/service_ingest.go c3-net-discovery
 //
 // SD-registration-over-CXO ingest: the server side of the fan-in path where
 // visors publish their live service-entry set as a CXO feed instead of

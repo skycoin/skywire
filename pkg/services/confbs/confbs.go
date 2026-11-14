@@ -1,4 +1,4 @@
-// Package confbs pkg/services/confbs/confbs.go c2-vis-appsvc
+// Package confbs pkg/services/confbs/confbs.go c3-vis-appsvc
 //
 // config-bootstrapper as a pkg/services.Service, so a visor can run it
 // under its own key.

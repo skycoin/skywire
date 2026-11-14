@@ -1,4 +1,4 @@
-// Package regcxo pkg/deployment/sd/regcxo/aggregator.go c4-net-discovery
+// Package regcxo pkg/deployment/sd/regcxo/aggregator.go c3-net-discovery
 //
 // SD-registration-over-CXO aggregator — the service-discovery side of the
 // fan-in path. Visors publish their live service-entry set (the type=visor /

@@ -1,4 +1,4 @@
-// Package services pkg/services/embed.go c2-vis-appsvc
+// Package services pkg/services/embed.go c3-vis-appsvc
 //
 // Embedding: a service that can run inside a host process which already
 // owns a dmsg client and an identity. The host (the visor) mounts the

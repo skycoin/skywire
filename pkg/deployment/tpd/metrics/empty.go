@@ -1,4 +1,4 @@
-// Package tpdiscmetrics pkg/deployment/tpd/metrics/empty.go c4-net-discovery
+// Package tpdiscmetrics pkg/deployment/tpd/metrics/empty.go c3-net-discovery
 package tpdiscmetrics
 
 import (

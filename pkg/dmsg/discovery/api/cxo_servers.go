@@ -1,4 +1,4 @@
-// Package api pkg/dmsg/discovery/api/cxo_servers.go c4-net-discovery
+// Package api pkg/dmsg/discovery/api/cxo_servers.go c3-net-discovery
 //
 // Registered dmsg servers on the clients-by-server feed, so visors keep their
 // server cache from the snapshot they already hold instead of asking for

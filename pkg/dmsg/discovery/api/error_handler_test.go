@@ -1,4 +1,4 @@
-// Package api pkg/dmsg/discovery/api/error_handler_test.go c4-net-discovery
+// Package api pkg/dmsg/discovery/api/error_handler_test.go c3-net-discovery
 package api
 
 import (

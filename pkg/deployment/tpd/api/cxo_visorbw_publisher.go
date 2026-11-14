@@ -1,4 +1,4 @@
-// Package api pkg/deployment/tpd/api/cxo_visorbw_publisher.go c4-net-discovery
+// Package api pkg/deployment/tpd/api/cxo_visorbw_publisher.go c3-net-discovery
 //
 // CXO per-visor bandwidth feed: what the reward system pays pool 2 from.
 //

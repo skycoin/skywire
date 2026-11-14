@@ -1,4 +1,4 @@
-// Package api pkg/dmsg/discovery/api/cxo_publisher.go c4-net-discovery
+// Package api pkg/dmsg/discovery/api/cxo_publisher.go c3-net-discovery
 //
 // CXO publisher for dmsg-discovery's "clients by server" view.
 //

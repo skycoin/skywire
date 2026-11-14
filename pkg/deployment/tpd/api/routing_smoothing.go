@@ -1,4 +1,4 @@
-// Package api pkg/deployment/tpd/api/routing_smoothing.go c4-net-discovery
+// Package api pkg/deployment/tpd/api/routing_smoothing.go c3-net-discovery
 package api
 
 import (

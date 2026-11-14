@@ -1,4 +1,4 @@
-// Package store pkg/deployment/tpd/store/telemetry_batch.go c4-net-discovery
+// Package store pkg/deployment/tpd/store/telemetry_batch.go c3-net-discovery
 //
 // Telemetry applied in batches: a telemetry shard (or a flush of paced
 // snapshots) carries many transports, and applying them one at a time was a

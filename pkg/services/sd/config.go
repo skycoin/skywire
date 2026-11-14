@@ -1,4 +1,4 @@
-// Package sd pkg/services/sd/config.go c2-vis-appsvc
+// Package sd pkg/services/sd/config.go c3-vis-appsvc
 package sd
 
 import (

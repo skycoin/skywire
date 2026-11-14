@@ -1,4 +1,4 @@
-// Package cxoaggregator pkg/deployment/tpd/cxoaggregator/telemetry_pace.go c4-net-discovery
+// Package cxoaggregator pkg/deployment/tpd/cxoaggregator/telemetry_pace.go c3-net-discovery
 //
 // Telemetry is applied to the store at most once per apply window for each
 // (transport, reporting edge).

@@ -1,4 +1,4 @@
-// Package store pkg/deployment/tpd/store/visorbw.go c4-net-discovery
+// Package store pkg/deployment/tpd/store/visorbw.go c3-net-discovery
 //
 // Per-visor daily bandwidth: what the reward system pays pool 2 from.
 //

@@ -1,4 +1,4 @@
-// Package store pkg/deployment/tpd/store/bandwidth_day_index_test.go c4-net-discovery
+// Package store pkg/deployment/tpd/store/bandwidth_day_index_test.go c3-net-discovery
 package store
 
 import (

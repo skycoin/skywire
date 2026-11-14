@@ -1,4 +1,4 @@
-// Package netgraph pkg/deployment/netgraph/layout.go c4-net-discovery
+// Package netgraph pkg/deployment/netgraph/layout.go c3-net-discovery
 //
 // Package netgraph lays out the transport graph and serves it as a canvas page.
 package netgraph

@@ -1,4 +1,4 @@
-// Package cxoaggregate pkg/cxo/cxoaggregate/aggregate.go c4-net-discovery
+// Package cxoaggregate pkg/cxo/cxoaggregate/aggregate.go c3-net-discovery
 //
 // Shared engine for the service-side CXO fan-in aggregators. It is the
 // receive-side counterpart to pkg/cxo/treestore (the publisher side):

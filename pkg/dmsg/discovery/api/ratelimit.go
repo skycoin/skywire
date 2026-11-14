@@ -1,4 +1,4 @@
-// Package api pkg/dmsg/discovery/api/ratelimit.go c4-net-discovery
+// Package api pkg/dmsg/discovery/api/ratelimit.go c3-net-discovery
 //
 // Per-client request rate limiting for the discovery HTTP API. This is the
 // server-side counterpart to the client-side serve-loop floor: it protects the

@@ -1,4 +1,4 @@
-// Package routingfeed pkg/deployment/tpd/routingfeed/routingfeed.go c4-net-discovery
+// Package routingfeed pkg/deployment/tpd/routingfeed/routingfeed.go c3-net-discovery
 //
 // Package routingfeed is the layout of TPD's CXO routing feed and the reader
 // that turns it back into the network's transport list.

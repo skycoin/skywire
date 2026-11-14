@@ -1,4 +1,4 @@
-// Package netgraph pkg/deployment/netgraph/page.go c4-net-discovery
+// Package netgraph pkg/deployment/netgraph/page.go c3-net-discovery
 package netgraph
 
 import (

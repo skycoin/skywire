@@ -1,4 +1,4 @@
-// Package api pkg/deployment/tpd/api/cxo_routing_publisher.go c4-net-discovery
+// Package api pkg/deployment/tpd/api/cxo_routing_publisher.go c3-net-discovery
 //
 // CXO routing feed: what visors route on. It carries the transports that
 // exist now (see routingEntries) with the latency and throughput routes are

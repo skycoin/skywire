@@ -1,4 +1,4 @@
-// Package api pkg/deployment/conf/api/cxo_publisher.go c4-net-discovery
+// Package api pkg/deployment/conf/api/cxo_publisher.go c3-net-discovery
 //
 // CXO publisher for the deployment's services config: the same document
 // GET / serves, gzipped JSON at deployment.ServicesCXOPath on

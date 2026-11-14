@@ -1,4 +1,4 @@
-// Package cxoaggregate pkg/cxo/cxoaggregate/feed_consumers.go c4-net-discovery
+// Package cxoaggregate pkg/cxo/cxoaggregate/feed_consumers.go c3-net-discovery
 //
 // In-process delivery of registrations a visor carries on its system feed.
 // A service that runs in the same process as the transport discovery

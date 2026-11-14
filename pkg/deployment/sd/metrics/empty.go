@@ -1,4 +1,4 @@
-// Package sdmetrics pkg/deployment/sd/metrics/empty.go c4-net-discovery
+// Package sdmetrics pkg/deployment/sd/metrics/empty.go c3-net-discovery
 package sdmetrics
 
 // NewEmpty constructs new empty metrics.

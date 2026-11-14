@@ -1,4 +1,4 @@
-// Package store pkg/deployment/tpd/store/batch_ops.go c4-net-discovery
+// Package store pkg/deployment/tpd/store/batch_ops.go c3-net-discovery
 //
 // Batched forms of the per-transport writes a CXO snapshot drives, so one
 // snapshot costs a handful of pipelines rather than a round trip (or a

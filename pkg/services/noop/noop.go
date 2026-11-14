@@ -1,4 +1,4 @@
-// Package noop pkg/services/noop/noop.go c2-vis-appsvc
+// Package noop pkg/services/noop/noop.go c3-vis-appsvc
 //
 // "noop" service — validates the pkg/services framework end-to-end
 // without bringing in any real service's dependencies. Used by

@@ -1,4 +1,4 @@
-// Package arfeed pkg/deployment/ar/arfeed/reach.go c4-net-discovery
+// Package arfeed pkg/deployment/ar/arfeed/reach.go c3-net-discovery
 //
 // Reachability: which visors can actually be transported, per transport type.
 //

@@ -1,4 +1,4 @@
-// Package api pkg/dmsg/discovery/api/inbox.go c4-net-discovery
+// Package api pkg/dmsg/discovery/api/inbox.go c3-net-discovery
 package api
 
 import (

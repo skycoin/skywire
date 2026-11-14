@@ -1,4 +1,4 @@
-// Package armetrics pkg/deployment/ar/metrics/victoria_metrics.go c4-net-discovery
+// Package armetrics pkg/deployment/ar/metrics/victoria_metrics.go c3-net-discovery
 package armetrics
 
 import (

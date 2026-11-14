@@ -1,4 +1,4 @@
-// Package arfeed pkg/deployment/ar/arfeed/arfeed.go c4-net-discovery
+// Package arfeed pkg/deployment/ar/arfeed/arfeed.go c3-net-discovery
 //
 // Wire shape of the address-resolver's CXO bindings feed — the tree layout,
 // the record type and the codec, shared by the publisher

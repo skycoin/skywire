@@ -1,4 +1,4 @@
-// Package store pkg/deployment/tpd/store/redis_daily_totals.go c4-net-discovery
+// Package store pkg/deployment/tpd/store/redis_daily_totals.go c3-net-discovery
 //
 // Network-wide daily totals, kept as reports arrive so nothing has to scan
 // every transport to answer "how much crossed the network on day D".
