@@ -10,7 +10,8 @@ enum Backup {
     static let groupsDir = "skychat"
     static let fileName = "skywire-backup.zip"
 
-    /// Writes the config and the group state to a zip in the temporary directory.
+    /// Writes the config and the group state to a zip in the temporary directory. The zip is
+    /// read back before this returns, so a bad one fails here and never reaches the save panel.
     static func write(config: String, paths: CorePaths) throws -> URL {
         var entries = [(name: configEntry, file: URL?.none, data: Data(config.utf8))]
         let dir = paths.localDir.appendingPathComponent(groupsDir, isDirectory: true)
@@ -27,13 +28,21 @@ enum Backup {
         let out = files.temporaryDirectory.appendingPathComponent(fileName)
         try? files.removeItem(at: out)
         guard files.createFile(atPath: out.path, contents: nil) else { throw unreadable }
-        let handle = try FileHandle(forWritingTo: out)
-        defer { try? handle.close() }
-        var zip = ZipWriter(handle: handle)
-        for entry in entries {
-            try zip.add(name: entry.name, data: try entry.file.map { try Data(contentsOf: $0) } ?? entry.data)
+        do {
+            let handle = try FileHandle(forWritingTo: out)
+            defer { try? handle.close() }
+            var zip = ZipWriter(handle: handle)
+            for entry in entries {
+                try zip.add(name: entry.name, data: try entry.file.map { try Data(contentsOf: $0) } ?? entry.data)
+            }
+            try zip.finish()
+            try handle.close()
+            // Reading the entries checks each CRC.
+            guard secretKey(in: out) != nil else { throw unreadable }
+        } catch {
+            try? files.removeItem(at: out)
+            throw error
         }
-        try zip.finish()
         return out
     }
 

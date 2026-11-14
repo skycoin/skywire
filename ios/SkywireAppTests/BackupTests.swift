@@ -105,6 +105,14 @@ final class BackupTests: XCTestCase {
         XCTAssertNil(Identity.publicKey(inConfig: paths.configFile), "a refused backup changed the identity")
     }
 
+    /// A zip that would not restore is not handed out: here the config holds no key.
+    func testABackupThatWouldNotRestoreIsRefused() throws {
+        let (paths, _) = try install()
+        XCTAssertThrowsError(try Backup.write(config: "{}", paths: paths))
+        let left = FileManager.default.temporaryDirectory.appendingPathComponent(Backup.fileName)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: left.path), "the refused zip was left behind")
+    }
+
     func testAnotherFileIsNoBackup() throws {
         XCTAssertNil(Backup.secretKey(in: try scratch(Data("not a zip".utf8))))
     }
