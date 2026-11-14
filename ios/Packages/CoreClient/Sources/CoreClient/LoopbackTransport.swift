@@ -102,7 +102,7 @@ public final class LoopbackTransport: RequestTransport {
     }
 
     /// Longer than any request's own timeout (a mail send's is the longest).
-    private static let exchangeLimit: TimeInterval = 330
+    private static let exchangeLimit: TimeInterval = 630
     /// A stream ends when its reader ends it, not on a clock.
     private static let streamLimit: TimeInterval = 60 * 60 * 24 * 365
 }

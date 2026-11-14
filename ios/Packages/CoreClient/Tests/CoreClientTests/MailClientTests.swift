@@ -87,15 +87,15 @@ final class MailClientTests: XCTestCase {
         XCTAssertEqual(body["to"] as? [String], [to])
     }
 
-    /// A send waits as long as the visor may take to deliver: five minutes, not the
+    /// A send waits as long as the visor may take to deliver: ten minutes, not the
     /// usual request budget, because the visor finishes what this side gives up on.
-    func testASendWaitsFiveMinutes() async throws {
+    func testASendWaitsTenMinutes() async throws {
         let recorder = TimeoutRecorder(LoopbackTransport(origin: server.origin))
         client = CoreClient(transport: recorder) { CoreClientTests.password }
         let to = try XCTUnwrap(Fixture.named("mail-status").decode(MailStatus.self).myAddress)
         _ = try await client.mailSend(MailOutgoing(to: [to], subject: "Fixture", body: "x"))
         let sends = recorder.timeouts.filter { $0.path.hasSuffix("/mail/send") }
-        XCTAssertEqual(sends.map(\.timeout), [5 * 60])
+        XCTAssertEqual(sends.map(\.timeout), [10 * 60])
     }
 
     /// Nobody got it (502): a result naming the reason, not a throw.

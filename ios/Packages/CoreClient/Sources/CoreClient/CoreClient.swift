@@ -405,12 +405,9 @@ public actor CoreClient {
 
     // MARK: Mail
 
-    /// For a send, which the visor delivers before it answers: a dmsg dial and
-    /// an SMTP exchange per recipient, and a route setup for a .skynet address.
-    /// It has to outlast the slowest relay worth waiting for: the visor finishes
-    /// a delivery this side gave up on, so an early timeout reads a sent mail
-    /// as failed (Android: five minutes).
-    public static let mailSendTimeout: TimeInterval = 5 * 60
+    /// For a send, which the visor relays whole before it answers: skymail.SendTimeout in
+    /// pkg/skymail/control.go. A shorter wait reads a mail still being delivered as failed.
+    public static let mailSendTimeout: TimeInterval = 10 * 60
 
     public func mailStatus() async throws -> MailStatus {
         try await get("/api/visors/\(try await localPK())/mail")
