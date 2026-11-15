@@ -495,27 +495,26 @@ func buildRouter() http.Handler {
 			w.Header().Set("Server", "")
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(func() (l string) { //nolint:errcheck,gosec
-				l = chunkedPageHead("Transport Bandwidth Logs", "Daily transport bandwidth logs for the Skywire Network", "/log-collection/tplogs")
-				l += navlinks
-				l += "<p><a href='/stats/bandwidth-history'>View Bandwidth History Graph</a></p>"
-				l += "<p style='color:#36A2EB'>Blue = Verified Bandwidth</p>"
-				l += "<p style='color:#FFCE56'>Yellow = Transport bandwidth inconsistent</p>"
-				l += "<p style='color:#FF6384'>Red = Error: sent or received is zero</p>"
+			l := chunkedPageHead("Transport Bandwidth Logs", "Daily transport bandwidth logs for the Skywire Network", "/log-collection/tplogs")
+			l += navlinks
+			l += "<p><a href='/stats/bandwidth-history'>View Bandwidth History Graph</a></p>"
+			l += "<p style='color:#36A2EB'>Blue = Verified Bandwidth</p>"
+			l += "<p style='color:#FFCE56'>Yellow = Transport bandwidth inconsistent</p>"
+			l += "<p style='color:#FF6384'>Red = Error: sent or received is zero</p>"
+			io.WriteString(w, l) //nolint:errcheck,gosec
 
-				tpdData, tpdSrc, err := fetchTPDBandwidthMetrics(7)
-				if err != nil {
-					l += fmt.Sprintf("<p style='color:red'>Error fetching TPD data: %v</p>", err)
-					// Fallback to shell-out
-					tp, _ := script.Exec(`skywire cli log tp -d rewards/log_backups`).String() //nolint:errcheck,gosec
-					l += fmt.Sprintf("%s\n", ansihtml.ConvertToHTML([]byte(tp)))
-				} else {
-					l += renderTPDBandwidthTable(tpdData, tpdSrc)
-				}
-				l += htmltoplink
-				l += htmlend
-				return l
-			}()))
+			// The table is hundreds of megabytes for a week of transports, so
+			// it is written straight to the response rather than built as one string.
+			tpdData, tpdSrc, err := fetchTPDBandwidthMetrics(7)
+			if err != nil {
+				fmt.Fprintf(w, "<p style='color:red'>Error fetching TPD data: %v</p>", err) //nolint:errcheck,gosec
+				// Fallback to shell-out
+				tp, _ := script.Exec(`skywire cli log tp -d rewards/log_backups`).String() //nolint:errcheck,gosec
+				fmt.Fprintf(w, "%s\n", ansihtml.ConvertToHTML([]byte(tp)))                 //nolint:errcheck,gosec
+			} else {
+				renderTPDBandwidthTable(w, tpdData, tpdSrc)
+			}
+			io.WriteString(w, htmltoplink+htmlend) //nolint:errcheck,gosec
 		})
 
 		r1.HandleFunc("GET /stats/ut", func(w http.ResponseWriter, r *http.Request) {
