@@ -97,7 +97,7 @@ require (
 	github.com/rivo/uniseg v0.4.7
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/shirou/gopsutil/v3 v3.24.5
-	github.com/skycoin/skycoin v0.28.8-0.20261114151230-b660a88065f9
+	github.com/skycoin/skycoin v0.28.8-0.20261115082258-e4dcbb49fa26
 	github.com/soheilhy/cmux v0.1.5
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.2
@@ -182,7 +182,7 @@ require (
 	github.com/itchyny/timefmt-go v0.1.9 // indirect
 	github.com/jaypipes/pcidb v1.1.1 // indirect
 	github.com/jezek/xgb v1.3.1 // indirect
-	github.com/klauspost/compress v1.20.3 // indirect
+	github.com/klauspost/compress v1.20.4 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.2 // indirect
 	github.com/klauspost/reedsolomon v1.14.2 // indirect
 	github.com/kr/fs v0.1.0 // indirect

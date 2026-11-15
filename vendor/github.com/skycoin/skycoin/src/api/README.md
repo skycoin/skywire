@@ -1393,6 +1393,15 @@ The `"txid"` value of the `"transaction"` object will need to be updated
 after signing the transaction.
 The unsigned `encoded_transaction` can be sent to `POST /api/v2/wallet/transaction/sign` for signing.
 
+`split` is optional and defaults to `false`.
+A transaction is limited to 32768 bytes, about 330 inputs.
+When `false`, a send that needs more inputs than fit returns an error.
+When `true`, such a send is paid with several transactions, returned in
+`"transactions"`, each an object like the response itself. The top level
+fields repeat the first part. The parts spend different confirmed outputs and
+none spends the change of another, so all of them can be injected at once, in
+any order. `"transactions"` is left out when one transaction is enough.
+
 Example:
 
 ```sh
@@ -2026,6 +2035,10 @@ but `POST /api/v1/wallet/transaction` can create and sign a transaction with a w
 Otherwise, sign the transaction separately from the API.
 
 The transaction must be fully valid and spendable (except for the lack of signatures) or else an error is returned.
+
+`split` is optional and defaults to `false`. It works as it does for
+`POST /api/v1/wallet/transaction`: a send too large for one transaction is
+paid with several, listed in `"data.transactions"`. Sign and inject every part.
 
 Example request body with manual hours selection type, spending from specific addresses, ignoring unconfirmed unspent outputs:
 
