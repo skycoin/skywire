@@ -3,7 +3,6 @@ package network
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -14,23 +13,25 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
-// TestQUICListenerBoundsPendingConns opens many QUIC conns that never open a
-// stream. The listener must stop accepting once maxPendingQUICConns wait, so
-// quic-go refuses the rest instead of every conn parking a goroutine.
+// TestQUICListenerBoundsPendingConns opens QUIC conns that never open a
+// stream. Each accepted one holds its slot for quicStreamAcceptTimeout, so the
+// listener must take exactly its cap off quic-go once every dial has settled.
 func TestQUICListenerBoundsPendingConns(t *testing.T) {
+	const pending, dials = 4, 12 // dials stay within quic-go's accept queue
+
 	srvPK, srvSK := cipher.GenerateKeyPair()
 	cliPK, cliSK := cipher.GenerateKeyPair()
 	srvCert, err := newQUICCertificate(srvPK, srvSK)
 	require.NoError(t, err)
 	cliCert, err := newQUICCertificate(cliPK, cliSK)
 	require.NoError(t, err)
-	qconf := &quic.Config{HandshakeIdleTimeout: 2 * time.Second}
+	qconf := &quic.Config{HandshakeIdleTimeout: 20 * time.Second}
 
 	srvUDP := quicTestUDP(t)
 	defer srvUDP.Close() //nolint:errcheck
 	qlis, err := quic.Listen(srvUDP, quicTLSConfig(srvCert, nil, nil), qconf)
 	require.NoError(t, err)
-	lis := newQuicListener(qlis, logging.MustGetLogger("quic-bound-test"))
+	lis := newQuicListenerCap(qlis, logging.MustGetLogger("quic-bound-test"), pending)
 	defer lis.Close() //nolint:errcheck
 
 	cliUDP := quicTestUDP(t)
@@ -38,29 +39,24 @@ func TestQUICListenerBoundsPendingConns(t *testing.T) {
 	tr := &quic.Transport{Conn: cliUDP}
 	defer tr.Close() //nolint:errcheck
 
-	const dials = 4 * maxPendingQUICConns
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
+	var held, dialed sync.WaitGroup
+	defer held.Wait()
 	defer cancel()
-	var accepted atomic.Int64
-	var wg sync.WaitGroup
+	dialed.Add(dials)
 	for range dials {
-		wg.Go(func() {
+		held.Go(func() {
 			qc, err := tr.Dial(ctx, srvUDP.LocalAddr(), quicTLSConfig(cliCert, &srvPK, nil), qconf)
+			dialed.Done()
 			if err != nil {
 				return
 			}
-			defer qc.CloseWithError(0, "") //nolint:errcheck
-			// A conn the server accepted is answered when the server stops it;
-			// count those that stay up past the handshake.
-			select {
-			case <-qc.Context().Done():
-			case <-time.After(time.Second):
-				accepted.Add(1)
-				<-ctx.Done()
-			}
+			<-ctx.Done()
+			qc.CloseWithError(0, "") //nolint:errcheck,gosec
 		})
 	}
-	wg.Wait()
-	t.Logf("%d of %d conns stayed up", accepted.Load(), dials)
-	require.Less(t, accepted.Load(), int64(dials/2))
+
+	dialed.Wait()
+	time.Sleep(200 * time.Millisecond)
+	require.Equal(t, int64(pending), lis.accepted.Load())
 }

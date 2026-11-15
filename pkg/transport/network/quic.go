@@ -19,6 +19,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -160,7 +161,9 @@ type quicListener struct {
 	slots chan struct{}
 	done  chan struct{}
 	wg    sync.WaitGroup
-	log   *logging.Logger
+	// accepted counts the conns taken off the quic-go listener.
+	accepted atomic.Int64
+	log      *logging.Logger
 }
 
 // maxPendingQUICConns caps the accepted QUIC conns waiting for their stream
@@ -169,10 +172,15 @@ type quicListener struct {
 const maxPendingQUICConns = 64
 
 func newQuicListener(lis *quic.Listener, log *logging.Logger) *quicListener {
+	return newQuicListenerCap(lis, log, maxPendingQUICConns)
+}
+
+// newQuicListenerCap is newQuicListener with room for pending conns.
+func newQuicListenerCap(lis *quic.Listener, log *logging.Logger, pending int) *quicListener {
 	l := &quicListener{
 		lis:   lis,
 		conns: make(chan net.Conn, 16),
-		slots: make(chan struct{}, maxPendingQUICConns),
+		slots: make(chan struct{}, pending),
 		done:  make(chan struct{}),
 		log:   log,
 	}
@@ -197,6 +205,7 @@ func (l *quicListener) acceptLoop() {
 			<-l.slots
 			return
 		}
+		l.accepted.Add(1)
 		l.wg.Add(1)
 		go func() {
 			defer l.wg.Done()
