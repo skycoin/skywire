@@ -2,6 +2,7 @@
 package rewardsserver
 
 import (
+	"bufio"
 	"bytes"
 	"cmp"
 	"encoding/json"
@@ -1222,9 +1223,10 @@ func fetchTPDBandwidthMetricsHTTP(tpdURL string, days int) ([]tpdstore.Transport
 }
 
 // renderTPDBandwidthTable renders TPD transport metrics as an HTML table
-func renderTPDBandwidthTable(metrics []tpdstore.TransportMetric, src statsSource) string {
+func renderTPDBandwidthTable(w io.Writer, metrics []tpdstore.TransportMetric, src statsSource) {
 	if len(metrics) == 0 {
-		return "<p>No transport metrics available from TPD</p>"
+		io.WriteString(w, "<p>No transport metrics available from TPD</p>") //nolint:errcheck,gosec
+		return
 	}
 
 	// Collect all dates across all transports
@@ -1240,25 +1242,29 @@ func renderTPDBandwidthTable(metrics []tpdstore.TransportMetric, src statsSource
 	}
 	slices.Sort(dates)
 
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("<p>Showing %d transports with bandwidth data over %d days</p>\n", len(metrics), len(dates)))
+	// A write fails only when the client has gone, and bufio then drops the
+	// writes after it, so the errors are not checked one by one.
+	out := bufio.NewWriter(w)
+	defer out.Flush()                                                     //nolint:errcheck,gosec
+	p := func(format string, a ...any) { fmt.Fprintf(out, format, a...) } //nolint:errcheck,gosec
+	p("<p>Showing %d transports with bandwidth data over %d days</p>\n", len(metrics), len(dates))
 	if line := src.String(); line != "" {
-		sb.WriteString(fmt.Sprintf("<p style='color:#888;font-size:11px;'>%s</p>\n", html.EscapeString(line)))
+		p("<p style='color:#888;font-size:11px;'>%s</p>\n", html.EscapeString(line))
 	}
-	sb.WriteString("<table style='border-collapse: collapse; font-size: 10px;'>\n")
-	sb.WriteString("<thead><tr style='border-bottom: 1px solid #555;'>")
-	sb.WriteString("<th style='padding: 4px 8px; text-align: left;'>Transport</th>")
-	sb.WriteString("<th style='padding: 4px 8px;'>Type</th>")
-	sb.WriteString("<th style='padding: 4px 8px;'>Live</th>")
+	p("<table style='border-collapse: collapse; font-size: 10px;'>\n")
+	p("<thead><tr style='border-bottom: 1px solid #555;'>")
+	p("<th style='padding: 4px 8px; text-align: left;'>Transport</th>")
+	p("<th style='padding: 4px 8px;'>Type</th>")
+	p("<th style='padding: 4px 8px;'>Live</th>")
 	for _, date := range dates {
 		dateParts := strings.Split(date, "-")
 		label := date
 		if len(dateParts) == 3 {
 			label = dateParts[1] + "-" + dateParts[2]
 		}
-		sb.WriteString(fmt.Sprintf("<th style='padding: 4px 8px;'>%s</th>", label))
+		p("<th style='padding: 4px 8px;'>%s</th>", label)
 	}
-	sb.WriteString("</tr></thead>\n<tbody>\n")
+	p("</tr></thead>\n<tbody>\n")
 
 	for _, m := range metrics {
 		// Build a map of date -> bandwidth for this transport
@@ -1279,10 +1285,10 @@ func renderTPDBandwidthTable(metrics []tpdstore.TransportMetric, src statsSource
 			liveStr = "<span style='color:#4BC0C0'>yes</span>"
 		}
 
-		sb.WriteString("<tr style='border-bottom: 1px solid #333;'>")
-		sb.WriteString(fmt.Sprintf("<td style='padding: 4px 8px; font-size: 11px;'>%s</td>", m.ID))
-		sb.WriteString(fmt.Sprintf("<td style='padding: 4px 8px; text-align: center;'>%s</td>", m.Type))
-		sb.WriteString(fmt.Sprintf("<td style='padding: 4px 8px; text-align: center;'>%s</td>", liveStr))
+		p("<tr style='border-bottom: 1px solid #333;'>")
+		p("<td style='padding: 4px 8px; font-size: 11px;'>%s</td>", m.ID)
+		p("<td style='padding: 4px 8px; text-align: center;'>%s</td>", m.Type)
+		p("<td style='padding: 4px 8px; text-align: center;'>%s</td>", liveStr)
 
 		for _, date := range dates {
 			bw := dailyBW[date]
@@ -1295,13 +1301,12 @@ func renderTPDBandwidthTable(metrics []tpdstore.TransportMetric, src statsSource
 			default:
 				color = "#36A2EB" // blue - verified
 			}
-			sb.WriteString(fmt.Sprintf("<td style='padding: 4px 8px; text-align: right; color: %s;'>%s</td>", color, formatBytesChart(bw)))
+			p("<td style='padding: 4px 8px; text-align: right; color: %s;'>%s</td>", color, formatBytesChart(bw))
 		}
-		sb.WriteString("</tr>\n")
+		p("</tr>\n")
 	}
 
-	sb.WriteString("</tbody></table>\n")
-	return sb.String()
+	p("</tbody></table>\n")
 }
 
 // tpdNetworkSummary holds cached network-wide TPD metrics summary.

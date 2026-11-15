@@ -426,10 +426,9 @@ func readCXOTransportMetrics(mgr *cxosub.Manager, days int) ([]tpdstore.Transpor
 		if !day || len(body) == 0 {
 			return true
 		}
-		// Walk lends the snapshot's bytes and Gunzip of a raw body
-		// returns that same slice, so copy before the callback returns.
-		decoded := append([]byte(nil), cxoutils.Gunzip(body)...)
-		byDate[date] = append(byDate[date], decoded)
+		// Only the newest days are decompressed, below. The snapshot's
+		// bodies are never modified in place, so holding them is safe.
+		byDate[date] = append(byDate[date], body)
 		if ts, found := mgr.SyncedAt(cxosub.FeedTPDMetrics, path); found && ts.After(newest) {
 			newest = ts
 		}
@@ -460,7 +459,7 @@ func readCXOTransportMetrics(mgr *cxosub.Manager, days int) ([]tpdstore.Transpor
 		var recs []tpdstore.TransportMetric
 		for _, body := range bodies {
 			var chunk []tpdstore.TransportMetric
-			if err := json.Unmarshal(body, &chunk); err != nil {
+			if err := json.Unmarshal(cxoutils.Gunzip(body), &chunk); err != nil {
 				// One malformed leaf must not take the whole window
 				// down; the day is simply not represented.
 				recs = nil
