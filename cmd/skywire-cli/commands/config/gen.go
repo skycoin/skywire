@@ -191,7 +191,7 @@ func init() {
 	// recommended way to expose a public visor behind a single firewall rule.
 	skyenvIntVar(genConfigCmd.Flags(), &transportPort, "transport-port", "${TRANSPORTPORT:-0}", "shared master transport port for all transport types (0 = per-type ports)")
 	skyenvIntVar(genConfigCmd.Flags(), &genMinHops, "min-hops", "${MINHOPS:-1}", "minimum route hops (1 = allow direct 1-hop routes, >=2 = force multihop through intermediaries for sender privacy)")
-	skyenvIntVar(genConfigCmd.Flags(), &arTransportLimit, "ar-transport-limit", "${ARTRANSPORTLIMIT:-0}", "address-resolver registration: 0 = stay registered, N>0 = deregister after N transports, N<0 = never register (inbound-invisible)")
+	skyenvIntVar(genConfigCmd.Flags(), &arTransportLimit, "ar-transport-limit", "${ARTRANSPORTLIMIT:-0}", "address-resolver registration: >=0 = register (default), <0 = never register (no inbound direct transports); only the sign matters")
 	skyenvBoolVar(genConfigCmd.Flags(), &noDirectTransports, "no-direct-transports", "${NODIRECTTRANSPORTS:-false}", "never create direct p2p transports; dmsg (relay) is still allowed")
 	skyenvBoolVar(genConfigCmd.Flags(), &noDmsgServerTransports, "no-dmsg-server-transports", "${NODMSGSERVERTRANSPORTS:-false}", "do not keep a transport to each dmsg server the visor holds a session with")
 	skyenvBoolVar(genConfigCmd.Flags(), &ptyRPCExec, "pty-rpc-exec", "${PTYRPCEXEC:-false}", "allow visor-RPC-initiated dmsgpty exec (control/jump node opt-in; off = closes a local privilege-escalation vector)")
@@ -482,7 +482,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "timeout")
 	skyenvStringVar(genConfigCmd.Flags(), &publicVisorRegTimeout, "regtimeout", "${REGTIMEOUT}", "public visor registration timeout (e.g. 10m)")
 	gHiddenFlags = append(gHiddenFlags, "regtimeout")
-	skyenvIntVar(genConfigCmd.Flags(), &publicVisorMaxTransports, "maxtransports", "${MAXTRANSPORTS:-0}", "public visor max transports")
+	skyenvIntVar(genConfigCmd.Flags(), &publicVisorMaxTransports, "maxtransports", "${MAXTRANSPORTS:-0}", "public visor: stop advertising in service discovery above N distinct peers (soft limit, closes nothing)")
 	gHiddenFlags = append(gHiddenFlags, "maxtransports")
 	skyenvStringVar(genConfigCmd.Flags(), &cliAddr, "cliaddr", "${CLIADDR}", "CLI RPC address (e.g. 0.0.0.0:3435 for Docker)")
 	gHiddenFlags = append(gHiddenFlags, "cliaddr")

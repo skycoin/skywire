@@ -198,7 +198,7 @@ one that no longer exists. Regenerate rather than edit by hand.
 | `STUNSERVERS` | `('')` | STUN servers for NAT traversal |
 | `SHUTDOWNTIMEOUT` | `'10s'` | Graceful shutdown timeout (default 10s) |
 | `REGTIMEOUT` | `'10m'` | Public visor registration timeout (default 10m) |
-| `MAXTRANSPORTS` | `2048` | Public visor max transports (default 1000) |
+| `MAXTRANSPORTS` | `2048` | Public visor only: stop advertising in service discovery while this visor serves more than N distinct peers (default 2048). A soft limit: it counts peers, not transports, and closes nothing. |
 | `MUXROUTES` | `0` | Number of parallel mux routes per connection (default 0) |
 | `POLICYPERDIAL` | `''` | Per-dial routing policy: preset:<name> (e.g. preset:adaptive), @/path/policy.star, @/path/policy.wasm, inline Starlark, or empty |
 

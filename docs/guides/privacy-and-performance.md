@@ -62,8 +62,8 @@ not edit the generated json by hand: the next autoconfig rebuilds it.
   --disable-public-autoconn`) makes the visor connect only to peers *you* set up.
 - **`ar_transport_limit`** controls the **address-resolver (AR) entry** — the
   record that lets an arbitrary visor resolve your PK to an address and dial you:
-    - `0` (default): stay registered — reachable inbound.
-    - `N > 0`: deregister after N transports exist.
+    - `0` or any positive value (default `0`): stay registered, reachable inbound.
+      Only the sign matters; a positive value does not deregister after N transports.
     - `N < 0`: **never register with the AR at all** — no one can look up your
       address, so no one can initiate a transport to you (and thus learn your IP)
       unless *you* dialed them first.

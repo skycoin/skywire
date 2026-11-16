@@ -87,8 +87,9 @@ const envfileTemplate = `#
 #--	Do not keep a transport to each dmsg server the visor holds a session with
 #NODMSGSERVERTRANSPORTS=true
 
-#--	Address resolver registration: 0 stays registered, N>0 leaves after N
-#	transports, a negative value never registers (no inbound transports)
+#--	Address resolver registration: 0 or more registers (the default); a
+#	negative value never registers, so other visors cannot open direct
+#	transports to this one. It can still dial out. Only the sign matters.
 #ARTRANSPORTLIMIT=0
 
 #--	Forward error correction on mux routes. Both ends must enable it.
@@ -551,7 +552,9 @@ const envfileTemplate = `#
 #--	Public visor registration timeout (default 10m)
 #REGTIMEOUT='10m'
 
-#--	Public visor max transports (default 1000)
+#--	Public visor only: stop advertising in service discovery while this
+#	visor serves more than N distinct peers (default 2048). A soft limit: it
+#	counts peers, not transports, and closes nothing.
 #MAXTRANSPORTS=2048
 
 #--	Number of parallel mux routes per connection (default 0)
