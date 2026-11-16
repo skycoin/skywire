@@ -23,11 +23,13 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 )
@@ -153,22 +155,81 @@ func requestFileHandler(ctx context.Context) http.HandlerFunc {
 			http.Error(w, "standalone mode: no visor transport for file requests", http.StatusServiceUnavailable)
 			return
 		}
-		payload, err := json.Marshal(fileReqMsg{Type: fileReqType, FileID: body.FileID, Name: body.FileName})
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
 		if chatCtrl == nil {
 			http.Error(w, "skychat: dm controller not started", http.StatusServiceUnavailable)
 			return
 		}
-		// Raw control frame: the peer consumes it in PreHandleFrame, so it is
-		// never surfaced or persisted as a chat message.
-		if err := chatCtrl.SendRaw(ctx, peer, payload); err != nil {
+		if err := requestFileFrom(ctx, peer, body.FileID, body.FileName); err != nil {
 			http.Error(w, "send request: "+err.Error(), http.StatusBadGateway)
 			return
 		}
-		markFileRequested(body.FileID, peer)
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+// requestFileFrom asks peer to re-send the file fileID. The id is marked as
+// expected before the request goes out, so a fast answer is not taken for a
+// new file.
+func requestFileFrom(ctx context.Context, peer cipher.PubKey, fileID, name string) error {
+	if chatCtrl == nil {
+		return errors.New("skychat: dm controller not started")
+	}
+	payload, err := json.Marshal(fileReqMsg{Type: fileReqType, FileID: fileID, Name: name})
+	if err != nil {
+		return err
+	}
+	markFileRequested(fileID, peer)
+	// Raw control frame: the peer consumes it in PreHandleFrame, so it is
+	// never surfaced or persisted as a chat message.
+	if err := chatCtrl.SendRaw(ctx, peer, payload); err != nil {
+		clearRequestedFile(fileID)
+		return err
+	}
+	return nil
+}
+
+// Group files are pulled on demand. A recorded voice or video message is
+// pulled as it arrives, since it is useless as a bare reference.
+const (
+	clipPullMaxSize = 16 << 20
+	clipPullMaxAge  = time.Hour
+)
+
+// clipPull requests a file; a variable so tests can watch it.
+var clipPull = func(peer cipher.PubKey, fileID, name string) {
+	ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
+	defer cancel()
+	if err := requestFileFrom(ctx, peer, fileID, name); err != nil {
+		clearRequestedFile(fileID)
+		appLog("skychat: pull of group clip %s from %s failed: %v", fileID, peer, err)
+	}
+}
+
+// recordedClip reports whether name is a clip the composer recorded
+// (voice-<stamp>, video-<stamp>, video-sq-<stamp>), the names every
+// skychat client gives them.
+func recordedClip(name string) bool {
+	n := strings.ToLower(name)
+	for _, p := range []string{"voice-", "video-sq-", "video-"} {
+		if rest, ok := strings.CutPrefix(n, p); ok && rest != "" && rest[0] >= '0' && rest[0] <= '9' {
+			return true
+		}
+	}
+	return false
+}
+
+// pullGroupClip fetches the bytes of a recorded clip posted to a group by
+// someone else, when they are not held here and the post is recent.
+func pullGroupClip(sender cipher.PubKey, ts time.Time, meta groupFileMeta) {
+	if !recordedClip(meta.Name) || meta.Size > clipPullMaxSize || time.Since(ts) > clipPullMaxAge {
+		return
+	}
+	if appCl != nil && sender == appCl.Config().VisorPK {
+		return
+	}
+	if _, held := findFileByID(meta.ID, meta.Name); held || isRequestedFile(meta.ID, sender) {
+		return
+	}
+	markFileRequested(meta.ID, sender)
+	go clipPull(sender, meta.ID, meta.Name)
 }
