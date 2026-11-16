@@ -171,7 +171,7 @@ extension LogLevel {
         switch self {
         case .error, .fatal: Color(hex: 0xDC2626)
         case .warn: Color(hex: 0xF59E0B)
-        case .info: Color(hex: 0x0F7BF4)
+        case .info: Color(hex: 0x1677FF)
         default: Color(hex: 0x9CA3AF)
         }
     }

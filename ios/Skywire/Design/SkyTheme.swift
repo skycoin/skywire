@@ -12,7 +12,7 @@ extension Color {
         self.init(UIColor(hex: hex).withAlphaComponent(opacity))
     }
 
-    static let skyPrimary = Color(light: 0x0F7BF4, dark: 0x4AA3FF)
+    static let skyPrimary = Color(light: 0x1677FF, dark: 0x4AA3FF)
     static let skyOnPrimary = Color(light: 0xFFFFFF, dark: 0x04264D)
     static let skyBackground = Color(light: 0xFFFFFF, dark: 0x0A101C)
     static let skyOnBackground = Color(light: 0x0B1526, dark: 0xECF2FB)
@@ -43,7 +43,7 @@ extension Color {
     static let skyWarning = Color(hex: 0xF59E0B)
     static let skyDangerBright = Color(hex: 0xFF7B6E)
     /// The logo bitmap's own blue, drawn untinted on the lock and launch screens.
-    static let skyLogo = Color(hex: 0x0072FF)
+    static let skyLogo = Color(hex: 0x1677FF)
 }
 
 extension UIColor {
@@ -58,7 +58,7 @@ enum SkyGradient {
     static let hero = LinearGradient(colors: [Color(hex: 0x1685FA), Color(hex: 0x0B57C9), Color(hex: 0x0A3F97)],
                                      startPoint: .topLeading, endPoint: .bottomTrailing)
     /// SkyButtonGradient: the round primary actions (Connect, the bar's cloud).
-    static let button = LinearGradient(colors: [Color(hex: 0x3D9BFF), Color(hex: 0x0F7BF4), Color(hex: 0x0B4FBC)],
+    static let button = LinearGradient(colors: [Color(hex: 0x3D9BFF), Color(hex: 0x1677FF), Color(hex: 0x0B4FBC)],
                                        startPoint: .topLeading, endPoint: .bottomTrailing)
 }
 

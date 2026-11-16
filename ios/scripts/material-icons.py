@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 import urllib.request
+import xml.etree.ElementTree as ET
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CATALOG = os.path.join(ROOT, "Skywire", "Assets.xcassets")
@@ -99,39 +100,73 @@ def colorset(name, light, dark):
     })
 
 
-def app_icon(logo_path):
-    """Android's adaptive icon flattened: the white logo, 44 x 33 dp of 108, on #0F7BF4."""
+def path_ops(data):
+    """Swift CGMutablePath calls for a VectorDrawable pathData of absolute M, L, C and Z."""
+    tokens = re.findall(r"[A-Za-z]|-?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?", data)
+    ops, i = [], 0
+    while i < len(tokens):
+        cmd = tokens[i]
+        n = {"M": 2, "L": 2, "C": 6, "Z": 0}.get(cmd)
+        if n is None:
+            sys.exit(f"path command {cmd!r} not supported")
+        v = tokens[i + 1:i + 1 + n]
+        i += 1 + n
+        pts = [f"CGPoint(x: {v[k]}, y: {v[k + 1]})" for k in range(0, n, 2)]
+        if cmd == "M":
+            ops.append(f"p.move(to: {pts[0]})")
+        elif cmd == "L":
+            ops.append(f"p.addLine(to: {pts[0]})")
+        elif cmd == "C":
+            ops.append(f"p.addCurve(to: {pts[2]}, control1: {pts[0]}, control2: {pts[1]})")
+        else:
+            ops.append("p.closeSubpath()")
+    return "\n".join(ops)
+
+
+def app_icon():
+    """Android's adaptive icon: ic_launcher_foreground's 108 dp layer, its middle 72 dp
+    (the part every launcher mask shows), on ic_launcher_background."""
     folder = os.path.join(CATALOG, "AppIcon.appiconset")
     os.makedirs(folder, exist_ok=True)
     out = os.path.join(folder, "AppIcon.png")
+    ns = "{http://schemas.android.com/apk/res/android}"
+    vector = ET.parse(os.path.join(ANDROID_RES, "drawable", "ic_launcher_foreground.xml")).getroot()
+    group, path = vector.find("group"), vector.find("group/path")
+    colors = ET.parse(os.path.join(ANDROID_RES, "values", "colors.xml")).getroot()
+    bg = colors.find("color[@name='ic_launcher_background']").text.strip().lstrip("#")
+    fill = path.get(ns + "fillColor").lstrip("#")
+    g = {k: group.get(ns + k, d) for k, d in
+         (("scaleX", "1"), ("scaleY", "1"), ("translateX", "0"), ("translateY", "0"))}
     swift = r'''
 import CoreGraphics
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
-let a = CommandLine.arguments
-let src = CGImageSourceCreateWithURL(URL(fileURLWithPath: a[1]) as CFURL, nil)!
-let logo = CGImageSourceCreateImageAtIndex(src, 0, nil)!
-let side = 1024, w = Double(side) * 44 / 108, h = Double(side) * 33 / 108
-let rect = CGRect(x: (Double(side) - w) / 2, y: (Double(side) - h) / 2, width: w, height: h)
-let rgb = CGColorSpace(name: CGColorSpace.sRGB)!
-let layer = CGContext(data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: 0, space: rgb, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-layer.draw(logo, in: rect)
-layer.setBlendMode(.sourceIn)
-layer.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1))
-layer.fill(CGRect(x: 0, y: 0, width: side, height: side))
-let icon = CGContext(data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: 0, space: rgb, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
-icon.setFillColor(CGColor(srgbRed: 0x0F / 255, green: 0x7B / 255, blue: 0xF4 / 255, alpha: 1))
+func srgb(_ hex: UInt32) -> CGColor {
+    CGColor(srgbRed: CGFloat(hex >> 16 & 0xFF) / 255, green: CGFloat(hex >> 8 & 0xFF) / 255, blue: CGFloat(hex & 0xFF) / 255, alpha: 1)
+}
+let side = 1024
+let icon = CGContext(data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+icon.setFillColor(srgb(0x%(bg)s))
 icon.fill(CGRect(x: 0, y: 0, width: side, height: side))
-icon.draw(layer.makeImage()!, in: CGRect(x: 0, y: 0, width: side, height: side))
-let dest = CGImageDestinationCreateWithURL(URL(fileURLWithPath: a[2]) as CFURL, UTType.png.identifier as CFString, 1, nil)!
+icon.translateBy(x: 0, y: CGFloat(side))
+icon.scaleBy(x: CGFloat(side) / 72, y: -CGFloat(side) / 72)
+icon.translateBy(x: -18 + %(translateX)s, y: -18 + %(translateY)s)
+icon.scaleBy(x: %(scaleX)s, y: %(scaleY)s)
+let p = CGMutablePath()
+%(ops)s
+icon.addPath(p)
+icon.setFillColor(srgb(0x%(fill)s))
+icon.fillPath(using: %(rule)s)
+let dest = CGImageDestinationCreateWithURL(URL(fileURLWithPath: CommandLine.arguments[1]) as CFURL, UTType.png.identifier as CFString, 1, nil)!
 CGImageDestinationAddImage(dest, icon.makeImage()!, nil)
 CGImageDestinationFinalize(dest)
-'''
+''' % dict(g, bg=bg, fill=fill, ops=path_ops(path.get(ns + "pathData")),
+           rule=".evenOdd" if path.get(ns + "fillType") == "evenOdd" else ".winding")
     script = os.path.join(os.environ.get("TMPDIR", "/tmp"), "skywire-appicon.swift")
     with open(script, "w") as f:
         f.write(swift)
-    subprocess.run(["swift", script, logo_path, out], check=True)
+    subprocess.run(["swift", script, out], check=True)
     write_json(os.path.join(folder, "Contents.json"), {
         "images": [{"filename": "AppIcon.png", "idiom": "universal", "platform": "ios", "size": "1024x1024"}],
         "info": INFO,
@@ -155,11 +190,11 @@ def main():
         print("icon", asset_name(icon))
     logo = os.path.join(ANDROID_RES, "drawable-nodpi", "skywire_logo.png")
     with open(logo, "rb") as f:
-        # Not a template: the lock and launch screens draw it in its own #0072FF.
+        # Not a template: the lock and launch screens draw it in its own #1677FF.
         imageset("skywire-logo", "skywire_logo.png", f.read(), template=False, vector=False)
     # Android's window background before the first frame (Theme.Skywire).
     colorset("LaunchBackground", "FFFFFF", "0A101C")
-    app_icon(logo)
+    app_icon()
     print("catalogue written:", CATALOG)
 
 
