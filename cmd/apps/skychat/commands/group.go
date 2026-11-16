@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -138,12 +139,62 @@ func sendFileToVisorGroup(_ context.Context, groupID, path, name string) (string
 	if err != nil {
 		return "", "", err
 	}
+	holdOwnFileEcho(fileID)
 	if err := pairRPCCall("GroupSend", func(c visorapi.API) error {
 		return c.GroupSend(visorapi.GroupSendArgs{ID: groupID, Text: text})
 	}); err != nil {
+		releaseOwnFileEcho(fileID)
 		return "", "", err
 	}
 	return fileID, "/files/" + fileID + strings.ToLower(filepath.Ext(name)), nil
+}
+
+// ownFileEchoGrace is how long the echo of our own group file post waits
+// after the /send-file answer, so the client applies the answer first.
+var ownFileEchoGrace = 500 * time.Millisecond
+
+// ownFileEchoMax bounds the wait for an answer that is never written.
+var ownFileEchoMax = 15 * time.Second
+
+// ownFileEchoes holds a channel per group file send whose /send-file answer
+// is not written yet, closed when it is.
+var ownFileEchoes sync.Map
+
+// holdOwnFileEcho makes the echo of the group file post fileID wait for
+// releaseOwnFileEcho. The visor echoes an owner's post at once, and a client
+// that has not yet read the file id from the answer cannot tell the echo
+// from a new message, so it showed the file twice.
+func holdOwnFileEcho(fileID string) {
+	ownFileEchoes.Store(fileID, make(chan struct{}))
+}
+
+func releaseOwnFileEcho(fileID string) {
+	if ch, ok := ownFileEchoes.LoadAndDelete(fileID); ok {
+		close(ch.(chan struct{}))
+	}
+}
+
+// ownFileEchoGate returns a channel closed once the echo of fileID may go to
+// the UI, or nil when nothing holds it.
+func ownFileEchoGate(fileID string) <-chan struct{} {
+	v, ok := ownFileEchoes.Load(fileID)
+	if !ok {
+		return nil
+	}
+	held := v.(chan struct{})
+	out := make(chan struct{})
+	go func() {
+		t := time.NewTimer(ownFileEchoMax)
+		defer t.Stop()
+		select {
+		case <-held:
+			time.Sleep(ownFileEchoGrace)
+		case <-t.C:
+			releaseOwnFileEcho(fileID)
+		}
+		close(out)
+	}()
+	return out
 }
 
 // groupPollerCancel stops the SSE-bridge goroutine on shutdown.
@@ -270,9 +321,11 @@ func deliverGroupMessages(msgs []visorapi.GroupMessage, since *time.Time) {
 			"ts":       m.TS.Format(time.RFC3339Nano),
 			"ts_nano":  m.TS.UnixNano(),
 		}
+		var gate <-chan struct{}
 		if meta, ok := parseGroupFileText(m.Text); ok {
 			envelope["message"] = "📎 " + meta.Name
 			enrichGroupFileRow(envelope, meta)
+			gate = ownFileEchoGate(meta.ID)
 		} else if rmeta, ok := parseReplyText(m.Text); ok {
 			envelope["message"] = rmeta.Text
 			enrichReplyRow(envelope, rmeta)
@@ -285,8 +338,7 @@ func deliverGroupMessages(msgs []visorapi.GroupMessage, since *time.Time) {
 			appLog("Group: marshal SSE message: %v", mErr)
 			continue
 		}
-		hub.broadcast(string(body))
-		hub.recordEvent(chatEvent{
+		ev := chatEvent{
 			ID:        newEventID(),
 			Channel:   channelGroup,
 			Transport: "cxo",
@@ -294,7 +346,18 @@ func deliverGroupMessages(msgs []visorapi.GroupMessage, since *time.Time) {
 			From:      m.SenderPK.Hex(),
 			GroupID:   m.GroupID,
 			Text:      m.Text,
-		})
+		}
+		if gate != nil {
+			// Our own file post, echoed before /send-file answered.
+			go func(h *sseHub) {
+				<-gate
+				h.broadcast(string(body))
+				h.recordEvent(ev)
+			}(hub)
+			continue
+		}
+		hub.broadcast(string(body))
+		hub.recordEvent(ev)
 		// Host-OS notification when no capable browser UI is showing it.
 		// Body = "<sender>: <text>" using the display text (file/reply
 		// overrides applied above). Own posts come back through this
