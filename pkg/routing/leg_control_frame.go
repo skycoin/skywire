@@ -33,7 +33,11 @@
 // dialects feed one state machine.
 package routing
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+
+	"github.com/google/uuid"
+)
 
 // LegControlMagic marks a mux frame body as a leg control frame. It is a sanity
 // check, not a security boundary: the frame is already authenticated by the
@@ -49,9 +53,41 @@ const LegControlVersion byte = 1
 // nonce, ports and flags routing.MakeLegRehomePacket carries.
 const LegControlKindRehome byte = 1
 
+// LegControlKindLegGone tells the peer that a leg died beyond its first hop.
+// It rides a surviving leg and names the dead one by the peer's own first-hop
+// transport, since the dead leg cannot carry a message about itself.
+const LegControlKindLegGone byte = 2
+
 // LegControlFrameSize is the encoded body length: magic(2) version(1) kind(1)
 // plus the LegRehomePacket payload's own 13 bytes.
 const LegControlFrameSize = 4 + LegRehomeSize
+
+// LegGoneFrameSize is a leg-gone body: magic(2) version(1) kind(1) and the
+// transport ID. It is longer than LegControlFrameSize, so a peer that predates
+// the kind decodes it as an unknown kind and drops it.
+const LegGoneFrameSize = 4 + 16
+
+// EncodeLegGoneFrame builds the body of a leg-gone control frame naming the
+// receiver's first-hop transport of the dead leg.
+func EncodeLegGoneFrame(tpID uuid.UUID) []byte {
+	b := make([]byte, LegGoneFrameSize)
+	binary.BigEndian.PutUint16(b[0:2], LegControlMagic)
+	b[2] = LegControlVersion
+	b[3] = LegControlKindLegGone
+	copy(b[4:], tpID[:])
+	return b
+}
+
+// DecodeLegGoneFrame reads a leg-gone body. ok is false for anything else.
+func DecodeLegGoneFrame(b []byte) (uuid.UUID, bool) {
+	if len(b) < LegGoneFrameSize || binary.BigEndian.Uint16(b[0:2]) != LegControlMagic ||
+		b[2] != LegControlVersion || b[3] != LegControlKindLegGone {
+		return uuid.Nil, false
+	}
+	var id uuid.UUID
+	copy(id[:], b[4:LegGoneFrameSize])
+	return id, true
+}
 
 // EncodeLegControlFrame builds the body of an in-band leg control frame. The
 // caller hands it to the mux, which seals or stamps it and sends it as a

@@ -50,10 +50,15 @@ type MuxCounters struct {
 	// dropped the control frame.
 	LegControlsInBandSent uint64 `json:"leg_controls_inband_sent"`
 	LegControlsInBand     uint64 `json:"leg_controls_inband_received"`
-	LegSplitsSent         uint64 `json:"leg_splits_sent"`
-	LegSplitsReceived     uint64 `json:"leg_splits_received"`
-	LegSplitsAcked        uint64 `json:"leg_splits_acked"`
-	LegSplitsFailed       uint64 `json:"leg_splits_failed"`
+	// LegGone* count leg-gone notices (leg_gone.go): sent per surviving leg,
+	// received, and received ones that pruned a leg here.
+	LegGoneSent       uint64 `json:"leg_gone_sent"`
+	LegGoneReceived   uint64 `json:"leg_gone_received"`
+	LegGonePruned     uint64 `json:"leg_gone_pruned"`
+	LegSplitsSent     uint64 `json:"leg_splits_sent"`
+	LegSplitsReceived uint64 `json:"leg_splits_received"`
+	LegSplitsAcked    uint64 `json:"leg_splits_acked"`
+	LegSplitsFailed   uint64 `json:"leg_splits_failed"`
 	// ForwardFanoutEngaged/Released count noteForwardFanout(on=true/false):
 	// the forward direction's fan-out-under-load latch (unidir.go) turning on
 	// (MuxEventForwardFanout) or off (MuxEventForwardConfined).
@@ -84,6 +89,9 @@ type muxGlobalCounters struct {
 	legSplitsForwarded    atomic.Uint64
 	legControlsInBandSent atomic.Uint64
 	legControlsInBand     atomic.Uint64
+	legGoneSent           atomic.Uint64
+	legGoneReceived       atomic.Uint64
+	legGonePruned         atomic.Uint64
 	legSplitsSent         atomic.Uint64
 	legSplitsReceived     atomic.Uint64
 	legSplitsAcked        atomic.Uint64
@@ -120,6 +128,9 @@ func (c *muxGlobalCounters) snapshot() MuxCounters {
 		LegSplitsForwarded:    c.legSplitsForwarded.Load(),
 		LegControlsInBandSent: c.legControlsInBandSent.Load(),
 		LegControlsInBand:     c.legControlsInBand.Load(),
+		LegGoneSent:           c.legGoneSent.Load(),
+		LegGoneReceived:       c.legGoneReceived.Load(),
+		LegGonePruned:         c.legGonePruned.Load(),
 		LegSplitsSent:         c.legSplitsSent.Load(),
 		LegSplitsReceived:     c.legSplitsReceived.Load(),
 		LegSplitsAcked:        c.legSplitsAcked.Load(),

@@ -1552,8 +1552,10 @@ func (rg *RouteGroup) pruneLivenessDeadLegs(deadIDs []uuid.UUID) {
 // that know the leg is gone for good (a transport the visor itself removed —
 // see handleTransportClosed) close the group instead.
 func (rg *RouteGroup) pruneDeadLegs(deadIDs []uuid.UUID, reason, hookEvent string) int {
+	peerIDs := rg.peerFirstHopsOf(deadIDs)
 	n := rg.removeLegsByID(deadIDs, reason, hookEvent)
 	if n > 0 {
+		rg.tellPeerLegsGone(peerIDs)
 		rg.signalRotate()
 		rg.maybeSelfHeal()
 	}

@@ -137,6 +137,10 @@ func (rg *RouteGroup) handleMuxControlFrame(packet routing.Packet) error {
 		rg.logger.WithError(err).Debug("Leg control: dropping a frame that failed its integrity check")
 		return nil
 	}
+	if tpID, ok := routing.DecodeLegGoneFrame(body); ok {
+		rg.handleLegGone(tpID)
+		return nil
+	}
 	kind, nonce, srcPort, dstPort, flags, ok := routing.DecodeLegControlFrame(body)
 	if !ok || kind != routing.LegControlKindRehome {
 		rg.logger.Debug("Leg control: dropping a malformed or unknown in-band frame")
