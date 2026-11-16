@@ -19,6 +19,18 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
+// wantsDirectTransport reports whether a dial may create a direct transport
+// to its destination, which needs at least one direction allowed one hop.
+func wantsDirectTransport(baseMinHops uint16, opts *DialOptions) bool {
+	return baseMinHops == 1 && (opts.EffectiveMinHops(true) <= 1 || opts.EffectiveMinHops(false) <= 1)
+}
+
+// directRouteAllowed reports whether a dial may ride the direct transport in
+// both directions, which a per-dial min-hops above 1 rules out.
+func directRouteAllowed(baseMinHops uint16, opts *DialOptions) bool {
+	return baseMinHops == 1 && !opts.AnyMinHopsConstraint()
+}
+
 // DialRoutes dials to a given visor of 'rPK'.
 // 'lPort'/'rPort' specifies the local/remote ports respectively.
 // A nil 'opts' input results in a value of '1' for all DialOptions fields.
@@ -220,7 +232,7 @@ func (r *router) DialRoutes(
 	// creation hook (the race path). The fetch loop waits on it only if it can't
 	// find a route over existing transports (see the fetch-error branch below).
 	var hookDone chan struct{}
-	if baseMinHops == 1 && !useExistingOnly {
+	if wantsDirectTransport(baseMinHops, opts) && !useExistingOnly {
 		r.routeSetupHookMu.Lock()
 		hooks := r.routeSetupHooks
 		r.routeSetupHookMu.Unlock()
@@ -484,6 +496,7 @@ func (r *router) DialRoutes(
 				// (the dial_decision trail ended at the seeded exclusion). Take the
 				// finder's filtered result instead.
 				f, rv, ok := r.directRoute(lPK, rPK)
+				ok = ok && directRouteAllowed(baseMinHops, opts)
 				if ok && opts.DiversifyTransports && r.firstHopExcluded(f, opts) {
 					// Every direct transport to this exit is a TWIN of the one
 					// the sibling tunnel holds — same peer, same host, same
