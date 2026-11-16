@@ -78,12 +78,23 @@ bytes. See `reward rules` for the human eligibility rules.
   `-p log_backups`), plus `-H/--hist`, `-u/--utfile` (skip the UT fetch), `--skip-collect`,
   `--prune-below-version` (default `auto`), and `--fetch` (fetch surveys with `cli log --survey`
   instead, with `--minv` and `--proxy host:port`). Date defaults to yesterday UTC.
-- **`rewards serve`** → the `ui` server and the hourly `run` cycle in ONE process, no timer. Takes the
+- **`rewards serve`** → the `ui` server and the `run` cycle in ONE process, no timer, EVENT DRIVEN. Takes the
   flags of `ui` and `run` (not `--date`, `--utfile`; the run flags whose shorthand the ui takes are long
-  only: `--loglvl`, `--lpath`, `--a1`). `--lpath`/`--hist` resolve under `-W/--wd`. One cycle at start
-  (catch-up), then hourly; cycles never overlap; a failed cycle (even a `log.Fatal` in the calculation)
-  is logged and retried next hour while the server keeps serving. `/health` shows `reward_cycle`
-  (running, cycles, failures, last_start/end/duration/result/error, next_run), and the payout and csv
+  only: `--loglvl`, `--lpath`, `--a1`). `--lpath`/`--hist` resolve under `-W/--wd`. The unpaid day
+  (yesterday UTC) is calculated at start, then on: a pushed survey whose calc-relevant fields changed
+  (reward address, ip, interfaces/MACs, arch, uuid, hypervisor, services, skywire_version, or a first
+  survey; a timestamp-only change does not count), after `--debounce` (1m, a burst gives one run); a
+  single payout address that sent coins (`--watch-interval` 30s polls `--skycoin-node`
+  `/api/v1/blockchain/metadata`, re-checks the unspent single addresses on a new block, or every 5m when
+  the head is unknown); each collection (`--collect-interval` 3h: survey cleanup + today's bandwidth,
+  none with `--skip-collect`); `--day-close-delay` (15m) after midnight UTC (fetches the finished day's
+  UT and final bandwidth once); and a `--cycle-interval` (1h) fallback. Every run hashes the inputs and
+  writes nothing when they match the last written outputs (log "Inputs for <date> unchanged"); a paid
+  day is never recalculated. Runs never overlap; a failed run (even a `log.Fatal` in the calculation)
+  is logged and retried at the next trigger or check while the server keeps serving. `/health` shows
+  `reward_cycle` (running, cycles, recalcs, skips, failures, last_start/end/duration/result/error,
+  last_trigger, last_date, inputs_hash, last_skip(_at), last_recalc_at, pending_trigger, next_run,
+  last_collect, collect_error, next_collect, last_watch, watch_error), and the payout and csv
   routes refuse while a cycle runs, as they did while the oneshot unit was active. Runs the telegram
   bot too when `TG_BOT_TOKEN` and `TG_CHAT_ID` are set (watches `<wd>/transactions0.txt`). Never run it
   beside the old timer on the same work dir.
@@ -92,7 +103,8 @@ bytes. See `reward rules` for the human eligibility rules.
   `work_dir` (hist/, log_backups/, xpub_index.json). Optional: `skycoin_node`, `whitelist`, `addr`
   (plain HTTP, none by default), `dmsg_port`, `canonical_domain`, `login_node`, `survey_min_version`,
   `skip_collect`, `fetch` + `proxy` (e.g. the visor's survey-whitelist proxy `127.0.0.1:4443`),
-  `min_version`, `prune_below_version`, `cycle_interval`, `no_cycle`, `bot_token_file` + `bot_chat_id`
+  `min_version`, `prune_below_version`, `cycle_interval`, `collect_interval`, `debounce`,
+  `watch_interval`, `day_close_delay` (durations, defaults as serve), `no_cycle`, `bot_token_file` + `bot_chat_id`
   (else `TG_BOT_TOKEN`/`TG_CHAT_ID` from the visor's environment; the token never goes in the block).
   `visor state --select services` shows it with `detail.reward_cycle`; `visor services
   start|stop|restart rewards` controls it; a failed start is retried with backoff. `skywire svc run`

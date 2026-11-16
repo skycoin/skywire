@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -44,5 +45,41 @@ func TestStoredChecksumRefreshesSurveyTime(t *testing.T) {
 	}
 	if time.Since(info.ModTime()) > time.Minute {
 		t.Fatalf("survey mtime not refreshed: %s", info.ModTime())
+	}
+}
+
+// A stored survey with a new reward address asks for a recalculation, and
+// the same survey again does not.
+func TestSurveyPushTriggersRecalc(t *testing.T) {
+	wd := t.TempDir()
+	pk, _ := cipher.GenerateKeyPair()
+	s := &Scheduler{}
+	SetScheduler(s)
+	defer SetScheduler(nil)
+
+	mux := http.NewServeMux()
+	registerSurveyIngestRoutes(mux, wd)
+	push := func(addr string) {
+		t.Helper()
+		body := `{"public_key":"` + pk.Hex() + `","skywire_version":"v1.3.112","skycoin_address":"` + addr + `"}`
+		req := httptest.NewRequest(http.MethodPost, "/node-info", strings.NewReader(body))
+		req.RemoteAddr = pk.Hex() + ":80"
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+		}
+	}
+	push("addr1")
+	if p := s.takePending(); p != "survey "+pk.Hex() {
+		t.Fatalf("first survey: pending %q", p)
+	}
+	push("addr1")
+	if p := s.takePending(); p != "" {
+		t.Fatalf("same survey: pending %q", p)
+	}
+	push("addr2")
+	if p := s.takePending(); p != "survey "+pk.Hex() {
+		t.Fatalf("new address: pending %q", p)
 	}
 }

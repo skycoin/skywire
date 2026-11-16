@@ -107,27 +107,54 @@ type cycleConfig struct {
 // cycleMu keeps two cycles in one process from sharing the package state.
 var cycleMu sync.Mutex
 
-// runCycle is one hourly cycle for o.date: the collection, then the
-// calculation unless the date was paid or its inputs did not change since
-// d last wrote its outputs. A step that fails returns an error. Deeper code
-// may still log.Fatal, which a caller that must outlive the cycle contains
-// with cmdutil.Contain.
+// runCycle is one whole cycle for o.date, as `rewards run` does it: the
+// collection, then the calculation unless the date was paid or its inputs
+// did not change since d last wrote its outputs. A step that fails returns
+// an error. Deeper code may still log.Fatal, which a caller that must
+// outlive the cycle contains with cmdutil.Contain.
 func runCycle(d *dayCycle, o rewardOpts) (cycleResult, error) {
 	cycleMu.Lock()
 	defer cycleMu.Unlock()
-	if _, err := time.Parse("2006-01-02", o.date); err != nil {
-		return cycleResult{date: o.date}, fmt.Errorf("invalid --date: %w", err)
+	if err := prepareCycle(o); err != nil {
+		return cycleResult{date: o.date}, err
 	}
-	if err := os.MkdirAll(o.histDir, 0750); err != nil {
-		return cycleResult{date: o.date}, fmt.Errorf("create hist dir: %w", err)
-	}
-	xpubIndexPath = filepath.Join(filepath.Dir(o.histDir), deprewards.XpubIndexFile)
-
 	// Collection runs even when the date was paid, as in the service: bw-collect fills today's file.
 	if !d.cfg.skipCollect {
 		collectAll(o, d.cfg)
 	}
 	return d.calcDay(o)
+}
+
+// calcCycle is the calculation part of runCycle.
+func calcCycle(d *dayCycle, o rewardOpts) (cycleResult, error) {
+	cycleMu.Lock()
+	defer cycleMu.Unlock()
+	if err := prepareCycle(o); err != nil {
+		return cycleResult{date: o.date}, err
+	}
+	return d.calcDay(o)
+}
+
+// collectCycle is the collection part of runCycle.
+func collectCycle(d *dayCycle, o rewardOpts) error {
+	cycleMu.Lock()
+	defer cycleMu.Unlock()
+	if err := prepareCycle(o); err != nil {
+		return err
+	}
+	collectAll(o, d.cfg)
+	return nil
+}
+
+func prepareCycle(o rewardOpts) error {
+	if _, err := time.Parse("2006-01-02", o.date); err != nil {
+		return fmt.Errorf("invalid --date: %w", err)
+	}
+	if err := os.MkdirAll(o.histDir, 0750); err != nil {
+		return fmt.Errorf("create hist dir: %w", err)
+	}
+	xpubIndexPath = filepath.Join(filepath.Dir(o.histDir), deprewards.XpubIndexFile)
+	return nil
 }
 
 // collectAll runs the collection steps of the service. A survey cleanup

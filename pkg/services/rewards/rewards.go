@@ -62,14 +62,19 @@ type Config struct {
 	CanonicalDomain  string          `json:"canonical_domain,omitempty"`
 	SurveyMinVersion string          `json:"survey_min_version,omitempty"`
 
-	// The cycle: hourly unless cycle_interval says otherwise, none with no_cycle.
-	NoCycle       bool              `json:"no_cycle,omitempty"`
-	CycleInterval services.Duration `json:"cycle_interval,omitempty"`
-	SkipCollect   bool              `json:"skip_collect,omitempty"`
-	Fetch         bool              `json:"fetch,omitempty"`
-	Proxy         string            `json:"proxy,omitempty"`
-	MinVersion    string            `json:"min_version,omitempty"`
-	PruneBelow    string            `json:"prune_below_version,omitempty"`
+	// The cycle: none with no_cycle. cycle_interval is the fallback check,
+	// the other intervals are those of `rewards serve`.
+	NoCycle         bool              `json:"no_cycle,omitempty"`
+	CycleInterval   services.Duration `json:"cycle_interval,omitempty"`
+	CollectInterval services.Duration `json:"collect_interval,omitempty"`
+	Debounce        services.Duration `json:"debounce,omitempty"`
+	WatchInterval   services.Duration `json:"watch_interval,omitempty"`
+	DayCloseDelay   services.Duration `json:"day_close_delay,omitempty"`
+	SkipCollect     bool              `json:"skip_collect,omitempty"`
+	Fetch           bool              `json:"fetch,omitempty"`
+	Proxy           string            `json:"proxy,omitempty"`
+	MinVersion      string            `json:"min_version,omitempty"`
+	PruneBelow      string            `json:"prune_below_version,omitempty"`
 
 	BotTokenFile string `json:"bot_token_file,omitempty"`
 	BotChatID    int64  `json:"bot_chat_id,omitempty"`
@@ -116,16 +121,21 @@ func (s *service) Run(ctx context.Context) error {
 		}
 		sched := &rewardsserver.Scheduler{
 			Cycle: rewardsserver.NewCycle(rewardsserver.CycleConfig{
-				WorkDir:     c.WorkDir,
-				SkycoinNode: c.SkycoinNode,
-				SkipCollect: c.SkipCollect,
-				Fetch:       c.Fetch,
-				Proxy:       c.Proxy,
-				MinVersion:  c.MinVersion,
-				PruneBelow:  c.PruneBelow,
+				WorkDir:       c.WorkDir,
+				SkycoinNode:   c.SkycoinNode,
+				SkipCollect:   c.SkipCollect,
+				Fetch:         c.Fetch,
+				Proxy:         c.Proxy,
+				MinVersion:    c.MinVersion,
+				PruneBelow:    c.PruneBelow,
+				DayCloseDelay: time.Duration(c.DayCloseDelay),
 			}),
-			Interval: time.Duration(c.CycleInterval),
-			Log:      s.log,
+			Interval:        time.Duration(c.CycleInterval),
+			CollectInterval: time.Duration(c.CollectInterval),
+			Debounce:        time.Duration(c.Debounce),
+			WatchInterval:   time.Duration(c.WatchInterval),
+			DayCloseDelay:   time.Duration(c.DayCloseDelay),
+			Log:             s.log,
 		}
 		s.mu.Lock()
 		s.sched = sched

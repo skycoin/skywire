@@ -6,6 +6,7 @@
 package clirewards
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -14,8 +15,11 @@ import (
 	"hash"
 	"io"
 	"io/fs"
+	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,6 +40,8 @@ const (
 	closeRetry = 10 * time.Minute
 	// maxBandwidthDays is the widest ?days= window TPD answers.
 	maxBandwidthDays = 35
+	// watchFallback spaces the address checks when the node does not tell its last block.
+	watchFallback = 5 * time.Minute
 )
 
 // fetchUT and closeBW fetch a day's uptimes and its final bandwidth.
@@ -53,6 +59,14 @@ type dayCycle struct {
 	mu         sync.Mutex
 	lastHash   map[string]string    // date to the inputs hash of the outputs on disk
 	closeTried map[string]time.Time // date to the last attempt to collect its final bandwidth
+	// watching is set when watchSpent runs, so the hash may read the spent cache as it is.
+	watching bool
+	watch    struct {
+		date    string
+		addrs   []string // unspent single payout addresses of date
+		head    uint64
+		checked time.Time
+	}
 }
 
 // cycleResult is what one calculation run did.
@@ -101,6 +115,7 @@ func (d *dayCycle) calcDay(o rewardOpts) (cycleResult, error) {
 	res := cycleResult{date: o.date}
 	if _, err := os.Stat(filepath.Join(o.histDir, o.date+".txt")); err == nil {
 		log.Infof("Transaction already broadcasted for %s; nothing to do", o.date)
+		d.setWatch(o.date, nil)
 		res.skipped, res.note = true, "paid"
 		return res, nil
 	}
@@ -137,10 +152,13 @@ func (d *dayCycle) calcDay(o rewardOpts) (cycleResult, error) {
 		}
 	}
 
-	// Ask the chain afresh: what an address had not sent at the last look
-	// it may have sent since.
-	forgetUnspent()
-	h, _, err := inputsHash(o)
+	// Without a watch, ask the chain afresh: what an address had not sent
+	// at the last look it may have sent since. With one, the watch keeps
+	// the cache current and only a calculation asks afresh.
+	if !d.watching {
+		forgetUnspent()
+	}
+	h, singles, err := inputsHash(o)
 	if err != nil {
 		return res, fmt.Errorf("hash inputs: %w", err)
 	}
@@ -149,9 +167,17 @@ func (d *dayCycle) calcDay(o rewardOpts) (cycleResult, error) {
 	same := d.lastHash[o.date] == h
 	d.mu.Unlock()
 	if same {
+		d.setWatch(o.date, singles)
 		log.Infof("Inputs for %s unchanged (%s); outputs kept", o.date, h[:12])
 		res.skipped, res.note = true, "inputs unchanged"
 		return res, nil
+	}
+	if d.watching {
+		forgetUnspent()
+		if h, singles, err = inputsHash(o); err != nil {
+			return res, fmt.Errorf("hash inputs: %w", err)
+		}
+		res.hash = h
 	}
 
 	xpubIndex = nil
@@ -165,8 +191,121 @@ func (d *dayCycle) calcDay(o rewardOpts) (cycleResult, error) {
 	d.mu.Lock()
 	d.lastHash[o.date] = h
 	d.mu.Unlock()
+	d.setWatch(o.date, singles)
 	log.Infof("Reward cycle complete for %s (inputs %s)", r.date, h[:12])
 	return res, nil
+}
+
+// setWatch makes addrs, the unspent single addresses of date, those the watch looks at.
+func (d *dayCycle) setWatch(date string, addrs []string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.watch.date, d.watch.addrs = date, addrs
+}
+
+// chainHead and addressExposure ask the skycoin node.
+var (
+	chainHead       = fetchChainHead
+	addressExposure = func(nodeURL, addr string) (rewardconfig.AddressExposure, error) {
+		return rewardconfig.FetchAddressExposure(&http.Client{Timeout: 30 * time.Second}, nodeURL, addr)
+	}
+)
+
+// watchSpent reports whether one of the watched addresses has sent coins
+// since the last look. It looks when the node has a new block, or every
+// watchFallback when the node does not say what its last block is.
+func (d *dayCycle) watchSpent(ctx context.Context, nodeURL string) (bool, error) {
+	d.mu.Lock()
+	addrs, last, checked := slices.Clone(d.watch.addrs), d.watch.head, d.watch.checked
+	d.mu.Unlock()
+	if len(addrs) == 0 {
+		return false, nil
+	}
+	head, headErr := chainHead(ctx, nodeURL)
+	now := d.now()
+	if headErr == nil && head == last {
+		return false, nil
+	}
+	if headErr != nil && now.Sub(checked) < watchFallback {
+		return false, headErr
+	}
+	var changed bool
+	for _, a := range addrs {
+		if ctx.Err() != nil {
+			return changed, ctx.Err()
+		}
+		e, err := addressExposure(nodeURL, a)
+		if err != nil {
+			return changed, fmt.Errorf("check whether %s has sent coins: %w", a, err)
+		}
+		if e.Spent {
+			log.Infof("Payout address %s has sent coins", a)
+			spentCache.Lock()
+			spentCache.m[a] = true
+			spentCache.Unlock()
+			changed = true
+		}
+	}
+	d.mu.Lock()
+	if headErr == nil {
+		d.watch.head = head
+	}
+	d.watch.checked = now
+	spentCache.Lock()
+	d.watch.addrs = slices.DeleteFunc(d.watch.addrs, func(a string) bool { return spentCache.m[a] })
+	spentCache.Unlock()
+	d.mu.Unlock()
+	return changed, headErr
+}
+
+// fetchChainHead is the sequence number of the node's last block.
+func fetchChainHead(ctx context.Context, nodeURL string) (uint64, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(nodeURL, "/")+"/api/v1/blockchain/metadata", nil)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("skycoin node %s returned %d", nodeURL, resp.StatusCode)
+	}
+	var m struct {
+		Head struct {
+			Seq uint64 `json:"seq"`
+		} `json:"head"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&m); err != nil {
+		return 0, fmt.Errorf("decode blockchain metadata: %w", err)
+	}
+	return m.Head.Seq, nil
+}
+
+// surveyChanged reports whether a survey replacing old can change a
+// calculation: a field calcRewards reads, the skywire version the survey
+// cleanup prunes by, or a survey appearing.
+func surveyChanged(old, new []byte) bool {
+	ko, okOld := surveyKey(old)
+	kn, okNew := surveyKey(new)
+	return okOld != okNew || ko != kn
+}
+
+func surveyKey(b []byte) (string, bool) {
+	s, err := parseSurveyBytes(b)
+	if err != nil {
+		return "", false
+	}
+	var v struct {
+		Version string `json:"skywire_version"`
+	}
+	_ = json.Unmarshal(b, &v) //nolint:errcheck // parsed above
+	k, err := surveyInputs(s)
+	if err != nil {
+		return "", false
+	}
+	return v.Version + " " + string(k), true
 }
 
 // closeBandwidth collects o.date's bandwidth after the day ended, so the
