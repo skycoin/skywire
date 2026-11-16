@@ -18,6 +18,7 @@ const (
 	BackendAaudio
 	BackendOpensl
 	BackendWebaudio
+	BackendCustom
 	BackendNull
 )
 
@@ -85,7 +86,10 @@ type ResampleAlgorithm uint32
 // ResampleAlgorithm enumeration.
 const (
 	ResampleAlgorithmLinear ResampleAlgorithm = 0
-	ResampleAlgorithmSpeex  ResampleAlgorithm = 1
+	ResampleAlgorithmCustom ResampleAlgorithm = 1
+
+	// Deprecated: Speex was removed from miniaudio, use ResampleAlgorithmCustom.
+	ResampleAlgorithmSpeex = ResampleAlgorithmCustom
 )
 
 // IOSSessionCategory type.
@@ -176,4 +180,25 @@ const (
 	AAudioAllowCapturePolicyByAll
 	AAudioAllowCapturePolicyBySystem
 	AAudioAllowCapturePolicyByNone
+)
+
+// DitherMode type.
+type DitherMode uint32
+
+// DitherMode enumeration.
+const (
+	DitherModeNone DitherMode = iota
+	DitherModeRectangle
+	DitherModeTriangle
+)
+
+// ChannelMixMode type.
+type ChannelMixMode uint32
+
+// ChannelMixMode enumeration.
+const (
+	ChannelMixModeRectangular ChannelMixMode = iota
+	ChannelMixModeSimple
+	ChannelMixModeCustomWeights
+	ChannelMixModeDefault = ChannelMixModeRectangular
 )

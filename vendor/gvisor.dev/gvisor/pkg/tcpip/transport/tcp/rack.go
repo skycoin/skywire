@@ -30,6 +30,17 @@ const (
 	// See: https://tools.ietf.org/html/draft-ietf-tcpm-rack-08#section-7.5.
 	wcDelayedACKTimeout = 200 * time.Millisecond
 
+	// tcpTimeoutMin is the PTO inflation applied when FlightSize is greater
+	// than one segment. It mirrors TCP_TIMEOUT_MIN_US in Linux's
+	// tcp_schedule_loss_probe, which is the implementation RFC 8985
+	// documents. On paths whose RTT is of the same order as end-host or
+	// transport jitter (e.g. receiver-side GRO/batched delivery on
+	// loopback-class transports), a bare 2*SRTT PTO fires while ACKs are
+	// merely delayed; the resulting probe typically overtakes the original
+	// transmission, so no DSACK is generated and TLP recovery detection
+	// converts the spurious probe into a congestion response.
+	tcpTimeoutMin = 2 * time.Millisecond
+
 	// tcpRACKRecoveryThreshold is the number of loss recoveries for which
 	// the reorder window is inflated and after that the reorder window is
 	// reset to its initial value of minRTT/4.
@@ -64,6 +75,10 @@ type rackControl struct {
 	// a TLP retransmission.
 	tlpHighRxt seqnum.Value
 
+	// tlpAckSeq is the peer sequence number of the latest window update
+	// acknowledging exactly tlpHighRxt.
+	tlpAckSeq seqnum.Value
+
 	// snd is a reference to the sender.
 	snd *sender
 }
@@ -71,12 +86,14 @@ type rackControl struct {
 // init initializes RACK specific fields.
 func (rc *rackControl) init(snd *sender, iss seqnum.Value) {
 	rc.FACK = iss
+	rc.EndSequence = iss
+	rc.RTTSeq = iss
 	rc.ReoWndIncr = 1
 	rc.snd = snd
 }
 
 // update will update the RACK related fields when an ACK has been received.
-// See: https://tools.ietf.org/html/draft-ietf-tcpm-rack-09#section-6.2
+// See: https://www.rfc-editor.org/rfc/rfc8985.html#section-6.2
 //
 // +checklocks:rc.snd.ep.mu
 func (rc *rackControl) update(seg *segment, ackSeg *segment) {
@@ -92,15 +109,15 @@ func (rc *rackControl) update(seg *segment, ackSeg *segment) {
 
 	// If the ACK is for a retransmitted packet, do not update if it is a
 	// spurious inference which is determined by below checks:
-	// 1. When Timestamping option is available, if the TSVal is less than
+	// 1. When Timestamping option is available, if the TSecr is less than
 	// the transmit time of the most recent retransmitted packet.
-	// 2. When RTT calculated for the packet is less than the smoothed RTT
+	// 2. When RTT calculated for the packet is less than the minimum RTT
 	// for the connection.
-	// See: https://tools.ietf.org/html/draft-ietf-tcpm-rack-08#section-7.2
-	// step 2
+	// See: https://www.rfc-editor.org/rfc/rfc8985.html#section-6.2, step 2.
 	if seg.xmitCount > 1 {
 		if ackSeg.parsedOptions.TS && ackSeg.parsedOptions.TSEcr != 0 {
-			if ackSeg.parsedOptions.TSEcr < rc.snd.ep.tsVal(seg.xmitTime) {
+			retransmitTS := rc.snd.ep.tsVal(seg.xmitTime)
+			if seqnum.Value(ackSeg.parsedOptions.TSEcr).LessThan(seqnum.Value(retransmitTS)) {
 				return
 			}
 		}
@@ -183,6 +200,8 @@ func (s *sender) schedulePTO() {
 		pto = s.rtt.TCPRTTState.SRTT * 2
 		if s.Outstanding == 1 {
 			pto += wcDelayedACKTimeout
+		} else {
+			pto += tcpTimeoutMin
 		}
 	}
 	s.rtt.Unlock()
@@ -249,43 +268,52 @@ func (s *sender) probeTimerExpired() tcpip.Error {
 	return nil
 }
 
-// detectTLPRecovery detects if recovery was accomplished by the loss probes
-// and updates TLP state accordingly.
-// See https://tools.ietf.org/html/draft-ietf-tcpm-rack-08#section-7.6.3.
+// detectTLPRecovery checks whether a retransmitted tail probe repaired a loss.
+// See RFC 8985 section 7.4.2 and Linux tcp_process_tlp_ack:
+// https://github.com/torvalds/linux/blob/7d0a66e4b/net/ipv4/tcp_input.c#L3892-L3920
 //
 // +checklocks:s.ep.mu
 func (s *sender) detectTLPRecovery(ack seqnum.Value, rcvdSeg *segment) {
-	if !(s.ep.SACKPermitted && s.rc.tlpRxtOut) {
+	end := s.rc.tlpHighRxt
+	if !s.ep.SACKPermitted || !s.rc.tlpRxtOut || ack.LessThan(end) {
 		return
 	}
 
-	// Step 1.
-	if s.isDupAck(rcvdSeg) && ack == s.rc.tlpHighRxt {
-		var sbAboveTLPHighRxt bool
-		for _, sb := range rcvdSeg.parsedOptions.SACKBlocks {
-			if s.rc.tlpHighRxt.LessThan(sb.End) {
-				sbAboveTLPHighRxt = true
-				break
-			}
-		}
-		if !sbAboveTLPHighRxt {
-			// TLP episode is complete.
+	blocks := rcvdSeg.parsedOptions.SACKBlocks
+	if len(blocks) != 0 && blocks[0].End == end && blocks[0].Start.LessThan(end) {
+		// The cumulative ACK covers the probe. A first SACK block ending
+		// there reports duplicate delivery of the probed segment.
+		s.rc.tlpRxtOut = false
+		return
+	}
+	if ack == end {
+		if s.SndUna.LessThan(ack) || s.rc.tlpAckSeq.LessThan(rcvdSeg.sequenceNumber) {
+			// The first ACK can be for either copy. A later peer sequence
+			// updates the send window even if its size is unchanged.
+			s.rc.tlpAckSeq = rcvdSeg.sequenceNumber
+		} else if ack == s.SndUna && rcvdSeg.logicalLen() == 0 && rcvdSeg.window != 0 && rcvdSeg.window == s.SndWnd && len(blocks) == 0 {
+			// A pure duplicate ACK indicates that both copies arrived.
 			s.rc.tlpRxtOut = false
 		}
+		return
 	}
 
-	if s.rc.tlpRxtOut && s.rc.tlpHighRxt.LessThanEq(ack) {
-		// TLP episode is complete.
-		s.rc.tlpRxtOut = false
-		if !checkDSACK(rcvdSeg) {
-			// Step 2. Either the original packet or the retransmission (in the
-			// form of a probe) was lost. Invoke a congestion control response
-			// equivalent to fast recovery.
-			s.cc.HandleLossDetected()
-			s.enterRecovery()
-			s.leaveRecovery()
-		}
+	// New data beyond the probe was delivered without evidence that both
+	// copies arrived. Reduce the window as for a loss, but do not start
+	// fast recovery: the probe has already repaired this hole. Keep the
+	// recovery point so this flight cannot trigger a second reduction.
+	s.rc.tlpRxtOut = false
+	s.cc.HandleLossDetected()
+	s.SndCwnd = s.Ssthresh
+	s.cc.PostRecovery()
+	s.FastRecovery.Last = s.SndNxt - 1
+	s.state = tcpip.Open
+	// This ACK can also report out-of-order data beyond the repaired hole.
+	// The scoreboard still includes blocks covered by the cumulative ACK.
+	if last, ok := s.ep.scoreboard.ranges.Max(); ok && ack.LessThan(last.End) {
+		s.state = tcpip.Disorder
 	}
+	s.ep.stack.Stats().TCP.TLPRecovery.Increment()
 }
 
 // updateRACKReorderWindow updates the reorder window.

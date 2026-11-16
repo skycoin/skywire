@@ -3,7 +3,6 @@ package malgo
 // #include "malgo.h"
 import "C"
 import (
-	"reflect"
 	"sync"
 	"unsafe"
 )
@@ -198,7 +197,7 @@ func InitContext(backends []Backend, config ContextConfig, logProc LogProc) (*Al
 	var backendsArg *C.ma_backend
 	backendCountArg := (C.ma_uint32)(len(backends))
 	if backendCountArg > 0 {
-		backendsArg = (*C.ma_backend)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&backends)).Data))
+		backendsArg = (*C.ma_backend)(unsafe.Pointer(&backends[0]))
 	}
 
 	result := C.ma_context_init(backendsArg, backendCountArg, &configC, ctx.cptr())

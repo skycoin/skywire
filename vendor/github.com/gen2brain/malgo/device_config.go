@@ -1,6 +1,9 @@
 package malgo
 
-// #include "malgo.h"
+/*
+#include <stdlib.h>
+#include "malgo.h"
+*/
 import "C"
 import (
 	"unsafe"
@@ -116,13 +119,11 @@ func (d *DeviceConfig) toC() (C.ma_device_config, func()) {
 	deviceConfig.resampling.algorithm = C.ma_resample_algorithm(d.Resampling.Algorithm)
 	deviceConfig.resampling.linear.lpfOrder = C.uint(d.Resampling.Linear.LpfOrder)
 
-	deviceConfig.playback.pDeviceID = (*C.ma_device_id)(d.Playback.DeviceID)
 	deviceConfig.playback.format = C.ma_format(d.Playback.Format)
 	deviceConfig.playback.channels = C.uint(d.Playback.Channels)
 	deviceConfig.playback.pChannelMap = (*C.ma_channel)(d.Playback.ChannelMap)
 	deviceConfig.playback.shareMode = C.ma_share_mode(d.Playback.ShareMode)
 
-	deviceConfig.capture.pDeviceID = (*C.ma_device_id)(d.Capture.DeviceID)
 	deviceConfig.capture.format = C.ma_format(d.Capture.Format)
 	deviceConfig.capture.channels = C.uint(d.Capture.Channels)
 	deviceConfig.capture.pChannelMap = (*C.ma_channel)(d.Capture.ChannelMap)
@@ -139,6 +140,22 @@ func (d *DeviceConfig) toC() (C.ma_device_config, func()) {
 	deviceConfig.alsa.noAutoResample = C.uint(d.Alsa.NoAutoResample)
 
 	var releasers []func()
+	if d.Playback.DeviceID != nil {
+		id := (*C.ma_device_id)(C.malloc(C.sizeof_ma_device_id))
+		*id = *(*C.ma_device_id)(d.Playback.DeviceID)
+		deviceConfig.playback.pDeviceID = id
+		releasers = append(releasers, func() {
+			C.free(unsafe.Pointer(id))
+		})
+	}
+	if d.Capture.DeviceID != nil {
+		id := (*C.ma_device_id)(C.malloc(C.sizeof_ma_device_id))
+		*id = *(*C.ma_device_id)(d.Capture.DeviceID)
+		deviceConfig.capture.pDeviceID = id
+		releasers = append(releasers, func() {
+			C.free(unsafe.Pointer(id))
+		})
+	}
 	if d.Pulse.StreamNameCapture != "" {
 		streamNameCapturePtr := C.CString(d.Pulse.StreamNameCapture)
 		deviceConfig.pulse.pStreamNameCapture = streamNameCapturePtr
@@ -212,11 +229,6 @@ type ResampleConfig struct {
 // ResampleLinearConfig type.
 type ResampleLinearConfig struct {
 	LpfOrder uint32
-}
-
-// ResampleSpeexConfig type.
-type ResampleSpeexConfig struct {
-	Quality int
 }
 
 // AAudioDeviceConfig type.
