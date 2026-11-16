@@ -9,12 +9,12 @@ running more than one at once is redundant and can fight over the binary.
 | Mechanism | Package | Unit(s) | Cadence | Updates by | Best for |
 |-----------|---------|---------|---------|-----------|----------|
 | **1. unattended-upgrades** | `skyrepo` | apt's `apt-daily-upgrade.timer` | apt periodic (≈daily) | reinstalling the `skywire-bin` **`.deb`** from the Skycoin apt repo | Debian/Armbian boards installed from the apt repo |
-| **2. source auto-update** | `skywire-autoupdate` | `skywire-update.service` + `.timer` | daily (`+` up to 1 h jitter) | `go install github.com/skycoin/skywire@<commit>` → `/opt/skywire/bin/skywire` | nodes that build from source and track the rolling release |
+| **2. auto-update** | `skywire-autoupdate` | `skywire-update.service` + `.timer` | daily (`+` up to 1 h jitter) | downloading the prebuilt `develop-latest` binary (or `go install github.com/skycoin/skywire@<commit>`) → `/opt/skywire/bin/skywire` | nodes that track the rolling release |
 | **3. docker auto-pull** | `skywire-docker-autopull` | `skywire-docker-autopull.service` + `.timer` | every 5 min | `docker pull` + `docker compose up -d --force-recreate` | container deployments |
 
 All three ultimately track the same **rolling release** off `develop`: the
-source updater installs the tip of `develop` (or a tagged release / pinned
-commit / prebuilt binary — see the channels below), and the docker path tracks
+updater installs the prebuilt binary of the tip of `develop` (or builds it, a
+tagged release or a pinned commit from source — see the channels below), and the docker path tracks
 the `:test` Docker tag. The update channels are described under mechanism 2
 below; how the prebuilt-binary pre-releases are produced is at the end of this
 page.
@@ -109,10 +109,12 @@ sudo unattended-upgrade --dry-run --debug 2>&1 | grep -i skycoin
 
 ---
 
-## 2. Source auto-update — `skywire-autoupdate`
+## 2. Auto-update — `skywire-autoupdate`
 
-The **`skywire-autoupdate`** package (depends on `skywire-bin` and `go`)
-rebuilds skywire from source on a daily timer, following the rolling release.
+The **`skywire-autoupdate`** package (depends on `skywire-bin`; `go` only for
+the source channels) updates skywire on a daily timer, following the rolling
+release. By default it downloads the prebuilt binary that CI rebuilds on every
+push to `develop`.
 It installs `/usr/bin/skywire-update` plus a service and timer.
 
 `skywire-update.service`:
@@ -140,11 +142,12 @@ Persistent=true
 ### What `/usr/bin/skywire-update` does
 
 1. Sources `/etc/skywire.conf` for its settings (`SKYENV`).
-2. Resolves the target from `UPDATE_CHANNEL` (default `develop` = the tip of
-   the `develop` branch). Also accepts `latest` (the latest tagged release),
-   an explicit `<commit-hash>`, or `binary` / `binary-develop`
-   (download a prebuilt linux binary from the rolling `develop-latest` GitHub
-   pre-release, verified against `SHA256SUMS`, instead of building from source).
+2. Resolves the target from `UPDATE_CHANNEL`. The default is `binary`
+   (download the prebuilt linux binary from the rolling `develop-latest` GitHub
+   pre-release, verified against `SHA256SUMS`) on amd64, arm64 and arm, and
+   `develop` (build the tip of the `develop` branch from source) elsewhere.
+   Also accepts `binary-develop` (same as `binary`), `latest` (build the latest
+   tagged release) and an explicit `<commit-hash>`.
 3. Compares that target to the running binary (`skywire -b`) and exits early
    if nothing changed.
 4. For the source channels, builds as the unprivileged `skywire-build` user
@@ -156,7 +159,7 @@ Persistent=true
    instead. Either way, installs the result to `/opt/skywire/bin/skywire`.
 5. Runs `skywire autoconfig`, then `systemctl restart skywire` (plus anything
    in `RESTART_SERVICES`) if the service is active.
-6. Prunes the Go build/module caches on exit.
+6. For the source channels, prunes the Go build/module caches on exit.
 
 Tunable knobs in `/etc/skywire.conf`: `UPDATE_CHANNEL`, `GOPROXY_MODE`,
 `MODCACHE_CAP_MB`, `RESTART_SERVICES`.

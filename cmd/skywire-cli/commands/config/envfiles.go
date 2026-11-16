@@ -566,15 +566,17 @@ const envfileTemplate = `#
 #	installed by the skywire-autoupdate package.
 
 #--	Update channel:
-#	"develop"        = latest develop branch commit (default)
-#	"latest"         = latest tagged release version
-#	"<hash>"         = pin to a specific commit hash
 #	"binary"         = download the prebuilt linux binary for this arch from the
-#	                   rolling develop-latest GitHub pre-release, verified against
-#	                   SHA256SUMS — no compile, no Go toolchain. Recommended for
-#	                   unattended hosts (avoids all source-build/network fragility).
+#	                   rolling develop-latest GitHub pre-release, rebuilt on every
+#	                   push to develop and verified against SHA256SUMS. No compile,
+#	                   no Go toolchain, no Go caches. The default on amd64, arm64
+#	                   and arm.
 #	"binary-develop" = the same as "binary"
-#UPDATE_CHANNEL=develop
+#	"develop"        = build the latest develop branch commit from source
+#	                   (the default on other architectures)
+#	"latest"         = build the latest tagged release version from source
+#	"<hash>"         = build a specific commit hash from source
+#UPDATE_CHANNEL=binary
 
 #--	Go module proxy mode for the source-build channels (develop/latest/<hash>).
 #	Unset (default): try GOPROXY=direct first, then fall back to the default
