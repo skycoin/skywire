@@ -6,6 +6,22 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.112
+
+Skychat group fixes reported by a mobile tester. A member that reconnects to
+the group owner is answered at once instead of after the owner's old
+connection to it closes, which had left a member cut off from the group. The
+sender no longer sees its own voice or video message twice, and a recorded
+clip posted to a group is fetched as soon as it arrives instead of on request.
+
+The TinyGo release builds get swap, because the linux/arm64 build ran out of
+memory on the 16 GB runner.
+
+-   cxo/node: answer a rejoining peer without waiting for its old conn  [#6257](https://github.com/skycoin/skywire/pull/6257)
+-   ci: give the tinygo release builds swap  [#6256](https://github.com/skycoin/skywire/pull/6256)
+-   skychat: pull a recorded clip posted to a group as it arrives  [#6255](https://github.com/skycoin/skywire/pull/6255)
+-   skychat: send the echo of an own group file after the send answers  [#6254](https://github.com/skycoin/skywire/pull/6254)
+
 ## 1.3.111
 
 The skycoin wallet now splits a send that is too large for one transaction
