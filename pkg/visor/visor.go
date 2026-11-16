@@ -642,6 +642,11 @@ type surveyState struct {
 	pushEligible  bool
 	pushReason    string
 	pushAt        time.Time
+	// kick asks the push loop to push now, after the reward address changed.
+	kick chan struct{}
+	// optOut is the last survey with its reward address removed, pushed once
+	// after the address was deleted so the reward system stops paying it.
+	optOut visorconfig.Survey
 }
 
 // logServerState holds log server API references for health stats.
@@ -943,7 +948,8 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, opts Options, logBcast 
 			mu:    new(sync.Mutex),
 		},
 		survey: surveyState{
-			mu: new(sync.RWMutex),
+			mu:   new(sync.RWMutex),
+			kick: make(chan struct{}, 1),
 		},
 		dmsgLatency: dmsgLatencyState{
 			servers: make(map[cipher.PubKey]time.Duration),
