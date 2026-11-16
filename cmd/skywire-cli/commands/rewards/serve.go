@@ -49,8 +49,10 @@ func init() {
 		if c.PruneBelow != "" {
 			cc.pruneBelow = c.PruneBelow
 		}
+		d := newDayCycle(runCmd.Flags(), cc)
 		return func(context.Context) error {
-			return containedCycle(runCmd.Flags(), cycleOpts(c.WorkDir, runDefaults), cc, c.SkycoinNode)
+			_, err := containedCycle(d, cycleOpts(c.WorkDir, runDefaults), c.SkycoinNode)
+			return err
 		}
 	}
 }
@@ -83,9 +85,11 @@ runs here too, watching <wd>/transactions0.txt.
 		node := flags.Lookup("skycoin-node").Value.String()
 		ctx := context.Background()
 
+		d := newDayCycle(runCmd.Flags(), runFlags)
 		s := &rewardsserver.Scheduler{
 			Cycle: func(context.Context) error {
-				return containedCycle(runCmd.Flags(), cycleOpts(wd, runOpts), runFlags, node)
+				_, err := containedCycle(d, cycleOpts(wd, runOpts), node)
+				return err
 			},
 			Log: logging.MustGetLogger("reward-cycle"),
 		}
@@ -112,20 +116,23 @@ func cycleOpts(wd string, o rewardOpts) rewardOpts {
 
 // containedCycle runs a cycle that cannot end the process: a log.Fatal in
 // it is returned as an error.
-func containedCycle(flags *pflag.FlagSet, o rewardOpts, c cycleConfig, skycoinNode string) error {
+func containedCycle(d *dayCycle, o rewardOpts, skycoinNode string) (cycleResult, error) {
 	fatalHookOnce.Do(func() { logging.AddHook(fatalHook{}) })
 	lastFatal.Store("")
-	var cycleErr error
+	var (
+		res      cycleResult
+		cycleErr error
+	)
 	err := cmdutil.Contain(func() {
 		if skycoinNode != "" {
 			skycoinNodeURL = skycoinNode
 		}
-		cycleErr = runCycle(flags, o, c)
+		res, cycleErr = runCycle(d, o)
 	})
 	if msg, _ := lastFatal.Load().(string); err != nil && msg != "" {
 		err = fmt.Errorf("%s (%w)", msg, err)
 	}
-	return errors.Join(cycleErr, err)
+	return res, errors.Join(cycleErr, err)
 }
 
 var (

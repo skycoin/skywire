@@ -52,6 +52,7 @@ func init() {
 	f.BoolVar(&runFlags.fetch, "fetch", false, "fetch surveys from visors (cli log --survey) instead of only cleaning the surveys visors push")
 	f.StringVar(&runFlags.minVersion, "minv", "", "with --fetch, minimum skywire version to fetch from")
 	f.StringVar(&runFlags.proxy, "proxy", "", "with --fetch, collect surveys via a dmsgweb SOCKS5 resolving proxy (host:port, e.g. 127.0.0.1:4443)")
+	f.DurationVar(&runFlags.dayCloseDelay, "day-close-delay", defaultDayCloseDelay, "how long after midnight UTC a day's uptimes and bandwidth are final and fetched once more")
 	f.StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 	clirpc.RegisterFetchFlags(runCmd)
 }
@@ -65,7 +66,9 @@ var runCmd = &cobra.Command{
   2. Collect today's bandwidth (cli rewards bw-collect)
   3. Stop if hist/<date>.txt shows the date's rewards were already sent
   4. Fetch the TPD uptimes for the date into hist/<date>_ut.txt, hist/<date>_ut.json
-     and hist/uptimes.json (as cli ut tpd --since <date> --until <date>)
+     and hist/uptimes.json (as cli ut tpd --since <date> --until <date>), unless
+     the file was written after the day closed (--day-close-delay after midnight UTC).
+     Once the day closed, collect its bandwidth once more so the file holds all of it.
   5. Calculate with the same code as the bare 'rewards' command
   6. Write hist/<date>_{ineligible.csv,shares.csv,rewardtxn0.csv,stats.txt}
      and the per-pool files
@@ -83,7 +86,7 @@ The calculation flags default to what the reward script passes (-b -B 0 -p log_b
 				logging.SetLevel(lvl)
 			}
 		}
-		if err := runCycle(cmd.Flags(), runOpts, runFlags); err != nil {
+		if _, err := runCycle(newDayCycle(cmd.Flags(), runFlags), runOpts); err != nil {
 			log.Fatal(err)
 		}
 	},
@@ -97,58 +100,34 @@ type cycleConfig struct {
 	pruneBelow  string
 	minVersion  string
 	proxy       string
+	// dayCloseDelay is how long after midnight UTC a day is final, defaultDayCloseDelay when zero.
+	dayCloseDelay time.Duration
 }
 
 // cycleMu keeps two cycles in one process from sharing the package state.
 var cycleMu sync.Mutex
 
-// runCycle is one hourly cycle for o.date. A step that fails returns an
-// error. Deeper code may still log.Fatal, which a caller that must outlive
-// the cycle contains with cmdutil.Contain.
-func runCycle(flags *pflag.FlagSet, o rewardOpts, c cycleConfig) error {
+// runCycle is one hourly cycle for o.date: the collection, then the
+// calculation unless the date was paid or its inputs did not change since
+// d last wrote its outputs. A step that fails returns an error. Deeper code
+// may still log.Fatal, which a caller that must outlive the cycle contains
+// with cmdutil.Contain.
+func runCycle(d *dayCycle, o rewardOpts) (cycleResult, error) {
 	cycleMu.Lock()
 	defer cycleMu.Unlock()
 	if _, err := time.Parse("2006-01-02", o.date); err != nil {
-		return fmt.Errorf("invalid --date: %w", err)
+		return cycleResult{date: o.date}, fmt.Errorf("invalid --date: %w", err)
 	}
 	if err := os.MkdirAll(o.histDir, 0750); err != nil {
-		return fmt.Errorf("create hist dir: %w", err)
+		return cycleResult{date: o.date}, fmt.Errorf("create hist dir: %w", err)
 	}
 	xpubIndexPath = filepath.Join(filepath.Dir(o.histDir), deprewards.XpubIndexFile)
-	// Read the index and the spent addresses fresh each cycle: a process
-	// that runs many cycles must not pay from a stale view.
-	xpubIndex = nil
-	spentCache.Lock()
-	spentCache.m = map[string]bool{}
-	spentCache.Unlock()
 
 	// Collection runs even when the date was paid, as in the service: bw-collect fills today's file.
-	if !c.skipCollect {
-		collectAll(o, c)
+	if !d.cfg.skipCollect {
+		collectAll(o, d.cfg)
 	}
-
-	if _, err := os.Stat(filepath.Join(o.histDir, o.date+".txt")); err == nil {
-		log.Infof("Transaction already broadcasted for %s; nothing to do", o.date)
-		return nil
-	}
-
-	o.utfile = c.utFile
-	if o.utfile == "" {
-		o.utfile = filepath.Join(o.histDir, o.date+"_ut.txt")
-		if err := fetchAndSaveUT(flags, o.date, o.histDir); err != nil {
-			return fmt.Errorf("UT fetch failed: %w", err)
-		}
-	}
-
-	r := calcRewards(o)
-	if err := writeAllOutputs(r, o.histDir); err != nil {
-		return fmt.Errorf("write outputs: %w", err)
-	}
-	if err := writePerPoolFiles(o.histDir, r.date, r.eligible, r.bwSatExp, r.minBW); err != nil {
-		log.Warnf("Failed to write per-pool detail files: %v", err)
-	}
-	log.Infof("Reward cycle complete for %s", r.date)
-	return nil
+	return d.calcDay(o)
 }
 
 // collectAll runs the collection steps of the service. A survey cleanup
@@ -179,8 +158,7 @@ func collectAll(o rewardOpts, c cycleConfig) {
 	clilog.RootCmd.Run(clilog.RootCmd, nil)
 
 	log.Info("Collecting bandwidth (bw-collect)")
-	histPath = o.histDir
-	bwSurveyPath = o.surveyPath
+	histPath, bwSurveyPath, bwDate, bwDays, noCache = o.histDir, o.surveyPath, "", 1, true
 	if err := collectBandwidth(bwCollectCmd.Flags(), logging.MustGetLogger("bw-collect")); err != nil {
 		log.Errorf("Bandwidth collection failed, so a date with no bandwidth file pays pool 2 as pool 1: %v", err)
 	}
