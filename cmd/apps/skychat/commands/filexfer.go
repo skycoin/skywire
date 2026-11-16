@@ -695,6 +695,10 @@ func sendFileHandler(ctx context.Context) http.HandlerFunc {
 					return
 				}
 				writeJSON(w, map[string]any{"id": id, "file_url": url, "group": groupVal})
+				if f, ok := w.(http.Flusher); ok {
+					f.Flush()
+				}
+				releaseOwnFileEcho(id)
 				return
 			}
 			n, gerr := sendFileToGroup(ctx, path)
