@@ -20,6 +20,10 @@ After starting up the visor, the dashboard is on `http://127.0.0.1:8000` and
 the desk (the wasm-visor hypervisor UI, with the dashboard as a tab inside it)
 on `http://127.0.0.1:8010`. See [the two ports](#the-two-ports) below.
 
+The **Rewards** page of a visor sets its reward address. To make a wallet
+and get the account xpub to put there, see
+[reward-xpub-gui.md](reward-xpub-gui.md).
+
 ### Serving the UI on the LAN
 
 Both addresses default to 127.0.0.1, so only the machine itself can reach the

@@ -16,7 +16,7 @@ Eligible skywire visors based on the criteria outlined in the [mainnet rules](ht
 skywire cli reward <account xpub>
 ```
 
-The reward address is the account xpub (depth 3) of a BIP44 wallet, and each payout goes to a fresh address derived from it. [guides/reward-xpub.md](guides/reward-xpub.md) shows how to create the wallet and find the right xpub.
+The reward address is the account xpub (depth 3) of a BIP44 wallet, and each payout goes to a fresh address derived from it. [guides/reward-xpub.md](guides/reward-xpub.md) shows how to create the wallet and find the right xpub. [guides/reward-xpub-gui.md](guides/reward-xpub-gui.md) does it step by step with screenshots of the wallet page.
 
 **NOTE: in order for the setting to persist updates for package-based linux installations, it is recommended to set the reward address in /etc/skywire.conf and run `skywire-autoconfig` to update the setting**
 
