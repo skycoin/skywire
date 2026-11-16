@@ -442,6 +442,9 @@ type RouteGroup struct {
 	selfHealAdd    func(excludeHops []string)
 	selfHealTarget int
 	healInFlight   atomic.Bool
+	// poolStandbys is how many standby tunnels this group's session held at
+	// the arbiter's last tick. See poolOwnsRefill.
+	poolStandbys atomic.Int32
 
 	// The standby-pool arbiter's per-group state (pool_arbiter.go): the legs
 	// this group took from the pool, when the last one was taken, and the load

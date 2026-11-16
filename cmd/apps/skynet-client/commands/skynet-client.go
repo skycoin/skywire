@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
@@ -86,6 +87,9 @@ var (
 	// site is inside handleLocalConn's dialRemote, not at startup.
 	reconnect      bool
 	reconnectDelay int64
+	// spares is how many standby route groups a multi-route forward holds so
+	// the router can replace a dead leg from them. -1 picks automatically.
+	spares int
 )
 
 func init() {
@@ -104,6 +108,7 @@ func init() {
 	RootCmd.Flags().BoolVar(&direct, "direct", false, "force a direct-transport-only route (create the transport on demand, dial 1-hop, bypass the route-finder); self-heals when the peer restarts")
 	RootCmd.Flags().BoolVar(&reconnect, "reconnect", false, "retry per-accept dial indefinitely instead of dropping local conn on remote-visor failure")
 	RootCmd.Flags().Int64Var(&reconnectDelay, "reconnect-delay", 2, "seconds between per-accept dial retries when --reconnect is set")
+	RootCmd.Flags().IntVar(&spares, "spares", -1, "spare routes held for leg fail-over; a dead leg is replaced from them (-1 = 3 with --routes above 1, else 0)")
 }
 
 // RootCmd is the root command for skynet-client
@@ -142,6 +147,7 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 		fs.BoolVar(&direct, "direct", false, "force a direct-transport-only route (create on demand, dial 1-hop, bypass route-finder)")
 		fs.BoolVar(&reconnect, "reconnect", false, "retry per-accept dial indefinitely on failure")
 		fs.Int64Var(&reconnectDelay, "reconnect-delay", 2, "seconds between per-accept dial retries")
+		fs.IntVar(&spares, "spares", -1, "spare routes held for leg fail-over (-1 = auto)")
 		if err := fs.Parse(args); err != nil {
 			return fmt.Errorf("failed to parse flags: %w", err)
 		}
@@ -208,6 +214,24 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 	// mux_routes/min_hops>1 (which otherwise forces this forward into
 	// multi-hop mux and breaks it). Unset (0) inherits the global default
 	// via the plain Dial path.
+	// Spare routes: a multi-route forward keeps a few standby route groups to
+	// the same peer, so the router replaces a dead leg from a measured chain.
+	spareCount := spares
+	if spareCount < 0 {
+		spareCount = 0
+		if routes > 1 || fwdMux > 1 || revMux > 1 {
+			spareCount = skynet.DefaultSpares
+		}
+	}
+	if direct {
+		spareCount = 0
+	}
+	mainRole := ""
+	if spareCount > 0 {
+		mainRole = skynet.TunnelRoleActive
+		appCl.Log().Infof("Holding %d spare routes for leg fail-over", spareCount)
+	}
+
 	dialWithShape := func(port uint16) (net.Conn, error) {
 		addr := appnet.Addr{Net: netType, PubKey: remotePK, Port: routing.Port(port)}
 		if direct || routes >= 1 || minHops >= 1 || fwdMinHops >= 1 || revMinHops >= 1 || fwdMux >= 1 || revMux >= 1 {
@@ -219,6 +243,7 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 				ForwardMuxRoutes: fwdMux,
 				ReverseMuxRoutes: revMux,
 				Direct:           direct,
+				TunnelRole:       mainRole,
 			})
 		}
 		return appCl.Dial(addr)
@@ -280,8 +305,37 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 
 	// The DialRoute signature carries a ctx for route-setup cancellation,
 	// but appCl's dial helpers take no ctx, so it's intentionally ignored.
+	// The first group that comes up starts the spares. A spare dialed before
+	// it would have no sibling to route around.
+	var mainOnce sync.Once
+	mainUp := make(chan struct{})
 	dialToMux := func(_ context.Context, muxPort uint16) (net.Conn, error) {
-		return dialWithShape(muxPort)
+		conn, err := dialWithShape(muxPort)
+		if err == nil {
+			mainOnce.Do(func() { close(mainUp) })
+		}
+		return conn, err
+	}
+
+	if spareCount > 0 {
+		spareAddr := appnet.Addr{Net: netType, PubKey: remotePK, Port: routing.Port(skyenv.SkyForwardingMuxPort)}
+		go func() {
+			select {
+			case <-ctx.Done():
+				return
+			case <-mainUp:
+			}
+			skynet.HoldSpares(ctx, appCl.Log(), spareCount, skynet.SpareRetry, func() (net.Conn, error) {
+				return appCl.DialWithOptions(spareAddr, appserver.DialOptionsReq{
+					MuxRoutes:           1,
+					MinHops:             minHops,
+					ForwardMinHops:      fwdMinHops,
+					ReverseMinHops:      revMinHops,
+					DiversifyTransports: true,
+					TunnelRole:          skynet.TunnelRoleStandby,
+				})
+			})
+		}()
 	}
 
 	// poolKey pins one warm route group per (peer, remote port, shape).
