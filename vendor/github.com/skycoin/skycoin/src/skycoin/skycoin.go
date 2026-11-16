@@ -36,6 +36,7 @@ import (
 	"github.com/skycoin/skycoin/src/visor"
 	"github.com/skycoin/skycoin/src/visor/dbutil"
 	"github.com/skycoin/skycoin/src/wallet"
+	"github.com/skycoin/skycoin/src/wallet/sweep"
 )
 
 var (
@@ -229,6 +230,16 @@ func (c *Coin) Run() error {
 		return err
 	}
 
+	var sweeper *sweep.Service
+	if wconf.EnableWalletAPI {
+		c.logger.Info("sweep.NewService")
+		sweeper, err = sweep.NewService(sweep.Config{Dir: wconf.WalletDir}, w, v, d)
+		if err != nil {
+			c.logger.WithError(err).Error("sweep.NewService failed")
+			return err
+		}
+	}
+
 	c.logger.Info("kvstorage.NewManager")
 	s, err = kvstorage.NewManager(sconf)
 	if err != nil {
@@ -240,7 +251,7 @@ func (c *Coin) Run() error {
 	gw = api.NewGateway(d, v, w, s)
 
 	if c.config.Node.WebInterface {
-		webInterface, err = c.createGUI(gw, host, quit)
+		webInterface, err = c.createGUI(gw, sweeper, host, quit)
 		if err != nil {
 			c.logger.WithError(err).Error("c.createGUI failed")
 			return err
@@ -287,6 +298,15 @@ func (c *Coin) Run() error {
 			errC <- err
 		}
 	}()
+
+	stopSweeper := make(chan struct{})
+	if sweeper != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sweeper.Run(stopSweeper)
+		}()
+	}
 
 	if c.config.Node.WebInterface {
 		cancelLaunchBrowser := make(chan struct{})
@@ -335,6 +355,7 @@ func (c *Coin) Run() error {
 
 	c.logger.Info("Closing daemon")
 	d.Shutdown()
+	close(stopSweeper)
 
 	c.logger.Info("Waiting for goroutines to finish")
 	wg.Wait()
@@ -500,7 +521,7 @@ func (c *Coin) ConfigureDaemon() daemon.Config {
 	return dc
 }
 
-func (c *Coin) createGUI(gw *api.Gateway, host string, quit chan struct{}) (*api.Server, error) {
+func (c *Coin) createGUI(gw *api.Gateway, sweeper *sweep.Service, host string, quit chan struct{}) (*api.Server, error) {
 	config := api.Config{
 		DisableCSRF:        c.config.Node.DisableCSRF,
 		DisableHeaderCheck: c.config.Node.DisableHeaderCheck,
@@ -527,6 +548,9 @@ func (c *Coin) createGUI(gw *api.Gateway, host string, quit chan struct{}) (*api
 		Username:     c.config.Node.WebInterfaceUsername,
 		Password:     c.config.Node.WebInterfacePassword,
 		ShutdownChan: quit,
+	}
+	if sweeper != nil {
+		config.Sweeper = sweeper
 	}
 
 	// -enable-gui and -web-wallet serve the same wallet. With the WALLET API set
