@@ -326,6 +326,9 @@ func deliverGroupMessages(msgs []visorapi.GroupMessage, since *time.Time) {
 			envelope["message"] = "📎 " + meta.Name
 			enrichGroupFileRow(envelope, meta)
 			gate = ownFileEchoGate(meta.ID)
+			if gate == nil && envelope["file_url"] == nil {
+				pullGroupClip(m.SenderPK, m.TS, meta)
+			}
 		} else if rmeta, ok := parseReplyText(m.Text); ok {
 			envelope["message"] = rmeta.Text
 			enrichReplyRow(envelope, rmeta)
