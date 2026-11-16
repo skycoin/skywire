@@ -42,30 +42,72 @@ func init() {
 		}
 		f.AddFlag(fl)
 	})
+	f.DurationVar(&serveTimes.Interval, "cycle-interval", rewardsserver.DefaultCycleInterval, "fallback check: hash the inputs and recalculate when they changed")
+	f.DurationVar(&serveTimes.CollectInterval, "collect-interval", rewardsserver.DefaultCollectInterval, "how often to clean the surveys and collect today's bandwidth")
+	f.DurationVar(&serveTimes.Debounce, "debounce", rewardsserver.DefaultDebounce, "how long a changed survey waits before the recalculation, so a burst gives one")
+	f.DurationVar(&serveTimes.WatchInterval, "watch-interval", rewardsserver.DefaultWatchInterval, "how often to look for a new block and re-check the unpaid day's single payout addresses")
 	runDefaults, runFlagDefaults := runOpts, runFlags
-	rewardsserver.NewCycle = func(c rewardsserver.CycleConfig) func(context.Context) error {
+	rewardsserver.NewCycle = func(c rewardsserver.CycleConfig) rewardsserver.Cycle {
 		cc := runFlagDefaults
 		cc.skipCollect, cc.fetch, cc.proxy, cc.minVersion = c.SkipCollect, c.Fetch, c.Proxy, c.MinVersion
 		if c.PruneBelow != "" {
 			cc.pruneBelow = c.PruneBelow
 		}
-		d := newDayCycle(runCmd.Flags(), cc)
-		return func(context.Context) error {
-			_, err := containedCycle(d, cycleOpts(c.WorkDir, runDefaults), c.SkycoinNode)
-			return err
+		cc.dayCloseDelay = c.DayCloseDelay
+		return newCycle(c.WorkDir, runDefaults, cc, c.SkycoinNode)
+	}
+}
+
+// serveTimes are the scheduler intervals of serve.
+var serveTimes rewardsserver.Scheduler
+
+// newCycle is the reward cycle of the work dir wd, keeping its state
+// between runs.
+func newCycle(wd string, o rewardOpts, c cycleConfig, skycoinNode string) rewardsserver.Cycle {
+	d := newDayCycle(runCmd.Flags(), c)
+	d.watching = true
+	cy := rewardsserver.Cycle{
+		Calc: func(_ context.Context, _ string) (rewardsserver.CalcResult, error) {
+			var res cycleResult
+			err := contained(skycoinNode, func() (err error) {
+				res, err = calcCycle(d, cycleOpts(wd, o))
+				return err
+			})
+			return rewardsserver.CalcResult{Date: res.date, InputsHash: res.hash, Skipped: res.skipped, Note: res.note}, err
+		},
+		Watch: func(ctx context.Context) (bool, error) {
+			if skycoinNode != "" {
+				return d.watchSpent(ctx, skycoinNode)
+			}
+			return d.watchSpent(ctx, skycoinNodeURL)
+		},
+		SurveyChanged: surveyChanged,
+	}
+	if !c.skipCollect {
+		cy.Collect = func(context.Context) error {
+			return contained(skycoinNode, func() error { return collectCycle(d, cycleOpts(wd, o)) })
 		}
 	}
+	return cy
 }
 
 var serveCmd = &cobra.Command{
 	Use:   "serve",
-	Short: "reward system UI server with the hourly reward cycle inside",
+	Short: "reward system UI server with the reward cycle inside",
 	Long: `Runs the reward system UI server ('rewards ui') and the hourly reward
 cycle ('rewards run') in one process, in place of the systemd timer.
 
-One cycle runs at start, to catch up, then one every hour. Cycles never
-overlap. A cycle that fails is logged and tried again the next hour, and
-the server keeps serving. /health reports the last cycle under reward_cycle.
+The unpaid day (yesterday UTC) is calculated at start, then again when an
+input may have changed: a pushed survey that differs where the calculation
+reads it (after --debounce, so a burst gives one run), a single payout
+address that sent coins (looked for on each new block of --skycoin-node,
+polled every --watch-interval), each collection (--collect-interval: survey
+cleanup and today's bandwidth), and --day-close-delay after midnight UTC.
+Every --cycle-interval a check runs too. Each run hashes the inputs first
+and writes nothing when they did not change, and a paid day is never
+recalculated. Runs never overlap. A run that fails is logged and tried
+again at the next trigger or check, and the server keeps serving. /health
+reports the cycle under reward_cycle.
 
 The flags are those of 'rewards ui' and 'rewards run', without --date and
 --utfile. Paths of the cycle (--lpath, --hist) are relative to --wd.
@@ -85,13 +127,14 @@ runs here too, watching <wd>/transactions0.txt.
 		node := flags.Lookup("skycoin-node").Value.String()
 		ctx := context.Background()
 
-		d := newDayCycle(runCmd.Flags(), runFlags)
 		s := &rewardsserver.Scheduler{
-			Cycle: func(context.Context) error {
-				_, err := containedCycle(d, cycleOpts(wd, runOpts), node)
-				return err
-			},
-			Log: logging.MustGetLogger("reward-cycle"),
+			Cycle:           newCycle(wd, runOpts, runFlags, node),
+			Interval:        serveTimes.Interval,
+			CollectInterval: serveTimes.CollectInterval,
+			Debounce:        serveTimes.Debounce,
+			WatchInterval:   serveTimes.WatchInterval,
+			DayCloseDelay:   runFlags.dayCloseDelay,
+			Log:             logging.MustGetLogger("reward-cycle"),
 		}
 		rewardsserver.SetScheduler(s)
 		go s.Start(ctx)
@@ -114,25 +157,31 @@ func cycleOpts(wd string, o rewardOpts) rewardOpts {
 	return o
 }
 
-// containedCycle runs a cycle that cannot end the process: a log.Fatal in
-// it is returned as an error.
-func containedCycle(d *dayCycle, o rewardOpts, skycoinNode string) (cycleResult, error) {
+// containedCycle runs a whole cycle, as `rewards run` does, that cannot end
+// the process: a log.Fatal in it is returned as an error.
+func containedCycle(d *dayCycle, o rewardOpts, skycoinNode string) (res cycleResult, err error) {
+	err = contained(skycoinNode, func() (err error) {
+		res, err = runCycle(d, o)
+		return err
+	})
+	return res, err
+}
+
+// contained runs fn so that a log.Fatal in it is returned as an error.
+func contained(skycoinNode string, fn func() error) error {
 	fatalHookOnce.Do(func() { logging.AddHook(fatalHook{}) })
 	lastFatal.Store("")
-	var (
-		res      cycleResult
-		cycleErr error
-	)
+	var fnErr error
 	err := cmdutil.Contain(func() {
 		if skycoinNode != "" {
 			skycoinNodeURL = skycoinNode
 		}
-		res, cycleErr = runCycle(d, o)
+		fnErr = fn()
 	})
 	if msg, _ := lastFatal.Load().(string); err != nil && msg != "" {
 		err = fmt.Errorf("%s (%w)", msg, err)
 	}
-	return res, errors.Join(cycleErr, err)
+	return errors.Join(fnErr, err)
 }
 
 var (

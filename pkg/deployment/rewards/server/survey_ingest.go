@@ -12,7 +12,9 @@
 // source — so a pushed survey is available to the next calc run immediately,
 // independent of the pull cycle's rsync (which matters because the pull is being
 // reduced to a low-frequency fallback). The existing getlogs.sh age-out + the
-// authoritative version prune over log_backups still apply.
+// authoritative version prune over log_backups still apply. A stored survey that
+// changes what the calculation reads asks the reward cycle to recalculate the
+// unpaid day (Scheduler.SurveyStored).
 package rewardsserver
 
 import (
@@ -102,6 +104,7 @@ func registerSurveyIngestRoutes(r1 *http.ServeMux, wd string) {
 			return
 		}
 		dst := filepath.Join(pkDir, "node-info.json")
+		old, _ := os.ReadFile(dst) //nolint:errcheck,gosec // no old survey reads as none
 		tmp := dst + ".tmp"
 		if err := os.WriteFile(tmp, body, 0644); err != nil { //nolint:gosec // survey is world-readable like the pulled ones
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, map[string]any{"error": "write"})
@@ -111,6 +114,9 @@ func registerSurveyIngestRoutes(r1 *http.ServeMux, wd string) {
 			_ = os.Remove(tmp) //nolint:errcheck,gosec // tmp is under the sender PK directory
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, map[string]any{"error": "commit"})
 			return
+		}
+		if s := currentScheduler(); s != nil {
+			s.SurveyStored(remotePK.Hex(), old, body)
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, map[string]any{"stored": true, "eligible": true})
 	})
