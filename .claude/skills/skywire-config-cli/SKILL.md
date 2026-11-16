@@ -56,9 +56,9 @@ Output/target flags:
 Privacy / routing / transport knobs (verified to land in the JSON):
 - `--min-hops N` → `routing.min_hops`. **1** = allow direct 1-hop routes (default);
   **>=2** forces multihop through intermediaries for sender privacy.
-- `--ar-transport-limit N` → `transport.ar_transport_limit`. **0** = stay
-  registered with the address-resolver; **N>0** = deregister after N transports;
-  **N<0** = never register (inbound-invisible).
+- `--ar-transport-limit N` → `transport.ar_transport_limit`. **>=0** = stay
+  registered with the address-resolver (only the sign matters; N>0 does not
+  deregister); **N<0** = never register (inbound-invisible).
 - `--no-direct-transports` → `transport.no_direct_transports`. Never create direct
   p2p transports; dmsg (relay) is still allowed.
 - `--transport-port N` → `transport.transport_port`. Shared master port carrying
