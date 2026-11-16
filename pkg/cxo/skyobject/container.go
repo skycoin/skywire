@@ -21,6 +21,8 @@ type Container struct {
 
 	conf *Config // configurations
 
+	deltas deltaStore // objects new per Root, see RecordDelta
+
 	// human readable (used by node for debugging)
 	cxPath, idxPath string
 }

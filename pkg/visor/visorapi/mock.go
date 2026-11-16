@@ -1506,6 +1506,11 @@ func (mc *mockRPCClient) GroupUnsend(_ GroupUnsendArgs) error { return nil }
 // GroupPoll implements API.
 func (mc *mockRPCClient) GroupPoll(_ time.Time) ([]GroupMessage, error) { return nil, nil }
 
+// GroupWait implements API.
+func (mc *mockRPCClient) GroupWait(_ time.Time, _ time.Duration) ([]GroupMessage, error) {
+	return nil, nil
+}
+
 // GroupDelete implements API.
 func (mc *mockRPCClient) GroupDelete(_ string) error { return nil }
 

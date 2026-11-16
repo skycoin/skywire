@@ -23,12 +23,12 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	generateSurvey(ctx, v, log, routine)
+	generateSurveyCtx(ctx, v, log, routine)
 }
 
-// generateSurvey is GenerateSurvey ending when ctx does, so the daily routine
+// generateSurveyCtx is GenerateSurvey ending when ctx does, so the daily routine
 // and its retries do not outlive the visor that started them.
-func generateSurvey(ctx context.Context, v *Visor, log *logging.Logger, routine bool) {
+func generateSurveyCtx(ctx context.Context, v *Visor, log *logging.Logger, routine bool) {
 	// wait sleeps for d and reports whether ctx is still live.
 	wait := func(d time.Duration) bool {
 		t := time.NewTimer(d)

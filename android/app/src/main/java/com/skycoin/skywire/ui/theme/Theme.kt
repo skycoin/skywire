@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.dp
  * hue family moved onto deep navy rather than grey or black, so the blue
  * still reads as the brand and not as decoration.
  */
-val SkywireBlue = Color(0xFF0F7BF4)
+val SkywireBlue = Color(0xFF1677FF)
 
 /** The gradient's deep stops — hero cards and the raised nav button. */
 val SkywireBlueDeep = Color(0xFF0B57C9)
@@ -98,7 +98,7 @@ private val LightColors = lightColorScheme(
 )
 
 private val DarkColors = darkColorScheme(
-    // Brighter than the brand blue: on navy, #0F7BF4 sinks. Dark ink on it
+    // Brighter than the brand blue: on navy, #1677FF sinks. Dark ink on it
     // rather than white — the button should read as a light source.
     primary = Color(0xFF4AA3FF),
     onPrimary = Color(0xFF04264D),

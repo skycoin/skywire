@@ -13,6 +13,8 @@
 // accept/reject verdict is recorded in v.survey so the hypervisor UI can show reward
 // eligibility (a rejected push → red mark, distinct from the hyphen for no reward
 // address). No-op until a reward address is set and reward_system_dmsg is configured.
+// Setting or deleting the reward address pushes at once instead of at the next
+// hourly check; a deletion sends the last survey without its address.
 package visor
 
 import (
@@ -29,6 +31,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 const (
@@ -56,16 +59,46 @@ func rewardSurveyPush(ctx context.Context, v *Visor, log *logging.Logger) {
 	checksumURL := base + "/node-info/stored-checksum"
 	postURL := base + "/node-info"
 
-	timer := time.NewTimer(rewardPushWarmup)
+	rewardPushLoop(ctx, v.survey.kick, rewardPushWarmup, rewardPushInterval, func() {
+		v.pushSurveyOnce(ctx, log, checksumURL, postURL)
+	})
+}
+
+// rewardPushLoop calls push after warmup, then every interval, and at once
+// on kick.
+func rewardPushLoop(ctx context.Context, kick <-chan struct{}, warmup, interval time.Duration, push func()) {
+	timer := time.NewTimer(warmup)
 	defer timer.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-timer.C:
+		case <-kick:
+			timer.Stop()
 		}
-		v.pushSurveyOnce(ctx, log, checksumURL, postURL)
-		timer.Reset(rewardPushInterval)
+		push()
+		timer.Reset(interval)
+	}
+}
+
+// generateSurvey is GenerateSurvey, replaced in tests.
+var generateSurvey = GenerateSurvey
+
+// refreshRewardSurvey regenerates the survey and pushes it at once, in the
+// background, so a new reward address counts without waiting for the hourly push.
+func (v *Visor) refreshRewardSurvey() {
+	go func() {
+		generateSurvey(v, v.log, false)
+		v.pushSurveyNow()
+	}()
+}
+
+// pushSurveyNow asks the push loop to push the survey now.
+func (v *Visor) pushSurveyNow() {
+	select {
+	case v.survey.kick <- struct{}{}:
+	default:
 	}
 }
 
@@ -77,11 +110,15 @@ func (v *Visor) pushSurveyOnce(ctx context.Context, log *logging.Logger, checksu
 		return
 	}
 	// Snapshot the current survey. Empty PubKey/SkycoinAddress = no reward address
-	// yet (survey not generated) — nothing to push.
+	// yet (survey not generated) — nothing to push, unless the address was just
+	// deleted: then the last survey goes once without it, so it stops being paid.
 	v.survey.mu.RLock()
-	survey := v.survey.data
-	v.survey.mu.RUnlock()
+	survey, optOut := v.survey.data, false
 	if survey.PubKey.Null() || strings.TrimSpace(survey.SkycoinAddress) == "" {
+		survey, optOut = v.survey.optOut, true
+	}
+	v.survey.mu.RUnlock()
+	if survey.PubKey.Null() {
 		return
 	}
 
@@ -126,6 +163,17 @@ func (v *Visor) pushSurveyOnce(ctx context.Context, log *logging.Logger, checksu
 		Error    string `json:"error"`
 	}
 	_ = json.Unmarshal(respBody, &r) //nolint:errcheck
+
+	if optOut {
+		if resp.StatusCode == http.StatusOK {
+			v.survey.mu.Lock()
+			v.survey.optOut = visorconfig.Survey{}
+			v.survey.pushAttempted, v.survey.pushReason = false, ""
+			v.survey.mu.Unlock()
+			log.Info("Reward survey push: reward address removal sent")
+		}
+		return
+	}
 
 	v.survey.mu.Lock()
 	v.survey.pushAttempted = true

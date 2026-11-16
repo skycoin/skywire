@@ -255,8 +255,14 @@ func (s *Signaler) acceptLoop(ctx context.Context, lis net.Listener) {
 	}
 }
 
+// inboundSigTimeout bounds the wait for the first signal on a fresh inbound
+// conn, so a peer that opens one and stays silent cannot hold it.
+var inboundSigTimeout = 30 * time.Second
+
 func (s *Signaler) handleInbound(conn net.Conn) {
+	_ = conn.SetReadDeadline(time.Now().Add(inboundSigTimeout)) //nolint:errcheck
 	sig, err := readSig(conn)
+	_ = conn.SetReadDeadline(time.Time{}) //nolint:errcheck
 	if err != nil {
 		_ = conn.Close() //nolint:errcheck
 		return

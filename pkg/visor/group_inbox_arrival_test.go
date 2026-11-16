@@ -41,3 +41,41 @@ func TestGroupInbox_PollFindsLateHistory(t *testing.T) {
 		t.Fatalf("a replay reached the poll again: %+v", again)
 	}
 }
+
+// TestGroupInbox_WaitArrivedAfter: a waiter wakes on the next arrival, a
+// replay does not wake it, and it gives up after the wait.
+func TestGroupInbox_WaitArrivedAfter(t *testing.T) {
+	g := newGroupInbox(0)
+	pk, _ := cipher.GenerateKeyPair()
+	now := time.Now().UTC()
+	g.deliver("g", pk, skychatgroup.Message{SenderPK: pk, Text: "a", TS: now})
+	cursor := g.snapshotArrivedAfter(time.Time{})[0].Arrived
+
+	if got := g.waitArrivedAfter(time.Time{}, time.Hour); len(got) != 1 {
+		t.Fatalf("waiting with messages after since got %d, want 1 at once", len(got))
+	}
+
+	sub := g.subscribe(4)
+	defer g.unsubscribe(sub)
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		g.deliver("g", pk, skychatgroup.Message{SenderPK: pk, Text: "a", TS: now}) // replay
+		time.Sleep(50 * time.Millisecond)
+		g.deliver("g", pk, skychatgroup.Message{SenderPK: pk, Text: "b", TS: now.Add(-time.Minute)})
+	}()
+	got := g.waitArrivedAfter(cursor, 5*time.Second)
+	if len(got) != 1 || got[0].Text != "b" {
+		t.Fatalf("wait got %+v, want the late message b", got)
+	}
+	if n := len(sub.ch); n != 1 {
+		t.Fatalf("subscriber got %d messages, want 1, the replay not fanned out", n)
+	}
+
+	tp := time.Now()
+	if got := g.waitArrivedAfter(got[0].Arrived, 50*time.Millisecond); len(got) != 0 {
+		t.Fatalf("wait with nothing new got %+v", got)
+	}
+	if time.Since(tp) < 50*time.Millisecond {
+		t.Fatal("did not wait")
+	}
+}

@@ -6,6 +6,160 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.112
+
+Skychat group fixes reported by a mobile tester. A member that reconnects to
+the group owner is answered at once instead of after the owner's old
+connection to it closes, which had left a member cut off from the group. The
+sender no longer sees its own voice or video message twice, and a recorded
+clip posted to a group is fetched as soon as it arrives instead of on request.
+
+The TinyGo release builds get swap, because the linux/arm64 build ran out of
+memory on the 16 GB runner.
+
+-   cxo/node: answer a rejoining peer without waiting for its old conn  [#6257](https://github.com/skycoin/skywire/pull/6257)
+-   ci: give the tinygo release builds swap  [#6256](https://github.com/skycoin/skywire/pull/6256)
+-   skychat: pull a recorded clip posted to a group as it arrives  [#6255](https://github.com/skycoin/skywire/pull/6255)
+-   skychat: send the echo of an own group file after the send answers  [#6254](https://github.com/skycoin/skywire/pull/6254)
+
+## 1.3.111
+
+The skycoin wallet now splits a send that is too large for one transaction
+into several, and a web wallet send that cannot reach the node fails instead
+of hanging. Skywallet sends now take a decimal coin amount. Node wallets
+and wallets kept in the browser can move coins off exposed addresses on
+every block, with a simple and an advanced sweep level.
+
+Skychat group messages arrive sooner. The app waits on the visor for the
+next message instead of polling every second, a lone message skips the
+batch wait, and a Root fills from the peer's delta in one request.
+
+The reward system runs as `skywire cli rewards serve` or as an embedded
+visor service. A subscribed CXO feed is held once instead of three times
+and the bandwidth table is streamed, which cuts the reward UI's memory use.
+QUIC accepts, WebRTC answers, dmsg setup streams, CXO requests and silent
+skychat streams are now bounded.
+
+skywire-update now uses the binary update channel by default, and the docs
+gain a screenshot guide to the reward xpub on the wallet page. The templ and
+htmx UI is served at the root, with the Angular UI at /angular.
+
+-   all: update go dependencies and bump skycoin to 8b54c5d  [#6252](https://github.com/skycoin/skywire/pull/6252)
+-   router: keep a min-hops dial off the direct transport  [#6251](https://github.com/skycoin/skywire/pull/6251)
+-   docs: add a screenshot guide to the reward xpub from the wallet page  [#6250](https://github.com/skycoin/skywire/pull/6250)
+-   config, docs: document the binary update channel as the default  [#6248](https://github.com/skycoin/skywire/pull/6248)
+-   all: bump skycoin to b6e6c0c  [#6247](https://github.com/skycoin/skywire/pull/6247)
+-   transport/network: count accepted QUIC conns in the pending bound test  [#6246](https://github.com/skycoin/skywire/pull/6246)
+-   rewards/server: stream the transport bandwidth table  [#6245](https://github.com/skycoin/skywire/pull/6245)
+-   cxo/treestore, cxo/cxosub: hold a subscribed feed once instead of three times  [#6244](https://github.com/skycoin/skywire/pull/6244)
+-   all: bump skycoin to e4dcbb4  [#6243](https://github.com/skycoin/skywire/pull/6243)
+-   ci: raise the android release apk budget to 40 MB  [#6242](https://github.com/skycoin/skywire/pull/6242)
+-   fastlane: screenshots and changelog for Skywire Mobile 0.0.12  [#6241](https://github.com/skycoin/skywire/pull/6241)
+-   skychat/group, skychat/call: drop an inbound stream that sends nothing  [#6240](https://github.com/skycoin/skywire/pull/6240)
+-   transport/setup: skip a stream from an untrusted key after closing it  [#6239](https://github.com/skycoin/skywire/pull/6239)
+-   transport/network: stop accepting QUIC conns while 64 wait  [#6238](https://github.com/skycoin/skywire/pull/6238)
+-   cxo/node: cap the object and delta requests a conn serves at once  [#6237](https://github.com/skycoin/skywire/pull/6237)
+-   visor: wait for the failed start in the embedded rewards test  [#6236](https://github.com/skycoin/skywire/pull/6236)
+-   transport/network: bound the WebRTC answers run at once  [#6235](https://github.com/skycoin/skywire/pull/6235)
+-   services/dmsgsrv: take the setup slot before accepting a stream  [#6234](https://github.com/skycoin/skywire/pull/6234)
+-   visor: give each delivery its own TS in the sub drop test  [#6233](https://github.com/skycoin/skywire/pull/6233)
+-   cxo/skyobject: hold the fill slot while a subtree is walked  [#6232](https://github.com/skycoin/skywire/pull/6232)
+-   visor, skychat: push group messages to the app as they arrive  [#6231](https://github.com/skycoin/skywire/pull/6231)
+-   cxo/node, cxo/skyobject: fill a Root from the peer's delta in one request  [#6230](https://github.com/skycoin/skywire/pull/6230)
+-   rewards, commands: fix the windows tests for rewards serve  [#6229](https://github.com/skycoin/skywire/pull/6229)
+-   services/rewards, visor: run the reward system as an embedded service  [#6228](https://github.com/skycoin/skywire/pull/6228)
+-   rewards: add serve, the ui server with the hourly cycle inside  [#6227](https://github.com/skycoin/skywire/pull/6227)
+-   visor, visorapi, appserver, cxo: drop is/has from the rpc-visible names  [#6226](https://github.com/skycoin/skywire/pull/6226)
+-   deps, hvui: take skycoin with the skywallet decimal coins fix  [#6225](https://github.com/skycoin/skywire/pull/6225)
+-   wasmhv, visor, hvui: push alerts for a hypervisor in a browse frame  [#6224](https://github.com/skycoin/skywire/pull/6224)
+-   pkg, cmd, docs: fix the remaining upward descriptor layers  [#6223](https://github.com/skycoin/skywire/pull/6223)
+-   ui2: regenerate the templ files in place and format them  [#6222](https://github.com/skycoin/skywire/pull/6222)
+-   vpn: log the windows and darwin nat helper warnings  [#6221](https://github.com/skycoin/skywire/pull/6221)
+-   pkg: move the rewards server out of cmd  [#6220](https://github.com/skycoin/skywire/pull/6220)
+-   pkg: retag the embedded deployment services to c3  [#6219](https://github.com/skycoin/skywire/pull/6219)
+-   pkg: retag the visor-launched apps to c3  [#6218](https://github.com/skycoin/skywire/pull/6218)
+-   rewards: keep the cycle going when bandwidth collection fails  [#6217](https://github.com/skycoin/skywire/pull/6217)
+-   ci, docs: publish the rolling binary from develop only  [#6216](https://github.com/skycoin/skywire/pull/6216)
+-   ci, build: count lightweight tags when stamping the version  [#6215](https://github.com/skycoin/skywire/pull/6215)
+-   deps, hvui: scroll tall wallet dialogs and show the message bar over them  [#6214](https://github.com/skycoin/skywire/pull/6214)
+-   deps: bump go.opentelemetry.io/otel/trace from 1.45.0 to 1.47.0  [#6213](https://github.com/skycoin/skywire/pull/6213)
+-   skychat, cxo, skymail, skysocks: drop is/has prefixes from exported names  [#6212](https://github.com/skycoin/skywire/pull/6212)
+-   pty: paste through a box where the browser cannot read the clipboard  [#6210](https://github.com/skycoin/skywire/pull/6210)
+-   rewards: drop --process from the rewards skill  [#6209](https://github.com/skycoin/skywire/pull/6209)
+-   router, routing, transport, app, netutil: drop is/has prefixes from exported names  [#6208](https://github.com/skycoin/skywire/pull/6208)
+-   rewards: make run use the live calculation  [#6207](https://github.com/skycoin/skywire/pull/6207)
+-   visor, visorapi, visorconfig, ui2: drop is/has prefixes from exported names  [#6206](https://github.com/skycoin/skywire/pull/6206)
+-   vpn: log through the logger instead of print  [#6205](https://github.com/skycoin/skywire/pull/6205)
+-   visor/ui2, hvui: stop autofill in the skychat password form  [#6204](https://github.com/skycoin/skywire/pull/6204)
+-   skychat/group: wait for the member listener in the non-admin admission test  [#6203](https://github.com/skycoin/skywire/pull/6203)
+-   dmsg, cxo, deployment, logging: drop is/has from boolean names  [#6202](https://github.com/skycoin/skywire/pull/6202)
+-   router, transport, skysocks, app: drop is/has from boolean names  [#6201](https://github.com/skycoin/skywire/pull/6201)
+-   visor: drop is/has from boolean names  [#6200](https://github.com/skycoin/skywire/pull/6200)
+-   cmd: drop is/has from boolean names  [#6199](https://github.com/skycoin/skywire/pull/6199)
+-   ci: build the wasm-tinygo lane with TinyGo 0.42.0 again  [#6198](https://github.com/skycoin/skywire/pull/6198)
+-   ui2: load the fonts from the root now that static/ is one level up  [#6197](https://github.com/skycoin/skywire/pull/6197)
+-   ui2: keep the page base under the in-tab visor  [#6196](https://github.com/skycoin/skywire/pull/6196)
+-   visor, ui2: forward skycoin-web at /wallet/web/  [#6195](https://github.com/skycoin/skywire/pull/6195)
+-   deps: take skycoin develop with its ui2 at the root  [#6194](https://github.com/skycoin/skywire/pull/6194)
+-   ci: drop the empty env block from android-sh.yml  [#6193](https://github.com/skycoin/skywire/pull/6193)
+-   make: run gofmt -s in make format  [#6192](https://github.com/skycoin/skywire/pull/6192)
+-   ci: build the wasm-tinygo lane with the release TinyGo  [#6191](https://github.com/skycoin/skywire/pull/6191)
+-   ci: run check-descriptors on macOS and windows too  [#6190](https://github.com/skycoin/skywire/pull/6190)
+-   all: pin golangci-lint v2.15.0 and check import grouping  [#6189](https://github.com/skycoin/skywire/pull/6189)
+-   docs: drop the is/has prefix from boolean names in rule K8  [#6188](https://github.com/skycoin/skywire/pull/6188)
+-   docs, tpviz: serve docs/sss3 and rebuild the netview module  [#6187](https://github.com/skycoin/skywire/pull/6187)
+-   ci: take the go version from go.mod in every workflow  [#6186](https://github.com/skycoin/skywire/pull/6186)
+-   visor, ui2, hvui: serve ui2 at the root and angular at /angular  [#6185](https://github.com/skycoin/skywire/pull/6185)
+-   all: tag every file with its descriptor  [#6183](https://github.com/skycoin/skywire/pull/6183)
+-   docs: add the Go adaptation of the SSS3 standard  [#6182](https://github.com/skycoin/skywire/pull/6182)
+-   ui2: add this device for push alerts  [#6181](https://github.com/skycoin/skywire/pull/6181)
+-   ui2: add voice calls to the chat tab  [#6180](https://github.com/skycoin/skywire/pull/6180)
+-   skymail, android: fixes from the Skywire Mobile 0.0.9 testers, part 2  [#6179](https://github.com/skycoin/skywire/pull/6179)
+-   skymail: wait for the outbox to clear in the delivery test  [#6178](https://github.com/skycoin/skywire/pull/6178)
+-   treestore, group: publish a lone group message without the batch wait  [#6177](https://github.com/skycoin/skywire/pull/6177)
+-   skymail, visor, android: give a mail send ten minutes  [#6176](https://github.com/skycoin/skywire/pull/6176)
+-   transport, Makefile: fix a double close and raise the android size budget  [#6175](https://github.com/skycoin/skywire/pull/6175)
+-   android: open the exported tether settings activity first  [#6174](https://github.com/skycoin/skywire/pull/6174)
+-   android: try the exported tether settings activity for the hotspot button  [#6173](https://github.com/skycoin/skywire/pull/6173)
+-   app, android: opening the SkyVPN screen broke a running tunnel  [#6172](https://github.com/skycoin/skywire/pull/6172)
+-   deps: update skycoin for the skydex-client ui2 and its API guard  [#6171](https://github.com/skycoin/skywire/pull/6171)
+-   android: say when the phone has no internet while the core starts  [#6170](https://github.com/skycoin/skywire/pull/6170)
+-   android: show a mail's sent size while composing  [#6169](https://github.com/skycoin/skywire/pull/6169)
+-   android: show mail dates in the phone's time zone  [#6168](https://github.com/skycoin/skywire/pull/6168)
+-   deps: update skycoin for multi-coin wallets in ui2  [#6167](https://github.com/skycoin/skywire/pull/6167)
+-   android: find used wallet addresses past the ones a wallet holds  [#6166](https://github.com/skycoin/skywire/pull/6166)
+-   visor, ui2: skychat password and room states in the ui2 chat tab  [#6165](https://github.com/skycoin/skywire/pull/6165)
+-   visor, ui2: vpn server picker in ui2  [#6164](https://github.com/skycoin/skywire/pull/6164)
+-   visor, ui2: history charts for resources and versions in ui2  [#6163](https://github.com/skycoin/skywire/pull/6163)
+-   visor, ui2: offline alert settings in the ui2 settings tab  [#6162](https://github.com/skycoin/skywire/pull/6162)
+-   visor, ui2: filter and multi select on the ui2 apps list  [#6161](https://github.com/skycoin/skywire/pull/6161)
+-   deps: update skycoin for browser wallet sends and QR scan in ui2  [#6160](https://github.com/skycoin/skywire/pull/6160)
+-   visor, ui2: transport labels and details in ui2  [#6159](https://github.com/skycoin/skywire/pull/6159)
+-   visor, ui2: rewards view of the visor list in ui2  [#6158](https://github.com/skycoin/skywire/pull/6158)
+-   visor, ui2: network transports page in ui2  [#6157](https://github.com/skycoin/skywire/pull/6157)
+-   visor, ui2: network view in ui2  [#6156](https://github.com/skycoin/skywire/pull/6156)
+-   visor, ui2: vpn tab in ui2  [#6155](https://github.com/skycoin/skywire/pull/6155)
+-   visor, ui2: skynet tab in ui2  [#6154](https://github.com/skycoin/skywire/pull/6154)
+-   visor, ui2: web proxy tab in ui2  [#6153](https://github.com/skycoin/skywire/pull/6153)
+-   deps: update skycoin for the wallet ui2 parity work  [#6152](https://github.com/skycoin/skywire/pull/6152)
+-   visor, ui2: bandwidth tab in ui2  [#6151](https://github.com/skycoin/skywire/pull/6151)
+-   visor, ui2: native chat tab in ui2  [#6150](https://github.com/skycoin/skywire/pull/6150)
+-   ci, docker: compile the e2e visor and tests on the runner  [#6149](https://github.com/skycoin/skywire/pull/6149)
+-   visor, ui2: host skycoin-web's wallet in the ui2 wallet tab  [#6148](https://github.com/skycoin/skywire/pull/6148)
+-   visor, ui2: uptime of every visor in ui2  [#6147](https://github.com/skycoin/skywire/pull/6147)
+-   integration: drop two fixed waits from the restart test  [#6146](https://github.com/skycoin/skywire/pull/6146)
+-   visor, ui2: host resources pages in ui2  [#6145](https://github.com/skycoin/skywire/pull/6145)
+-   visor, ui2: deployment services page in ui2  [#6144](https://github.com/skycoin/skywire/pull/6144)
+-   visor: do not wait at boot for a service the visor hosts itself  [#6143](https://github.com/skycoin/skywire/pull/6143)
+-   visor, ui2: app catalog and flags form in ui2  [#6142](https://github.com/skycoin/skywire/pull/6142)
+-   visor, ui2: hypervisor settings page in ui2  [#6141](https://github.com/skycoin/skywire/pull/6141)
+-   visor: drop the constant key of pkFromParam  [#6140](https://github.com/skycoin/skywire/pull/6140)
+-   visor, ui2: bulk actions on the ui2 visor list  [#6139](https://github.com/skycoin/skywire/pull/6139)
+-   deps: update skycoin for the server rendered explorer  [#6138](https://github.com/skycoin/skywire/pull/6138)
+-   rewards: fetch the uptime data over dmsg in rewards run  [#6137](https://github.com/skycoin/skywire/pull/6137)
+-   visor, ui2: label, remove and sort visors in the ui2 list  [#6136](https://github.com/skycoin/skywire/pull/6136)
+-   docs: add the ui2 parity table  [#6135](https://github.com/skycoin/skywire/pull/6135)
+
 ## 1.3.110
 
 -   ci: keep the Go build caches inside the repository cache quota  [#6133](https://github.com/skycoin/skywire/pull/6133)

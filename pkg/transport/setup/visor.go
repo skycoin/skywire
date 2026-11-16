@@ -77,6 +77,7 @@ func (ts *TransportListener) Serve(ctx context.Context) {
 			if err := conn.Close(); err != nil {
 				ts.log.WithError(err).Error("Failed to close stream")
 			}
+			continue
 		}
 		gw := &TransportGateway{tm: ts.tm, log: ts.log}
 		rpcS := rpc.NewServer()

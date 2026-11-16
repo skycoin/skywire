@@ -35,6 +35,7 @@ var (
 	startRevMinHops int    // per-direction reverse MinHops override
 	startFwdMux     int    // per-direction forward MuxRoutes override
 	startRevMux     int    // per-direction reverse MuxRoutes override
+	startSpares     int    // spare routes held for leg fail-over (-1 = auto)
 	startDirect     bool   // force a direct-transport-only route (create on demand, dial 1-hop)
 	startRoutingPol string // per-app routing policy (@file.wasm / preset:<name> / "none")
 )
@@ -65,6 +66,7 @@ func init() {
 	startCmd.Flags().IntVar(&startRevMinHops, "reverse-min-hops", 0, "per-direction reverse MinHops override (>=2 forces multi-hop on reverse only; combine with low/0 --min-hops for direct-upstream + multi-hop-downstream)")
 	startCmd.Flags().IntVar(&startFwdMux, "forward-mux", 0, "per-direction forward MuxRoutes override (>0 sets forward leg count independent of --routes)")
 	startCmd.Flags().IntVar(&startRevMux, "reverse-mux", 0, "per-direction reverse MuxRoutes override (download-heavy: --forward-mux 1 --reverse-mux N)")
+	startCmd.Flags().IntVar(&startSpares, "spares", -1, "spare routes held for leg fail-over; a dead leg is replaced from them (-1 = 3 with --routes above 1, else 0)")
 	startCmd.Flags().BoolVar(&startDirect, "direct", false, "force a direct-transport-only route: create the transport to the server on demand, dial 1-hop over it, bypass the route-finder; self-heals if the transport drops (e.g. server restart). For reliable control-plane forwards like the rsn-pprof resolving-proxy bridge.")
 	startCmd.Flags().StringVar(&startRoutingPol, "routing-policy", "", "per-app routing policy for this skynet forward's mesh route: @/path/to/policy.wasm, preset:<name>, or \"none\" to clear (parity with `proxy start --routing-policy`)")
 	startCmd.MarkFlagsMutuallyExclusive("internal", "external")
@@ -167,6 +169,10 @@ var startCmd = &cobra.Command{
 
 		if cmd.Flags().Changed("reverse-mux") {
 			arguments["--reverse-mux"] = fmt.Sprintf("%d", startRevMux)
+		}
+
+		if cmd.Flags().Changed("spares") {
+			arguments["--spares"] = fmt.Sprintf("%d", startSpares)
 		}
 
 		if startDirect {

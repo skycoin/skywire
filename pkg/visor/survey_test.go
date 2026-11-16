@@ -30,7 +30,7 @@ func TestSurveyRoutineEndsWithItsContext(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		generateSurvey(ctx, v, logging.MustGetLogger("survey_test"), true)
+		generateSurveyCtx(ctx, v, logging.MustGetLogger("survey_test"), true)
 	}()
 
 	select {

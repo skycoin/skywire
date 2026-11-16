@@ -21,6 +21,7 @@ cobra subcommand tree.
 - [hypervisor.md](hypervisor.md) — the hypervisor web UI, serving it on the LAN, its password, pairing a desk tab, the terminal UI, adding a remote hypervisor
 - [visor-alerts.md](visor-alerts.md) — mail or webhook alerts when a visor the hypervisor manages goes offline, the visor states and the offline delay
 - [reward-xpub.md](reward-xpub.md) — create a Skycoin BIP44 wallet and set its account xpub as the visor's reward address
+- [reward-xpub-gui.md](reward-xpub-gui.md) — the same step by step with screenshots, using only the wallet web page
 - [skycoin-wallet.md](skycoin-wallet.md) — run a Skycoin node and wallet with `skywire skycoin`, check an address with the cli, fiber coins, a public node as a service
 - [../wasm-visor-ui-tour.md](../wasm-visor-ui-tour.md) — a screenshot tour of the desk, the wasm-visor UI: its windows, the dashboard as a browser tab, netscrape, websh
 - [network-visualizer.md](network-visualizer.md) — the transport-graph UI (`cli tp viz`), which is not the hypervisor interface

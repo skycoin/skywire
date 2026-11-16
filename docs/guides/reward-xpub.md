@@ -5,6 +5,9 @@ reward system derives a fresh address from it for every payout and never pays
 the same address twice. This page shows how to make the wallet, which xpub to
 copy, and how to set it.
 
+For a short walkthrough with screenshots of only the wallet page, see
+[reward-xpub-gui.md](reward-xpub-gui.md).
+
 An xpub is the default and the recommended reward address. A single Skycoin
 address can be set only with an explicit opt-in, and it is refused if it has
 already sent coins. From the reward day of November 15, 2026 a single address

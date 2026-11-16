@@ -513,8 +513,8 @@ const (
 	// PacketHost indicates a packet addressed to the local host.
 	PacketHost PacketType = iota
 
-	// PacketOtherHost indicates an outgoing packet addressed to
-	// another host caught by a NIC in promiscuous mode.
+	// PacketOtherHost indicates an incoming frame addressed to another
+	// host's link address.
 	PacketOtherHost
 
 	// PacketOutgoing for a packet originating from the local host
@@ -1288,12 +1288,21 @@ type TCPInfoOption struct {
 	// SndMss is the maximum TCP payload size, in bytes.
 	SndMss uint32
 
+	// TotalRetrans is the lifetime number of retransmitted TCP segments.
+	TotalRetrans uint32
+
 	// SndSsthresh is the threshold between slow start and congestion
 	// avoidance.
 	SndSsthresh uint32
 
 	// ReorderSeen indicates if reordering is seen in the endpoint.
 	ReorderSeen bool
+
+	// Timestamps is true if TCP timestamps were negotiated.
+	Timestamps bool
+
+	// SACKPermitted is true if selective acknowledgments were negotiated.
+	SACKPermitted bool
 }
 
 func (*TCPInfoOption) isGettableSocketOption() {}

@@ -722,3 +722,53 @@ func TestStreamRouteGroupMuxInfoEmpty(t *testing.T) {
 		t.Errorf("route groups = %d, want 0", len(sample.RouteGroups))
 	}
 }
+
+// TestStreamGroupMessagesLaggingClock checks that a live message is sent
+// whatever its timestamp, since TS is the sender's clock, and that a message
+// both replayed and on the live channel goes out once.
+func TestStreamGroupMessagesLaggingClock(t *testing.T) {
+	groupCh := make(chan GroupMessageData, 8)
+	fv := newFakeVisor()
+	fv.subscribeGroupMessages = func(int) (<-chan GroupMessageData, func() uint64) {
+		return groupCh, func() uint64 { return 0 }
+	}
+	replayed := GroupMessageData{GroupID: "g1", SenderPK: "p1", TimestampNs: 60, Body: "replayed"}
+	fv.snapshotGroupAfterNs = func(int64) []GroupMessageData { return []GroupMessageData{replayed} }
+	client, cleanup := newTestServer(t, fv)
+	defer cleanup()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	got := make(chan string, 8)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = client.StreamGroupMessages(ctx, "", 10, nil, func(e *GroupMessageEvent) { //nolint
+			got <- e.Body
+		})
+	}()
+
+	groupCh <- replayed
+	groupCh <- GroupMessageData{GroupID: "g2", SenderPK: "p2", TimestampNs: 100, Body: "ahead"}
+	groupCh <- GroupMessageData{GroupID: "g1", SenderPK: "p3", TimestampNs: 40, Body: "lagging"}
+
+	var bodies []string
+	for len(bodies) < 3 {
+		select {
+		case b := <-got:
+			bodies = append(bodies, b)
+		case <-time.After(3 * time.Second):
+			t.Fatalf("got %v, want replayed, ahead and lagging", bodies)
+		}
+	}
+	if bodies[0] != "replayed" || bodies[1] != "ahead" || bodies[2] != "lagging" {
+		t.Fatalf("got %v, want [replayed ahead lagging]", bodies)
+	}
+	select {
+	case b := <-got:
+		t.Fatalf("extra message %q", b)
+	case <-time.After(100 * time.Millisecond):
+	}
+	cancel()
+	<-done
+}

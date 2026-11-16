@@ -2,18 +2,10 @@
 package clirewardstgbot
 
 import (
-	"fmt"
-	"log"
-	"os"
-	"strconv"
-	"strings"
-	"time"
+	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
-
-	"github.com/bitfield/script"
-	"github.com/spf13/cobra"
-	tele "gopkg.in/telebot.v3"
+	rewardsbot "github.com/skycoin/skywire/pkg/deployment/rewards/bot"
 )
 
 var filePath string
@@ -36,91 +28,13 @@ for each newly-broadcast reward transaction to a telegram chat.
 Requires two environment variables:
   TG_BOT_TOKEN   telegram bot API token
   TG_CHAT_ID     numeric telegram chat ID to post into`,
-	Run: func(_ *cobra.Command, _ []string) {
-		chatIDStr := os.Getenv("TG_CHAT_ID")
-		chatID, err := strconv.ParseInt(chatIDStr, 10, 64)
-		if err != nil {
-			cmdutil.Fatalf("failed to parse chat ID: %v", err)
-		}
-		pref := tele.Settings{
-			Token:  os.Getenv("TG_BOT_TOKEN"),
-			Poller: &tele.LongPoller{Timeout: 10 * time.Second},
-		}
-
-		b, err := tele.NewBot(pref)
+	Run: func(cmd *cobra.Command, _ []string) {
+		token, chatID, err := rewardsbot.FromEnv()
 		if err != nil {
 			cmdutil.Fatal(err)
-			return
 		}
-
-		tgbotscript := `#!/bin/bash
-		_stats() {
-		#  [[ $1 == "" ]] && return
-		  cat ` + strings.TrimSuffix(filePath, "/transactions0.txt") + `/hist/$(find ` + strings.TrimSuffix(filePath, "/transactions0.txt") + `/hist/ -name "*.txt" -type f -exec grep -l "$1" {} + | xargs -I{} basename {} | tr -d ".txt")_stats.txt
-		}
-		`
-
-		//	var lastModTime time.Time
-		lastModTime, err := os.Stat(filePath)
-		if err != nil {
+		if err := rewardsbot.Run(cmd.Context(), token, chatID, filePath); err != nil {
 			cmdutil.Fatal(err)
-			return
 		}
-		// Use a goroutine to periodically check the file for changes
-		go func() {
-			for {
-				time.Sleep(2 * time.Second)
-
-				fileInfo, err := os.Stat(filePath)
-				if err != nil {
-					log.Printf("Error checking file info: %s", err)
-					continue
-				}
-
-				if fileInfo.ModTime().After(lastModTime.ModTime()) {
-					// The file has been modified since the last check, get the last line which is the most recent txid
-					lastLine, err := script.File(filePath).Last(1).String()
-					if err != nil {
-						log.Printf("Error getting last line of file: %v", err)
-						continue
-					}
-					if lastLine != "" {
-						tmpFile, err := os.CreateTemp(os.TempDir(), "*.sh")
-						if err != nil {
-							return
-						}
-						if err := tmpFile.Close(); err != nil {
-							return
-						}
-						_, _ = script.Exec(`chmod +x ` + tmpFile.Name()).String() //nolint:errcheck
-						_, _ = script.Echo(tgbotscript).WriteFile(tmpFile.Name()) //nolint:errcheck
-						stats, err := script.Exec(`bash -c 'source ` + tmpFile.Name() + `  ; _stats ` + lastLine + `'`).String()
-						if err != nil {
-							log.Printf("Error getting statistics: %v", err)
-							continue
-						}
-						//nolint:errcheck,gosec
-						os.Remove(tmpFile.Name())
-
-						dateforlink, err := script.Echo(stats).First(1).Replace("date: ", "").String()
-						if err != nil {
-							log.Printf("Error getting date for link: %v", err)
-							continue
-						}
-						msg := fmt.Sprintf("Rewards have been distributed!\n\nhttps://explorer.skycoin.com/app/transaction/%s\n\n%s\n\nhttps://reward.skywire.dev/skycoin-rewards/hist/%s", lastLine, stats, dateforlink)
-						// Send the last line to the Telegram chat
-						_, err = b.Send(&tele.Chat{ID: chatID}, msg)
-						if err != nil {
-							log.Printf("Error sending message to Telegram chat: %s", err)
-							continue
-						}
-					}
-
-					lastModTime = fileInfo
-				}
-			}
-		}()
-
-		b.Start()
 	},
 }

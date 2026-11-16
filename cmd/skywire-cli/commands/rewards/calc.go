@@ -170,6 +170,11 @@ func parseSurvey(path string) (*surveyData, error) {
 	if err != nil {
 		return nil, err
 	}
+	return parseSurveyBytes(data)
+}
+
+// parseSurveyBytes parses a node-info.json survey as parseSurvey reads it.
+func parseSurveyBytes(data []byte) (*surveyData, error) {
 	var s surveyData
 	if err := json.Unmarshal(data, &s); err != nil {
 		return nil, err

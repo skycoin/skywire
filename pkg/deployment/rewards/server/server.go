@@ -99,21 +99,25 @@ func buildRouter() http.Handler {
 			DmsgAddr:    fmt.Sprintf("%s:%d", pk.String(), dmsgPort),
 		}
 
-		// Reward-specific extra fields
-		nextrun, _ := script.Exec(`systemctl status skywire-reward.timer --lines=0`).First(5).Last(1).Replace("    Trigger: ", "").String() //nolint:errcheck,gosec
-		prevDuration, _ := script.Exec(`systemctl status skywire-reward.service --lines=0`).Match("Duration").First(1).String()             //nolint:errcheck,gosec
-		active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String()                                                     //nolint:errcheck,gosec
-
-		httputil.WriteJSON(w, r, http.StatusOK, map[string]any{
-			"service_name":                    resp.ServiceName,
-			"build_info":                      resp.BuildInfo,
-			"started_at":                      resp.StartedAt,
-			"dmsg_address":                    resp.DmsgAddr,
-			"reward_system_active":            strings.TrimRight(active, "\n"),
-			"reward_system_next_run":          strings.TrimRight(nextrun, "\n"),
-			"reward_system_prev_run_duration": strings.TrimRight(prevDuration, "\n"),
-			"whitelisted_keys":                wlkeys,
-		})
+		out := map[string]any{
+			"service_name":     resp.ServiceName,
+			"build_info":       resp.BuildInfo,
+			"started_at":       resp.StartedAt,
+			"dmsg_address":     resp.DmsgAddr,
+			"whitelisted_keys": wlkeys,
+		}
+		if s := currentScheduler(); s != nil {
+			out["reward_cycle"] = s.Status()
+		} else {
+			// The cycle runs from the systemd timer.
+			nextrun, _ := script.Exec(`systemctl status skywire-reward.timer --lines=0`).First(5).Last(1).Replace("    Trigger: ", "").String() //nolint:errcheck,gosec
+			prevDuration, _ := script.Exec(`systemctl status skywire-reward.service --lines=0`).Match("Duration").First(1).String()             //nolint:errcheck,gosec
+			active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String()                                                     //nolint:errcheck,gosec
+			out["reward_system_active"] = strings.TrimRight(active, "\n")
+			out["reward_system_next_run"] = strings.TrimRight(nextrun, "\n")
+			out["reward_system_prev_run_duration"] = strings.TrimRight(prevDuration, "\n")
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, out)
 	}
 	r1.HandleFunc("GET /health", healthHandler)
 	r1.HandleFunc("GET /health/health", healthHandler) // accessible when visor's /health takes priority
@@ -298,18 +302,16 @@ func buildRouter() http.Handler {
 			flush(w)
 			w.Write([]byte(navlinks)) //nolint:errcheck,gosec
 			flush(w)
-			tmpFile, err := os.CreateTemp(os.TempDir(), "*.sh")
-			if err != nil {
-				return
+			if txt := cycleStatusText(); txt != "" {
+				w.Write([]byte(txt + "\n")) //nolint:errcheck,gosec
+			} else if tmpFile, err := os.CreateTemp(os.TempDir(), "*.sh"); err == nil {
+				_ = tmpFile.Close()                                                                               //nolint:errcheck,gosec
+				_, _ = script.Exec(`chmod +x ` + tmpFile.Name()).String()                                         //nolint:errcheck,gosec
+				_, _ = script.Echo(nextlogrun).WriteFile(tmpFile.Name())                                          //nolint:errcheck,gosec
+				res, _ := script.Exec(`bash -c 'source ` + tmpFile.Name() + ` ; _nextskywireclilogrun'`).String() //nolint:errcheck,gosec
+				os.Remove(tmpFile.Name())                                                                         //nolint:errcheck,gosec
+				w.Write([]byte(fmt.Sprintf("%s\n", res)))                                                         //nolint:errcheck,gosec,staticcheck
 			}
-			if err := tmpFile.Close(); err != nil {
-				return
-			}
-			_, _ = script.Exec(`chmod +x ` + tmpFile.Name()).String()                                         //nolint:errcheck,gosec
-			_, _ = script.Echo(nextlogrun).WriteFile(tmpFile.Name())                                          //nolint:errcheck,gosec
-			res, _ := script.Exec(`bash -c 'source ` + tmpFile.Name() + ` ; _nextskywireclilogrun'`).String() //nolint:errcheck,gosec
-			os.Remove(tmpFile.Name())                                                                         //nolint:errcheck,gosec
-			w.Write([]byte(fmt.Sprintf("%s\n", res)))                                                         //nolint:errcheck,gosec,staticcheck
 			flush(w)
 
 			// Initial line count
@@ -493,27 +495,26 @@ func buildRouter() http.Handler {
 			w.Header().Set("Server", "")
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(func() (l string) { //nolint:errcheck,gosec
-				l = chunkedPageHead("Transport Bandwidth Logs", "Daily transport bandwidth logs for the Skywire Network", "/log-collection/tplogs")
-				l += navlinks
-				l += "<p><a href='/stats/bandwidth-history'>View Bandwidth History Graph</a></p>"
-				l += "<p style='color:#36A2EB'>Blue = Verified Bandwidth</p>"
-				l += "<p style='color:#FFCE56'>Yellow = Transport bandwidth inconsistent</p>"
-				l += "<p style='color:#FF6384'>Red = Error: sent or received is zero</p>"
+			l := chunkedPageHead("Transport Bandwidth Logs", "Daily transport bandwidth logs for the Skywire Network", "/log-collection/tplogs")
+			l += navlinks
+			l += "<p><a href='/stats/bandwidth-history'>View Bandwidth History Graph</a></p>"
+			l += "<p style='color:#36A2EB'>Blue = Verified Bandwidth</p>"
+			l += "<p style='color:#FFCE56'>Yellow = Transport bandwidth inconsistent</p>"
+			l += "<p style='color:#FF6384'>Red = Error: sent or received is zero</p>"
+			io.WriteString(w, l) //nolint:errcheck,gosec
 
-				tpdData, tpdSrc, err := fetchTPDBandwidthMetrics(7)
-				if err != nil {
-					l += fmt.Sprintf("<p style='color:red'>Error fetching TPD data: %v</p>", err)
-					// Fallback to shell-out
-					tp, _ := script.Exec(`skywire cli log tp -d rewards/log_backups`).String() //nolint:errcheck,gosec
-					l += fmt.Sprintf("%s\n", ansihtml.ConvertToHTML([]byte(tp)))
-				} else {
-					l += renderTPDBandwidthTable(tpdData, tpdSrc)
-				}
-				l += htmltoplink
-				l += htmlend
-				return l
-			}()))
+			// The table is hundreds of megabytes for a week of transports, so
+			// it is written straight to the response rather than built as one string.
+			tpdData, tpdSrc, err := fetchTPDBandwidthMetrics(7)
+			if err != nil {
+				fmt.Fprintf(w, "<p style='color:red'>Error fetching TPD data: %v</p>", err) //nolint:errcheck,gosec
+				// Fallback to shell-out
+				tp, _ := script.Exec(`skywire cli log tp -d rewards/log_backups`).String() //nolint:errcheck,gosec
+				fmt.Fprintf(w, "%s\n", ansihtml.ConvertToHTML([]byte(tp)))                 //nolint:errcheck,gosec
+			} else {
+				renderTPDBandwidthTable(w, tpdData, tpdSrc)
+			}
+			io.WriteString(w, htmltoplink+htmlend) //nolint:errcheck,gosec
 		})
 
 		r1.HandleFunc("GET /stats/ut", func(w http.ResponseWriter, r *http.Request) {
@@ -1091,8 +1092,8 @@ func buildRouter() http.Handler {
 		// builds the transaction from it.
 		handleAuth("GET /skycoin-rewards/payout", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Server", "")
-			active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String() //nolint:errcheck,gosec
-			if strings.TrimRight(active, "\n") == "active" {
+			active := cycleActive()
+			if active == "active" {
 				w.WriteHeader(http.StatusServiceUnavailable)
 				w.Write([]byte("reward calculation running")) //nolint:errcheck,gosec
 				return
@@ -1116,8 +1117,8 @@ func buildRouter() http.Handler {
 		})
 
 		r1.HandleFunc("GET /skycoin-rewards/csv", func(w http.ResponseWriter, r *http.Request) {
-			active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String() //nolint:errcheck,gosec
-			if strings.TrimRight(active, "\n") == "active" {
+			active := cycleActive()
+			if active == "active" {
 				w.Header().Set("Server", "")
 				w.WriteHeader(http.StatusNotFound)
 				return
@@ -1139,13 +1140,13 @@ func buildRouter() http.Handler {
 		})
 		//status of reward system hourly run.
 		r1.HandleFunc("GET /skycoin-rewards/s", func(w http.ResponseWriter, r *http.Request) {
-			active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String() //nolint:errcheck,gosec
-			httputil.WriteJSON(w, r, http.StatusOK, map[string]any{"active": strings.TrimRight(active, "\n")})
+			active := cycleActive()
+			httputil.WriteJSON(w, r, http.StatusOK, map[string]any{"active": active})
 		})
 
 		r1.HandleFunc("GET /skycoin-rewards/csv/plain", func(w http.ResponseWriter, r *http.Request) {
-			active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String() //nolint:errcheck,gosec
-			if strings.TrimRight(active, "\n") == "active" {
+			active := cycleActive()
+			if active == "active" {
 				w.Header().Set("Server", "")
 				w.WriteHeader(http.StatusNotFound)
 				return
@@ -1854,14 +1855,22 @@ func BuildHandler() http.Handler {
 }
 
 // serveStandalone starts HTTP and DMSG listeners. Called by the CLI command.
-// bindAddr is the host:port listen address for the HTTP server.
 func serveStandalone(h http.Handler, bindAddr string) {
 	log := logging.MustGetLogger("dmsghttp")
-	if dmsgDisc == "" {
-		log.Fatal("Dmsg Discovery URL not specified")
-	}
-
 	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
+	defer cancel()
+	if err := serve(ctx, h, bindAddr, log); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// serve runs the dmsg listener under sk, and bindAddr when set, until ctx
+// ends. Everything it starts stops with ctx.
+func serve(ctx context.Context, h http.Handler, bindAddr string, log *logging.Logger) error {
+	if dmsgDisc == "" {
+		return errors.New("dmsg discovery URL not specified")
+	}
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	pk, err := sk.PubKey()
 	if err != nil {
@@ -1878,7 +1887,7 @@ func serveStandalone(h http.Handler, bindAddr string) {
 	// fall back on rendered "unavailable" in production.
 	dmsgClient, stopDmsg, err := dmsgclient.StartDmsgEmbedded(ctx, log, pk, sk, false, rewardServicePKs()...)
 	if err != nil {
-		log.WithError(err).Fatal("Failed to start DMSG client")
+		return fmt.Errorf("start dmsg client: %w", err)
 	}
 	defer stopDmsg()
 
@@ -1898,7 +1907,8 @@ func serveStandalone(h http.Handler, bindAddr string) {
 	// sessions (#4538), while a subscriber reads a snapshot it already
 	// holds.
 	setStatsCXOSubMgrFromDmsg(dmsgClient)
-	startVisorBWWriter(filepath.Join(wd, "hist"))
+	defer closeStatsCXO()
+	startVisorBWWriter(ctx, filepath.Join(wd, "hist"))
 	log.Info("stats pages: TPD aggregates sourced over CXO (HTTP-over-dmsg kept as fallback)")
 
 	// tp-viz reads the deployment over THIS client rather than one of its own.
@@ -1914,75 +1924,76 @@ func serveStandalone(h http.Handler, bindAddr string) {
 
 	lis, err := dmsgClient.Listen(dmsgPort) //nolint: gosec
 	if err != nil {
-		log.WithError(err).Fatal("Failed to listen on DMSG port")
+		return fmt.Errorf("listen on dmsg port %d: %w", dmsgPort, err)
 	}
-	go func() {
-		<-ctx.Done()
-		if err := lis.Close(); err != nil {
-			log.WithError(err).Error("Failed to close DMSG listener")
-		}
-	}()
 
 	// Increased timeouts for dmsg latency characteristics
 	// DMSG has higher latency than direct TCP due to multi-hop routing
-	serve := &http.Server{
+	dmsgSrv := &http.Server{
 		Handler:           h,
 		ReadTimeout:       30 * time.Second, // Allow for dmsg multi-hop latency
 		WriteTimeout:      60 * time.Second, // Allow time to generate large responses
 		IdleTimeout:       90 * time.Second, // Keep connections alive longer
 		ReadHeaderTimeout: 10 * time.Second, // Headers can be slow over dmsg
 	}
-
+	servers := []*http.Server{dmsgSrv}
+	errc := make(chan error, 2)
 	wg := new(sync.WaitGroup)
-	// Start serving
-	wg.Go(func() {
-		cmdutil.Printf("listening on http://%s\n", bindAddr)
-		srv := &http.Server{Addr: bindAddr, Handler: h, ReadHeaderTimeout: 10 * time.Second}
-		if err := srv.ListenAndServe(); err != nil {
-			log.WithError(err).Error("HTTP listener stopped")
-		}
-	})
-
+	if bindAddr != "" {
+		httpSrv := &http.Server{Addr: bindAddr, Handler: h, ReadHeaderTimeout: 10 * time.Second}
+		servers = append(servers, httpSrv)
+		wg.Go(func() {
+			cmdutil.Printf("listening on http://%s\n", bindAddr)
+			if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.WithError(err).Error("HTTP listener stopped")
+			}
+		})
+	}
 	wg.Go(func() {
 		log.WithField("dmsg_addr", lis.Addr().String()).Info("Serving...")
-		if err := serve.Serve(lis); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Serve: %v", err)
+		if err := dmsgSrv.Serve(lis); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errc <- fmt.Errorf("serve: %w", err)
 		}
 	})
 
-	// Graceful shutdown handler
-	go func() {
-		<-ctx.Done()
-		log.Info("Shutting down dmsghttp reward server...")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := serve.Shutdown(shutdownCtx); err != nil {
-			log.WithError(err).Error("HTTP server shutdown error")
-		}
-	}()
-
-	go func() {
-		err := generateAndCacheJSON()
-		if err != nil {
-			cmdutil.Println("Error updating log-collection cache:", err)
-		}
-		err = generateAndCacheStats()
-		if err != nil {
-			cmdutil.Println("Error updating statistics cache:", err)
-		}
-		for range time.NewTicker(cacheInterval).C {
-			err := generateAndCacheJSON()
-			if err != nil {
+	wg.Go(func() {
+		refresh := func() {
+			if err := generateAndCacheJSON(); err != nil {
 				cmdutil.Println("Error updating log-collection cache:", err)
 			}
-			err = generateAndCacheStats()
-			if err != nil {
+			if err := generateAndCacheStats(); err != nil {
 				cmdutil.Println("Error updating statistics cache:", err)
 			}
 		}
-	}()
+		refresh()
+		tick := time.NewTicker(cacheInterval)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-tick.C:
+				refresh()
+			}
+		}
+	})
 
+	select {
+	case <-ctx.Done():
+	case err = <-errc:
+	}
+	log.Info("Shutting down dmsghttp reward server...")
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelShutdown()
+	for _, s := range servers {
+		if serr := s.Shutdown(shutdownCtx); serr != nil {
+			log.WithError(serr).Error("HTTP server shutdown error")
+		}
+	}
+	_ = lis.Close() //nolint:errcheck
+	cancel()
 	wg.Wait()
+	return err
 }
 
 func cal() (ret string) {

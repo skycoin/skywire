@@ -47,6 +47,7 @@ import (
 	"github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skyquic"
+	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
 // Type is the registry key used in services.json blocks.
@@ -548,15 +549,33 @@ func (s *service) serveRouteSetup(ctx context.Context, dmsgC *dmsg.Client) {
 	defer lis.Close() //nolint:errcheck
 
 	snLog.WithField("dmsg_port", skyenv.DmsgSetupPort).Info("Route setup-node listening")
+	serveSetupConns(ctx, lis, router.WrapDmsgClient(dmsgC), snLog)
+}
 
-	const maxConcurrent = 20
-	sem := make(chan struct{}, maxConcurrent)
+// maxConcurrentSetups bounds the setup requests served at once.
+const maxConcurrentSetups = 20
+
+// setupConnTimeout is the gateway timeout. The conn deadline adds a margin
+// so a peer that sends nothing cannot hold a slot past it.
+const setupConnTimeout = 2 * time.Minute
+
+// serveSetupConns serves each accepted conn on its own goroutine, at most
+// maxConcurrentSetups at once. A full set of slots stops the accepting, so
+// the listener's backlog absorbs a burst instead of parked goroutines.
+func serveSetupConns(ctx context.Context, lis net.Listener, dialer network.Dialer, snLog *logging.Logger) {
+	sem := make(chan struct{}, maxConcurrentSetups)
 	setupMetrics := setupmetrics.NewEmpty()
 
 	for {
-		conn, accErr := lis.AcceptStream()
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			return
+		}
+		conn, accErr := lis.Accept()
 		if accErr != nil {
-			if ctx.Err() != nil || errors.Is(accErr, dmsg.ErrEntityClosed) {
+			<-sem
+			if ctx.Err() != nil || errors.Is(accErr, dmsg.ErrEntityClosed) || errors.Is(accErr, net.ErrClosed) {
 				snLog.Debug("Route setup-node listener stopped")
 				return
 			}
@@ -564,28 +583,35 @@ func (s *service) serveRouteSetup(ctx context.Context, dmsgC *dmsg.Client) {
 			continue
 		}
 
-		reqPK := conn.RemoteAddr().(dmsg.Addr).PK
-		snLog.WithField("remote_pk", reqPK).Debug("Accepted route setup request")
+		addr, ok := conn.RemoteAddr().(dmsg.Addr)
+		if !ok {
+			conn.Close() //nolint:errcheck,gosec
+			<-sem
+			continue
+		}
+		snLog.WithField("remote_pk", addr.PK).Debug("Accepted route setup request")
 
 		gw := &router.SetupRPCGateway{
 			Metrics: setupMetrics,
 			Ctx:     ctx,
 			Conn:    conn,
-			ReqPK:   reqPK,
-			Dialer:  router.WrapDmsgClient(dmsgC),
-			Timeout: 2 * time.Minute,
+			ReqPK:   addr.PK,
+			Dialer:  dialer,
+			Timeout: setupConnTimeout,
 		}
 
 		rpcS := rpc.NewServer()
 		if regErr := router.RegisterSetupRPCGateway(rpcS, "SetupRPCGateway", gw); regErr != nil {
 			snLog.WithError(regErr).Error("Failed to register setup RPC")
 			conn.Close() //nolint:errcheck,gosec
+			<-sem
 			continue
 		}
 
 		go func() {
-			sem <- struct{}{}
 			defer func() { <-sem }()
+			defer conn.Close()                                                  //nolint:errcheck
+			conn.SetDeadline(time.Now().Add(setupConnTimeout + 10*time.Second)) //nolint:errcheck,gosec
 			rpcS.ServeConn(conn)
 		}()
 	}

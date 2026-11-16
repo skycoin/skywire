@@ -17,6 +17,7 @@
 package treestore
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -26,6 +27,7 @@ import (
 	"time"
 
 	skycipher "github.com/skycoin/skycoin/src/cipher"
+	"github.com/skycoin/skycoin/src/cipher/encoder"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
@@ -101,6 +103,7 @@ type Subscriber struct {
 	cache    map[string][]byte
 	prefixes []string // declared filter; empty = match all
 	callback UpdateCallback
+	onChange func()
 	// filled is set once a whole Root has been filled and walked. fillErr is
 	// the last fill or walk failure since then. Both are guarded by mu.
 	filled    bool
@@ -727,6 +730,22 @@ func (s *Subscriber) Walk(prefix string, fn func(path string, value []byte) bool
 	}
 }
 
+// WalkShared is Walk without the copy. The values are the cache's own,
+// which are never modified in place, so fn may keep them but must not write
+// to them.
+func (s *Subscriber) WalkShared(prefix string, fn func(path string, value []byte) bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for path, value := range s.cache {
+		if !HasPrefix(path, prefix) || !s.matchesPrefixLocked(path) {
+			continue
+		}
+		if !fn(path, value) {
+			return
+		}
+	}
+}
+
 // CacheSizeAndSampleKeys returns (totalCacheEntries, firstMaxSampleKeys).
 // Operator-visibility helper: a non-zero cache total combined with a
 // zero post-Walk snapshot means either the manager's prefix filter
@@ -791,6 +810,14 @@ func (s *Subscriber) OnFillError(fn func(error)) {
 func (s *Subscriber) OnUpdate(cb UpdateCallback) {
 	s.mu.Lock()
 	s.callback = cb
+	s.mu.Unlock()
+}
+
+// OnChange registers (or replaces) a callback that fires when a Root changed
+// the cache, without building the UpdateEvent copies OnUpdate gets.
+func (s *Subscriber) OnChange(fn func()) {
+	s.mu.Lock()
+	s.onChange = fn
 	s.mu.Unlock()
 }
 
@@ -1122,33 +1149,46 @@ func (s *Subscriber) applySnapshot(snap map[string][]byte) {
 	prev := s.cache
 	s.cache = snap
 	cb := s.callback
+	onChange := s.onChange
 	prefixes := s.prefixes
 	s.mu.Unlock()
 
-	if cb == nil {
+	if cb == nil && onChange == nil {
 		return
 	}
 
 	var changes []UpdateEvent
+	changed := false
 	for path, newVal := range snap {
 		if !pathMatchesAny(path, prefixes) {
 			continue
 		}
 		if oldVal, had := prev[path]; !had || !bytesEqual(oldVal, newVal) {
+			changed = true
+			if cb == nil {
+				break
+			}
 			changes = append(changes, UpdateEvent{Path: path, Value: append([]byte(nil), newVal...)})
 		}
 	}
 	for path := range prev {
+		if changed && cb == nil {
+			break
+		}
 		if _, stillThere := snap[path]; stillThere {
 			continue
 		}
 		if !pathMatchesAny(path, prefixes) {
 			continue
 		}
+		changed = true
 		changes = append(changes, UpdateEvent{Path: path, Value: nil})
 	}
-	if len(changes) > 0 {
+	if cb != nil && len(changes) > 0 {
 		cb(changes)
+	}
+	if onChange != nil && changed {
+		onChange()
 	}
 }
 
@@ -1188,21 +1228,29 @@ func (s *Subscriber) mergePartialSnapshot(recovered map[string][]byte) {
 		s.cache = make(map[string][]byte)
 	}
 	var changes []UpdateEvent
+	changed := false
 	cb := s.callback
+	onChange := s.onChange
 	prefixes := s.prefixes
 	for path, newVal := range recovered {
 		if old, had := s.cache[path]; had && bytesEqual(old, newVal) {
 			continue
 		}
 		s.cache[path] = newVal
-		if cb != nil && pathMatchesAny(path, prefixes) {
-			changes = append(changes, UpdateEvent{Path: path, Value: append([]byte(nil), newVal...)})
+		if pathMatchesAny(path, prefixes) {
+			changed = true
+			if cb != nil {
+				changes = append(changes, UpdateEvent{Path: path, Value: append([]byte(nil), newVal...)})
+			}
 		}
 	}
 	s.mu.Unlock()
 
 	if cb != nil && len(changes) > 0 {
 		cb(changes)
+	}
+	if onChange != nil && changed {
+		onChange()
 	}
 }
 
@@ -1217,7 +1265,7 @@ func walkTreeBestEffort(pack registry.Pack, node *TreeNode, basePath string, out
 	}
 	for i := range n {
 		var entry TreeEntry
-		if _, err := node.Children.ValueByIndex(pack, i, &entry); err != nil {
+		if err := entryAt(pack, node, i, &entry); err != nil {
 			continue // this child's index object wasn't fetched; skip it
 		}
 		fullPath := entry.Name
@@ -1225,7 +1273,7 @@ func walkTreeBestEffort(pack registry.Pack, node *TreeNode, basePath string, out
 			fullPath = basePath + "/" + entry.Name
 		}
 		if len(entry.Leaf) > 0 {
-			out[fullPath] = append([]byte(nil), entry.Leaf...)
+			out[fullPath] = leafValue(entry.Leaf)
 			continue
 		}
 		if entry.Sub.Hash == (skycipher.SHA256{}) {
@@ -1248,7 +1296,7 @@ func walkTree(pack registry.Pack, node *TreeNode, basePath string, out map[strin
 	}
 	for i := range n {
 		var entry TreeEntry
-		if _, err := node.Children.ValueByIndex(pack, i, &entry); err != nil {
+		if err := entryAt(pack, node, i, &entry); err != nil {
 			return err
 		}
 		fullPath := entry.Name
@@ -1256,7 +1304,7 @@ func walkTree(pack registry.Pack, node *TreeNode, basePath string, out map[strin
 			fullPath = basePath + "/" + entry.Name
 		}
 		if len(entry.Leaf) > 0 {
-			out[fullPath] = append([]byte(nil), entry.Leaf...)
+			out[fullPath] = leafValue(entry.Leaf)
 			continue
 		}
 		// Sub-tree: decode and recurse.
@@ -1289,15 +1337,7 @@ func pathMatchesAny(path string, prefixes []string) bool {
 }
 
 func bytesEqual(a, b []byte) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
+	return bytes.Equal(a, b)
 }
 
 // quietThresholdFor is the silence the watchdog tolerates after streak
@@ -1312,4 +1352,34 @@ func quietThresholdFor(base time.Duration, streak int64) time.Duration {
 		return reconnectQuietMax
 	}
 	return d
+}
+
+// entryAt decodes child i of node with its Leaf pointing into the stored
+// object rather than into a fresh copy of it. The registry decoder copies any
+// object with a byte slice before decoding, which made the cache a second
+// copy of the feed beside the CXO store and reallocated every leaf on every
+// Root.
+func entryAt(pack registry.Pack, node *TreeNode, i int, entry *TreeEntry) error {
+	hash, err := node.Children.HashByIndex(pack, i)
+	if err != nil {
+		return err
+	}
+	if hash == (skycipher.SHA256{}) {
+		return registry.ErrRefsElementIsNil
+	}
+	val, err := pack.Get(hash)
+	if err != nil {
+		return err
+	}
+	*entry = TreeEntry{}
+	_, err = encoder.DeserializeRawNoCopy(val, entry)
+	return err
+}
+
+// leafValue returns a decoded leaf for the cache without copying it, so the
+// cache, the CXO store and every snapshot built from the cache share one
+// copy. The capacity is cut to the length so an append by a reader
+// reallocates instead of writing over the rest of the stored object.
+func leafValue(b []byte) []byte {
+	return b[:len(b):len(b)]
 }

@@ -2,6 +2,8 @@
 package services
 
 import (
+	"encoding/json"
+
 	"github.com/skycoin/skywire/pkg/cxo/node"
 	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
@@ -22,6 +24,8 @@ type State struct {
 	Aggregators []AggregatorState `json:"cxo_aggregators,omitempty"`
 	// Publishers are the CXO feeds the service publishes to the fleet.
 	Publishers []PublisherState `json:"cxo_publishers,omitempty"`
+	// Detail is what a service reports beyond these fields, as JSON.
+	Detail json.RawMessage `json:"detail,omitempty"`
 }
 
 // AggregatorState describes one CXO aggregator.

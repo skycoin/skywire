@@ -590,7 +590,7 @@ The per-message **⋯** menu offers:
   messages. `DELETE /group/<id>/message?ts=<unixnano>` publishes a
   durable `{"skychat_delete":{to_ts_nano}}` tombstone (via
   `GroupSend`) *and* prunes the original leaf (via `GroupUnsend`).
-  The tombstone rides the normal `GroupPoll` → SSE path so it
+  The tombstone rides the normal `GroupWait` → SSE path so it
   propagates live, and — being a durable leaf — also reaches members
   who were offline during the delete and future joiners; group
   `/history` filters both the tombstone and the deleted message. It

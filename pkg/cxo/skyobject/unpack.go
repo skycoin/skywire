@@ -138,6 +138,8 @@ func (c *Container) Save(up *Unpack, r *registry.Root) (err error) {
 
 	// walk the Root first
 
+	var created = make(map[cipher.SHA256]struct{}) // new to the CXDS, for the delta
+
 	defer func() {
 		if err != nil {
 			up.reset()
@@ -190,6 +192,9 @@ func (c *Container) Save(up *Unpack, r *registry.Root) (err error) {
 
 			ui.dec++ // used
 			deepper = ui.created
+			if deepper {
+				created[hash] = struct{}{}
+			}
 			return deepper, err
 
 		})
@@ -226,6 +231,10 @@ func (c *Container) Save(up *Unpack, r *registry.Root) (err error) {
 		return err
 	}
 
+	if ui := up.m[cipher.SHA256(r.Reg)]; ui != nil && ui.created {
+		created[cipher.SHA256(r.Reg)] = struct{}{}
+	}
+
 	// make rc of related objects actual
 
 	for key, ui := range up.m {
@@ -247,7 +256,42 @@ func (c *Container) Save(up *Unpack, r *registry.Root) (err error) {
 
 	}
 
+	c.RecordDelta(r.Pub, r.Nonce, r.Seq, c.saveDelta(up.Pack, r, created))
 	return err
+}
+
+// saveDelta lists, in walk order, the objects of a saved Root that its
+// subscribers may lack: the ones the Save created, and the ones this node
+// itself got lately for another Root, such as a subtree of a relayed feed.
+func (c *Container) saveDelta(p *Pack, r *registry.Root, created map[cipher.SHA256]struct{}) (keys []cipher.SHA256) {
+	seen := make(map[cipher.SHA256]struct{})
+	recent := c.deltas.recentElsewhere(r.Pub, r.Nonce)
+	for _, dr := range r.Refs {
+		err := dr.Walk(p, func(hash cipher.SHA256, _ int) (bool, error) {
+			if hash == (cipher.SHA256{}) {
+				return false, nil
+			}
+			if _, ok := seen[hash]; ok {
+				return false, nil
+			}
+			if _, ok := created[hash]; !ok && !recent(hash) {
+				return false, nil
+			}
+			seen[hash] = struct{}{}
+			keys = append(keys, hash)
+			if len(keys) >= DeltaMaxKeys {
+				return false, registry.ErrStopIteration
+			}
+			return true, nil
+		})
+		if err != nil || len(keys) >= DeltaMaxKeys {
+			break
+		}
+	}
+	if _, ok := created[cipher.SHA256(r.Reg)]; ok {
+		keys = append(keys, cipher.SHA256(r.Reg))
+	}
+	return keys
 }
 
 func (i *Index) saveRoot(

@@ -68,10 +68,47 @@ bytes. See `reward rules` for the human eligibility rules.
   `hist/uptimes.json`) → calculate → write
   `hist/{date}_{ineligible.csv,shares.csv,rewardtxn0.csv,stats.txt}` + per-pool files, byte
   compatible with the four `rewards -b -B 0 ... -e/-20/-10/-12` calls of the reward script.
+  A finished day is fixed: its uptimes are fetched again only while `hist/<date>_ut.txt` predates
+  `--day-close-delay` (default 15m) after its midnight UTC, and once the day closed its bandwidth is
+  collected once more (`bw-collect --date <date> --days 2`, retried every 10m on failure). The outputs
+  are written only when a hash of every input (binary, options, ut/bandwidth/transport files, the
+  surveys of visors that met the uptime, spent state of their single addresses) changed since the
+  last calculation in the same process.
   Takes the bare command's calculation flags with the script's defaults (`-b` true, `-B 0`,
   `-p log_backups`), plus `-H/--hist`, `-u/--utfile` (skip the UT fetch), `--skip-collect`,
   `--prune-below-version` (default `auto`), and `--fetch` (fetch surveys with `cli log --survey`
   instead, with `--minv` and `--proxy host:port`). Date defaults to yesterday UTC.
+- **`rewards serve`** → the `ui` server and the `run` cycle in ONE process, no timer, EVENT DRIVEN. Takes the
+  flags of `ui` and `run` (not `--date`, `--utfile`; the run flags whose shorthand the ui takes are long
+  only: `--loglvl`, `--lpath`, `--a1`). `--lpath`/`--hist` resolve under `-W/--wd`. The unpaid day
+  (yesterday UTC) is calculated at start, then on: a pushed survey whose calc-relevant fields changed
+  (reward address, ip, interfaces/MACs, arch, uuid, hypervisor, services, skywire_version, or a first
+  survey; a timestamp-only change does not count), after `--debounce` (1m, a burst gives one run); a
+  single payout address that sent coins (`--watch-interval` 30s polls `--skycoin-node`
+  `/api/v1/blockchain/metadata`, re-checks the unspent single addresses on a new block, or every 5m when
+  the head is unknown); each collection (`--collect-interval` 3h: survey cleanup + today's bandwidth,
+  none with `--skip-collect`); `--day-close-delay` (15m) after midnight UTC (fetches the finished day's
+  UT and final bandwidth once); and a `--cycle-interval` (1h) fallback. Every run hashes the inputs and
+  writes nothing when they match the last written outputs (log "Inputs for <date> unchanged"); a paid
+  day is never recalculated. Runs never overlap; a failed run (even a `log.Fatal` in the calculation)
+  is logged and retried at the next trigger or check while the server keeps serving. `/health` shows
+  `reward_cycle` (running, cycles, recalcs, skips, failures, last_start/end/duration/result/error,
+  last_trigger, last_date, inputs_hash, last_skip(_at), last_recalc_at, pending_trigger, next_run,
+  last_collect, collect_error, next_collect, last_watch, watch_error), and the payout and csv
+  routes refuse while a cycle runs, as they did while the oneshot unit was active. Runs the telegram
+  bot too when `TG_BOT_TOKEN` and `TG_CHAT_ID` are set (watches `<wd>/transactions0.txt`). Never run it
+  beside the old timer on the same work dir.
+- **Embedded in a visor**: an `embedded_services` block of type `rewards` runs the same server and
+  cycle under its own key (`keyfile` or `secret_key`, the `reward_system_dmsg` UI key) with
+  `work_dir` (hist/, log_backups/, xpub_index.json). Optional: `skycoin_node`, `whitelist`, `addr`
+  (plain HTTP, none by default), `dmsg_port`, `canonical_domain`, `login_node`, `survey_min_version`,
+  `skip_collect`, `fetch` + `proxy` (e.g. the visor's survey-whitelist proxy `127.0.0.1:4443`),
+  `min_version`, `prune_below_version`, `cycle_interval`, `collect_interval`, `debounce`,
+  `watch_interval`, `day_close_delay` (durations, defaults as serve), `no_cycle`, `bot_token_file` + `bot_chat_id`
+  (else `TG_BOT_TOKEN`/`TG_CHAT_ID` from the visor's environment; the token never goes in the block).
+  `visor state --select services` shows it with `detail.reward_cycle`; `visor services
+  start|stop|restart rewards` controls it; a failed start is retried with backoff. `skywire svc run`
+  runs the same block outside a visor.
 - **`rewards tp-collect`** → fetch per-key transport stats from TPD
   (`/all-transports/per-key-stats`, cached 5min in `/tmp/tpd.json`), append PKs with
   >= `-m/--min` (default 2) p2p transports (dmsg excluded) to `hist/YYYY-MM-DD_transports.txt`.
@@ -98,12 +135,15 @@ bytes. See `reward rules` for the human eligibility rules.
 - **`rewards systemd`** → write `skywire-reward.service` (oneshot `rewards run`) +
   `.timer` (hourly) + `fiberreward.service` (the `ui`) to `-o/--out` (default
   `/etc/systemd/system`; use `-o /dev/stdout` to preview, note it double-prints via `.Tee()`).
-  `-u/--user`, `-p/--path`, `-s/--skyenv` (default `fr.conf`).
+  `-u/--user`, `-p/--path`, `-s/--skyenv` (default `fr.conf`). `--serve` writes only
+  `skywire-reward-serve.service` (`rewards serve -W <path>`, TZ=UTC, Restart=always) with
+  `EnvironmentFile=-<--env-file>` (default `/etc/rewardbot.env`) for the bot.
 - **`rewards script {getlogs|reward}`** → print the legacy bash scripts (getlogs.sh /
   reward.sh) to pipe to bash. `getlogs -m <ver>` / `reward -d <date>` prepend a var. Superseded
   by `rewards run`; kept for reference.
 - **`rewards bot`** → telegram notifier. Watches `-w/--watch` (reward txid file); posts
-  per-day stats on each new broadcast. Needs env `TG_BOT_TOKEN` + `TG_CHAT_ID`.
+  per-day stats on each new broadcast. Needs env `TG_BOT_TOKEN` + `TG_CHAT_ID`. `serve` embeds it.
+  Bot API errors are logged with the token replaced by `<token>`.
 
 ## Gotchas
 - `reward` `Long` help dials the visor RPC to show the current address, now done **lazily**

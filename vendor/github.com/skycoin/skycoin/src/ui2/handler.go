@@ -171,6 +171,7 @@ func coinHandler(n Node, o Options) http.Handler {
 		return nil
 	}))
 	mux.HandleFunc("/wallet/do/{op}", post(walletOpHandler(n)))
+	sweepHandlers(mux, n, page, post)
 	mux.HandleFunc("/reset", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			post(func(w http.ResponseWriter, r *http.Request) templ.Component {
@@ -260,11 +261,12 @@ func coinHandler(n Node, o Options) http.Handler {
 	mux.HandleFunc("/send/row", page(func(*http.Request) templ.Component { return SendRow() }))
 	mux.HandleFunc("/send/inject", post(func(_ http.ResponseWriter, r *http.Request) templ.Component {
 		id := r.PostFormValue("id")
-		txid, err := n.InjectEncodedTransaction(r.PostFormValue("rawtx"))
+		raws := r.PostForm["rawtx"]
+		txids, err := injectAll(n, raws)
 		if err != nil {
-			return SentView(walletURL(id), "", err.Error())
+			return SentAllView(walletURL(id), txids, len(raws), err.Error())
 		}
-		return SentView(walletURL(id), txid, "")
+		return SentAllView(walletURL(id), txids, len(raws), "")
 	}))
 
 	mux.HandleFunc("/bw/wallet", page(func(r *http.Request) templ.Component {
@@ -375,6 +377,14 @@ func coinHandler(n Node, o Options) http.Handler {
 			return SentView(back, "", err.Error())
 		}
 		return SentView(back, txid, "")
+	}))
+	// A sweep of a browser wallet, signed in the page. The answer is read by bw.js.
+	mux.HandleFunc("/bw/sweep/inject", post(func(_ http.ResponseWriter, r *http.Request) templ.Component {
+		txid, err := n.InjectEncodedTransaction(r.PostFormValue("rawtx"))
+		if err != nil {
+			return BrowserSweepInjected("", err.Error())
+		}
+		return BrowserSweepInjected(txid, "")
 	}))
 	return mux
 }

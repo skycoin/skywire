@@ -75,6 +75,10 @@ var Mount func(http.Handler)
 // proxy here rather than in the environment, which an embedder shares.
 var nodeTransport = http.DefaultTransport
 
+// nodeTimeout bounds a request to a coin node, so a node or mesh route that
+// stops answering gives the wallet an error instead of a request that never ends.
+var nodeTimeout = 2 * time.Minute
+
 // NodeDial is set by an embedder to open the connection to the --socks5-proxy.
 // A program whose loopback is not the host's, such as one in a browser tab,
 // sets it to reach its own proxy.
@@ -777,7 +781,7 @@ func handleReadOnlyPost(c *webCtx, trimmedPath string, nodeURL string) bool {
 
 	// Cache transaction queries for 30 seconds to avoid slow repeated lookups
 	if trimmedPath == "/v1/transactions" {
-		cacheKey := targetURL + "?" + c.Request.FormValue("addrs")
+		cacheKey := transactionsCacheKey(c, targetURL)
 		if entry, ok := queryCache.get(cacheKey, 30*time.Second); ok {
 			log.Printf("[PROXY] POST %s -> cached (%s ago)", c.Request.URL.Path, time.Since(entry.cachedAt).Round(time.Second)) //nolint:gosec // logs a request path on a local server; the value is recorded, never interpreted
 			c.Data(entry.statusCode, entry.contentType, entry.body)
@@ -809,7 +813,7 @@ func handleReadOnlyPost(c *webCtx, trimmedPath string, nodeURL string) bool {
 		req.Header.Set("X-CSRF-Token", csrfToken)
 	}
 
-	client := &http.Client{Transport: nodeTransport}
+	client := &http.Client{Transport: nodeTransport, Timeout: nodeTimeout}
 	resp, err := client.Do(req) //nolint:gosec // G704: request targets an operator-configured node URL
 	if err != nil {
 		errInternal(c, fmt.Sprintf("failed to query node: %v", err))
@@ -829,7 +833,7 @@ func handleReadOnlyPost(c *webCtx, trimmedPath string, nodeURL string) bool {
 
 	// Cache successful transaction responses
 	if trimmedPath == "/v1/transactions" && resp.StatusCode == http.StatusOK {
-		cacheKey := targetURL + "?" + c.Request.FormValue("addrs")
+		cacheKey := transactionsCacheKey(c, targetURL)
 		queryCache.set(cacheKey, proxyCacheEntry{
 			body:        body,
 			contentType: resp.Header.Get("Content-Type"),
@@ -844,7 +848,7 @@ func handleReadOnlyPost(c *webCtx, trimmedPath string, nodeURL string) bool {
 
 // fetchCSRFToken fetches a CSRF token from the remote node
 func fetchCSRFToken(nodeURL string) (string, error) {
-	resp, err := (&http.Client{Transport: nodeTransport}).Get(nodeURL + "/api/v1/csrf") //nolint:gosec
+	resp, err := (&http.Client{Transport: nodeTransport, Timeout: nodeTimeout}).Get(nodeURL + "/api/v1/csrf") //nolint:gosec
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch CSRF token: %v", err)
 	}
@@ -907,7 +911,7 @@ func proxyToNodeWithBase(c *webCtx, remoteNodeURL string, targetPath string) {
 		}
 	}
 
-	client := &http.Client{Transport: nodeTransport}
+	client := &http.Client{Transport: nodeTransport, Timeout: nodeTimeout}
 	resp, err := client.Do(proxyReq) //nolint:gosec // G704: proxies to an operator-configured node URL
 	if err != nil {
 		log.Printf("[PROXY] Request failed: %v", err)
@@ -1134,4 +1138,12 @@ func routeCoins(mux *http.ServeMux, table *coinTable, custom *customCoins, coins
 		}
 	})
 
+}
+
+// transactionsCacheKey keys a cached transactions query on every field of its
+// form, sorted, so a query asking for verbose or confirmed transactions is not
+// answered with another one's.
+func transactionsCacheKey(c *webCtx, targetURL string) string {
+	c.Request.FormValue("addrs") // parses the form
+	return targetURL + "?" + c.Request.PostForm.Encode()
 }

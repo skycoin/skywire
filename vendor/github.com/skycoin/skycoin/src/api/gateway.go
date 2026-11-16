@@ -92,8 +92,11 @@ type Visorer interface {
 	GetWalletUnconfirmedTransactionsVerbose(wltID string) ([]visor.UnconfirmedTransaction, [][]visor.TransactionInput, error)
 	GetWalletBalance(wltID string) (wallet.BalancePair, wallet.AddressBalances, error)
 	CreateTransaction(p transaction.Params, wp visor.CreateTransactionParams) (*coin.Transaction, []visor.TransactionInput, error)
+	CreateTransactions(p transaction.Params, wp visor.CreateTransactionParams) ([]*coin.Transaction, [][]visor.TransactionInput, error)
 	WalletCreateTransaction(wltID string, p transaction.Params, wp visor.CreateTransactionParams) (*coin.Transaction, []visor.TransactionInput, error)
 	WalletCreateTransactionSigned(wltID string, password []byte, p transaction.Params, wp visor.CreateTransactionParams) (*coin.Transaction, []visor.TransactionInput, error)
+	WalletCreateTransactions(wltID string, p transaction.Params, wp visor.CreateTransactionParams) ([]*coin.Transaction, [][]visor.TransactionInput, error)
+	WalletCreateTransactionsSigned(wltID string, password []byte, p transaction.Params, wp visor.CreateTransactionParams) ([]*coin.Transaction, [][]visor.TransactionInput, error)
 	WalletSignTransaction(wltID string, password []byte, txn *coin.Transaction, signIndexes []int) (*coin.Transaction, []visor.TransactionInput, error)
 	ScanWalletAddresses(wltID string, password []byte, num uint64) ([]cipher.Address, error)
 	TransactionsFinder() wallet.TransactionsFinder

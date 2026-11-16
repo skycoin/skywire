@@ -2002,6 +2002,13 @@ func (rc *rpcClient) GroupPoll(since time.Time) ([]GroupMessage, error) {
 	return resp, err
 }
 
+// GroupWait implements API.
+func (rc *rpcClient) GroupWait(since time.Time, wait time.Duration) ([]GroupMessage, error) {
+	var resp []GroupMessage
+	err := rc.Call("GroupWait", &GroupWaitRequest{Since: since, Wait: wait}, &resp)
+	return resp, err
+}
+
 // GroupDelete implements API.
 func (rc *rpcClient) GroupDelete(id string) error {
 	return rc.Call("GroupDelete", &id, &struct{}{})

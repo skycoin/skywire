@@ -141,6 +141,15 @@ func (rg *RouteGroup) poolWideningAllowed() bool {
 	return !rg.standbyTunnel() && !rg.tunnelRoleUnknown()
 }
 
+// poolOwnsRefill reports whether a missing leg of this group should come from
+// the standby pool, which holds measured chains, and not from a fresh dial.
+func (rg *RouteGroup) poolOwnsRefill() bool {
+	if rg.mux == nil || rg.TunnelRole() != tunnelRoleActive {
+		return false
+	}
+	return int(rg.poolStandbys.Load()) > rg.mux.knInt(routersettings.PoolMinStandby)
+}
+
 // dialMuxTarget clamps a DIAL's requested mux width to what this group's role
 // allows. It runs on the dial path, where the role has just been seeded from
 // DialOptions (saveRouteGroupRules) — so it is the gate that keeps a pooled
@@ -723,6 +732,9 @@ func (r *router) poolArbiterTick(now time.Time) {
 		}
 	}
 	for k, active := range actives {
+		for _, g := range active {
+			g.poolStandbys.Store(int32(len(pools[k]))) //nolint:gosec // a pool is a handful of tunnels
+		}
 		poolArbiterRound(active, pools[k], now, func(g, s *RouteGroup, exclude []uuid.UUID) error {
 			n, err := r.growMuxFromPool(g.desc.DstPort(), 1, 0, exclude)
 			if err == nil && n == 0 {

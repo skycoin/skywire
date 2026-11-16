@@ -65,6 +65,17 @@ jobs:
           echo "$RUNNER_TEMP/tinygo/bin" >> "$GITHUB_PATH"
           sudo apt-get update && sudo apt-get install -y llvm time
 
+      # The arm64 build peaked at 15.2 GB on the 16 GB runner at v1.3.110 and
+      # ran out at v1.3.111, which the runner reports only as a cancel.
+      - name: Add swap
+        run: |
+          set -euo pipefail
+          sudo fallocate -l 16G /mnt/tinygo-swap
+          sudo chmod 600 /mnt/tinygo-swap
+          sudo mkswap /mnt/tinygo-swap
+          sudo swapon /mnt/tinygo-swap
+          free -h
+
       - name: Build
         env:
           GOOS: ${{ matrix.goos }}

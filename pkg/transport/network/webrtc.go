@@ -310,9 +310,18 @@ type webrtcListener struct {
 	iceURLs  []string
 	announce func(string)
 	conns    chan net.Conn
+	slots    chan struct{}
 	done     chan struct{}
 	once     sync.Once
 }
+
+// maxConcurrentWebRTCAnswers caps the signaling streams answered at once,
+// counting an answered conn until Accept takes it. Each one is a whole
+// PeerConnection, and a browser holds only a few hundred in total.
+const maxConcurrentWebRTCAnswers = 16
+
+// webrtcAnswer is the answerer the listener runs per signaling stream.
+var webrtcAnswer = webrtcAccept
 
 func newWebRTCListener(dmsgC *dmsg.Client, iceURLs []string, announce func(string)) (*webrtcListener, error) {
 	dl, err := dmsgC.Listen(webrtcSignalPort)
@@ -324,6 +333,7 @@ func newWebRTCListener(dmsgC *dmsg.Client, iceURLs []string, announce func(strin
 		iceURLs:  iceURLs,
 		announce: announce,
 		conns:    make(chan net.Conn),
+		slots:    make(chan struct{}, maxConcurrentWebRTCAnswers),
 		done:     make(chan struct{}),
 	}
 	go l.acceptLoop()
@@ -332,14 +342,23 @@ func newWebRTCListener(dmsgC *dmsg.Client, iceURLs []string, announce func(strin
 
 func (l *webrtcListener) acceptLoop() {
 	for {
+		// Take the slot before accepting, so a flood of signaling streams
+		// waits in the dmsg listener instead of each starting a PeerConnection.
+		select {
+		case l.slots <- struct{}{}:
+		case <-l.done:
+			return
+		}
 		str, err := l.dmsgLis.AcceptStream()
 		if err != nil {
+			<-l.slots
 			return
 		}
 		go func(s *dmsg.Stream) {
+			defer func() { <-l.slots }()
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
-			conn, err := webrtcAccept(ctx, s, l.iceURLs, l.announce)
+			conn, err := webrtcAnswer(ctx, s, l.iceURLs, l.announce)
 			if err != nil {
 				s.Close() //nolint:errcheck,gosec
 				return

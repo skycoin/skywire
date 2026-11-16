@@ -30,7 +30,6 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/checksum"
 	"gvisor.dev/gvisor/pkg/tcpip/header"
 	"gvisor.dev/gvisor/pkg/tcpip/header/parse"
-	"gvisor.dev/gvisor/pkg/tcpip/network/hash"
 	"gvisor.dev/gvisor/pkg/tcpip/network/internal/fragmentation"
 	"gvisor.dev/gvisor/pkg/tcpip/network/internal/ip"
 	"gvisor.dev/gvisor/pkg/tcpip/network/internal/multicast"
@@ -58,9 +57,6 @@ const (
 
 	// DefaultTTL is the default time-to-live value for this endpoint.
 	DefaultTTL = 64
-
-	// buckets is the number of identifier buckets.
-	buckets = 2048
 
 	// The size of a fragment block, in bytes, as per RFC 791 section 3.1,
 	// page 14.
@@ -605,7 +601,7 @@ func (e *endpoint) writePacket(r *stack.Route, pkt *stack.PacketBuffer) tcpip.Er
 	}
 
 	if nft := stk.NFTables(); nft != nil && stk.IsNFTablesConfigured() {
-		if !nft.CheckOutput(pkt, r, stack.IP) {
+		if !nft.CheckOutput(pkt, r, r.OutgoingNIC(), stack.IP) {
 			// nftables is telling us to drop the packet.
 			return nil
 		}
@@ -685,7 +681,7 @@ func (e *endpoint) writePacketPostRouting(r *stack.Route, pkt *stack.PacketBuffe
 	}
 
 	if nft := stk.NFTables(); nft != nil && stk.IsNFTablesConfigured() {
-		if !nft.CheckPostrouting(pkt, r, stack.IP) {
+		if !nft.CheckPostrouting(pkt, r, r.OutgoingNIC(), stack.IP) {
 			// nftables is telling us to drop the packet.
 			return nil
 		}
@@ -802,7 +798,7 @@ func (e *endpoint) forwardPacketWithRoute(route *stack.Route, pkt *stack.PacketB
 	}
 
 	if nft := stk.NFTables(); nft != nil && stk.IsNFTablesConfigured() {
-		if !nft.CheckForward(pkt, route, stack.IP) {
+		if !nft.CheckForward(pkt, route, route.OutgoingNIC(), stack.IP) {
 			// nftables is telling us to drop the packet.
 			return nil
 		}
@@ -915,7 +911,7 @@ func (e *endpoint) forwardUnicastPacket(pkt *stack.PacketBuffer) ip.ForwardingEr
 		}
 
 		if nft := stk.NFTables(); nft != nil && stk.IsNFTablesConfigured() {
-			if !nft.CheckForward(pkt, nil /* route */, stack.IP) {
+			if !nft.CheckForward(pkt, nil /* route */, 0 /* outNICID */, stack.IP) {
 				// nftables is telling us to drop the packet.
 				return nil
 			}
@@ -956,6 +952,12 @@ func (e *endpoint) forwardUnicastPacket(pkt *stack.PacketBuffer) ip.ForwardingEr
 // HandlePacket is called by the link layer when new ipv4 packets arrive for
 // this endpoint.
 func (e *endpoint) HandlePacket(pkt *stack.PacketBuffer) {
+	// As in ip_rcv_core, frames for another host's link address are dropped
+	// before they are counted.
+	if pkt.PktType == tcpip.PacketOtherHost {
+		return
+	}
+
 	stats := e.stats.ip
 
 	stats.PacketsReceived.Increment()
@@ -974,7 +976,7 @@ func (e *endpoint) HandlePacket(pkt *stack.PacketBuffer) {
 	defer hView.Release()
 
 	if !e.nic.IsLoopback() {
-		if !e.protocol.allowExternalLoopbackTraffic.Load() {
+		if !e.protocol.allowExternalLoopbackTraffic.Load() && !e.nic.AllowExternalIPv4LoopbackTraffic() {
 			if header.IsV4LoopbackAddress(h.SourceAddress()) {
 				martianPacketLogger.Infof("Martian packet dropped with loopback source address. If your traffic is unexpectedly dropped, you may want to allow martian packets.")
 				stats.InvalidSourceAddressesReceived.Increment()
@@ -1029,6 +1031,11 @@ func (e *endpoint) HandlePacket(pkt *stack.PacketBuffer) {
 func (e *endpoint) handleLocalPacket(pkt *stack.PacketBuffer, canSkipRXChecksum bool) {
 	stats := e.stats.ip
 	stats.PacketsReceived.Increment()
+
+	if !e.isEnabled() {
+		stats.DisabledPacketsReceived.Increment()
+		return
+	}
 
 	pkt = pkt.CloneToInbound()
 	defer pkt.DecRef()
@@ -1607,6 +1614,13 @@ func (e *endpoint) PermanentAddresses() []tcpip.AddressWithPrefix {
 	return e.addressableEndpointState.PermanentAddresses()
 }
 
+// AddressInfos implements stack.AddressableEndpoint.
+func (e *endpoint) AddressInfos() []stack.AddressInfo {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.addressableEndpointState.AddressInfos()
+}
+
 // JoinGroup implements stack.GroupAddressableEndpoint.
 func (e *endpoint) JoinGroup(addr tcpip.Address) tcpip.Error {
 	e.mu.Lock()
@@ -1676,11 +1690,6 @@ type protocol struct {
 	// defaultTTL is the current default TTL for the protocol. Only the
 	// uint8 portion of it is meaningful.
 	defaultTTL atomicbitops.Uint32
-
-	ids    []atomicbitops.Uint32
-	hashIV uint32
-	// idTS is the unix timestamp in milliseconds 'ids' was last accessed.
-	idTS atomicbitops.Int64
 
 	fragmentation *fragmentation.Fragmentation
 
@@ -2066,27 +2075,6 @@ func packetMustBeFragmented(pkt *stack.PacketBuffer, networkMTU uint32) bool {
 	return pkt.GSOOptions.Type == stack.GSONone && uint32(payload) > networkMTU
 }
 
-// addressToUint32 translates an IPv4 address into its little endian uint32
-// representation.
-//
-// This function does the same thing as binary.LittleEndian.Uint32 but operates
-// on a tcpip.Address (a string) without the need to convert it to a byte slice,
-// which would cause an allocation.
-func addressToUint32(addr tcpip.Address) uint32 {
-	addrBytes := addr.As4()
-	_ = addrBytes[3] // bounds check hint to compiler
-	return uint32(addrBytes[0]) | uint32(addrBytes[1])<<8 | uint32(addrBytes[2])<<16 | uint32(addrBytes[3])<<24
-}
-
-// hashRoute calculates a hash value for the given source/destination pair using
-// the addresses, transport protocol number and a 32-bit number to generate the
-// hash.
-func hashRoute(srcAddr, dstAddr tcpip.Address, protocol tcpip.TransportProtocolNumber, hashIV uint32) uint32 {
-	a := addressToUint32(srcAddr)
-	b := addressToUint32(dstAddr)
-	return hash.Hash3Words(a, b, uint32(protocol), hashIV)
-}
-
 // Options holds options to configure a new protocol.
 //
 // +stateify savable
@@ -2101,20 +2089,9 @@ type Options struct {
 
 // NewProtocolWithOptions returns an IPv4 network protocol.
 func NewProtocolWithOptions(opts Options) stack.NetworkProtocolFactory {
-	ids := make([]atomicbitops.Uint32, buckets)
-
-	// Randomly initialize hashIV and the ids.
-	r := hash.RandN32(1 + buckets)
-	for i := range ids {
-		ids[i] = atomicbitops.FromUint32(r[i])
-	}
-	hashIV := r[buckets]
-
 	return func(s *stack.Stack) stack.NetworkProtocol {
 		p := &protocol{
 			stack:      s,
-			ids:        ids,
-			hashIV:     hashIV,
 			defaultTTL: atomicbitops.FromUint32(DefaultTTL),
 			options:    opts,
 		}

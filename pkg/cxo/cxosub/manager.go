@@ -1057,7 +1057,7 @@ func (m *Manager) liveServe(ctx context.Context, fk Feed, f *managedFeed) error 
 	// Buffered(1) so a burst of Roots coalesces into a single pending
 	// re-walk (natural debounce → bounds subscriber CPU on chatty feeds).
 	updateCh := make(chan struct{}, 1)
-	sub.OnUpdate(func(_ []treestore.UpdateEvent) {
+	sub.OnChange(func() {
 		select {
 		case updateCh <- struct{}{}:
 		default:
@@ -1114,8 +1114,9 @@ firstRoot:
 // subscriber is still open (live mode never closes it between walks).
 func (m *Manager) walkIntoSnapshot(sub *treestore.Subscriber, prefix string, f *managedFeed) {
 	snapshot := make(map[string][]byte)
-	sub.Walk(prefix, func(path string, body []byte) bool {
-		// Walk passes a copy of body, so storing it is safe.
+	sub.WalkShared(prefix, func(path string, body []byte) bool {
+		// The snapshot shares the subscriber cache values, which are never
+		// modified in place, so the feed is held once.
 		snapshot[path] = body
 		return true
 	})
@@ -1167,7 +1168,7 @@ func (m *Manager) syncOnce(ctx context.Context, fk Feed, f *managedFeed) {
 	sub.OnFillError(f.recordErr)
 
 	rootCh := make(chan struct{}, 1)
-	sub.OnUpdate(func(_ []treestore.UpdateEvent) {
+	sub.OnChange(func() {
 		select {
 		case rootCh <- struct{}{}:
 		default:
@@ -1194,8 +1195,9 @@ func (m *Manager) syncOnce(ctx context.Context, fk Feed, f *managedFeed) {
 	}
 
 	snapshot := make(map[string][]byte)
-	sub.Walk(prefix, func(path string, body []byte) bool {
-		// Walk passes a copy of body, so storing it is safe.
+	sub.WalkShared(prefix, func(path string, body []byte) bool {
+		// The snapshot shares the subscriber cache values, which are never
+		// modified in place, so the feed is held once.
 		snapshot[path] = body
 		return true
 	})

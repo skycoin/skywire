@@ -32,18 +32,18 @@ var (
 	debruijnPos      = [...]byte{0, 9, 1, 10, 13, 21, 2, 29, 11, 14, 16, 18, 22, 25, 3, 30, 8, 12, 20, 28, 15, 17, 24, 7, 19, 27, 23, 6, 26, 5, 4, 31}
 )
 
+// init initializes the allocator used for incoming frames.
 func init() {
 	defaultAllocator = NewAllocator()
 }
 
-// Allocator for incoming frames, optimized to prevent overwriting after zeroing
+// Allocator pools byte slices for incoming frames.
 type Allocator struct {
 	buffers []sync.Pool
 }
 
-// NewAllocator initiates a []byte allocator for frames less than 65536 bytes,
-// the waste(memory fragmentation) of space allocation is guaranteed to be
-// no more than 50%.
+// NewAllocator creates a byte-slice allocator for frames up to 65536 bytes.
+// Allocations use power-of-two capacities, wasting less than half the capacity.
 func NewAllocator() *Allocator {
 	alloc := new(Allocator)
 	alloc.buffers = make([]sync.Pool, 17) // 1B -> 64K
@@ -57,7 +57,8 @@ func NewAllocator() *Allocator {
 	return alloc
 }
 
-// Get a []byte from pool with most appropriate cap
+// Get returns a pooled byte slice sized for size, or nil if size is outside
+// the supported range.
 func (alloc *Allocator) Get(size int) *[]byte {
 	if size <= 0 || size > 65536 {
 		return nil
@@ -74,8 +75,8 @@ func (alloc *Allocator) Get(size int) *[]byte {
 	return p
 }
 
-// Put returns a []byte to pool for future use,
-// which the cap must be exactly 2^n
+// Put returns a byte slice to the pool. The slice capacity must be a power of
+// two between 1 and 65536.
 func (alloc *Allocator) Put(p *[]byte) error {
 	if p == nil {
 		return errors.New("allocator Put() incorrect buffer size")
@@ -88,7 +89,7 @@ func (alloc *Allocator) Put(p *[]byte) error {
 	return nil
 }
 
-// msb returns the pos of most significant bit
+// msb returns the position of the most significant set bit.
 // http://supertech.csail.mit.edu/papers/debruijn.pdf
 func msb(size int) byte {
 	v := uint32(size)

@@ -42,6 +42,7 @@ The API has two versions, `/api/v1` and `/api/v2`.
 	- [Decrypt wallet](#decrypt-wallet)
 	- [Get wallet seed](#get-wallet-seed)
 	- [Recover encrypted wallet by seed](#recover-encrypted-wallet-by-seed)
+	- [Sweep exposed addresses](#sweep-exposed-addresses)
 - [Key-value storage APIs](#key-value-storage-apis)
 	- [Get all storage values](#get-all-storage-values)
 	- [Add value to storage](#add-value-to-storage)
@@ -1393,6 +1394,15 @@ The `"txid"` value of the `"transaction"` object will need to be updated
 after signing the transaction.
 The unsigned `encoded_transaction` can be sent to `POST /api/v2/wallet/transaction/sign` for signing.
 
+`split` is optional and defaults to `false`.
+A transaction is limited to 32768 bytes, about 330 inputs.
+When `false`, a send that needs more inputs than fit returns an error.
+When `true`, such a send is paid with several transactions, returned in
+`"transactions"`, each an object like the response itself. The top level
+fields repeat the first part. The parts spend different confirmed outputs and
+none spends the change of another, so all of them can be injected at once, in
+any order. `"transactions"` is left out when one transaction is enough.
+
 Example:
 
 ```sh
@@ -1756,6 +1766,112 @@ Result:
 }
 ```
 
+### Sweep exposed addresses
+
+API sets: `WALLET`
+
+```
+URI: /api/v2/wallet/sweep
+Method: GET
+Args:
+    id: wallet id
+
+Method: POST
+Body: the rule
+    wallet: wallet id
+    enabled: level 1, sweep every exposed address no mapping covers to
+        destination. False by default
+    destination: kind "account" (with an optional account), "wallet" (with an
+        optional wallet) or "address" (with an address). Defaults to "account"
+        for a bip44 wallet and "wallet" otherwise. An account destination with
+        no account is the first account after the shared and source accounts
+    mappings: [optional] level 2, a list of {"from": source, "to": destination}.
+        A source is {"address": ...} or {"account": n}, the exposed addresses of
+        that bip44 account. Mappings sweep whether enabled is set or not
+    shared_accounts: [optional] bip44 accounts whose xpub was shared
+    addresses: [optional] addresses to sweep, each must have sent
+    include_spent: [optional] false sweeps only shared accounts, addresses and
+        mapping sources, not every address that has sent. True by default
+    gap: [optional] unused addresses kept generated on a shared account, 20 by default
+```
+
+The node moves the confirmed coins of the exposed addresses of a wallet in the
+block after they arrive. An address is exposed when it belongs to a shared bip44
+account, including those that never sent, or when it has sent. An address goes
+to the destination of its own mapping, else of its account's mapping, else to
+the level 1 destination when enabled is set, else it is left alone. A single
+address that never sent is never swept, and every destination is refused when
+it is exposed. Each sweep burns every coin hour of its inputs, the highest fee
+the rules allow. The rules are kept in `sweep.json` in the wallet directory.
+
+Both methods return the rule, `null` when there is none, and its status.
+
+Example:
+
+```sh
+curl -X POST http://127.0.0.1:6420/api/v2/wallet/sweep \
+ -H 'Content-Type: application/json' \
+ -d '{"wallet":"reward.wlt","shared_accounts":[0],"enabled":true,
+      "mappings":[{"from":{"account":2},"to":{"kind":"wallet","wallet":"cold.wlt"}}]}'
+```
+
+Result:
+
+```json
+{
+    "data": {
+        "rule": {
+            "wallet": "reward.wlt",
+            "enabled": true,
+            "destination": {"kind": "account"},
+            "shared_accounts": [0],
+            "mappings": [{"from": {"account": 2}, "to": {"kind": "wallet", "wallet": "cold.wlt"}}]
+        },
+        "status": {
+            "wallet": "reward.wlt",
+            "enabled": true,
+            "active": true,
+            "paused": "paused: wallet locked, 7.000000 coins waiting on exposed addresses",
+            "unlocked": false,
+            "head_seq": 1203,
+            "exposed_addresses": 21,
+            "uncovered_addresses": 0,
+            "waiting_coins": "7.000000",
+            "waiting_hours": 120,
+            "contested": 0,
+            "confirmed_sweeps": 0
+        }
+    }
+}
+```
+
+`enabled` is level 1 and `active` says the rule sweeps anything, through level 1
+or a mapping. `uncovered_addresses` counts exposed addresses left alone because
+no mapping covers them and level 1 is off. `pending_txids`, `last_sweep`,
+`last_txids`, `displaced_txids`, `destinations`, `unlock_expires` and
+`last_error` appear when set.
+
+```
+URI: /api/v2/wallet/sweep/unlock
+Method: POST
+Body:
+    id: wallet id
+    password: wallet password
+    ttl_seconds: [optional] how long the node keeps the password, until it stops when 0
+```
+
+An encrypted wallet is swept only while the node holds its password in memory.
+It is never written to disk.
+
+```
+URI: /api/v2/wallet/sweep/lock
+Method: POST
+Body:
+    id: wallet id
+```
+
+Makes the node forget the password. Both return the rule and status.
+
 ## Key-value storage APIs
 
 Endpoints interact with the key-value storage. Each request require the `type` argument to
@@ -2026,6 +2142,10 @@ but `POST /api/v1/wallet/transaction` can create and sign a transaction with a w
 Otherwise, sign the transaction separately from the API.
 
 The transaction must be fully valid and spendable (except for the lack of signatures) or else an error is returned.
+
+`split` is optional and defaults to `false`. It works as it does for
+`POST /api/v1/wallet/transaction`: a send too large for one transaction is
+paid with several, listed in `"data.transactions"`. Sign and inject every part.
 
 Example request body with manual hours selection type, spending from specific addresses, ignoring unconfirmed unspent outputs:
 

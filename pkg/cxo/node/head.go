@@ -58,6 +58,7 @@ func newNodeHead(nf *nodeFeed) (n *nodeHead) {
 
 		successq: make(chan doneRequest),   // release connection
 		failureq: make(chan failedRequest), // failed requests
+		deltaq:   make(chan deltaReply),
 	}
 
 	return
@@ -221,6 +222,10 @@ type fillHead struct {
 
 	successq chan doneRequest   // succeeded requests
 	failureq chan failedRequest // failed requests
+	deltaq   chan deltaReply    // RqDelta replies
+
+	delta bool                     // an RqDelta is in flight, requests wait
+	pre   map[cipher.SHA256][]byte // objects of the delta not yet wanted
 
 	rqo *list.List // request objects (cipher.SHA256)
 	fc  *list.List // connections to fill from (*Conn)
@@ -267,6 +272,10 @@ func (n *nodeHead) handle() {
 		case fc = <-f.failureq:
 
 			f.handleRequestFailure(fc)
+
+		case dr := <-f.deltaq:
+
+			f.handleDelta(dr)
 
 		case err = <-f.ff:
 
@@ -328,6 +337,9 @@ func (f *fillHead) handleRequest(key cipher.SHA256) {
 	// race: in-flight Filler goroutines can land here after the
 	// fillHead's lists were torn down.
 	if f.rqo == nil {
+		return
+	}
+	if !f.delta && f.servePre(key) {
 		return
 	}
 	f.rqo.PushBack(key)
@@ -548,6 +560,7 @@ func (f *fillHead) createFiller(cr connRoot) {
 
 	f.rqo = list.New()                   // create list of keys
 	f.fc = f.cs.buildConnsList(cr.r.Seq) // create list of connections
+	f.startDelta(cr)
 
 	f.await.Add(1)
 	go f.runFiller(f.f)
@@ -581,6 +594,7 @@ func (f *fillHead) closeFiller() {
 	f.f = nil
 
 	f.rqo, f.fc, f.rq = nil, nil, nil
+	f.delta, f.pre = false, nil
 	f.tc, f.hardTc = nil, nil
 
 	f.r = connRoot{}
@@ -631,8 +645,8 @@ func (f *fillHead) triggerRequest() {
 // request objects from anymore, neither busy nor idle
 func (f *fillHead) tryRequest() (fatal bool) {
 
-	if f.rqo.Len() == 0 {
-		return fatal // no objects to request
+	if f.rqo.Len() == 0 || f.delta {
+		return fatal // no objects to request, or waiting for the delta
 	}
 
 	if f.fc.Len() == 0 {

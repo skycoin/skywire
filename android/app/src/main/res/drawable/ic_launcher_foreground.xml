@@ -1,15 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Adaptive-icon foreground: the Skycoin cloud tinted white over the
-     brand-blue background layer. 44x33dp keeps the logo's 4:3 box fully
-     inside the 66dp safe circle (half-diagonal 27.5dp), so no launcher
-     mask or parallax scale ever crowds the cloud against the edge. -->
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item
-        android:width="44dp"
-        android:height="33dp"
-        android:gravity="center">
-        <bitmap
-            android:src="@drawable/skywire_logo"
-            android:tint="@android:color/white" />
-    </item>
-</layer-list>
+<!-- The cloud is three circles of radius r, centered at (r,2r) (2r,r) (3r,2r).
+     Scale 1.06 makes r 11dp and the translate puts their centroid on 54,54. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="1.06"
+        android:scaleY="1.06"
+        android:translateX="31.97"
+        android:translateY="35.66">
+        <path
+            android:fillColor="#FFFFFF"
+            android:fillType="evenOdd"
+            android:pathData="M 28.9271 3.91754L 16.1913 31.1444L 11.946 31.1444L 25.7679 1.37114C 27.0513 1.95877 28.0386 2.84021 28.9271 3.91754ZM 20.8315 0C 22.3124 0 23.6946 0.293815 24.978 0.881446L 10.9587 31.1444L 10.4651 31.1444C 9.18165 31.1444 7.89819 30.8506 6.81219 30.4588L 20.8315 0ZM 37.5164 12.5361C 38.405 13.2217 39.0961 14.0052 39.7871 14.8866L 32.2839 31.1444C 31.9877 31.1444 31.5928 31.2423 31.2966 31.2423L 28.9271 31.2423L 37.5164 12.5361ZM 34.752 30.4588L 40.9719 17.1392C 41.3668 18.2165 41.5642 19.4897 41.5642 20.665C 41.5642 25.1702 38.7011 28.9898 34.752 30.4588ZM 31.1979 10.3815L 21.5226 31.1444L 17.5735 31.1444L 29.7169 5.0928C 30.6055 6.65981 31.1979 8.4227 31.1979 10.3815ZM 20.0417 0L 6.02237 30.165C 2.46819 28.5001 0 24.8764 0 20.7629C 0 15.0825 4.64019 10.3815 10.3664 10.3815C 10.3664 4.89692 14.6117 0.391754 20.0417 0ZM 35.9368 11.5567L 26.8539 31.1444L 23.2009 31.1444L 32.7775 10.5773C 33.9622 10.6753 34.9495 11.067 35.9368 11.5567Z" />
+    </group>
+</vector>

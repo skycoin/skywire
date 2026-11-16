@@ -528,12 +528,12 @@ func (v *Visor) SetRewardAddress(p string) (string, error) {
 	if err := v.storeRewardAddress(p); err != nil {
 		return p, err
 	}
-	// Refresh the survey in the background. Setting the reward address must
-	// not block on survey generation — the address is already persisted above,
-	// and survey-gen depends on the address, not the other way around. Running
-	// it synchronously made SetRewardAddress hang whenever the survey's dmsg
-	// IP lookup couldn't complete (see GenerateSurvey's IP-lookup loop).
-	go GenerateSurvey(v, v.log, false)
+	// Refresh the survey in the background and push it at once. Setting the
+	// reward address must not block on survey generation — the address is already
+	// persisted above, and survey-gen depends on the address, not the other way
+	// around. Running it synchronously made SetRewardAddress hang whenever the
+	// survey's dmsg IP lookup couldn't complete (see GenerateSurvey's IP-lookup loop).
+	v.refreshRewardSurvey()
 	return p, nil
 }
 
@@ -557,7 +557,7 @@ func (v *Visor) SetSingleRewardAddress(p string) (string, error) {
 	if err := v.storeRewardAddress(p); err != nil {
 		return p, err
 	}
-	go GenerateSurvey(v, v.log, false)
+	v.refreshRewardSurvey()
 	return p, nil
 }
 
@@ -590,8 +590,13 @@ func (v *Visor) DeleteRewardAddress() error {
 	v.conf.RewardAddress = ""
 	v.mirrorChanges()
 	v.survey.mu.Lock()
+	if old := v.survey.data; !old.PubKey.Null() {
+		old.SkycoinAddress = ""
+		v.survey.optOut = old
+	}
 	v.survey.data = visorconfig.Survey{}
 	v.survey.mu.Unlock()
+	v.pushSurveyNow()
 	return nil
 }
 

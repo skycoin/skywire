@@ -811,6 +811,8 @@ func (c *Client) WalletBalance(id string) (*BalanceResponse, error) {
 
 // CreateTransactionRequest is sent to /api/v2/transaction
 type CreateTransactionRequest struct {
+	// Split pays a send too large for one transaction with several.
+	Split             bool           `json:"split,omitempty"`
 	IgnoreUnconfirmed bool           `json:"ignore_unconfirmed"`
 	HoursSelection    HoursSelection `json:"hours_selection"`
 	ChangeAddress     *string        `json:"change_address,omitempty"`

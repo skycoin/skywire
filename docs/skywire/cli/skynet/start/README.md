@@ -29,6 +29,7 @@ skywire cli skynet start [pk]
       --reverse-mux int                               per-direction reverse MuxRoutes override (download-heavy: --forward-mux 1 --reverse-mux N)
       --routes int                                    number of parallel skynet mux routes (0 or 1 = single route)
       --routing-policy proxy start --routing-policy   per-app routing policy for this skynet forward's mesh route: @/path/to/policy.wasm, preset:<name>, or "none" to clear (parity with proxy start --routing-policy)
+      --spares int                                    spare routes held for leg fail-over; a dead leg is replaced from them (-1 = 3 with --routes above 1, else 0) (default -1)
 ```
 
 ## Global Flags
