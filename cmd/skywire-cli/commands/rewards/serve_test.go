@@ -28,10 +28,10 @@ func TestContainedCycle(t *testing.T) {
 	if err := os.WriteFile(ut, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	c := cycleConfig{skipCollect: true, utFile: ut}
+	d := newDayCycle(runCmd.Flags(), cycleConfig{skipCollect: true, utFile: ut})
 
 	// No surveys: the calculation logs a Fatal, which must come back as an error.
-	err := containedCycle(runCmd.Flags(), o, c, "")
+	_, err := containedCycle(d, o, "")
 	if err == nil || !strings.Contains(err.Error(), "the path to the surveys does not exist") {
 		t.Fatalf("got %v", err)
 	}
@@ -40,7 +40,7 @@ func TestContainedCycle(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(o.histDir, o.date+".txt"), []byte("txid\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := containedCycle(runCmd.Flags(), o, c, ""); err != nil {
-		t.Fatalf("paid date: %v", err)
+	if res, err := containedCycle(d, o, ""); err != nil || res.note != "paid" {
+		t.Fatalf("paid date: %+v %v", res, err)
 	}
 }

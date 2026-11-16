@@ -68,6 +68,12 @@ bytes. See `reward rules` for the human eligibility rules.
   `hist/uptimes.json`) → calculate → write
   `hist/{date}_{ineligible.csv,shares.csv,rewardtxn0.csv,stats.txt}` + per-pool files, byte
   compatible with the four `rewards -b -B 0 ... -e/-20/-10/-12` calls of the reward script.
+  A finished day is fixed: its uptimes are fetched again only while `hist/<date>_ut.txt` predates
+  `--day-close-delay` (default 15m) after its midnight UTC, and once the day closed its bandwidth is
+  collected once more (`bw-collect --date <date> --days 2`, retried every 10m on failure). The outputs
+  are written only when a hash of every input (binary, options, ut/bandwidth/transport files, the
+  surveys of visors that met the uptime, spent state of their single addresses) changed since the
+  last calculation in the same process.
   Takes the bare command's calculation flags with the script's defaults (`-b` true, `-B 0`,
   `-p log_backups`), plus `-H/--hist`, `-u/--utfile` (skip the UT fetch), `--skip-collect`,
   `--prune-below-version` (default `auto`), and `--fetch` (fetch surveys with `cli log --survey`
