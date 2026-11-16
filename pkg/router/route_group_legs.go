@@ -171,7 +171,7 @@ func (rg *RouteGroup) topUpBelowTarget() {
 	add := rg.selfHealAdd
 	target := rg.selfHealTarget
 	rg.mu.Unlock()
-	if add == nil || target <= 1 || rg.isClosed() || !rg.poolWideningAllowed() {
+	if add == nil || target <= 1 || rg.isClosed() || !rg.poolWideningAllowed() || rg.poolOwnsRefill() {
 		return
 	}
 	if rg.aliveLegCount() >= target {
@@ -204,6 +204,11 @@ func (rg *RouteGroup) maybeSelfHeal() {
 		return
 	}
 	if add == nil || target <= 1 || rg.isClosed() {
+		return
+	}
+	// A pool that can spare a tunnel replaces the leg on the arbiter's next
+	// tick with a chain it has measured. A dial here would pick one blind.
+	if rg.poolOwnsRefill() {
 		return
 	}
 	if rg.aliveLegCount() >= target {
