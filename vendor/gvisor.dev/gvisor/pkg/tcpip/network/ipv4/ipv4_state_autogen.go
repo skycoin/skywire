@@ -221,7 +221,7 @@ func (e *icmpv4FragmentationNeededSockError) beforeSave() {}
 func (e *icmpv4FragmentationNeededSockError) StateSave(stateSinkObject state.Sink) {
 	e.beforeSave()
 	stateSinkObject.Save(0, &e.icmpv4DestinationUnreachableSockError)
-	stateSinkObject.Save(1, &e.mtu)
+	stateSinkObject.SaveUint32(1, &e.mtu)
 }
 
 func (e *icmpv4FragmentationNeededSockError) afterLoad(context.Context) {}
@@ -229,7 +229,7 @@ func (e *icmpv4FragmentationNeededSockError) afterLoad(context.Context) {}
 // +checklocksignore
 func (e *icmpv4FragmentationNeededSockError) StateLoad(ctx context.Context, stateSourceObject state.Source) {
 	stateSourceObject.Load(0, &e.icmpv4DestinationUnreachableSockError)
-	stateSourceObject.Load(1, &e.mtu)
+	stateSourceObject.LoadUint32(1, &e.mtu)
 }
 
 func (i *IGMPOptions) StateTypeName() string {
@@ -247,14 +247,14 @@ func (i *IGMPOptions) beforeSave() {}
 // +checklocksignore
 func (i *IGMPOptions) StateSave(stateSinkObject state.Sink) {
 	i.beforeSave()
-	stateSinkObject.Save(0, &i.Enabled)
+	stateSinkObject.SaveBool(0, &i.Enabled)
 }
 
 func (i *IGMPOptions) afterLoad(context.Context) {}
 
 // +checklocksignore
 func (i *IGMPOptions) StateLoad(ctx context.Context, stateSourceObject state.Source) {
-	stateSourceObject.Load(0, &i.Enabled)
+	stateSourceObject.LoadBool(0, &i.Enabled)
 }
 
 func (igmp *igmpState) StateTypeName() string {
@@ -277,7 +277,7 @@ func (igmp *igmpState) StateSave(stateSinkObject state.Sink) {
 	igmp.beforeSave()
 	stateSinkObject.Save(0, &igmp.ep)
 	stateSinkObject.Save(1, &igmp.genericMulticastProtocol)
-	stateSinkObject.Save(2, &igmp.mode)
+	stateSinkObject.SaveInt(2, (*int)(&igmp.mode))
 	stateSinkObject.Save(3, &igmp.igmpV1Job)
 }
 
@@ -287,7 +287,7 @@ func (igmp *igmpState) afterLoad(context.Context) {}
 func (igmp *igmpState) StateLoad(ctx context.Context, stateSourceObject state.Source) {
 	stateSourceObject.Load(0, &igmp.ep)
 	stateSourceObject.Load(1, &igmp.genericMulticastProtocol)
-	stateSourceObject.Load(2, &igmp.mode)
+	stateSourceObject.LoadInt(2, (*int)(&igmp.mode))
 	stateSourceObject.Load(3, &igmp.igmpV1Job)
 }
 
@@ -349,9 +349,6 @@ func (p *protocol) StateFields() []string {
 		"stack",
 		"icmpRateLimitedTypes",
 		"defaultTTL",
-		"ids",
-		"hashIV",
-		"idTS",
 		"fragmentation",
 		"options",
 		"allowExternalLoopbackTraffic",
@@ -368,14 +365,11 @@ func (p *protocol) StateSave(stateSinkObject state.Sink) {
 	stateSinkObject.Save(0, &p.stack)
 	stateSinkObject.Save(1, &p.icmpRateLimitedTypes)
 	stateSinkObject.Save(2, &p.defaultTTL)
-	stateSinkObject.Save(3, &p.ids)
-	stateSinkObject.Save(4, &p.hashIV)
-	stateSinkObject.Save(5, &p.idTS)
-	stateSinkObject.Save(6, &p.fragmentation)
-	stateSinkObject.Save(7, &p.options)
-	stateSinkObject.Save(8, &p.allowExternalLoopbackTraffic)
-	stateSinkObject.Save(9, &p.multicastRouteTable)
-	stateSinkObject.Save(10, &p.multicastForwardingDisp)
+	stateSinkObject.Save(3, &p.fragmentation)
+	stateSinkObject.Save(4, &p.options)
+	stateSinkObject.Save(5, &p.allowExternalLoopbackTraffic)
+	stateSinkObject.Save(6, &p.multicastRouteTable)
+	stateSinkObject.Save(7, &p.multicastForwardingDisp)
 }
 
 // +checklocksignore
@@ -383,15 +377,17 @@ func (p *protocol) StateLoad(ctx context.Context, stateSourceObject state.Source
 	stateSourceObject.Load(0, &p.stack)
 	stateSourceObject.Load(1, &p.icmpRateLimitedTypes)
 	stateSourceObject.Load(2, &p.defaultTTL)
-	stateSourceObject.Load(3, &p.ids)
-	stateSourceObject.Load(4, &p.hashIV)
-	stateSourceObject.Load(5, &p.idTS)
-	stateSourceObject.Load(6, &p.fragmentation)
-	stateSourceObject.Load(7, &p.options)
-	stateSourceObject.Load(8, &p.allowExternalLoopbackTraffic)
-	stateSourceObject.Load(9, &p.multicastRouteTable)
-	stateSourceObject.Load(10, &p.multicastForwardingDisp)
-	stateSourceObject.AfterLoad(func() { p.afterLoad(ctx) })
+	stateSourceObject.Load(3, &p.fragmentation)
+	stateSourceObject.Load(4, &p.options)
+	stateSourceObject.Load(5, &p.allowExternalLoopbackTraffic)
+	stateSourceObject.Load(6, &p.multicastRouteTable)
+	stateSourceObject.Load(7, &p.multicastForwardingDisp)
+	stateSourceObject.AfterLoadTo(p)
+}
+
+// +checklocksignore
+func (p *protocol) StateAfterLoad(ctx context.Context) {
+	p.afterLoad(ctx)
 }
 
 func (o *Options) StateTypeName() string {
@@ -411,7 +407,7 @@ func (o *Options) beforeSave() {}
 func (o *Options) StateSave(stateSinkObject state.Sink) {
 	o.beforeSave()
 	stateSinkObject.Save(0, &o.IGMP)
-	stateSinkObject.Save(1, &o.AllowExternalLoopbackTraffic)
+	stateSinkObject.SaveBool(1, &o.AllowExternalLoopbackTraffic)
 }
 
 func (o *Options) afterLoad(context.Context) {}
@@ -419,7 +415,7 @@ func (o *Options) afterLoad(context.Context) {}
 // +checklocksignore
 func (o *Options) StateLoad(ctx context.Context, stateSourceObject state.Source) {
 	stateSourceObject.Load(0, &o.IGMP)
-	stateSourceObject.Load(1, &o.AllowExternalLoopbackTraffic)
+	stateSourceObject.LoadBool(1, &o.AllowExternalLoopbackTraffic)
 }
 
 func (s *Stats) StateTypeName() string {
@@ -757,28 +753,28 @@ func (m *multiCounterIGMPStats) StateLoad(ctx context.Context, stateSourceObject
 }
 
 func init() {
-	state.Register((*icmpv4DestinationUnreachableSockError)(nil))
-	state.Register((*icmpv4DestinationHostUnreachableSockError)(nil))
-	state.Register((*icmpv4DestinationNetUnreachableSockError)(nil))
-	state.Register((*icmpv4DestinationPortUnreachableSockError)(nil))
-	state.Register((*icmpv4DestinationProtoUnreachableSockError)(nil))
-	state.Register((*icmpv4SourceRouteFailedSockError)(nil))
-	state.Register((*icmpv4SourceHostIsolatedSockError)(nil))
-	state.Register((*icmpv4DestinationHostUnknownSockError)(nil))
-	state.Register((*icmpv4FragmentationNeededSockError)(nil))
-	state.Register((*IGMPOptions)(nil))
-	state.Register((*igmpState)(nil))
-	state.Register((*endpoint)(nil))
-	state.Register((*protocol)(nil))
-	state.Register((*Options)(nil))
-	state.Register((*Stats)(nil))
-	state.Register((*sharedStats)(nil))
-	state.Register((*multiCounterICMPv4PacketStats)(nil))
-	state.Register((*multiCounterICMPv4SentPacketStats)(nil))
-	state.Register((*multiCounterICMPv4ReceivedPacketStats)(nil))
-	state.Register((*multiCounterICMPv4Stats)(nil))
-	state.Register((*multiCounterIGMPPacketStats)(nil))
-	state.Register((*multiCounterIGMPSentPacketStats)(nil))
-	state.Register((*multiCounterIGMPReceivedPacketStats)(nil))
-	state.Register((*multiCounterIGMPStats)(nil))
+	state.RegisterNoHooks((*icmpv4DestinationUnreachableSockError)(nil))
+	state.RegisterNoHooks((*icmpv4DestinationHostUnreachableSockError)(nil))
+	state.RegisterNoHooks((*icmpv4DestinationNetUnreachableSockError)(nil))
+	state.RegisterNoHooks((*icmpv4DestinationPortUnreachableSockError)(nil))
+	state.RegisterNoHooks((*icmpv4DestinationProtoUnreachableSockError)(nil))
+	state.RegisterNoHooks((*icmpv4SourceRouteFailedSockError)(nil))
+	state.RegisterNoHooks((*icmpv4SourceHostIsolatedSockError)(nil))
+	state.RegisterNoHooks((*icmpv4DestinationHostUnknownSockError)(nil))
+	state.RegisterNoHooks((*icmpv4FragmentationNeededSockError)(nil))
+	state.RegisterNoHooks((*IGMPOptions)(nil))
+	state.RegisterNoHooks((*igmpState)(nil))
+	state.RegisterNoHooks((*endpoint)(nil))
+	state.RegisterStruct((*protocol)(nil))
+	state.RegisterNoHooks((*Options)(nil))
+	state.RegisterNoHooks((*Stats)(nil))
+	state.RegisterNoHooks((*sharedStats)(nil))
+	state.RegisterNoHooks((*multiCounterICMPv4PacketStats)(nil))
+	state.RegisterNoHooks((*multiCounterICMPv4SentPacketStats)(nil))
+	state.RegisterNoHooks((*multiCounterICMPv4ReceivedPacketStats)(nil))
+	state.RegisterNoHooks((*multiCounterICMPv4Stats)(nil))
+	state.RegisterNoHooks((*multiCounterIGMPPacketStats)(nil))
+	state.RegisterNoHooks((*multiCounterIGMPSentPacketStats)(nil))
+	state.RegisterNoHooks((*multiCounterIGMPReceivedPacketStats)(nil))
+	state.RegisterNoHooks((*multiCounterIGMPStats)(nil))
 }

@@ -27,15 +27,15 @@ require (
 	github.com/0magnet/netscrape v0.0.1-0.20261013224547-9fae42cd783b
 	github.com/0magnet/osnotify v0.0.1-0.20261013221008-334ed955239e
 	github.com/0magnet/plot-go v0.0.2-0.20261013224559-d646d2eb8b5d
-	github.com/0magnet/progkit v0.0.0-20261107115537-3b33fe756642
-	github.com/0magnet/progterm v0.0.0-20261107115624-8c83f3af5ca9
+	github.com/0magnet/progkit v0.0.0-20261115125834-6c01bc622bde
+	github.com/0magnet/progterm v0.0.0-20261115125930-9c2f90286356
 	github.com/0magnet/realorigin v0.2.4-0.20261013224605-2a5caf0f6585
 	github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076
 	github.com/0magnet/sh/v3 v3.13.2-0.20261024150911-145e01c63128
 	github.com/0magnet/spheregraph v0.0.1-0.20261013221036-b8e448a97be5
 	github.com/0magnet/termanim v0.0.1-0.20261013224625-c801aece6dff
 	github.com/0magnet/webrtc/v4 v4.2.24
-	github.com/0magnet/websh v0.0.1-0.20261113222132-71bc5ae69baf
+	github.com/0magnet/websh v0.0.1-0.20261114122934-ffd57803ff74
 	github.com/0magnet/wfdrive v0.3.3-0.20261013224635-8e5aa89d1aa6
 	github.com/0magnet/winbox-go v0.0.1-0.20261109140257-4c5c0e948cd6
 	github.com/0magnet/wisp v0.0.0-20261028112650-b15df570c542
@@ -44,7 +44,7 @@ require (
 	github.com/AudriusButkevicius/pfilter v0.0.12
 	github.com/DiSiqueira/GoTree v1.0.0
 	github.com/MichaelMure/go-term-markdown v0.1.4
-	github.com/a-h/templ v0.3.1100
+	github.com/a-h/templ v0.3.1118
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/bitfield/script v0.25.2
 	github.com/blang/semver/v4 v4.0.0
@@ -56,14 +56,14 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/disintegration/imaging v1.6.2
 	github.com/docker/docker v28.5.2+incompatible
-	github.com/elazarl/goproxy v1.9.3
+	github.com/elazarl/goproxy v1.9.4
 	github.com/emersion/go-vcard v0.1.0
 	github.com/fatih/color v1.19.0
 	github.com/flynn/noise v1.1.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/gdamore/tcell/v3 v3.6.0
 	github.com/gen2brain/dlgs v0.0.0-20220603100644-40c77870fa8d
-	github.com/gen2brain/malgo v0.11.27
+	github.com/gen2brain/malgo v0.11.28
 	github.com/gizak/termui/v3 v3.1.0
 	github.com/go-playground/validator/v10 v10.30.6
 	github.com/go-redis/redis v6.15.9+incompatible
@@ -87,7 +87,7 @@ require (
 	github.com/oschwald/geoip2-golang/v2 v2.5.0
 	github.com/peterh/liner v1.2.3
 	github.com/pion/datachannel v1.6.4
-	github.com/pion/ice/v4 v4.4.8
+	github.com/pion/ice/v4 v4.4.9
 	github.com/pion/interceptor v0.1.51
 	github.com/pion/rtp v1.10.6
 	github.com/pires/go-proxyproto v0.16.0
@@ -97,7 +97,7 @@ require (
 	github.com/rivo/uniseg v0.4.7
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/shirou/gopsutil/v3 v3.24.5
-	github.com/skycoin/skycoin v0.28.8-0.20261115234819-b6e6c0c5c908
+	github.com/skycoin/skycoin v0.28.8-0.20261116061451-8b54c5d9a673
 	github.com/soheilhy/cmux v0.1.5
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.2
@@ -106,14 +106,14 @@ require (
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
 	github.com/tetratelabs/wazero v1.12.0
 	github.com/thesyncim/gopus v0.2.3
-	github.com/tidwall/pretty v1.2.2
+	github.com/tidwall/pretty v1.3.0
 	github.com/toqueteos/webbrowser v1.2.1
 	github.com/vishvananda/netlink v1.3.1
 	github.com/wlynxg/anet v0.0.5
-	github.com/xtaci/smux v1.5.58
+	github.com/xtaci/smux v1.5.60
 	github.com/xxxserxxx/lingo/v2 v2.0.1
 	github.com/yuin/goldmark v1.8.7
-	github.com/zcalusic/sysinfo v1.2.1
+	github.com/zcalusic/sysinfo v1.2.3
 	go.starlark.net v0.0.0-20261021141710-4f4267fb140d
 	golang.org/x/crypto v0.59.0
 	golang.org/x/net v0.62.0
@@ -126,7 +126,7 @@ require (
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/telebot.v3 v3.3.8
-	gvisor.dev/gvisor v0.0.0-20261017122056-1b7906fdee8c
+	gvisor.dev/gvisor v0.0.0-20261116051058-bf94a54a4f12
 )
 
 require (
@@ -135,7 +135,7 @@ require (
 	github.com/0magnet/go-dsp v0.0.1-0.20261013221717-1ec76fa9affb // indirect
 	github.com/0magnet/img2txt-go v0.0.1-0.20261013220954-ae0d760b7d2b // indirect
 	github.com/0magnet/u-root v0.16.1-0.20261003214924-44e47b732754 // indirect
-	github.com/0magnet/xterm-go v0.0.1-0.20261113221252-923689a13b7f // indirect
+	github.com/0magnet/xterm-go v0.0.1-0.20261113221359-36e33e634de1 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20261013165250-51075c6ea6bc // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/MichaelMure/go-term-text v0.3.1 // indirect
@@ -173,7 +173,7 @@ require (
 	github.com/go-text/typesetting v0.3.5 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/godbus/dbus/v5 v5.2.4 // indirect
-	github.com/gomarkdown/markdown v0.0.0-20261107145437-196b8db0f2b3 // indirect
+	github.com/gomarkdown/markdown v0.0.0-20261109103609-13f93121d67a // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/gopacket v1.1.19 // indirect
@@ -210,7 +210,7 @@ require (
 	github.com/onsi/gomega v1.36.3 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
-	github.com/oschwald/maxminddb-golang/v2 v2.9.0 // indirect
+	github.com/oschwald/maxminddb-golang/v2 v2.9.1 // indirect
 	github.com/pandatix/go-abnf v0.5.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
 	github.com/pion/dtls/v3 v3.1.15 // indirect
@@ -222,20 +222,20 @@ require (
 	github.com/pion/sdp/v3 v3.0.20 // indirect
 	github.com/pion/srtp/v3 v3.1.3 // indirect
 	github.com/pion/stun/v4 v4.0.1 // indirect
-	github.com/pion/transport/v5 v5.1.4 // indirect
+	github.com/pion/transport/v5 v5.1.5 // indirect
 	github.com/pion/turn/v5 v5.1.3 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/power-devops/perfstat v0.0.0-20260916203055-22a1a467d9f0 // indirect
 	github.com/prometheus/client_golang v1.25.0 // indirect
 	github.com/prometheus/client_model v0.6.3 // indirect
-	github.com/prometheus/common v0.73.1 // indirect
+	github.com/prometheus/common v0.74.0 // indirect
 	github.com/prometheus/procfs v0.23.0 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rogpeppe/go-internal v1.16.0 // indirect
 	github.com/rs/cors v1.11.1 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
-	github.com/shibukawa/configdir v0.0.0-20170330084843-e180dbdc8da0 // indirect
+	github.com/shibukawa/configdir v1.1.0 // indirect
 	github.com/shoenig/go-m1cpu v0.2.4 // indirect
 	github.com/shopspring/decimal v1.6.0 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
@@ -260,17 +260,17 @@ require (
 	go.opentelemetry.io/otel/trace v1.47.0 // indirect
 	go.uber.org/mock v0.6.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.6 // indirect
-	golang.org/x/exp v0.0.0-20261106192419-47ce03d25ef0 // indirect
-	golang.org/x/exp/shiny v0.0.0-20261106192419-47ce03d25ef0 // indirect
-	golang.org/x/image v0.47.0 // indirect
+	golang.org/x/exp v0.0.0-20261113113407-e3970619a1a4 // indirect
+	golang.org/x/exp/shiny v0.0.0-20261113113407-e3970619a1a4 // indirect
+	golang.org/x/image v0.48.0 // indirect
 	golang.org/x/text v0.44.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20261104224025-d1e00e9f33ab // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20261110000943-09e21b237f2c // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	howett.net/plist v1.0.2-0.20250314012144-ee69052608d9 // indirect
-	modernc.org/libc v1.80.1 // indirect
+	modernc.org/libc v1.81.2 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
-	modernc.org/memory v1.12.1 // indirect
+	modernc.org/memory v1.13.0 // indirect
 	modernc.org/sqlite v1.62.0 // indirect
 	mvdan.cc/sh/v3 v3.14.1 // indirect
 )

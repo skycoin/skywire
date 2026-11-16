@@ -21,6 +21,20 @@ func (d DeviceID) String() string {
 	return hex.EncodeToString(d[:displayLen])
 }
 
+// ParseDeviceID returns the identifier from its string representation.
+func ParseDeviceID(s string) (DeviceID, error) {
+	var id DeviceID
+	b, err := hex.DecodeString(s)
+	if err != nil {
+		return id, err
+	}
+	if len(b) > len(id) {
+		return id, fmt.Errorf("malgo: device id too long: %d bytes", len(b))
+	}
+	copy(id[:], b)
+	return id, nil
+}
+
 func (d *DeviceID) Pointer() unsafe.Pointer {
 	return C.CBytes(d[:])
 }

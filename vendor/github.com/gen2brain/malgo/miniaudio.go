@@ -13,9 +13,8 @@ package malgo
 #cgo ios CFLAGS: -x objective-c
 #cgo ios LDFLAGS: -framework CoreFoundation -framework AVFAudio -framework CoreAudio -framework AudioToolbox
 
-#cgo !noasm,!arm,!arm64 CFLAGS: -msse2
+#cgo !noasm,386 !noasm,amd64 CFLAGS: -msse2
 #cgo !noasm,amd64.v3 CFLAGS: -mavx -mavx2
-#cgo !noasm,arm,arm64 CFLAGS: -mfpu=neon -mfloat-abi=hard
 #cgo noasm CFLAGS: -DMA_NO_SSE2 -DMA_NO_AVX2 -DMA_NO_AVX512 -DMA_NO_NEON
 
 #include "malgo.h"
@@ -26,6 +25,12 @@ import "C"
 func SampleSizeInBytes(format FormatType) int {
 	cformat := (C.ma_format)(format)
 	ret := C.ma_get_bytes_per_sample(cformat)
+	return int(ret)
+}
+
+// FrameSizeInBytes retrieves the size of a frame in bytes for the given format and channel count.
+func FrameSizeInBytes(format FormatType, channels uint32) int {
+	ret := C.ma_get_bytes_per_frame(C.ma_format(format), C.ma_uint32(channels))
 	return int(ret)
 }
 
