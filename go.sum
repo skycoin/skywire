@@ -101,8 +101,6 @@ github.com/0magnet/img2txt-go v0.0.1-0.20261013220954-ae0d760b7d2b h1:TvuDIGb7WM
 github.com/0magnet/img2txt-go v0.0.1-0.20261013220954-ae0d760b7d2b/go.mod h1:M/nZ3W+0x5ti9fZDs6Cx+6eTZnwVdGMjeMuRDmOB5es=
 github.com/0magnet/kcp-go/v5 v5.6.84 h1:oxyCqV3YYgjL8NAxvqjUCfRPfOgCNyrU1z1AsDUy7BY=
 github.com/0magnet/kcp-go/v5 v5.6.84/go.mod h1:f9AyOlxJMQQz1LCr85Cv06db6r+z3iN8NIXeesFzGBg=
-github.com/0magnet/logrus v1.10.3-0.20261108193845-7365f3bff722 h1:jP6Ky5ctVB6OOmgQz1k7TOCs2sBoyzoWcqnpdbwzkF8=
-github.com/0magnet/logrus v1.10.3-0.20261108193845-7365f3bff722/go.mod h1:D/PU43DLCFgwuSq3EWKroaA/o4Tk33Tn+o5em8WrnJk=
 github.com/0magnet/lolcat-go v0.0.1-0.20261013220959-57aa27491489 h1:e9oQciGjDuTPFtS0t9cX+C6pOcVVIJIsa5AjcTPsjtA=
 github.com/0magnet/lolcat-go v0.0.1-0.20261013220959-57aa27491489/go.mod h1:DbbClVrvQ558CvwGWU78xx0k03aEY/uS9qf5Wtw+n3o=
 github.com/0magnet/metrics v1.44.1-0.20261104204112-415e795e7886 h1:sFcrhDVYBGsyNF+VwjTcOxLhgTwtq0lpSSjYhSBHD1w=
@@ -814,12 +812,12 @@ github.com/shopspring/decimal v1.6.0/go.mod h1:gawqmDU56v4yIKSwfBSFip1HdCCXN8/+D
 github.com/sirupsen/logrus v1.2.0/go.mod h1:LxeOpSwHxABJmUn/MG1IvRgCAasNZTLOkJPxbbu5VWo=
 github.com/sirupsen/logrus v1.4.2/go.mod h1:tLMulIdttU9McNUspp0xgXVQah82FyeX6MwdIuYE2rE=
 github.com/sirupsen/logrus v1.6.0/go.mod h1:7uNnSEd1DgxDLC74fIahvMZmmYsHGZGEOFrfsX/uA88=
-github.com/sirupsen/logrus v1.10.2 h1:G2SED73/qrAu6YwbdxOD6peLkCBI3z7L+ykJFTXJBBo=
-github.com/sirupsen/logrus v1.10.2/go.mod h1:SLEg8TqYulVKKfIGHldVp2K2aYz2DKSVBq4g/H5bR7Q=
+github.com/sirupsen/logrus v1.10.3-0.20261117174421-40042a1bf4df h1:ZYoXvTiW8QKRSJ6xOWVEuteaDId2fLkwYQ4yud5Fqjo=
+github.com/sirupsen/logrus v1.10.3-0.20261117174421-40042a1bf4df/go.mod h1:SLEg8TqYulVKKfIGHldVp2K2aYz2DKSVBq4g/H5bR7Q=
 github.com/skycoin/encodertest v0.0.0-20190217072920-14c2e31898b9 h1:DElGw1Fhj4amuW1KM5q8Xowosb3RiOQce0lDJw0Qv0Y=
 github.com/skycoin/encodertest v0.0.0-20190217072920-14c2e31898b9/go.mod h1:OQz8NXVJUWEw7PWYASZ/1BIw5GXgVMTGvrCGDlZa9+k=
-github.com/skycoin/skycoin v0.28.8-0.20261117145039-38b3036d50d8 h1:tF+LIppkHjj3h61b9fl5NxrharRPVXwTBE5q/9dSHRs=
-github.com/skycoin/skycoin v0.28.8-0.20261117145039-38b3036d50d8/go.mod h1:HtkCujPjuMnmuAkzhnbsqEsXka7+hKPJj/RMBleu17o=
+github.com/skycoin/skycoin v0.28.8-0.20261117174941-56f97efd15da h1:pbC6tEuI+0BXdZr7z4BbcC9bmdeJmAfLAPfN6UlCSNU=
+github.com/skycoin/skycoin v0.28.8-0.20261117174941-56f97efd15da/go.mod h1:GTD5BEZxmxfJCJ1FBzJtM9og00ziZq/RSPkUPMb/rk8=
 github.com/soheilhy/cmux v0.1.5 h1:jjzc5WVemNEDTLwv9tlmemhC73tI08BNOIGwBOo10Js=
 github.com/soheilhy/cmux v0.1.5/go.mod h1:T7TcVDs9LWfQgPlPsdngu6I6QIoyIFZDDC6sNE1GqG0=
 github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8 h1:TG/diQgUe0pntT/2D9tmUCz4VNwm9MfrtPr0SU2qSX8=
