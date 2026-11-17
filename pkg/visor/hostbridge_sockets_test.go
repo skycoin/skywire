@@ -110,15 +110,9 @@ func TestHostBridgeSocketsSurviveReconnect(t *testing.T) {
 
 	require.Equal(t, tcpAddr, l.Addr().String())
 	require.Equal(t, udpAddr, pc.LocalAddr().String())
-	require.Eventually(t, func() bool {
-		c, err := net.DialTimeout("tcp", tcpAddr, time.Second)
-		if err != nil {
-			return false
-		}
-		_ = c.Close() //nolint:errcheck
-		return true
-	}, 5*time.Second, 50*time.Millisecond)
-	echoOnce(t, tcpAddr, "after the cut")
+	// The listener accepts before the new session can carry data, so wait for
+	// a full round trip, not just a dial.
+	require.Eventually(t, func() bool { return echoTry(tcpAddr, "after the cut") }, 5*time.Second, 50*time.Millisecond)
 	udpRound("udp after")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
