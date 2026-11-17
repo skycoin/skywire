@@ -43,8 +43,18 @@ func writeRaceCSV(t *testing.T, dir, a, b string) {
 	}
 }
 
+// raceHash is the X-Reward-CSV header GET /payout gives for dir as it is now.
+func raceHash(t *testing.T, dir string) string {
+	t.Helper()
+	_, csv, err := nextPayout(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return PayoutCSVHash(csv)
+}
+
 // raceTxn is the transaction sendrewards.sh builds from the payout csv of
-// dir as it is now, with change back to the sending address.
+// dir as it is now, with the change to an unused address.
 func raceTxn(t *testing.T, dir string) string {
 	t.Helper()
 	_, csv, err := nextPayout(dir)
@@ -55,7 +65,7 @@ func raceTxn(t *testing.T, dir string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pk, sk, err := cipher.GenerateDeterministicKeyPair([]byte("reward wallet"))
+	_, sk, err := cipher.GenerateDeterministicKeyPair([]byte("reward wallet"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +74,8 @@ func raceTxn(t *testing.T, dir string) string {
 	for a, c := range want {
 		txn.Out = append(txn.Out, coin.TransactionOutput{Address: a, Coins: c, Hours: 1})
 	}
-	txn.Out = append(txn.Out, coin.TransactionOutput{Address: cipher.AddressFromPubKey(pk), Coins: 100e6, Hours: 1})
+	chg, _, _ := cipher.GenerateDeterministicKeyPair([]byte("fresh change"))
+	txn.Out = append(txn.Out, coin.TransactionOutput{Address: cipher.AddressFromPubKey(chg), Coins: 100e6, Hours: 1})
 	if err := txn.SignInputs([]cipher.SecKey{sk}); err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +100,7 @@ func payoutCode(err error) int {
 func TestSendPayoutPaysTheCSV(t *testing.T) {
 	dir := raceHist(t, "5.000999", "3.123456")
 	sent := 0
-	day, txid, err := sendPayout(dir, raceTxn(t, dir), func() (string, error) { sent++; return "txid", nil })
+	day, txid, err := sendPayout(dir, raceTxn(t, dir), raceHash(t, dir), func() (string, error) { sent++; return "txid", nil })
 	if err != nil || day != raceDay || txid != "txid" || sent != 1 {
 		t.Fatalf("day %q txid %q sent %d: %v", day, txid, sent, err)
 	}
@@ -102,11 +113,11 @@ func TestSendPayoutPaysTheCSV(t *testing.T) {
 // transaction built from the old one is refused, not broadcast.
 func TestSendPayoutRefusesRecalculatedCSV(t *testing.T) {
 	dir := raceHist(t, "4.000000", "3.000000")
-	raw := raceTxn(t, dir)
+	raw, h := raceTxn(t, dir), raceHash(t, dir)
 	writeRaceCSV(t, dir, "4.000000", "2.500000")
 	sent := 0
-	_, _, err := sendPayout(dir, raw, func() (string, error) { sent++; return "txid", nil })
-	if payoutCode(err) != http.StatusConflict || !errors.Is(err, rewards.ErrPayoutMismatch) || sent != 0 {
+	_, _, err := sendPayout(dir, raw, h, func() (string, error) { sent++; return "txid", nil })
+	if payoutCode(err) != http.StatusConflict || !errors.Is(err, errPayoutStale) || sent != 0 {
 		t.Fatalf("code %d sent %d: %v", payoutCode(err), sent, err)
 	}
 	if !undistributed(dir, raceDay) {
@@ -118,7 +129,7 @@ func TestSendPayoutRefusesRecalculatedCSV(t *testing.T) {
 // not paid again.
 func TestPayoutPendingMarker(t *testing.T) {
 	dir := raceHist(t, "4.000000", "3.000000")
-	raw := raceTxn(t, dir)
+	raw, h := raceTxn(t, dir), raceHash(t, dir)
 	if err := os.WriteFile(filepath.Join(dir, raceDay+".txt.pending"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +140,7 @@ func TestPayoutPendingMarker(t *testing.T) {
 		t.Fatalf("nextPayout: %v", err)
 	}
 	sent := 0
-	if _, _, err := sendPayout(dir, raw, func() (string, error) { sent++; return "txid", nil }); payoutCode(err) != http.StatusConflict || sent != 0 {
+	if _, _, err := sendPayout(dir, raw, h, func() (string, error) { sent++; return "txid", nil }); payoutCode(err) != http.StatusConflict || sent != 0 {
 		t.Fatalf("code %d sent %d: %v", payoutCode(err), sent, err)
 	}
 }
@@ -153,7 +164,7 @@ func TestPayoutAndCalcNeverOverlap(t *testing.T) {
 
 	// A survey arrives while the payout broadcasts.
 	calcDone := make(chan struct{})
-	_, _, err := sendPayout(dir, raceTxn(t, dir), func() (string, error) {
+	_, _, err := sendPayout(dir, raceTxn(t, dir), raceHash(t, dir), func() (string, error) {
 		broadcasting.Store(1)
 		defer broadcasting.Store(0)
 		go func() { _ = s.RunOnce(context.Background(), "survey"); close(calcDone) }() //nolint:errcheck
@@ -172,7 +183,7 @@ func TestPayoutAndCalcNeverOverlap(t *testing.T) {
 
 	// A payout that arrives during a Calc waits for it, then sees its csv.
 	dir2 := raceHist(t, "4.000000", "3.000000")
-	raw := raceTxn(t, dir2)
+	raw, h := raceTxn(t, dir2), raceHash(t, dir2)
 	dir = dir2
 	hold = make(chan struct{})
 	calcDone = make(chan struct{})
@@ -180,7 +191,7 @@ func TestPayoutAndCalcNeverOverlap(t *testing.T) {
 	waitFor(t, func() bool { return calcing.Load() == 1 }, time.Second)
 	payDone := make(chan error, 1)
 	go func() {
-		_, _, err := sendPayout(dir2, raw, func() (string, error) { return "txid", nil })
+		_, _, err := sendPayout(dir2, raw, h, func() (string, error) { return "txid", nil })
 		payDone <- err
 	}()
 	select {
@@ -192,5 +203,27 @@ func TestPayoutAndCalcNeverOverlap(t *testing.T) {
 	<-calcDone
 	if err := <-payDone; payoutCode(err) != http.StatusConflict {
 		t.Fatalf("payout after the Calc rewrote the csv: %v", err)
+	}
+}
+
+// A transaction sent without the csv hash, or that does not pay the csv it
+// names, is refused and not broadcast.
+func TestSendPayoutNeedsTheCSVHash(t *testing.T) {
+	dir := raceHist(t, "4.000000", "3.000000")
+	raw, h := raceTxn(t, dir), raceHash(t, dir)
+	sent := 0
+	send := func() (string, error) { sent++; return "txid", nil }
+	if _, _, err := sendPayout(dir, raw, "", send); payoutCode(err) != http.StatusPreconditionRequired {
+		t.Fatalf("no hash: %v", err)
+	}
+	other := raceHist(t, "4.000000", "2.000000")
+	if _, _, err := sendPayout(dir, raceTxn(t, other), h, send); payoutCode(err) != http.StatusConflict || !errors.Is(err, rewards.ErrPayoutMismatch) {
+		t.Fatalf("wrong transaction: %v", err)
+	}
+	if sent != 0 {
+		t.Fatal("a refused payout was broadcast")
+	}
+	if _, _, err := sendPayout(dir, raw, h, send); err != nil || sent != 1 {
+		t.Fatalf("good payout: %v", err)
 	}
 }

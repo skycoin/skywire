@@ -16,11 +16,17 @@ if [[ "$user_input" != "Y" && "$user_input" != "y" ]]; then
   exit 0
 fi
 ## get the payout csv: the oldest undistributed day, without payouts to single
-## reward addresses that have sent coins. Stop if it is not a clean csv.
-payout="$(skywire dmsg curl $REWARD_SYS_URL/skycoin-rewards/payout -s $REWARD_WL_SK)"
-if [[ -z "$payout" ]] || echo "$payout" | grep -vx 'Skycoin Address, Reward Amount' | grep -qvE '^[1-9A-HJ-NP-Za-km-z]+, *[0-9.]+ *$'; then
+## reward addresses that have sent coins. Its X-Reward-CSV header goes back with
+## the transaction, so a csv recalculated in between is refused. dmsg curl
+## cannot send headers, so this goes through `skywire dmsg web` (see REWARD_HTTP).
+REWARD_HTTP="${REWARD_HTTP:-http://127.0.0.1:8081}"
+hdr="$(mktemp)" ; trap 'rm -f "$hdr"' EXIT
+payout="$(curl -s -D "$hdr" $REWARD_HTTP/skycoin-rewards/payout)"
+csvhash="$(grep -i '^X-Reward-CSV:' "$hdr" | cut -d: -f2 | tr -d ' \r')"
+if [[ -z "$payout" || -z "$csvhash" ]] || echo "$payout" | grep -vx 'Skycoin Address, Reward Amount' | grep -qvE '^[1-9A-HJ-NP-Za-km-z]+, *[0-9.]+ *$'; then
   echo "could not get a clean payout csv ; exiting"
   echo "$payout"
   exit 1
 fi
-skywire dmsg curl $REWARD_SYS_URL/reward -d "$(skycoin-cli createRawTransaction $WALLET_FILE -a $FROM_ADDRESS -c $FROM_ADDRESS --csv <(echo "$payout" | tr -d ' ' | awk -F, '{printf "%s,%.3f\n", $1, int($2*1000)/1000}' | grep -v ',0\.000$'))" -s $REWARD_WL_SK
+## rows under 0.001 SKY and the header row both become ",0.000" and are dropped
+curl -s $REWARD_HTTP/reward -H "X-Reward-CSV: $csvhash" -d "$(skycoin-cli createRawTransaction $WALLET_FILE -a $FROM_ADDRESS --csv <(echo "$payout" | tr -d ' ' | awk -F, '{printf "%s,%.3f\n", $1, int($2*1000)/1000}' | grep -v ',0\.000$'))"

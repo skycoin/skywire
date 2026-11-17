@@ -1030,7 +1030,7 @@ func buildRouter() http.Handler {
 				w.Write([]byte("skywire skycoin cli decodeRawTransaction:\n\n" + decoded + "\n\nskywire skycoin cli decodeRawTransaction error:\n\n" + err.Error())) //nolint:errcheck,gosec
 				return
 			}
-			_, txid, err := sendPayout(wd+`/hist`, string(body), func() (string, error) {
+			_, txid, err := sendPayout(wd+`/hist`, string(body), r.Header.Get(PayoutCSVHeader), func() (string, error) {
 				return script.Exec("skywire skycoin cli broadcastTransaction " + string(body)).String()
 			})
 			if pe := (*payoutError)(nil); errors.As(err, &pe) {
@@ -1100,6 +1100,7 @@ func buildRouter() http.Handler {
 			}
 			w.Header().Set("Content-Type", "text/plain")
 			w.Header().Set("X-Reward-Day", day)
+			w.Header().Set(PayoutCSVHeader, PayoutCSVHash(csv))
 			if s := currentScheduler(); s != nil {
 				if st := s.Status(); st.LastDate == day && st.InputsHash != "" {
 					w.Header().Set("X-Reward-Inputs", st.InputsHash)

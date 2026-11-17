@@ -2,6 +2,8 @@
 package rewardsserver
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -165,7 +167,7 @@ func (e *payoutError) Unwrap() error { return e.err }
 // sendPayout pays the oldest undistributed day with rawTxn. From reading the
 // day's payout csv to recording the transaction id, no calculation runs, and
 // the transaction must pay that csv exactly.
-func sendPayout(histDir, rawTxn string, broadcast func() (string, error)) (day, txid string, err error) {
+func sendPayout(histDir, rawTxn, csvHash string, broadcast func() (string, error)) (day, txid string, err error) {
 	err = payoutExclusive(func() error {
 		var csv []byte
 		day, csv, err = nextPayout(histDir)
@@ -177,6 +179,12 @@ func sendPayout(histDir, rawTxn string, broadcast func() (string, error)) (day, 
 		case err != nil:
 			return &payoutError{http.StatusServiceUnavailable, "payout csv for " + day + ": " + err.Error(), err}
 		}
+		if csvHash == "" {
+			return &payoutError{http.StatusPreconditionRequired, "send the " + PayoutCSVHeader + " header of GET /skycoin-rewards/payout with the transaction", errPayoutStale}
+		}
+		if csvHash != PayoutCSVHash(csv) {
+			return &payoutError{http.StatusConflict, "rewards for " + day + " were recalculated since the payout csv was fetched; run sendrewards again", errPayoutStale}
+		}
 		// Never send to a single reward address that has sent coins.
 		if err := checkPayoutTxn(histDir, day, rawTxn); err != nil {
 			log.Warnf("reward transaction for %s refused: %v", day, err)
@@ -186,9 +194,13 @@ func sendPayout(histDir, rawTxn string, broadcast func() (string, error)) (day, 
 		if err != nil {
 			return &payoutError{http.StatusInternalServerError, "payout csv for " + day + ": " + err.Error(), err}
 		}
-		if err := rewards.CheckTransactionPaysExactly(rawTxn, want); err != nil {
+		full, err := os.ReadFile(filepath.Join(histDir, day+"_rewardtxn0.csv")) //nolint:gosec
+		if err != nil {
+			return &payoutError{http.StatusInternalServerError, "payout csv for " + day + ": " + err.Error(), err}
+		}
+		if err := rewards.CheckTransactionPaysExactly(rawTxn, want, rewards.CSVAddresses(full)); err != nil {
 			log.Warnf("reward transaction for %s refused: %v", day, err)
-			return &payoutError{http.StatusConflict, "rewards for " + day + " were recalculated since the payout csv was fetched; run sendrewards again\n\n" + err.Error(), err}
+			return &payoutError{http.StatusConflict, "reward transaction for " + day + " does not pay the payout csv exactly:\n\n" + err.Error(), err}
 		}
 		txid, err = broadcastAndRecord(filepath.Join(histDir, day+".txt"), broadcast)
 		if errors.Is(err, errUnrecorded) {
@@ -204,4 +216,18 @@ func sendPayout(histDir, rawTxn string, broadcast func() (string, error)) (day, 
 		err = &payoutError{http.StatusServiceUnavailable, err.Error(), err}
 	}
 	return day, txid, err
+}
+
+// PayoutCSVHeader carries PayoutCSVHash of the csv GET /skycoin-rewards/payout
+// served. POST /reward must send it back, so a csv recalculated in between is
+// refused.
+const PayoutCSVHeader = "X-Reward-CSV"
+
+// errPayoutStale refuses a transaction built from another payout csv.
+var errPayoutStale = errors.New("payout csv changed")
+
+// PayoutCSVHash is the hex sha256 of a payout csv.
+func PayoutCSVHash(csv []byte) string {
+	h := sha256.Sum256(csv)
+	return hex.EncodeToString(h[:])
 }

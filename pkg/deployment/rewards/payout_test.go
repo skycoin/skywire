@@ -128,6 +128,10 @@ func TestCheckTransactionPaysExactly(t *testing.T) {
 	pk, sk, err := cipher.GenerateDeterministicKeyPair([]byte("reward wallet"))
 	require.NoError(t, err)
 	from := cipher.AddressFromPubKey(pk).String()
+	fpk, _, _ := cipher.GenerateDeterministicKeyPair([]byte("fresh change"))
+	fresh := cipher.AddressFromPubKey(fpk).String()
+	// The day's full csv: payoutSpent was filtered out of the payout.
+	payees := CSVAddresses([]byte(payoutDerived + ", 5.000000\n" + payoutUnspent + ", 3.000000\n" + payoutSpent + ", 1.000000\n"))
 	want, err := PayoutDroplets([]byte(payoutDerived + ", 5.000000\n" + payoutUnspent + ", 3.000000\n"))
 	require.NoError(t, err)
 
@@ -138,13 +142,16 @@ func TestCheckTransactionPaysExactly(t *testing.T) {
 	}{
 		{name: "match", outs: map[string]uint64{payoutDerived: 5e6, payoutUnspent: 3e6}},
 		{name: "change to the sending address", outs: map[string]uint64{payoutDerived: 5e6, payoutUnspent: 3e6, from: 42e6}},
+		{name: "change to an unused address", outs: map[string]uint64{payoutDerived: 5e6, payoutUnspent: 3e6, fresh: 42e6}},
+		{name: "two change outputs", outs: map[string]uint64{payoutDerived: 5e6, payoutUnspent: 3e6, from: 1e6, fresh: 1e6}, bad: "only one change output"},
 		{name: "missing payee", outs: map[string]uint64{payoutDerived: 5e6, from: 3e6}, bad: payoutUnspent + " is not paid"},
 		{name: "wrong amount", outs: map[string]uint64{payoutDerived: 5e6, payoutUnspent: 4e6}, bad: payoutUnspent + " is paid 4"},
 		{name: "extra output", outs: map[string]uint64{payoutDerived: 5e6, payoutUnspent: 3e6, payoutSpent: 1e6}, bad: payoutSpent + " is paid 1.000000 and is not in the csv"},
+		{name: "overpaid payee", outs: map[string]uint64{payoutDerived: 6e6, payoutUnspent: 3e6}, bad: payoutDerived + " is paid 6"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			err := CheckTransactionPaysExactly(signedPayout(t, sk, c.outs), want)
+			err := CheckTransactionPaysExactly(signedPayout(t, sk, c.outs), want, payees)
 			if c.bad == "" {
 				require.NoError(t, err)
 				return
@@ -154,8 +161,5 @@ func TestCheckTransactionPaysExactly(t *testing.T) {
 		})
 	}
 
-	// Unsigned, no output counts as change.
-	err = CheckTransactionPaysExactly(payoutRawTxn(t, payoutDerived, payoutUnspent, from), want)
-	require.ErrorIs(t, err, ErrPayoutMismatch)
-	require.Error(t, CheckTransactionPaysExactly("nothex", want))
+	require.Error(t, CheckTransactionPaysExactly("nothex", want, payees))
 }

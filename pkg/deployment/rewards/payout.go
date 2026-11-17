@@ -172,58 +172,61 @@ func PayoutDroplets(csv []byte) (map[cipher.Address]uint64, error) {
 	return want, sc.Err()
 }
 
+// CSVAddresses are the addresses of a reward csv, whatever their amounts.
+func CSVAddresses(csv []byte) map[cipher.Address]bool {
+	m := map[cipher.Address]bool{}
+	sc := bufio.NewScanner(bytes.NewReader(csv))
+	sc.Buffer(make([]byte, 64<<10), 1<<20)
+	for sc.Scan() {
+		a, _, _ := strings.Cut(strings.ReplaceAll(sc.Text(), " ", ""), ",")
+		if addr, err := cipher.DecodeBase58Address(a); err == nil {
+			m[addr] = true
+		}
+	}
+	return m
+}
+
 // CheckTransactionPaysExactly refuses a raw transaction (hex) unless its
-// outputs pay each address of want exactly its droplets. More may go only to
-// an address that signed one of its inputs, which is where
-// createRawTransaction -c <from address> sends the change.
-func CheckTransactionPaysExactly(rawTxn string, want map[cipher.Address]uint64) error {
+// outputs pay each address of want exactly its droplets. One more output may
+// take the change, to an address that is none of the day's payees.
+func CheckTransactionPaysExactly(rawTxn string, want map[cipher.Address]uint64, payees map[cipher.Address]bool) error {
 	txn, err := coin.DeserializeTransactionHex(strings.TrimSpace(rawTxn))
 	if err != nil {
 		return fmt.Errorf("decode transaction: %w", err)
 	}
-	change := inputAddresses(txn)
 	got := map[cipher.Address]uint64{}
 	for _, o := range txn.Out {
 		got[o.Address] += o.Coins
 	}
 	var bad []string
 	for addr, w := range want {
-		g := got[addr]
-		switch {
-		case g == w, g > w && change[addr]:
+		switch g := got[addr]; {
+		case g == w:
 		case g == 0:
 			bad = append(bad, fmt.Sprintf("%s is not paid (csv %s)", addr, coins(w)))
 		default:
 			bad = append(bad, fmt.Sprintf("%s is paid %s (csv %s)", addr, coins(g), coins(w)))
 		}
 	}
+	var change []cipher.Address
 	for addr, g := range got {
-		if _, ok := want[addr]; !ok && !change[addr] {
-			bad = append(bad, fmt.Sprintf("%s is paid %s and is not in the csv", addr, coins(g)))
+		if _, ok := want[addr]; ok {
+			continue
 		}
+		if payees[addr] {
+			bad = append(bad, fmt.Sprintf("%s is paid %s and is not in the csv", addr, coins(g)))
+			continue
+		}
+		change = append(change, addr)
+	}
+	if len(change) > 1 {
+		bad = append(bad, fmt.Sprintf("%d outputs outside the csv, only one change output is allowed", len(change)))
 	}
 	if len(bad) > 0 {
 		slices.Sort(bad)
 		return fmt.Errorf("%w: %s", ErrPayoutMismatch, strings.Join(bad, "; "))
 	}
 	return nil
-}
-
-// inputAddresses are the addresses that signed txn's inputs, recovered from
-// the signatures. A bad signature gives some other address, but the node
-// then refuses the transaction anyway.
-func inputAddresses(txn coin.Transaction) map[cipher.Address]bool {
-	m := map[cipher.Address]bool{}
-	inner := txn.HashInner()
-	for i, in := range txn.In {
-		if i >= len(txn.Sigs) || txn.Sigs[i].Null() {
-			continue
-		}
-		if pk, err := cipher.PubKeyFromSig(txn.Sigs[i], cipher.AddSHA256(inner, in)); err == nil {
-			m[cipher.AddressFromPubKey(pk)] = true
-		}
-	}
-	return m
 }
 
 func coins(d uint64) string {
