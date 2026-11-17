@@ -21,8 +21,6 @@ var (
 	errNotPermitted                   = errors.New("ioctl: operation not permitted")
 	errVPNServerClosed                = errors.New("vpn-server closed")
 	errPermissionDenied               = errors.New("permission denied")
-	// errIPTablesMissing: the vpn-server sets the FORWARD policy and NAT through iptables.
-	errIPTablesMissing = errors.New("iptables is not installed: install the iptables package")
 
 	errNoTransportFound = appserver.RPCErr{
 		Err: router.ErrNoTransportFound.Error(),
