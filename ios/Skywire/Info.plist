@@ -29,7 +29,8 @@
   which start a draft (MailRouter); the copied contacts' rows are both. Only
   those are claimed; skycoin: belongs to the Skycoin wallet.
   UIAppFonts and UILaunchScreen: Android's two typefaces and its splash
-  (the logo on white, #0A101C at night), M6.5.
+  (the logo on white, #0A101C at night), M6.5. iOS shows the launch snapshot's
+  sRGB numbers as Display P3, so its assets hold the P3 values (#3875F6, #0B101B).
 -->
 <plist version="1.0">
 <dict>

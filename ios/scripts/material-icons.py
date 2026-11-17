@@ -192,8 +192,9 @@ def main():
     with open(logo, "rb") as f:
         # Not a template: the lock and launch screens draw it in its own #1677FF.
         imageset("skywire-logo", "skywire_logo.png", f.read(), template=False, vector=False)
-    # Android's window background before the first frame (Theme.Skywire).
-    colorset("LaunchBackground", "FFFFFF", "0A101C")
+    # Android's window background before the first frame (Theme.Skywire), #0A101C at night,
+    # written as its Display P3 value: iOS shows the launch snapshot's sRGB numbers as P3.
+    colorset("LaunchBackground", "FFFFFF", "0B101B")
     app_icon()
     print("catalogue written:", CATALOG)
 
