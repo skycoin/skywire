@@ -20,6 +20,7 @@ import (
 	"github.com/bitfield/script"
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/wlynxg/anet"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -571,6 +572,7 @@ var genConfigCmd = &cobra.Command{
 		// anything reads a flag — is where its path is final.
 		skyenvfile = resolveSkyenvFile()
 		refreshSkyenvDefaults(cmd.Flags())
+		genFlags = cmd.Flags()
 		if envs || envfileOut != "" {
 			envfile = envfileTemplate
 			// Uncomment settings that match flags passed on the command line
@@ -1112,6 +1114,9 @@ func readExistingConfig(log *logging.Logger) {
 // oldConfCache holds the previously-read config for use across configure* functions.
 var oldConfCache *visorconfig.V1
 
+// genFlags is gen's flag set once it runs, for Changed checks outside the command.
+var genFlags *pflag.FlagSet
+
 // mergeExistingApps makes a regenerate non-destructive to the launcher apps.
 // Without it, `config gen -r` rebuilds the apps list from the current defaults,
 // which both adds newly-introduced apps AND silently drops any app the operator
@@ -1120,7 +1125,8 @@ var oldConfCache *visorconfig.V1
 //
 //   - operator-toggled fields on apps present in both (AutoStart, Args,
 //     LauncherMode, RestartPolicy) are restored from the old entry — so a regen
-//     doesn't reset e.g. a skysocks-client's --srv or an app you enabled;
+//     doesn't reset e.g. a skysocks-client's --srv or an app you enabled
+//     (an autostart set in skywire.conf or by flag still wins, #6184);
 //   - custom apps present only in the old config are carried over verbatim; and
 //   - brand-new default apps (added since the old config was written) still
 //     appear.
@@ -1178,6 +1184,7 @@ func mergeExistingApps(log *logging.Logger) {
 	for _, a := range old {
 		oldByName[a.Name] = a
 	}
+	declared := declaredAutostarts()
 	newByName := make(map[string]struct{}, len(conf.Launcher.Apps))
 	var added []string
 	for i := range conf.Launcher.Apps {
@@ -1209,6 +1216,9 @@ func mergeExistingApps(log *logging.Logger) {
 				conf.Launcher.Apps[i].Args = setFlag(conf.Launcher.Apps[i].Args, "--ca", resolverCA)
 			}
 		}
+		if on, ok := declared[name]; ok {
+			conf.Launcher.Apps[i].AutoStart = on
+		}
 		// Env belongs with the args it was written for: an old skycoin-web entry
 		// reaches its .dmsg node through HTTP_PROXY, which its args do not carry.
 		if len(prev.Env) > 0 {
@@ -1234,6 +1244,31 @@ func mergeExistingApps(log *logging.Logger) {
 	if len(carried) > 0 {
 		log.Infof("regen: preserved %d custom app(s): %s", len(carried), strings.Join(carried, ", "))
 	}
+}
+
+// declaredAutostarts returns the autostart of each app whose toggle is set on
+// the command line or in skywire.conf. A regen keeps the old autostart for the rest.
+func declaredAutostarts() map[string]bool {
+	toggles := []struct {
+		app, flag, key string
+		on             bool
+	}{
+		{skyenv.SkychatName, "servechat", "SKYCHAT", skychatEnable},
+		{skyenv.SkysocksName, "serveproxy", "PROXYSERVER", proxyServerEnable},
+		{skyenv.VPNServerName, "servevpn", "VPNSERVER", vpnServerEnable},
+		{skyenv.VPNRouterName, "servevpnrouter", "VPNROUTER", vpnRouterEnable},
+		{skyenv.SkyDNSName, "skydns", "SKYDNS", skyDNSEnable},
+		{skyenv.SkycoinWebName, "skycoinweb", "SKYCOINWEB", skycoinWebEnable},
+		{skyenv.SkycoinDaemonName, "skycoind", "SKYCOIND", skycoinDaemonEnable},
+	}
+	fs := genFlags
+	out := make(map[string]bool, len(toggles))
+	for _, t := range toggles {
+		if (fs != nil && fs.Changed(t.flag)) || scriptExecString("${"+t.key+"}") != "" {
+			out[t.app] = t.on
+		}
+	}
+	return out
 }
 
 // noServerAppsOn turns off vpn-server and skysocks autostart on js. A browser
