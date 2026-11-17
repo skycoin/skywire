@@ -23,7 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging/logrusbridge"
 
 	"github.com/0magnet/calvin"
-	"github.com/0magnet/logrus"
+	"github.com/sirupsen/logrus"
 	skydexmarket "github.com/skycoin/skycoin/cmd/skydex-market/commands"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
