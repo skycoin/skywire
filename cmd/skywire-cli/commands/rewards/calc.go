@@ -752,6 +752,8 @@ Architectures:
 ` + fmt.Sprintf("%v", append(rewards.Architectures, "null", "all")) + `
 
 `,
+	// An unknown word (a subcommand missing from this build) must not start a calculation.
+	Args: cobra.NoArgs,
 	Run: func(_ *cobra.Command, _ []string) {
 		if log == nil {
 			log = logging.MustGetLogger("rewards")
