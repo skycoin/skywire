@@ -91,3 +91,71 @@ func TestPayoutsBeforeCutoff(t *testing.T) {
 	require.Empty(t, asked)
 	require.Error(t, CheckTransactionPayouts("2026-10-30", "nothex", payoutShares, payoutNode(asked, false)))
 }
+
+// signedPayout is a transaction from a wallet address paying outs (droplets),
+// signed as createRawTransaction signs it.
+func signedPayout(t *testing.T, sk cipher.SecKey, outs map[string]uint64) string {
+	t.Helper()
+	var txn coin.Transaction
+	txn.In = []cipher.SHA256{cipher.SumSHA256([]byte("uxout"))}
+	for a, c := range outs {
+		txn.Out = append(txn.Out, coin.TransactionOutput{Address: cipher.MustDecodeBase58Address(a), Coins: c, Hours: 1})
+	}
+	require.NoError(t, txn.SignInputs([]cipher.SecKey{sk}))
+	require.NoError(t, txn.UpdateHeader())
+	s, err := txn.SerializeHex()
+	require.NoError(t, err)
+	return s
+}
+
+func TestPayoutDroplets(t *testing.T) {
+	want, err := PayoutDroplets([]byte("Skycoin Address, Reward Amount\n" +
+		payoutDerived + ", 5.123999\n" +
+		payoutUnspent + ", 0.000900\n" +
+		payoutSpent + ", 0.29\n" +
+		payoutSpent + ", 1.000000\n"))
+	require.NoError(t, err)
+	require.Equal(t, map[cipher.Address]uint64{
+		cipher.MustDecodeBase58Address(payoutDerived): 5_123_000,
+		cipher.MustDecodeBase58Address(payoutSpent):   290_000 + 1_000_000,
+	}, want)
+
+	_, err = PayoutDroplets([]byte(payoutDerived + ", lots\n"))
+	require.Error(t, err)
+}
+
+func TestCheckTransactionPaysExactly(t *testing.T) {
+	pk, sk, err := cipher.GenerateDeterministicKeyPair([]byte("reward wallet"))
+	require.NoError(t, err)
+	from := cipher.AddressFromPubKey(pk).String()
+	want, err := PayoutDroplets([]byte(payoutDerived + ", 5.000000\n" + payoutUnspent + ", 3.000000\n"))
+	require.NoError(t, err)
+
+	cases := []struct {
+		name string
+		outs map[string]uint64
+		bad  string
+	}{
+		{name: "match", outs: map[string]uint64{payoutDerived: 5e6, payoutUnspent: 3e6}},
+		{name: "change to the sending address", outs: map[string]uint64{payoutDerived: 5e6, payoutUnspent: 3e6, from: 42e6}},
+		{name: "missing payee", outs: map[string]uint64{payoutDerived: 5e6, from: 3e6}, bad: payoutUnspent + " is not paid"},
+		{name: "wrong amount", outs: map[string]uint64{payoutDerived: 5e6, payoutUnspent: 4e6}, bad: payoutUnspent + " is paid 4"},
+		{name: "extra output", outs: map[string]uint64{payoutDerived: 5e6, payoutUnspent: 3e6, payoutSpent: 1e6}, bad: payoutSpent + " is paid 1.000000 and is not in the csv"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := CheckTransactionPaysExactly(signedPayout(t, sk, c.outs), want)
+			if c.bad == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, ErrPayoutMismatch)
+			require.ErrorContains(t, err, c.bad)
+		})
+	}
+
+	// Unsigned, no output counts as change.
+	err = CheckTransactionPaysExactly(payoutRawTxn(t, payoutDerived, payoutUnspent, from), want)
+	require.ErrorIs(t, err, ErrPayoutMismatch)
+	require.Error(t, CheckTransactionPaysExactly("nothex", want))
+}
