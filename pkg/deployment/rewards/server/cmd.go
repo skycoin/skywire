@@ -8,17 +8,15 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"runtime"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/0magnet/calvin"
-	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/tpviz"
 )
@@ -194,161 +192,10 @@ func Serve(ctx context.Context, cfg RewardConfig, bind string, l *logging.Logger
 	return serve(ctx, ConfigureAndBuild(cfg), bind, l)
 }
 
-func scriptExecString(s string) string {
-	if runtime.GOOS == "windows" {
-		var variable, defaultvalue string
-		if strings.Contains(s, ":-") {
-			parts := strings.SplitN(s, ":-", 2)
-			variable = parts[0] + "}"
-			defaultvalue = strings.TrimRight(parts[1], "}")
-		} else {
-			variable = s
-			defaultvalue = ""
-		}
-		out, err := script.Exec(fmt.Sprintf(`powershell -c '$SKYENV = "%s"; if ($SKYENV -ne "" -and (Test-Path $SKYENV)) { . $SKYENV }; echo %s"`, skyenvfile, variable)).String()
-		if err == nil {
-			if (out == "") || (out == variable) {
-				return defaultvalue
-			}
-			return strings.TrimRight(out, "\n")
-		}
-		return defaultvalue
-	}
-	z, err := script.Exec(fmt.Sprintf(`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`, skyenvfile, s)).String()
-	if err == nil {
-		return strings.TrimSpace(z)
-	}
-	return ""
-}
-
-func scriptExecArray(s string) string {
-	if runtime.GOOS == "windows" {
-		variable := s
-		if strings.Contains(variable, "[@]}") {
-			variable = strings.TrimRight(variable, "[@]}")
-			variable = strings.TrimRight(variable, "{")
-		}
-		out, err := script.Exec(fmt.Sprintf(`powershell -c '$SKYENV = "%s"; if ($SKYENV -ne "" -and (Test-Path $SKYENV)) { . $SKYENV }; foreach ($item in %s) { Write-Host $item }'`, skyenvfile, variable)).Slice()
-		if err == nil {
-			if len(out) != 0 {
-				return ""
-			}
-			return strings.Join(out, ",")
-		}
-	}
-	y, err := script.Exec(fmt.Sprintf(`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; for _i in %s ; do echo "$_i" ; done'`, skyenvfile, s)).Slice()
-	if err == nil {
-		return strings.Join(y, ",")
-	}
-	return ""
-}
-
-func scriptExecInt(s string) int {
-	if runtime.GOOS == "windows" {
-		var variable string
-		if strings.Contains(s, ":-") {
-			parts := strings.SplitN(s, ":-", 2)
-			variable = parts[0] + "}"
-		} else {
-			variable = s
-		}
-		out, err := script.Exec(fmt.Sprintf(`powershell -c '$SKYENV = "%s"; if ($SKYENV -ne "" -and (Test-Path $SKYENV)) { . $SKYENV }; echo %s"`, skyenvfile, variable)).String()
-		if err == nil {
-			if (out == "") || (out == variable) {
-				return 0
-			}
-			i, err := strconv.Atoi(strings.TrimSpace(strings.TrimRight(out, "\n")))
-			if err == nil {
-				return i
-			}
-			return 0
-		}
-		return 0
-	}
-	z, err := script.Exec(fmt.Sprintf(`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`, skyenvfile, s)).String()
-	if err == nil {
-		if z == "" {
-			return 0
-		}
-		i, err := strconv.Atoi(z)
-		if err == nil {
-			return i
-		}
-	}
-	return 0
-}
-func scriptExecUint(s string) uint {
-	if runtime.GOOS == "windows" {
-		var variable string
-		if strings.Contains(s, ":-") {
-			parts := strings.SplitN(s, ":-", 2)
-			variable = parts[0] + "}"
-		} else {
-			variable = s
-		}
-		out, err := script.Exec(fmt.Sprintf(`powershell -c '$SKYENV = "%s"; if ($SKYENV -ne "" -and (Test-Path $SKYENV)) { . $SKYENV }; echo %s"`, skyenvfile, variable)).String()
-		if err == nil {
-			if (out == "") || (out == variable) {
-				return 0
-			}
-			i, err := strconv.Atoi(strings.TrimSpace(strings.TrimRight(out, "\n")))
-			if err == nil {
-				return uint(i) //nolint: gosec
-			}
-			return 0
-		}
-		return 0
-	}
-	z, err := script.Exec(fmt.Sprintf(`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`, skyenvfile, s)).String()
-	if err == nil {
-		if z == "" {
-			return 0
-		}
-		i, err := strconv.Atoi(z)
-		if err == nil {
-			return uint(i) //nolint: gosec
-		}
-	}
-	return uint(0)
-}
-
-func scriptExecUint16(s string) uint16 {
-	if runtime.GOOS == "windows" {
-		var variable string
-		if strings.Contains(s, ":-") {
-			parts := strings.SplitN(s, ":-", 2)
-			variable = parts[0] + "}"
-		} else {
-			variable = s
-		}
-		out, err := script.Exec(fmt.Sprintf(`powershell -c '$SKYENV = "%s"; if ($SKYENV -ne "" -and (Test-Path $SKYENV)) { . $SKYENV }; echo %s"`, skyenvfile, variable)).String()
-		if err == nil {
-			if (out == "") || (out == variable) {
-				return 0
-			}
-			i, err := strconv.Atoi(strings.TrimSpace(strings.TrimRight(out, "\n")))
-			if err == nil {
-				if i >= 0 && i <= 65535 {
-					return uint16(i)
-				}
-				return 0
-			}
-			return 0
-		}
-		return 0
-	}
-	z, err := script.Exec(fmt.Sprintf(`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`, skyenvfile, s)).String()
-	if err == nil {
-		if z == "" {
-			return 0
-		}
-		i, err := strconv.Atoi(z)
-		if err == nil {
-			if i >= 0 && i <= 65535 {
-				return uint16(i)
-			}
-			return 0
-		}
-	}
-	return uint16(0)
-}
+// The SKYENV file is parsed in Go, never sourced by a shell: these run in
+// init for every skywire command, and a file that runs skywire would recurse.
+func scriptExecString(s string) string { return cmdutil.SkyenvString(s, skyenvfile) }
+func scriptExecArray(s string) string  { return cmdutil.SkyenvArray(s, skyenvfile) }
+func scriptExecInt(s string) int       { return cmdutil.SkyenvInt(s, skyenvfile) }
+func scriptExecUint(s string) uint     { return cmdutil.SkyenvUint(s, skyenvfile) }
+func scriptExecUint16(s string) uint16 { return uint16(cmdutil.SkyenvUint(s, skyenvfile)) } //nolint:gosec

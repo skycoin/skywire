@@ -107,8 +107,10 @@ func applySkyenv(cmd *cobra.Command, cfg *sendConfig, skyenv string) error {
 	if _, err := os.Stat(path); err != nil { //nolint:gosec
 		return fmt.Errorf("SKYENV: %w", err)
 	}
-	c := exec.Command("bash", "-c", `source "$SKYENV" >/dev/null 2>&1 ; printf '%s\n%s\n' "$WALLET_FILE" "$REWARD_SYS_URL"`) //nolint:gosec
-	c.Env = append(os.Environ(), "SKYENV="+path)
+	// The file may run skywire (WALLET_FILE=$(skywire skycoin cli ...)). Without
+	// SKYENV in its environment that skywire does not read the file again.
+	c := exec.Command("bash", "-c", `source "$SENDREWARDS_CONF" >/dev/null 2>&1 ; printf '%s\n%s\n' "$WALLET_FILE" "$REWARD_SYS_URL"`) //nolint:gosec
+	c.Env = append(envWithout(os.Environ(), "SKYENV"), "SENDREWARDS_CONF="+path)
 	c.Stderr = io.Discard
 	out, err := c.Output()
 	if err != nil {
@@ -524,4 +526,15 @@ func statusMessage(code int, body []byte) string {
 		return fmt.Sprintf("%d: this visor's key is not in the reward system whitelist.\n%s", code, b)
 	}
 	return fmt.Sprintf("http status %d\n%s", code, b)
+}
+
+// envWithout is env less the variable named key.
+func envWithout(env []string, key string) []string {
+	out := env[:0:0]
+	for _, kv := range env {
+		if !strings.HasPrefix(kv, key+"=") {
+			out = append(out, kv)
+		}
+	}
+	return out
 }

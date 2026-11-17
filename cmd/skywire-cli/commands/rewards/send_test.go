@@ -306,3 +306,23 @@ REWARD_SYS_URL="dmsg://036a70e6956061778e1883e928c1236189db14dfd446df23d83e45c32
 	_, err = dmsgProxyBase("dmsg://nope:80")
 	require.Error(t, err)
 }
+
+// The conf may run skywire to find the wallet. That skywire must not see
+// SKYENV, or it would read the conf again, without end.
+func TestApplySkyenvHidesSkyenvFromTheConf(t *testing.T) {
+	conf := filepath.Join(t.TempDir(), "sendrewards.conf")
+	if err := os.WriteFile(conf, []byte(`WALLET_FILE=$([ -n "$SKYENV" ] && echo recursed || echo rewards.wlt)`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SKYENV", conf)
+	cmd := &cobra.Command{}
+	cmd.Flags().String("wallet", "", "")
+	cmd.Flags().String("server", "", "")
+	var cfg sendConfig
+	if err := applySkyenv(cmd, &cfg, conf); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.wallet != "rewards.wlt" {
+		t.Fatalf("wallet = %q", cfg.wallet)
+	}
+}
