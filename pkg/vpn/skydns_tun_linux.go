@@ -4,11 +4,13 @@
 package vpn
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/songgao/water"
 
@@ -62,6 +64,9 @@ func ensureSkyDNSTun() error {
 	if skyDNSTunReady() {
 		return nil
 	}
+	if err := tunDriverAvailable(); err != nil {
+		return err
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		return err
@@ -108,4 +113,18 @@ func skyDNSZonesSet() bool {
 	out, err := osutil.RunWithResult("resolvectl", "domain", SkyDNSTunName)
 	return err == nil && strings.Contains(string(out), "~dmsg") && strings.Contains(string(out), "~skynet") &&
 		strings.Contains(string(out), "~skywire")
+}
+
+// tunDriverAvailable reports a missing TUN driver plainly. Opening the device
+// fails with ENODEV when the tun module is not loaded, which is common after a
+// kernel upgrade without a reboot, and with ENOENT when the node is missing.
+func tunDriverAvailable() error {
+	f, err := os.OpenFile("/dev/net/tun", os.O_RDWR, 0)
+	if err == nil {
+		return f.Close()
+	}
+	if errors.Is(err, syscall.ENODEV) || errors.Is(err, syscall.ENXIO) || errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("skydns: the kernel has no TUN driver (%v): run \"modprobe tun\", or reboot if the kernel was just upgraded", err)
+	}
+	return nil
 }
