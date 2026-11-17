@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"os/exec"
 	"strings"
 
 	"golang.org/x/sys/unix"
@@ -27,6 +28,9 @@ const (
 
 // GetIPTablesForwardPolicy gets current policy for iptables `forward` chain.
 func GetIPTablesForwardPolicy() (string, error) {
+	if _, err := exec.LookPath("iptables"); err != nil {
+		return "", errIPTablesMissing
+	}
 	outputBytes, err := osutil.RunElevatedWithResult("sh", "-c", getIPTablesForwardPolicyCMD)
 	if err != nil {
 		return "", err
