@@ -74,7 +74,10 @@ func raceTxn(t *testing.T, dir string) string {
 	for a, c := range want {
 		txn.Out = append(txn.Out, coin.TransactionOutput{Address: a, Coins: c, Hours: 1})
 	}
-	chg, _, _ := cipher.GenerateDeterministicKeyPair([]byte("fresh change"))
+	chg, _, err := cipher.GenerateDeterministicKeyPair([]byte("fresh change"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	txn.Out = append(txn.Out, coin.TransactionOutput{Address: cipher.AddressFromPubKey(chg), Coins: 100e6, Hours: 1})
 	if err := txn.SignInputs([]cipher.SecKey{sk}); err != nil {
 		t.Fatal(err)

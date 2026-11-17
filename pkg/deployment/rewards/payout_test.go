@@ -128,7 +128,8 @@ func TestCheckTransactionPaysExactly(t *testing.T) {
 	pk, sk, err := cipher.GenerateDeterministicKeyPair([]byte("reward wallet"))
 	require.NoError(t, err)
 	from := cipher.AddressFromPubKey(pk).String()
-	fpk, _, _ := cipher.GenerateDeterministicKeyPair([]byte("fresh change"))
+	fpk, _, err := cipher.GenerateDeterministicKeyPair([]byte("fresh change"))
+	require.NoError(t, err)
 	fresh := cipher.AddressFromPubKey(fpk).String()
 	// The day's full csv: payoutSpent was filtered out of the payout.
 	payees := CSVAddresses([]byte(payoutDerived + ", 5.000000\n" + payoutUnspent + ", 3.000000\n" + payoutSpent + ", 1.000000\n"))
