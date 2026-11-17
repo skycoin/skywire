@@ -27,7 +27,7 @@ func (hv *Hypervisor) ui2FleetTps(body bool) http.HandlerFunc {
 		case 1, 30:
 			f.Days = d
 		}
-		r2 := r.Clone(r.Context())
+		r2 := innerReq(r)
 		q2 := r2.URL.Query()
 		q2.Set("days", strconv.Itoa(f.Days))
 		q2.Del("live")

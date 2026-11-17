@@ -58,7 +58,7 @@ func (hv *Hypervisor) ui2VPNServers() http.HandlerFunc {
 		if hv.tpvizServer == nil {
 			p.Err = "service discovery view not available on this hypervisor"
 		} else {
-			r2 := r.Clone(r.Context())
+			r2 := innerReq(r)
 			r2.URL.Path, r2.URL.RawQuery = "/api/services", "type="+want
 			cw := &captureWriter{h: http.Header{}, code: http.StatusOK}
 			hv.tpvizServer.Handler().ServeHTTP(cw, r2)
@@ -67,11 +67,10 @@ func (hv *Hypervisor) ui2VPNServers() http.HandlerFunc {
 				Services []string `json:"services"`
 				Country  string   `json:"country"`
 			}
-			switch {
-			case cw.code != http.StatusOK:
+			if cw.code != http.StatusOK {
 				p.Err = cw.errText()
-			case json.Unmarshal(cw.body.Bytes(), &m) != nil:
-				p.Err = "bad service list"
+			} else if err := json.Unmarshal(cw.body.Bytes(), &m); err != nil {
+				p.Err = "bad service list: " + err.Error()
 			}
 			for _, e := range m {
 				for _, s := range e.Services {

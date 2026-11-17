@@ -27,7 +27,7 @@ func (hv *Hypervisor) ui2FleetUptime(body bool) http.HandlerFunc {
 			days = d
 		}
 		all := r.URL.Query().Get("all") != ""
-		r2 := r.Clone(r.Context())
+		r2 := innerReq(r)
 		q := r2.URL.Query()
 		q.Set("days", strconv.Itoa(days))
 		r2.URL.RawQuery = q.Encode()
