@@ -205,6 +205,29 @@ func TestCalcDayPaid(t *testing.T) {
 	}
 }
 
+// A day whose send is in flight or did not finish keeps the files it was
+// paid from, whatever its inputs do.
+func TestCalcDayPayoutPendingFreezes(t *testing.T) {
+	f := newCycleFixture(t)
+	d := newDayCycle(nil, cycleConfig{})
+	f.calc(t, d)
+	paid := f.txn(t)
+	pending := filepath.Join(f.o.histDir, cycleTestDate+".txt.pending")
+	if err := os.WriteFile(pending, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f.writeSurvey(t, cycleTestAlt)
+	if res := f.calc(t, d); !res.skipped || res.note != "payout pending" || f.txn(t) != paid {
+		t.Fatalf("%+v with a pending send:\n%s", res, f.txn(t))
+	}
+	if err := os.Remove(pending); err != nil {
+		t.Fatal(err)
+	}
+	if res := f.calc(t, d); res.skipped || !strings.Contains(f.txn(t), cycleTestAlt) {
+		t.Fatalf("%+v after the send was cleared:\n%s", res, f.txn(t))
+	}
+}
+
 // A payout address that sends coins is seen by the watch on the next block,
 // and the recalculation that follows leaves it out. Until then the hash
 // reads the cache and asks the node nothing.

@@ -4,12 +4,18 @@ package rewards
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
+	"math"
 	"net/http"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/skycoin/skycoin/src/cipher"
 	"github.com/skycoin/skycoin/src/coin"
+	"github.com/skycoin/skycoin/src/util/droplet"
 
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 )
@@ -134,4 +140,96 @@ func CheckTransactionPayouts(day, rawTxn string, sharesCSV []byte, spent func(st
 		return fmt.Errorf("the transaction pays reward addresses that have sent coins, not broadcast: %s", strings.Join(bad, ", "))
 	}
 	return nil
+}
+
+// ErrPayoutMismatch marks a reward transaction whose outputs are not those of
+// the payout CSV.
+var ErrPayoutMismatch = errors.New("the transaction does not pay the payout csv")
+
+// PayoutDroplets reads a payout CSV ("address, amount" rows) as
+// scripts/rewards/sendrewards.sh hands it to createRawTransaction: the amount
+// truncated to 3 decimals, and rows without an address or paying nothing
+// left out. Amounts are in droplets, summed per address.
+func PayoutDroplets(csv []byte) (map[cipher.Address]uint64, error) {
+	want := map[cipher.Address]uint64{}
+	sc := bufio.NewScanner(bytes.NewReader(csv))
+	sc.Buffer(make([]byte, 64<<10), 1<<20)
+	for sc.Scan() {
+		a, amount, _ := strings.Cut(strings.ReplaceAll(sc.Text(), " ", ""), ",")
+		addr, err := cipher.DecodeBase58Address(a)
+		if err != nil {
+			continue
+		}
+		f, err := strconv.ParseFloat(amount, 64)
+		if err != nil {
+			return nil, fmt.Errorf("payout csv amount %q for %s: %w", amount, a, err)
+		}
+		// awk's int($2*1000) in sendrewards.sh, then %.3f.
+		if n := math.Trunc(f * 1000); n > 0 {
+			want[addr] += uint64(n) * 1000
+		}
+	}
+	return want, sc.Err()
+}
+
+// CheckTransactionPaysExactly refuses a raw transaction (hex) unless its
+// outputs pay each address of want exactly its droplets. More may go only to
+// an address that signed one of its inputs, which is where
+// createRawTransaction -c <from address> sends the change.
+func CheckTransactionPaysExactly(rawTxn string, want map[cipher.Address]uint64) error {
+	txn, err := coin.DeserializeTransactionHex(strings.TrimSpace(rawTxn))
+	if err != nil {
+		return fmt.Errorf("decode transaction: %w", err)
+	}
+	change := inputAddresses(txn)
+	got := map[cipher.Address]uint64{}
+	for _, o := range txn.Out {
+		got[o.Address] += o.Coins
+	}
+	var bad []string
+	for addr, w := range want {
+		g := got[addr]
+		switch {
+		case g == w, g > w && change[addr]:
+		case g == 0:
+			bad = append(bad, fmt.Sprintf("%s is not paid (csv %s)", addr, coins(w)))
+		default:
+			bad = append(bad, fmt.Sprintf("%s is paid %s (csv %s)", addr, coins(g), coins(w)))
+		}
+	}
+	for addr, g := range got {
+		if _, ok := want[addr]; !ok && !change[addr] {
+			bad = append(bad, fmt.Sprintf("%s is paid %s and is not in the csv", addr, coins(g)))
+		}
+	}
+	if len(bad) > 0 {
+		slices.Sort(bad)
+		return fmt.Errorf("%w: %s", ErrPayoutMismatch, strings.Join(bad, "; "))
+	}
+	return nil
+}
+
+// inputAddresses are the addresses that signed txn's inputs, recovered from
+// the signatures. A bad signature gives some other address, but the node
+// then refuses the transaction anyway.
+func inputAddresses(txn coin.Transaction) map[cipher.Address]bool {
+	m := map[cipher.Address]bool{}
+	inner := txn.HashInner()
+	for i, in := range txn.In {
+		if i >= len(txn.Sigs) || txn.Sigs[i].Null() {
+			continue
+		}
+		if pk, err := cipher.PubKeyFromSig(txn.Sigs[i], cipher.AddSHA256(inner, in)); err == nil {
+			m[cipher.AddressFromPubKey(pk)] = true
+		}
+	}
+	return m
+}
+
+func coins(d uint64) string {
+	s, err := droplet.ToString(d)
+	if err != nil {
+		return strconv.FormatUint(d, 10) + " droplets"
+	}
+	return s
 }

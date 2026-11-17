@@ -78,7 +78,7 @@ type Scheduler struct {
 	DayCloseDelay time.Duration
 	Log           *logging.Logger
 
-	// run is held for the whole of a Calc or Collect, so two never overlap.
+	// run is held for the whole of a Calc, a Collect or a payout, so two never overlap.
 	run      sync.Mutex
 	mu       sync.Mutex
 	st       CycleStatus
@@ -325,6 +325,14 @@ func (s *Scheduler) RunOnce(ctx context.Context, reason string) (err error) {
 		l.WithField("date", res.Date).Info("Reward cycle done")
 	}
 	return err
+}
+
+// Exclusive runs fn with no Calc or Collect running. It waits for one in
+// progress, and none starts until fn returns.
+func (s *Scheduler) Exclusive(fn func() error) error {
+	s.run.Lock()
+	defer s.run.Unlock()
+	return fn()
 }
 
 // calc runs Calc, turning a panic into an error so the server lives on.

@@ -23,4 +23,4 @@ if [[ -z "$payout" ]] || echo "$payout" | grep -vx 'Skycoin Address, Reward Amou
   echo "$payout"
   exit 1
 fi
-skywire dmsg curl $REWARD_SYS_URL/reward -d "$(skycoin-cli createRawTransaction $WALLET_FILE -a $FROM_ADDRESS --csv <(echo "$payout" | tr -d ' ' | awk -F, '{printf "%s,%.3f\n", $1, int($2*1000)/1000}' |  grep -v '^,0.000$'))" -s $REWARD_WL_SK
+skywire dmsg curl $REWARD_SYS_URL/reward -d "$(skycoin-cli createRawTransaction $WALLET_FILE -a $FROM_ADDRESS -c $FROM_ADDRESS --csv <(echo "$payout" | tr -d ' ' | awk -F, '{printf "%s,%.3f\n", $1, int($2*1000)/1000}' | grep -v ',0\.000$'))" -s $REWARD_WL_SK

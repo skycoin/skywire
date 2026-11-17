@@ -119,6 +119,13 @@ func (d *dayCycle) calcDay(o rewardOpts) (cycleResult, error) {
 		res.skipped, res.note = true, "paid"
 		return res, nil
 	}
+	// A send in flight, or one that did not finish: its files are what was paid.
+	if _, err := os.Stat(filepath.Join(o.histDir, o.date+".txt.pending")); err == nil {
+		log.Warnf("Reward send pending for %s; outputs kept", o.date)
+		d.setWatch(o.date, nil)
+		res.skipped, res.note = true, "payout pending"
+		return res, nil
+	}
 	now := d.now()
 	closed := d.closedAt(o.date)
 
