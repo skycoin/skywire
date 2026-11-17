@@ -141,6 +141,14 @@ bytes. See `reward rules` for the human eligibility rules.
 - **`rewards script {getlogs|reward}`** → print the legacy bash scripts (getlogs.sh /
   reward.sh) to pipe to bash. `getlogs -m <ver>` / `reward -d <date>` prepend a var. Superseded
   by `rewards run`; kept for reference.
+- **`rewards send`** → distribute the oldest undistributed day (replaces scripts/rewards/sendrewards.sh).
+  Checks the local node (`--node`, default `http://127.0.0.1:6420`) and `/skycoin-rewards/s`, prints the
+  day's `_stats.txt`, asks (`-y/--yes` skips, refuses without it when stdin is no tty), GETs `/skycoin-rewards/payout`
+  (truncates via `rewards.PayoutDroplets`), refuses while an unconfirmed txn pays the wallet, change = new
+  entry (deterministic) or node's next bip44 change address, builds via the node wallet API (password asked
+  on the tty, never a flag), verifies exact payout + one unused change, POSTs `/reward` with `X-Reward-CSV`.
+  `SKYENV=<conf>` reads `WALLET_FILE`, `REWARD_SYS_URL`; `--wallet`/`--server` override. Server over
+  `--proxy` (default `socks5h://127.0.0.1:4445`) as `http://<pk>.dmsg`, or `--http <base>`.
 - **`rewards bot`** → telegram notifier. Watches `-w/--watch` (reward txid file); posts
   per-day stats on each new broadcast. Needs env `TG_BOT_TOKEN` + `TG_CHAT_ID`. `serve` embeds it.
   Bot API errors are logged with the token replaced by `<token>`.
