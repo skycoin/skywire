@@ -287,7 +287,7 @@ REWARD_SYS_URL="dmsg://036a70e6956061778e1883e928c1236189db14dfd446df23d83e45c32
 
 	c, cfg := newCmd()
 	require.NoError(t, applySkyenv(c, cfg, conf))
-	require.Equal(t, os.Getenv("HOME")+"/.skycoin/wallets/conf.wlt", cfg.wallet)
+	require.Equal(t, filepath.Clean(os.Getenv("HOME")+"/.skycoin/wallets/conf.wlt"), filepath.Clean(cfg.wallet))
 	require.Equal(t, "dmsg://036a70e6956061778e1883e928c1236189db14dfd446df23d83e45c321b330c91f:80", cfg.server)
 
 	c, cfg = newCmd()
