@@ -109,7 +109,12 @@ func applySkyenv(cmd *cobra.Command, cfg *sendConfig, skyenv string) error {
 	}
 	// The file may run skywire (WALLET_FILE=$(skywire skycoin cli ...)). Without
 	// SKYENV in its environment that skywire does not read the file again.
-	c := exec.Command("bash", "-c", `source "$SENDREWARDS_CONF" >/dev/null 2>&1 ; printf '%s\n%s\n' "$WALLET_FILE" "$REWARD_SYS_URL"`) //nolint:gosec
+	// Git Bash on Windows gives MSYS paths (/c/Users/...); cygpath turns them
+	// back into native ones. cygpath exists only there.
+	c := exec.Command("bash", "-c", `source "$SENDREWARDS_CONF" >/dev/null 2>&1
+w=$WALLET_FILE
+case $w in /*) command -v cygpath >/dev/null 2>&1 && w=$(cygpath -w "$w") ;; esac
+printf '%s\n%s\n' "$w" "$REWARD_SYS_URL"`) //nolint:gosec
 	c.Env = append(envWithout(os.Environ(), "SKYENV"), "SENDREWARDS_CONF="+path)
 	c.Stderr = io.Discard
 	out, err := c.Output()
