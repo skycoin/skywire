@@ -28,11 +28,11 @@ set -u
 
 say() { echo "tinygo-toolchain: $*" >&2; }
 
-command -v tinygo >/dev/null 2>&1 || { echo auto; exit 0; }
+command -v "${TINYGO:-tinygo}" >/dev/null 2>&1 || { echo auto; exit 0; }
 
 # Probe. The package does not exist, and does not need to: the toolchain check
 # happens first, so this returns immediately either way.
-probe=$(cd / && tinygo build -o /dev/null -target=wasm ./tinygo-toolchain-probe 2>&1)
+probe=$(cd / && "${TINYGO:-tinygo}" build -o /dev/null -target=wasm ./tinygo-toolchain-probe 2>&1)
 minor=$(printf '%s\n' "$probe" |
 	sed -n 's/.*requires go version [0-9][0-9.]* through \([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' |
 	head -1)
