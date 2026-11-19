@@ -1,12 +1,13 @@
 package proxystatus
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 )
 
 func TestRenderShowsTheAcceptCounters(t *testing.T) {
-	var b strings.Builder
+	var b bytes.Buffer
 	writeAcceptSection(&b, Snapshot{})
 	if b.Len() != 0 {
 		t.Fatalf("no accept counters should render nothing, got %q", b.String())

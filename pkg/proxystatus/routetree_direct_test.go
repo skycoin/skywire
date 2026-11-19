@@ -2,6 +2,7 @@
 package proxystatus
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -68,7 +69,7 @@ func renderTree(n *bitree.Node) string {
 	if n == nil {
 		return ""
 	}
-	var sb strings.Builder
+	var sb bytes.Buffer
 	var walk func(*bitree.Node)
 	walk = func(cur *bitree.Node) {
 		if cur == nil {

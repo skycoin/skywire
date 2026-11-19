@@ -80,6 +80,23 @@ func TestWriteJSON(t *testing.T) {
 		assert.Contains(t, w.Body.String(), "\n  ") // indented
 	})
 
+	t.Run("same bytes as Marshal, buffers reused", func(t *testing.T) {
+		big := map[string]string{"k": strings.Repeat("x", 4096)}
+		small := map[string]any{"a": []int{1, 2}, "h": "<b>&"}
+		for _, v := range []any{big, small, big, small} {
+			for _, q := range []string{"/", "/?pretty=1"} {
+				w := httptest.NewRecorder()
+				WriteJSON(w, httptest.NewRequest(http.MethodGet, q, nil), http.StatusOK, v)
+				want, err := json.Marshal(v)
+				if q != "/" {
+					want, err = json.MarshalIndent(v, "", "  ")
+				}
+				require.NoError(t, err)
+				assert.Equal(t, string(want)+"\n", w.Body.String())
+			}
+		}
+	})
+
 	t.Run("error value", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodGet, "/", nil)
