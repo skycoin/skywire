@@ -154,4 +154,36 @@ func TestClaimFirstHop_RefusesAHopALiveSiblingAlreadyHolds(t *testing.T) {
 	require.True(t, ok, "diversifying onto a free transport must still succeed")
 }
 
+// A dial that loses a claim used to exclude only the hop it lost, so it kept
+// re-picking hops other siblings had taken since its snapshot and then
+// reported the pool as settled. The refresh must pick up every current hold.
+func TestExcludeHeldFirstHops_RefreshesFromEveryHold(t *testing.T) {
+	lPK, _ := cipher.GenerateKeyPair()
+	exit, _ := cipher.GenerateKeyPair()
+	liveMid, _ := cipher.GenerateKeyPair()
+	const rPort = routing.Port(3)
+	r := newExclusionTestRouter(t, lPK)
+
+	liveTp := uuid.New()
+	seedSiblingRG(t, r, lPK, exit, liveMid, rPort, routing.Port(1001), liveTp)
+
+	flightTp, flightPeer := uuid.New(), mustPK(t)
+	_, ok := r.claimFirstHop(exit, rPort, []routing.Hop{{TpID: flightTp, From: lPK, To: flightPeer}})
+	require.True(t, ok)
+
+	lostTp, lostPeer := uuid.New(), mustPK(t)
+	lost := []routing.Hop{{TpID: lostTp, From: lPK, To: lostPeer}}
+	opts := &DialOptions{DiversifyTransports: true, RequireDisjointFirstHop: true}
+	r.excludeHeldFirstHops(lPK, exit, rPort, lost, opts)
+	r.excludeHeldFirstHops(lPK, exit, rPort, lost, opts)
+
+	require.ElementsMatch(t, []uuid.UUID{lostTp, flightTp, liveTp}, opts.ExcludeTransportIDs)
+	require.Contains(t, opts.ExcludeFirstHopPeers, flightPeer)
+	require.Contains(t, opts.ExcludeFirstHopPeers, lostPeer)
+	require.Contains(t, opts.ExcludeFirstHopPeers, liveMid)
+
+	free := []routing.Hop{{TpID: uuid.New(), From: lPK, To: mustPK(t)}}
+	require.False(t, r.firstHopExcluded(free, opts), "an untouched first hop stays free")
+}
+
 func mustIDs(ids []uuid.UUID, _ []cipher.PubKey, _ []string) []uuid.UUID { return ids }
