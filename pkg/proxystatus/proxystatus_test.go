@@ -2,6 +2,7 @@ package proxystatus
 
 import (
 	"bufio"
+	"bytes"
 	"math"
 	"net/http"
 	"regexp"
@@ -362,6 +363,20 @@ func TestContrastAA(t *testing.T) {
 	for _, gone := range []string{"#7a80a8", "--muted:#666"} {
 		if strings.Contains(css, gone) {
 			t.Errorf("css still contains low-contrast token %q", gone)
+		}
+	}
+}
+
+// WriteFragment into a reused buffer gives the same bytes as RenderFragment.
+func TestWriteFragmentReusedBuffer(t *testing.T) {
+	long := Snapshot{Surface: SurfaceSkysocks, Running: true, Logs: []string{strings.Repeat("long line ", 500)}}
+	short := Snapshot{Surface: SurfaceSkysocks, Logs: []string{"short"}}
+	var b bytes.Buffer
+	for _, snap := range []Snapshot{long, short, long} {
+		b.Reset()
+		WriteFragment(&b, snap)
+		if got, want := b.String(), string(RenderFragment(snap)); got != want {
+			t.Fatalf("reused buffer fragment differs:\n got %q\nwant %q", got, want)
 		}
 	}
 }

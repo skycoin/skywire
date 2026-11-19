@@ -2,6 +2,7 @@
 package httputil
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -10,11 +11,19 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
 var log = logging.MustGetLogger("httputil")
+
+// jsonBufPool holds WriteJSON's encode buffers. A polled reply such as the
+// hypervisor summary otherwise allocates its whole body twice per request.
+var jsonBufPool = sync.Pool{New: func() any { return new(bytes.Buffer) }} //nolint:gochecknoglobals
+
+// jsonBufMax is the largest buffer returned to jsonBufPool.
+const jsonBufMax = 4 << 20
 
 // WriteJSON writes a json object on a http.ResponseWriter with the given code.
 // A value that cannot be encoded answers 500. Write errors are only logged.
@@ -26,22 +35,27 @@ func WriteJSON(w http.ResponseWriter, r *http.Request, code int, v any) {
 	if err, ok := v.(error); ok {
 		v = map[string]any{"error": err.Error()}
 	}
-	// Marshal before writing the header, so a value that cannot be encoded
+	// Encode before writing the header, so a value that cannot be encoded
 	// answers 500 instead of a status with an empty or truncated body.
-	var body []byte
+	buf := jsonBufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer func() {
+		if buf.Cap() <= jsonBufMax {
+			jsonBufPool.Put(buf)
+		}
+	}()
+	enc := json.NewEncoder(buf)
 	if pretty {
-		body, err = json.MarshalIndent(v, "", "  ")
-	} else {
-		body, err = json.Marshal(v)
+		enc.SetIndent("", "  ")
 	}
-	if err != nil {
+	if err := enc.Encode(v); err != nil {
 		log.WithError(err).Error("Failed to encode JSON response")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	if _, err := w.Write(append(body, '\n')); err != nil {
+	if _, err := w.Write(buf.Bytes()); err != nil {
 		if isIOError(err) {
 			log.WithError(err).Debug("Failed to write JSON response (client likely disconnected)")
 			return
