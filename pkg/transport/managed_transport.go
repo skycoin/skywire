@@ -584,12 +584,33 @@ func (mt *ManagedTransport) datagramReadLoop(ctx context.Context, dc network.Dat
 	}
 }
 
+// dispatchQueueLen bounds the packets read but not yet dispatched on one
+// transport. The reader blocks once it is full.
+const dispatchQueueLen = 64
+
 // readLoop continuously reads packets from the underlying transport
-// and sends them to readCh
+// and hands them, in order, to a dispatch goroutine that sends them to readCh.
 // This is a blocking call
 func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 	log := mt.log.WithField("src", "read_loop")
 	defer mt.wg.Done()
+
+	// TinyGo scans goroutine stacks conservatively. Handler frames left in the
+	// slots of a reader parked in Read pinned dead buffers, so dispatch elsewhere.
+	queue := make(chan routing.Packet, dispatchQueueLen)
+	drained := make(chan struct{})
+	mt.wg.Add(1)
+	go mt.dispatchLoop(queue, drained, readCh)
+	stopped := false
+	stop := func() {
+		if !stopped {
+			stopped = true
+			close(queue)
+			<-drained
+		}
+	}
+	defer stop()
+
 	for {
 		p, tp, err := mt.readPacket()
 		if err != nil {
@@ -616,9 +637,26 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 			} else {
 				log.WithError(err).Warn("Failed to read packet, closing transport")
 			}
+			stop() // dispatch what was read before the transport closes
 			mt.closeWith("read: " + err.Error())
 			return
 		}
+		select {
+		case queue <- p:
+		case <-mt.done:
+			return
+		}
+	}
+}
+
+// dispatchLoop handles the packets readLoop queued, in the order read, and
+// sends the router's share to readCh. It closes drained when readLoop closes
+// queue or the transport closes.
+func (mt *ManagedTransport) dispatchLoop(queue <-chan routing.Packet, drained chan<- struct{}, readCh chan<- routing.Packet) {
+	log := mt.log.WithField("src", "read_loop")
+	defer mt.wg.Done()
+	defer close(drained)
+	for p := range queue {
 		if !mt.dispatchPacket(p) {
 			continue
 		}
