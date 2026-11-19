@@ -1,6 +1,7 @@
 import { HTTP_INTERCEPTORS } from '@angular/common/http';
 import { Route } from '@angular/router';
 
+import { NODE_CSRF_GUARDS_ACCESS } from '../../skycoin-wallet/app/node-access';
 import { WALLET_BASE_PATH } from '../../skycoin-wallet/app/wallet-path';
 import { AuthGuardService } from '../services/auth-guard.service';
 import { WalletBackendInterceptor } from './wallet-backend.interceptor';
@@ -56,6 +57,8 @@ export const walletRoute: Route = {
   component: WalletPageComponent,
   providers: [
     { provide: WALLET_BASE_PATH, useValue: '/wallet' },
+    // The node calls go through the hypervisor behind its login, never from the browser to the node.
+    { provide: NODE_CSRF_GUARDS_ACCESS, useValue: false },
     { provide: HTTP_INTERCEPTORS, useClass: WalletBackendInterceptor, multi: true },
   ],
   children: [{ path: '', loadChildren: loadSkycoinWallet }],
