@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"runtime/debug"
 	"time"
 
 	bolt "github.com/0magnet/bbolt"
@@ -83,6 +84,9 @@ func RepairIfCorrupt(path string) error {
 // that recover() actually catches the corruption panic instead of the
 // visor crash-looping.
 func probeIntegrity(path string) (probeErr error) {
+	// A truncated file leaves pages past its end in the mmap. Reading one
+	// is a memory fault, so turn faults into panics the recover can catch.
+	defer debug.SetPanicOnFault(debug.SetPanicOnFault(true))
 	defer func() {
 		if r := recover(); r != nil {
 			probeErr = fmt.Errorf("panic during integrity check: %v", r)
