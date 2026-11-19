@@ -66,6 +66,13 @@ func (l *AppLauncher) ResetConfig(conf AppLauncherConfig) {
 	for _, ac := range conf.Apps {
 		apps[ac.Name] = ac
 	}
+	// The visor adds internal apps such as pty and skymail outside the
+	// config's list. A config change must not drop them.
+	for name, ac := range l.apps {
+		if _, ok := apps[name]; !ok && ac.LauncherMode == string(appcommon.RunModeInternal) {
+			apps[name] = ac
+		}
+	}
 	l.apps = apps
 
 	// we shouldn't change directories of apps, it causes
