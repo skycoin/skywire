@@ -14,10 +14,12 @@
 package bbolthealth
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
+	"runtime/debug"
 	"time"
 
 	bolt "github.com/0magnet/bbolt"
@@ -66,7 +68,10 @@ func RepairIfCorrupt(path string) error {
 	} else if err != nil {
 		return fmt.Errorf("bbolthealth: stat %s: %w", path, err)
 	}
-	probeErr := probeIntegrity(path)
+	probeErr := checkTruncated(path)
+	if probeErr == nil {
+		probeErr = probeIntegrity(path)
+	}
 	if probeErr != nil {
 		return moveCorruptAside(path, probeErr)
 	}
@@ -83,6 +88,9 @@ func RepairIfCorrupt(path string) error {
 // that recover() actually catches the corruption panic instead of the
 // visor crash-looping.
 func probeIntegrity(path string) (probeErr error) {
+	// A truncated file leaves pages past its end in the mmap. Reading one
+	// is a memory fault, so turn faults into panics the recover can catch.
+	defer debug.SetPanicOnFault(debug.SetPanicOnFault(true))
 	defer func() {
 		if r := recover(); r != nil {
 			probeErr = fmt.Errorf("panic during integrity check: %v", r)
@@ -164,6 +172,45 @@ func moveCorruptAside(path string, reason error) error {
 	if err := os.Rename(path, bak); err != nil {
 		return fmt.Errorf("bbolthealth: %s corrupt (%v); also failed to move aside to %s: %w",
 			path, reason, bak, err)
+	}
+	return nil
+}
+
+// checkTruncated reports a file shorter than the page count its newest meta
+// page records. bbolt does not check this, and reading a page past the end
+// faults on unix, while on Windows the file is grown with zeros and Open
+// panics without returning a handle to close, so the file cannot be moved.
+func checkTruncated(path string) error {
+	f, err := os.Open(path) //nolint:gosec // path is the caller's db file
+	if err != nil {
+		return nil // let the bbolt open report it
+	}
+	defer f.Close() //nolint:errcheck
+	fi, err := f.Stat()
+	if err != nil {
+		return nil
+	}
+	// Meta layout from bbolt internal/common: a 16-byte page header, then
+	// magic, version, pageSize, flags, root (16), freelist, pgid, txid.
+	readMeta := func(off int64) (pageSize uint32, pgid, txid uint64, ok bool) {
+		var b [72]byte
+		if _, err := f.ReadAt(b[:], off); err != nil {
+			return 0, 0, 0, false
+		}
+		if binary.LittleEndian.Uint32(b[16:]) != 0xED0CDAED {
+			return 0, 0, 0, false
+		}
+		return binary.LittleEndian.Uint32(b[24:]), binary.LittleEndian.Uint64(b[56:]), binary.LittleEndian.Uint64(b[64:]), true
+	}
+	ps, pgid, txid, ok := readMeta(0)
+	if !ok || ps == 0 {
+		return nil
+	}
+	if _, pgid1, txid1, ok1 := readMeta(int64(ps)); ok1 && txid1 > txid {
+		pgid = pgid1
+	}
+	if want := int64(pgid) * int64(ps); fi.Size() < want { //nolint:gosec // page counts fit in int64
+		return fmt.Errorf("truncated: %d bytes, meta records %d pages of %d", fi.Size(), pgid, ps)
 	}
 	return nil
 }

@@ -127,7 +127,7 @@ func ui2CallFor(r *http.Request, pk, app string, h http.Handler, v any) error {
 	if v != nil {
 		b, _ = json.Marshal(v) //nolint:errcheck
 	}
-	r2 := r.Clone(r.Context())
+	r2 := innerReq(r)
 	r2.SetPathValue("pk", pk)
 	r2.SetPathValue("app", app)
 	r2.Body = io.NopCloser(bytes.NewReader(b))

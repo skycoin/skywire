@@ -1023,68 +1023,42 @@ func buildRouter() http.Handler {
 				w.Write([]byte("skywire skycoin cli status:\n\n" + status + "\n\nskywire skycoin cli status error:\n\n" + err.Error())) //nolint:errcheck,gosec
 				return
 			}
-			// Find all combined transaction CSVs, the broadcast inputs.
-			dates, err := histRewardDates(wd + `/hist`)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte("histRewardDates(wd + /hist):\n\nError:\n\n" + err.Error())) //nolint:errcheck,gosec
+			// The raw transaction is the request body. Pay the oldest
+			// undistributed day with it, if it pays that day's csv.
+			if decoded, err := script.Exec("skywire skycoin cli decodeRawTransaction " + string(body)).String(); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte("skywire skycoin cli decodeRawTransaction:\n\n" + decoded + "\n\nskywire skycoin cli decodeRawTransaction error:\n\n" + err.Error())) //nolint:errcheck,gosec
 				return
 			}
-			//and range through the results
-			for _, d := range dates {
-				f1 := wd + `/hist/` + d + "_rewardtxn0.csv"
-				//look for .txt file with the same date
-				g, err := script.File(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String()
-				//error is expected here - file does not exist when rewards have not been distributed for that _rewardtxn0.csv
-				//also consider rewards not distributed if the file exists but is empty or contains "test" - for testing
-				if err != nil || g == "" || g == "\n" || g == "test" || g == "test\n" {
-					//raw transaction is the request body ; decode it to make sure it's good
-					decoded, err := script.Exec("skywire skycoin cli decodeRawTransaction " + string(body)).String()
-					if err != nil {
-						w.WriteHeader(http.StatusBadRequest)
-						w.Write([]byte("skywire skycoin cli decodeRawTransaction:\n\n" + decoded + "\n\nskywire skycoin cli decodeRawTransaction error:\n\n" + err.Error())) //nolint:errcheck,gosec
-						return
-					}
-					// Never send to a single reward address that has sent coins, whatever the day.
-					if err := checkPayoutTxn(wd+`/hist`, d, string(body)); err != nil {
-						log.Warnf("reward transaction for %s refused: %v", d, err)
-						w.WriteHeader(http.StatusBadRequest)
-						w.Write([]byte("reward transaction for " + d + " refused:\n\n" + err.Error() + "\n\nBuild it from GET /skycoin-rewards/payout instead.")) //nolint:errcheck,gosec
-						return
-					}
-					// Broadcast, and record the transaction id for that day's reward.
-					marker := strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)
-					txid, err := broadcastAndRecord(marker, func() (string, error) {
-						return script.Exec("skywire skycoin cli broadcastTransaction " + string(body)).String()
-					})
-					if errors.Is(err, errUnrecorded) {
-						log.Errorf("reward transaction %s for %s was broadcast but not recorded: %v", strings.TrimSpace(txid), d, err)
-						w.WriteHeader(http.StatusInternalServerError)
-						w.Write([]byte("THE TRANSACTION WAS BROADCAST. Do not send it again.\n\nWrite this transaction id to " + marker + " by hand:\n\n" + txid + "\n\nerror:\n\n" + err.Error())) //nolint:errcheck,gosec
-						return
-					}
-					if err != nil {
-						w.WriteHeader(http.StatusInternalServerError)
-						w.Write([]byte("skywire skycoin cli broadcastTransaction:\n\n" + txid + "\n\nerror:\n\n" + err.Error())) //nolint:errcheck,gosec
-						return
-					}
-					//record the transaction ID for the reward notification system - append the file!
-					txnFile := wd + `/` + "transactions0.txt"
-					cmdutil.Printf("[reward] Appending txid to %s\n", txnFile)
-					_, err = script.Echo(txid).AppendFile(txnFile)
-					if err != nil {
-						w.WriteHeader(http.StatusInternalServerError)
-						w.Write([]byte(`script.Echo(txid).AppendFile(wd + / + "transactions0.txt")\n\n` + txid + "\n\nerror:\n\n" + err.Error())) //nolint:errcheck,gosec
-						return
-					}
-					w.WriteHeader(http.StatusOK)
-					w.Write([]byte(txid)) //nolint:errcheck,gosec
-					return
+			_, txid, err := sendPayout(wd+`/hist`, string(body), r.Header.Get(PayoutCSVHeader), func() (string, error) {
+				return script.Exec("skywire skycoin cli broadcastTransaction " + string(body)).String()
+			})
+			if pe := (*payoutError)(nil); errors.As(err, &pe) {
+				w.WriteHeader(pe.code)
+				msg := pe.msg
+				if pe.code == http.StatusNotFound {
+					h, _ := script.FindFiles(wd + `/hist/`).String() //nolint:errcheck,gosec
+					msg += "\n\n" + h
 				}
+				w.Write([]byte(msg)) //nolint:errcheck,gosec
+				return
 			}
-			w.WriteHeader(http.StatusNotFound)
-			h, _ := script.FindFiles(wd + `/hist/`).String()               //nolint:errcheck,gosec
-			w.Write([]byte("No undistributed rewards csv found.\n\n" + h)) //nolint:errcheck,gosec
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte(err.Error())) //nolint:errcheck,gosec
+				return
+			}
+			//record the transaction ID for the reward notification system - append the file!
+			txnFile := wd + `/` + "transactions0.txt"
+			cmdutil.Printf("[reward] Appending txid to %s\n", txnFile)
+			_, err = script.Echo(txid).AppendFile(txnFile)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte(`script.Echo(txid).AppendFile(wd + / + "transactions0.txt")\n\n` + txid + "\n\nerror:\n\n" + err.Error())) //nolint:errcheck,gosec
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(txid)) //nolint:errcheck,gosec
 		})
 
 		// The oldest undistributed day's reward transaction CSV, without the
@@ -1098,10 +1072,24 @@ func buildRouter() http.Handler {
 				w.Write([]byte("reward calculation running")) //nolint:errcheck,gosec
 				return
 			}
-			day, csv, err := nextPayout(wd + `/hist`)
+			var day string
+			var csv []byte
+			// Under the lock, so a calculation starting now cannot hand out half its files.
+			err := payoutExclusive(func() (err error) {
+				day, csv, err = nextPayout(wd + `/hist`)
+				return err
+			})
 			switch {
 			case errors.Is(err, errNoPayout):
 				w.WriteHeader(http.StatusNotFound)
+				w.Write([]byte(err.Error())) //nolint:errcheck,gosec
+				return
+			case errors.Is(err, errPayoutPending):
+				w.WriteHeader(http.StatusConflict)
+				w.Write([]byte(err.Error())) //nolint:errcheck,gosec
+				return
+			case errors.Is(err, errCycleRunning):
+				w.WriteHeader(http.StatusServiceUnavailable)
 				w.Write([]byte(err.Error())) //nolint:errcheck,gosec
 				return
 			case err != nil:
@@ -1112,6 +1100,12 @@ func buildRouter() http.Handler {
 			}
 			w.Header().Set("Content-Type", "text/plain")
 			w.Header().Set("X-Reward-Day", day)
+			w.Header().Set(PayoutCSVHeader, PayoutCSVHash(csv))
+			if s := currentScheduler(); s != nil {
+				if st := s.Status(); st.LastDate == day && st.InputsHash != "" {
+					w.Header().Set("X-Reward-Inputs", st.InputsHash)
+				}
+			}
 			w.WriteHeader(http.StatusOK)
 			w.Write(csv) //nolint:errcheck,gosec
 		})

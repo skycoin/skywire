@@ -129,6 +129,7 @@
     <string name="call_missed_title">Missed call</string>
     <string name="chat_notif_join_request">Group join request</string>
     <string name="chat_notif_message_request">Message request</string>
+    <string name="chat_notif_group_message">Group message</string>
     <plurals name="chat_notif_join_waiting">
         <item quantity="one">%1$d waiting to join %2$s</item>
         <item quantity="other">%1$d waiting to join %2$s</item>
@@ -743,6 +744,8 @@
     <string name="wallet_pending_removed">Removed from the node\'s pool</string>
     <string name="wallet_outputs_none_wallet">This wallet holds no unspent outputs.</string>
     <string name="wallet_usd_value">≈ %1$s</string>
+    <string name="wallet_usd_as_of">Price from %1$s</string>
+    <string name="wallet_usd_unavailable">USD price not available now: coinpaprika.com did not answer.</string>
     <string name="wallet_tx_usd_now">Value now</string>
     <string name="settings_wallet_prices">Prices in US dollars</string>
     <string name="settings_wallet_prices_hint">Show wallet balances and amounts in USD too. Prices come from coinpaprika.com, which then sees this phone\'s internet address and which coins you look at. Off by default.</string>

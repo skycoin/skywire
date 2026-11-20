@@ -45,7 +45,7 @@ skywire cli config gen
       --sudph int                            udp transport listening port (0 = random / shared master port)
       --transport-port int                   shared master transport port for all transport types (0 = per-type ports)
       --min-hops int                         minimum route hops (1 = allow direct 1-hop routes, >=2 = force multihop through intermediaries for sender privacy) (default 1)
-      --ar-transport-limit int               address-resolver registration: 0 = stay registered, N>0 = deregister after N transports, N<0 = never register (inbound-invisible)
+      --ar-transport-limit int               address-resolver registration: >=0 = register (default), <0 = never register (no inbound direct transports); only the sign matters
       --no-direct-transports                 never create direct p2p transports; dmsg (relay) is still allowed
       --no-dmsg-server-transports            do not keep a transport to each dmsg server the visor holds a session with
       --pty-rpc-exec                         allow visor-RPC-initiated dmsgpty exec (control/jump node opt-in; off = closes a local privilege-escalation vector)
@@ -158,7 +158,7 @@ skywire cli config gen
       --stun string                          comma-separated list of STUN servers
       --timeout string                       graceful shutdown timeout (e.g. 10s)
       --regtimeout string                    public visor registration timeout (e.g. 10m)
-      --maxtransports int                    public visor max transports
+      --maxtransports int                    public visor: stop advertising in service discovery above N distinct peers (soft limit, closes nothing)
       --cliaddr string                       CLI RPC address (e.g. 0.0.0.0:3435 for Docker)
       --lan-dmsg-port int                    embedded DMSG server TCP port (0 = OS-assigned at runtime; pin via LANDMSGPORT for stable WAN reachability)
       --lan-dmsg-public string               embedded DMSG server WAN-reachable address (host:port; requires port-forward)

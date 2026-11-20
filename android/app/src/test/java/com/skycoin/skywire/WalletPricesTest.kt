@@ -31,4 +31,16 @@ class WalletPricesTest {
         assertEquals("10.00", CoinSpec.SKY.usdPlain(133_334_000uL, 0.075))
         assertEquals("1.50", CoinSpec.ETH.usdPlain(1_000_000uL, 1500.0)) // 0.001 ETH in gwei units
     }
+
+    /** The stored form of a quote: a price kept across a restart, or nothing when it does not read. */
+    @Test
+    fun aQuoteSurvivesBeingStored() {
+        val quote = WalletPrices.Quote(0.042841804154099855, 1_795_000_000_000)
+        assertEquals(quote, WalletPrices.decode(WalletPrices.encode(quote)))
+        assertNull(WalletPrices.decode(""))
+        assertNull(WalletPrices.decode("0.04"))
+        assertNull(WalletPrices.decode("0.0|1795000000000"))
+        assertNull(WalletPrices.decode("NaN|1795000000000"))
+        assertNull(WalletPrices.decode("abc|def"))
+    }
 }

@@ -16,6 +16,10 @@ RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 COMMIT := $(shell git rev-list -1 HEAD)
 
 PROJECT_BASE := github.com/skycoin/skywire
+
+# The tinygo the TinyGo targets run, kept current with the 0magnet/tinygo fork
+# toolchain release by scripts/tinygo-fork.sh. Resolved once, on first use.
+TINYGO = $(eval TINYGO := $$(shell sh "$(CURDIR)/scripts/tinygo-fork.sh"))$(TINYGO)
 ifeq ($(OS),Windows_NT)
 	SHELL := pwsh
 	OPTS?=powershell -Command setx GO111MODULE on;
@@ -496,7 +500,7 @@ hostbridge-dist: ## Rebuild the TinyGo host bridges the wasm visor embeds (needs
 	for t in linux/amd64 linux/arm64 linux/arm linux/386 darwin/amd64 darwin/arm64 windows/amd64; do \
 		os=$${t%/*}; arch=$${t#*/}; ext=; [ $$os = windows ] && ext=.exe; \
 		f=pkg/hostbridge/dist/skywire-hostbridge-$$os-$$arch$$ext; \
-		GOOS=$$os GOARCH=$$arch tinygo build -no-debug -o $$f ./cmd/hostbridge && gzip -9 -n -f $$f || exit 1; \
+		GOOS=$$os GOARCH=$$arch $(TINYGO) build -no-debug -o $$f ./cmd/hostbridge && gzip -9 -n -f $$f || exit 1; \
 	done
 
 doc-gen: ## Regenerate docs/skywire/ from the live cobra command tree
@@ -547,7 +551,7 @@ test-wasm: ## Run the js/wasm tests under Node (GOOS=js GOARCH=wasm) — the bro
 	@echo "the js/wasm tests pass."
 
 build-wasm-tinygo: ## Compile-check the TinyGo wasm binaries (-o /dev/null, no run) — mirrors the CI wasm-tinygo lane
-	@command -v tinygo >/dev/null 2>&1 || { echo "tinygo not installed — see docs/examples/routing-policies/wasm/README.md (TinyGo 0.41+)"; exit 1; }
+	@command -v $(TINYGO) >/dev/null 2>&1 || { echo "tinygo not installed — see docs/examples/routing-policies/wasm/README.md (TinyGo 0.41+)"; exit 1; }
 	@# TinyGo trails Go by weeks after each Go minor, and refuses to run at all
 	@# against a newer one ("requires go version 1.19 through 1.26, got go1.27").
 	@# CI installs the current Go, so this lane went red the day #4221 bumped it.
@@ -563,27 +567,27 @@ build-wasm-tinygo: ## Compile-check the TinyGo wasm binaries (-o /dev/null, no r
 	@# for wasm. The one js/wasm module (the root binary) uses it and is
 	@# standard-Go-only — the `build-wasm` lane compile-checks it instead.
 	@echo "  tinygo build -target wasi (app-mux routing policy)"
-	@cd docs/examples/routing-policies/wasm/app-mux && GOTOOLCHAIN=$$(cd ../../../../.. && sh scripts/tinygo-toolchain.sh) tinygo build -target=wasi -no-debug -opt=2 -o /dev/null . || exit 1
+	@cd docs/examples/routing-policies/wasm/app-mux && GOTOOLCHAIN=$$(cd ../../../../.. && TINYGO=$(TINYGO) sh scripts/tinygo-toolchain.sh) $(TINYGO) build -target=wasi -no-debug -opt=2 -o /dev/null . || exit 1
 	@echo "all TinyGo wasm binaries compile."
 
 test-wasm-policy: ## Rebuild app-mux.wasm from source with TinyGo and run the policy loader test against the FRESH build (real WASM runtime smoke test)
-	@command -v tinygo >/dev/null 2>&1 || { echo "tinygo not installed — see docs/examples/routing-policies/wasm/README.md (TinyGo 0.32+)"; exit 1; }
+	@command -v $(TINYGO) >/dev/null 2>&1 || { echo "tinygo not installed — see docs/examples/routing-policies/wasm/README.md (TinyGo 0.32+)"; exit 1; }
 	@mkdir -p ./build/wasm-fixtures
-	cd docs/examples/routing-policies/wasm/app-mux && GOTOOLCHAIN=$$(cd ../../../../.. && sh scripts/tinygo-toolchain.sh) tinygo build -target=wasi -no-debug -opt=2 -o "$(CURDIR)/build/wasm-fixtures/app-mux.wasm" .
+	cd docs/examples/routing-policies/wasm/app-mux && GOTOOLCHAIN=$$(cd ../../../../.. && TINYGO=$(TINYGO) sh scripts/tinygo-toolchain.sh) $(TINYGO) build -target=wasi -no-debug -opt=2 -o "$(CURDIR)/build/wasm-fixtures/app-mux.wasm" .
 	SKYWIRE_APPMUX_WASM="$(CURDIR)/build/wasm-fixtures/app-mux.wasm" go test -mod=vendor -count=1 -v -run TestWasmEvaluator ./pkg/router/policy/wasm/
 
 BUNDLE_WASM_SRC = docs/examples/routing-policies/wasm/bundle
 BUNDLE_WASM = pkg/router/policy/wasm/presets/bundle.wasm
 
 bundle-wasm: ## Rebuild the COMMITTED routing-policy bundle.wasm (pkg/router/policy/wasm/presets) from source with TinyGo, then check parity
-	@command -v tinygo >/dev/null 2>&1 || { echo "tinygo not installed — see docs/examples/routing-policies/wasm/README.md (TinyGo 0.41+)"; exit 1; }
-	cd $(BUNDLE_WASM_SRC) && GOTOOLCHAIN=$$(cd "$(CURDIR)" && sh scripts/tinygo-toolchain.sh) tinygo build -target=wasi -no-debug -opt=2 -o "$(CURDIR)/$(BUNDLE_WASM)" .
+	@command -v $(TINYGO) >/dev/null 2>&1 || { echo "tinygo not installed — see docs/examples/routing-policies/wasm/README.md (TinyGo 0.41+)"; exit 1; }
+	cd $(BUNDLE_WASM_SRC) && GOTOOLCHAIN=$$(cd "$(CURDIR)" && TINYGO=$(TINYGO) sh scripts/tinygo-toolchain.sh) $(TINYGO) build -target=wasi -no-debug -opt=2 -o "$(CURDIR)/$(BUNDLE_WASM)" .
 	@echo "rebuilt $(BUNDLE_WASM). Verifying native<->wazero parity..."
 	go test -count=1 -run 'TestDecideParity|TestTickParity' ./pkg/router/policy/wasm/presets/
 	@echo "review with 'git status' and commit $(BUNDLE_WASM) intentionally."
 
 check-bundle-wasm: ## Warn if the committed routing-policy bundle.wasm differs from a fresh TinyGo build
-	@command -v tinygo >/dev/null 2>&1 || { echo "tinygo not installed — see docs/examples/routing-policies/wasm/README.md (TinyGo 0.41+)"; exit 1; }
+	@command -v $(TINYGO) >/dev/null 2>&1 || { echo "tinygo not installed — see docs/examples/routing-policies/wasm/README.md (TinyGo 0.41+)"; exit 1; }
 	@# pkg/router/policy/wasm/presets/bundle.wasm is a build artifact committed to
 	@# the repo and embedded in the visor: a native visor on a preset:* policy runs
 	@# it via wazero. A stale one ships DIFFERENT routing decisions (and different
@@ -609,7 +613,7 @@ check-bundle-wasm: ## Warn if the committed routing-policy bundle.wasm differs f
 	@# that goes with it, and a hint that cannot distinguish "rebuilt elsewhere"
 	@# from "out of date" has no business failing a build.
 	@tmp=$$(mktemp) && \
-	( cd $(BUNDLE_WASM_SRC) && GOTOOLCHAIN=$$(cd "$(CURDIR)" && sh scripts/tinygo-toolchain.sh) tinygo build -target=wasi -no-debug -opt=2 -o "$$tmp" . ) && \
+	( cd $(BUNDLE_WASM_SRC) && GOTOOLCHAIN=$$(cd "$(CURDIR)" && TINYGO=$(TINYGO) sh scripts/tinygo-toolchain.sh) $(TINYGO) build -target=wasi -no-debug -opt=2 -o "$$tmp" . ) && \
 	if cmp -s "$$tmp" "$(BUNDLE_WASM)"; then rm -f "$$tmp"; echo "The committed routing-policy bundle.wasm is byte-identical to a fresh build."; else \
 		echo "NOTE: the committed routing-policy bundle.wasm differs from a fresh build here."; \
 		echo "      Byte equality does not hold across toolchain builds, so this is not by"; \

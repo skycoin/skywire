@@ -18,6 +18,7 @@
 package router
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"sync"
@@ -192,4 +193,46 @@ func (r *router) claimFirstHop(rPK cipher.PubKey, rPort routing.Port, hops []rou
 		return nil, false
 	}
 	return r.firstHopHolds.claim(dialDstKey(rPK, rPort), hold)
+}
+
+// maxFirstHopClaimLosses bounds the re-picks one dial makes after losing a
+// first-hop claim. A lost claim is contention, not a failed route.
+const maxFirstHopClaimLosses = 16
+
+// errFirstHopClaimContention is a dial that kept losing first-hop claims to
+// its siblings. It is retryable, unlike ErrNoDisjointFirstHop.
+var errFirstHopClaimContention = errors.New("first-hop claims kept colliding with sibling dials")
+
+// excludeHeldFirstHops refreshes opts after a lost claim with every first hop
+// held now, in flight or live, and with the lost hop's transport, peer and IP.
+func (r *router) excludeHeldFirstHops(lPK, rPK cipher.PubKey, rPort routing.Port, lost []routing.Hop, opts *DialOptions) {
+	if opts == nil || len(lost) == 0 {
+		return
+	}
+	opts.ExcludeTransportIDs = appendMissing(opts.ExcludeTransportIDs, lost[0].TpID)
+	opts.ExcludeFirstHopPeers = appendMissing(opts.ExcludeFirstHopPeers, lost[0].To)
+	if r.tm != nil {
+		if tp := r.tm.Transport(lost[0].TpID); tp != nil && tp.RemoteIP() != "" {
+			opts.ExcludeFirstHopIPs = appendMissing(opts.ExcludeFirstHopIPs, tp.RemoteIP())
+		}
+	}
+	ids, peers, ips := r.inFlightFirstHopExclusions(rPK, rPort)
+	opts.ExcludeTransportIDs = appendMissing(opts.ExcludeTransportIDs, ids...)
+	opts.ExcludeFirstHopPeers = appendMissing(opts.ExcludeFirstHopPeers, peers...)
+	opts.ExcludeFirstHopIPs = appendMissing(opts.ExcludeFirstHopIPs, ips...)
+	if ids, pks, peers, ips, count := r.siblingRouteGroupExclusions(lPK, rPK, rPort); count > 0 {
+		opts.ExcludeTransportIDs = appendMissing(opts.ExcludeTransportIDs, ids...)
+		opts.ExcludeIntermediatePKs = appendMissing(opts.ExcludeIntermediatePKs, pks...)
+		opts.ExcludeFirstHopPeers = appendMissing(opts.ExcludeFirstHopPeers, peers...)
+		opts.ExcludeFirstHopIPs = appendMissing(opts.ExcludeFirstHopIPs, ips...)
+	}
+}
+
+func appendMissing[T comparable](s []T, vs ...T) []T {
+	for _, v := range vs {
+		if !slices.Contains(s, v) {
+			s = append(s, v)
+		}
+	}
+	return s
 }

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"os/exec"
 	"strings"
 
 	"golang.org/x/sys/unix"
@@ -15,6 +16,9 @@ import (
 	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/vpn/netctl"
 )
+
+// errIPTablesMissing: the vpn-server sets the FORWARD policy and NAT through iptables.
+var errIPTablesMissing = errors.New("iptables is not installed: install the iptables package")
 
 const (
 	getIPTablesForwardPolicyCMD    = "iptables -L | grep \"Chain FORWARD\" | tr -d '()' | awk '{print $4}'"
@@ -27,6 +31,9 @@ const (
 
 // GetIPTablesForwardPolicy gets current policy for iptables `forward` chain.
 func GetIPTablesForwardPolicy() (string, error) {
+	if _, err := exec.LookPath("iptables"); err != nil {
+		return "", errIPTablesMissing
+	}
 	outputBytes, err := osutil.RunElevatedWithResult("sh", "-c", getIPTablesForwardPolicyCMD)
 	if err != nil {
 		return "", err

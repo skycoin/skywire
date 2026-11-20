@@ -2,6 +2,7 @@
 package proxystatus
 
 import (
+	"bytes"
 	"fmt"
 	"html"
 	"strings"
@@ -55,7 +56,7 @@ const pollMs = 2000
 // initial paint, so the page still works with JS/WebSocket unavailable. Other
 // surfaces have no WebSocket endpoint and fall back to a meta refresh, as before.
 func Render(snap Snapshot) []byte {
-	var b strings.Builder
+	var b bytes.Buffer
 	surface := html.EscapeString(string(snap.Surface))
 	live := snap.Surface == SurfaceSkysocks
 	b.WriteString("<!doctype html><html lang=en><head><meta charset=utf-8>")
@@ -118,7 +119,7 @@ func Render(snap Snapshot) []byte {
 	}
 
 	b.WriteString("</body></html>")
-	return []byte(b.String())
+	return b.Bytes()
 }
 
 // RenderFragment renders ONLY the live region — the inner HTML of
@@ -130,9 +131,15 @@ func Render(snap Snapshot) []byte {
 // the fragment (the <pre> log block) ride through the TEXT frame as-is, so no
 // escaping is needed.
 func RenderFragment(snap Snapshot) []byte {
-	var b strings.Builder
+	var b bytes.Buffer
 	writeLiveRegion(&b, snap)
-	return []byte(b.String())
+	return b.Bytes()
+}
+
+// WriteFragment appends what RenderFragment returns to b, so a caller pushing
+// the fragment every tick can reuse one buffer.
+func WriteFragment(b *bytes.Buffer, snap Snapshot) {
+	writeLiveRegion(b, snap)
 }
 
 // liveScript opens a WebSocket to <origin>/ws and replaces the live region's
@@ -344,7 +351,7 @@ const graphScript = `<script>(function(){` +
 
 // writeLiveRegion writes the dynamic status content (pills, per-leg mux, events,
 // recent log) shared by Render (page shell) and RenderFragment (SSE push).
-func writeLiveRegion(b *strings.Builder, snap Snapshot) {
+func writeLiveRegion(b *bytes.Buffer, snap Snapshot) {
 	if snap.Note != "" {
 		fmt.Fprintf(b, `<p class="note">%s</p>`, html.EscapeString(snap.Note))
 	}
@@ -376,7 +383,7 @@ func writeLiveRegion(b *strings.Builder, snap Snapshot) {
 // uptime, the listener/suffix it answers for, the downstream chain target and the
 // request counters the layer's own Stats already track. Omitted entirely for a
 // surface with no Layer (skysocks), so the existing page is untouched.
-func writeLayerSection(b *strings.Builder, snap Snapshot) {
+func writeLayerSection(b *bytes.Buffer, snap Snapshot) {
 	l := snap.Layer
 	if l == nil {
 		return
@@ -427,7 +434,7 @@ func writeLayerSection(b *strings.Builder, snap Snapshot) {
 // writeSessionsSection renders the dmsg client's established server sessions —
 // the dmsg surface's real "am I connected" answer. Server PKs are full and
 // click-to-copy. Omitted when the surface tracks no dmsg sessions.
-func writeSessionsSection(b *strings.Builder, snap Snapshot) {
+func writeSessionsSection(b *bytes.Buffer, snap Snapshot) {
 	// Rendered (including its "none connected" state, which is the interesting
 	// case) for the dmsg surface with a populated layer, and on the skywire
 	// surface when it carries the visor's sessions.
@@ -453,7 +460,7 @@ func writeSessionsSection(b *strings.Builder, snap Snapshot) {
 // writeNamesSection renders the layer's name resolution: which resolver answers
 // and the aliases it was configured with. Deliberately does NOT claim a lookup
 // history — neither resolving proxy caches lookups, so there is none to show.
-func writeNamesSection(b *strings.Builder, snap Snapshot) {
+func writeNamesSection(b *bytes.Buffer, snap Snapshot) {
 	n := snap.Names
 	if n == nil {
 		return
@@ -481,7 +488,7 @@ func writeNamesSection(b *strings.Builder, snap Snapshot) {
 
 // writeForwardsSection renders what this visor exposes to the mesh through the
 // surface's forwarding plane. Omitted when the surface has none.
-func writeForwardsSection(b *strings.Builder, snap Snapshot) {
+func writeForwardsSection(b *bytes.Buffer, snap Snapshot) {
 	if snap.Surface != SurfaceSkynet || snap.Layer == nil {
 		return
 	}
@@ -521,7 +528,7 @@ const requestsShown = 50
 // writeRequestsSection renders the resolving proxies' recent requests: the
 // host the browser asked for, the layer that took it, how it traveled and
 // how the dial ended.
-func writeRequestsSection(b *strings.Builder, snap Snapshot) {
+func writeRequestsSection(b *bytes.Buffer, snap Snapshot) {
 	if len(snap.Requests) == 0 {
 		return
 	}
@@ -545,7 +552,7 @@ func writeRequestsSection(b *strings.Builder, snap Snapshot) {
 	b.WriteString(`</tbody></table></section>`)
 }
 
-func writeConnsSection(b *strings.Builder, snap Snapshot) {
+func writeConnsSection(b *bytes.Buffer, snap Snapshot) {
 	if len(snap.Conns) == 0 {
 		return
 	}
@@ -589,7 +596,7 @@ func agoOrDash(t *time.Time) string {
 // live pill (ACTIVE with the in-flight split count, or IDLE) plus the cumulative
 // shape (splits · chunks · bytes, streams-per-split × chunk-size). Omitted
 // entirely when the surface does not range-split.
-func writeRangeSplitSection(b *strings.Builder, snap Snapshot) {
+func writeRangeSplitSection(b *bytes.Buffer, snap Snapshot) {
 	rs := snap.RangeSplit
 	if rs == nil || !rs.Enabled {
 		return
@@ -609,7 +616,7 @@ func writeRangeSplitSection(b *strings.Builder, snap Snapshot) {
 // writeAcceptSection renders the accept path's counters, which cover what
 // happened to a connection before it became a row in the streams table.
 // Omitted until something has been accepted.
-func writeAcceptSection(b *strings.Builder, snap Snapshot) {
+func writeAcceptSection(b *bytes.Buffer, snap Snapshot) {
 	a := snap.Accept
 	if a == nil {
 		return
@@ -633,7 +640,7 @@ func writeAcceptSection(b *strings.Builder, snap Snapshot) {
 // leg's end-to-end mux telemetry (hop count, gate state, route-rtt, rtx,
 // sent/recv share bars) hangs off the destination leaf for that leg. A static,
 // no-JS analog of the `cli proxy mux plot` panel.
-func writeMuxSection(b *strings.Builder, snap Snapshot) {
+func writeMuxSection(b *bytes.Buffer, snap Snapshot) {
 	if len(snap.Legs) == 0 {
 		// The dmsg surface has no route groups AT ALL — it relays over dmsg
 		// sessions, not the route plane — so saying "no active route group" there
@@ -727,7 +734,7 @@ func sectionToggle(snap Snapshot, name string) string {
 // stacked below the route tree; its own SHOW/HIDE toggle collapses the .rgbody
 // (canvas + legend + hint) via a body class, leaving the heading and the WebGL
 // context in place so a later reveal just re-fits.
-func writeGraphSection(b *strings.Builder) {
+func writeGraphSection(b *bytes.Buffer) {
 	b.WriteString(`<section id="rgraphsec" aria-label="route graph">`)
 	b.WriteString(`<h2>route graph<button type="button" class="sectoggle" data-sec="graph" ` +
 		`onclick="secToggle('graph')" aria-label="show or hide this section"></button></h2>`)
@@ -772,7 +779,7 @@ func writeGraphSection(b *strings.Builder) {
 // tunnel as active. Unlabeled tunnels (a single-tunnel session, or a route
 // group belonging to something else) are counted but carry no role word.
 // Omitted for a single tunnel, which has nothing to count.
-func writeTunnelCount(b *strings.Builder, snap Snapshot) {
+func writeTunnelCount(b *bytes.Buffer, snap Snapshot) {
 	if len(snap.Tunnels) < 2 {
 		return
 	}
@@ -806,14 +813,14 @@ func writeTunnelCount(b *strings.Builder, snap Snapshot) {
 // the stream-boundary header nodes (▚) and the per-stream leg accent bands (▏sN)
 // read as two distinct kinds of multiplexing. Rendered only when more than one
 // stream is present (single-stream trees carry no stream chrome to explain).
-func writeLayerLegend(b *strings.Builder) {
+func writeLayerLegend(b *bytes.Buffer) {
 	b.WriteString(`<div class="llayers">` +
 		`<span class="llayer stream-l"><b>` + StreamHeaderGlyph + ` tunnel</b> · independent route groups (--tunnels); <b>standby</b> = held in the pool, carrying nothing</span>` +
 		`<span class="llayer leg-l"><b>` + StreamBandGlyph + `sN leg</b> · packet-striping mux within a tunnel</span>` +
 		`</div>`)
 }
 
-func writeTreeLegend(b *strings.Builder) {
+func writeTreeLegend(b *bytes.Buffer) {
 	b.WriteString(`<div class="tlegend">` +
 		`<span class="lgnd src">source · this visor</span>` +
 		`<span class="lgnd hop-l1">hop 1</span>` +
@@ -997,7 +1004,7 @@ func legStableKey(l Leg) string { return l.RemotePK + "|" + l.TransportID }
 // ROUTE-GROUP latency (the stream's session RTT to the exit), labeled as such —
 // yamux exposes no per-stream round-trip, so it is not faked per stream. The
 // summary line carries the aggregate ↑/↓ across all open streams.
-func writeStreamsSection(b *strings.Builder, snap Snapshot) {
+func writeStreamsSection(b *bytes.Buffer, snap Snapshot) {
 	if len(snap.Streams) == 0 {
 		return
 	}
@@ -1068,7 +1075,7 @@ func firstToken(s string) string {
 // trailing field's KEY tinted to the level color (its =value left default). A
 // line that doesn't begin with a recognizable "[ts] LEVEL" shape is emitted as
 // plain default-foreground text (unchanged from the pre-token behavior).
-func writeLogLine(b *strings.Builder, line string) {
+func writeLogLine(b *bytes.Buffer, line string) {
 	esc := html.EscapeString
 	rest := line
 
@@ -1124,7 +1131,7 @@ func writeLogLine(b *strings.Builder, line string) {
 // logfmt field with its KEY tinted to cls and its =value left default. Field
 // values may contain spaces (unquoted), so a field runs until the next " key="
 // boundary. Spacing is preserved verbatim.
-func writeLogMsgFields(b *strings.Builder, s, cls string) {
+func writeLogMsgFields(b *bytes.Buffer, s, cls string) {
 	esc := html.EscapeString
 	starts := fieldStarts(s)
 	if len(starts) == 0 {
@@ -1209,7 +1216,7 @@ func leadingSpaces(s string) string {
 // the operator reads one chronological stream instead of two disjoint lists. The
 // live WebSocket restreams this fragment, and the inline script pins the pane to
 // the bottom so the newest line stays visible.
-func writeLogSection(b *strings.Builder, snap Snapshot) {
+func writeLogSection(b *bytes.Buffer, snap Snapshot) {
 	fmt.Fprintf(b, `<section><h2>route, transport &amp; log%s</h2>`, sectionToggle(snap, "log"))
 	lines := combinedLogLines(snap.Events, snap.Logs, maxLogLines)
 	if len(lines) == 0 {
@@ -1299,7 +1306,7 @@ func compactAge(ms int64) string {
 // mutate the route group and need an app→visor mux-control RPC that does not exist
 // yet (see the TODO in pkg/skysocks/client.go handleStatusControl). Non-skysocks
 // surfaces have no WebSocket and keep the fully-inert preview.
-func writeControlSeam(b *strings.Builder, snap Snapshot) {
+func writeControlSeam(b *bytes.Buffer, snap Snapshot) {
 	b.WriteString(`<section class="seam"><h2>route control <small>read-only preview</small></h2>`)
 	switch snap.Surface {
 	case SurfaceSkysocks:
@@ -1331,7 +1338,7 @@ func writeControlSeam(b *strings.Builder, snap Snapshot) {
 	b.WriteString(`</div></section>`)
 }
 
-func writeFooter(b *strings.Builder, snap Snapshot) {
+func writeFooter(b *bytes.Buffer, snap Snapshot) {
 	b.WriteString(`<footer>other surfaces: `)
 	first := true
 	for _, s := range []Surface{SurfaceSkywire, SurfaceDmsg, SurfaceSkynet, SurfaceSkysocks} {

@@ -24,8 +24,15 @@ func (f *windowFake) GetAllTransportMetrics(context.Context, store.MetricsQuery)
 
 // The startup cycle publishes the saved settled days as they were saved and
 // builds the rest from the rows, to the same bytes as pivoting the whole window.
+// Inside the late window yesterday is still open, so it is rebuilt too.
 func TestMetricsStartupPublishesSavedAndRebuiltDays(t *testing.T) {
-	now := time.Now().UTC()
+	day := time.Date(2026, 11, 19, 0, 0, 0, 0, time.UTC)
+	t.Run("midday", func(t *testing.T) { testMetricsStartup(t, day.Add(12*time.Hour)) })
+	t.Run("late window", func(t *testing.T) { testMetricsStartup(t, day.Add(5*time.Minute)) })
+}
+
+func testMetricsStartup(t *testing.T, now time.Time) {
+	open := store.OpenMetricsDays(now)
 	window := store.MetricsWindowDates(now, metricsWindowDays)
 	metrics := metricsFixture(60, 1)
 	for i := range metrics {
@@ -49,15 +56,15 @@ func TestMetricsStartupPublishesSavedAndRebuiltDays(t *testing.T) {
 	require.NoError(t, err)
 	defer pub.Close() //nolint:errcheck
 	m := &MetricsCXOPublisher{api: &API{store: fake}, pub: pub, log: logging.MustGetLogger("t"),
-		parts: map[string]int{}, unsaved: map[string][][]byte{}}
+		parts: map[string]int{}, unsaved: map[string][][]byte{}, now: func() time.Time { return now }}
 	m.publish(context.Background(), true)
 	require.NoError(t, pub.Flush())
 
 	pivoted := store.PivotDailyMetrics(metrics, window)
 	want := map[string][]byte{}
-	for _, d := range window {
+	for i, d := range window {
 		parts, ok := saved[d]
-		if !ok {
+		if !ok || i < open {
 			var err error
 			parts, err = gzipPartsFrom(pivoted[d], maxPublishBody, 0)
 			require.NoError(t, err)

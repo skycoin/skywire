@@ -243,3 +243,43 @@ func TestRepairIfCorrupt_SyncWalkCatchesPageCorruption(t *testing.T) {
 		t.Errorf("expected a .corrupt.<ts> sibling after repair; dir=%v", entries)
 	}
 }
+
+// A truncated file leaves pages the b-tree still points to past the end of
+// the file. Reading one is a memory fault, which must not crash the process.
+func TestRepairIfCorrupt_TruncatedFileMovedAside(t *testing.T) {
+	const pageSize = 4096
+	path := filepath.Join(t.TempDir(), "truncated.db")
+
+	db, err := bolt.Open(path, 0600, &bolt.Options{Timeout: time.Second, PageSize: pageSize})
+	if err != nil {
+		t.Fatalf("create bbolt: %v", err)
+	}
+	if err := db.Update(func(tx *bolt.Tx) error {
+		b, e := tx.CreateBucketIfNotExists([]byte("data"))
+		if e != nil {
+			return e
+		}
+		val := make([]byte, 256)
+		for i := range 4000 {
+			if e := b.Put(fmt.Appendf(nil, "key-%06d", i), val); e != nil {
+				return e
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("populate: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if err := os.Truncate(path, 8*pageSize); err != nil {
+		t.Fatalf("truncate: %v", err)
+	}
+
+	if err := RepairIfCorrupt(path); err != nil {
+		t.Fatalf("RepairIfCorrupt returned error: %v", err)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("truncated file should have been moved aside; still present (err=%v)", err)
+	}
+}

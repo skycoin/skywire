@@ -20,6 +20,7 @@ import (
 	"github.com/bitfield/script"
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/wlynxg/anet"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -191,7 +192,7 @@ func init() {
 	// recommended way to expose a public visor behind a single firewall rule.
 	skyenvIntVar(genConfigCmd.Flags(), &transportPort, "transport-port", "${TRANSPORTPORT:-0}", "shared master transport port for all transport types (0 = per-type ports)")
 	skyenvIntVar(genConfigCmd.Flags(), &genMinHops, "min-hops", "${MINHOPS:-1}", "minimum route hops (1 = allow direct 1-hop routes, >=2 = force multihop through intermediaries for sender privacy)")
-	skyenvIntVar(genConfigCmd.Flags(), &arTransportLimit, "ar-transport-limit", "${ARTRANSPORTLIMIT:-0}", "address-resolver registration: 0 = stay registered, N>0 = deregister after N transports, N<0 = never register (inbound-invisible)")
+	skyenvIntVar(genConfigCmd.Flags(), &arTransportLimit, "ar-transport-limit", "${ARTRANSPORTLIMIT:-0}", "address-resolver registration: >=0 = register (default), <0 = never register (no inbound direct transports); only the sign matters")
 	skyenvBoolVar(genConfigCmd.Flags(), &noDirectTransports, "no-direct-transports", "${NODIRECTTRANSPORTS:-false}", "never create direct p2p transports; dmsg (relay) is still allowed")
 	skyenvBoolVar(genConfigCmd.Flags(), &noDmsgServerTransports, "no-dmsg-server-transports", "${NODMSGSERVERTRANSPORTS:-false}", "do not keep a transport to each dmsg server the visor holds a session with")
 	skyenvBoolVar(genConfigCmd.Flags(), &ptyRPCExec, "pty-rpc-exec", "${PTYRPCEXEC:-false}", "allow visor-RPC-initiated dmsgpty exec (control/jump node opt-in; off = closes a local privilege-escalation vector)")
@@ -482,7 +483,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "timeout")
 	skyenvStringVar(genConfigCmd.Flags(), &publicVisorRegTimeout, "regtimeout", "${REGTIMEOUT}", "public visor registration timeout (e.g. 10m)")
 	gHiddenFlags = append(gHiddenFlags, "regtimeout")
-	skyenvIntVar(genConfigCmd.Flags(), &publicVisorMaxTransports, "maxtransports", "${MAXTRANSPORTS:-0}", "public visor max transports")
+	skyenvIntVar(genConfigCmd.Flags(), &publicVisorMaxTransports, "maxtransports", "${MAXTRANSPORTS:-0}", "public visor: stop advertising in service discovery above N distinct peers (soft limit, closes nothing)")
 	gHiddenFlags = append(gHiddenFlags, "maxtransports")
 	skyenvStringVar(genConfigCmd.Flags(), &cliAddr, "cliaddr", "${CLIADDR}", "CLI RPC address (e.g. 0.0.0.0:3435 for Docker)")
 	gHiddenFlags = append(gHiddenFlags, "cliaddr")
@@ -571,6 +572,7 @@ var genConfigCmd = &cobra.Command{
 		// anything reads a flag — is where its path is final.
 		skyenvfile = resolveSkyenvFile()
 		refreshSkyenvDefaults(cmd.Flags())
+		genFlags = cmd.Flags()
 		if envs || envfileOut != "" {
 			envfile = envfileTemplate
 			// Uncomment settings that match flags passed on the command line
@@ -1112,6 +1114,9 @@ func readExistingConfig(log *logging.Logger) {
 // oldConfCache holds the previously-read config for use across configure* functions.
 var oldConfCache *visorconfig.V1
 
+// genFlags is gen's flag set once it runs, for Changed checks outside the command.
+var genFlags *pflag.FlagSet
+
 // mergeExistingApps makes a regenerate non-destructive to the launcher apps.
 // Without it, `config gen -r` rebuilds the apps list from the current defaults,
 // which both adds newly-introduced apps AND silently drops any app the operator
@@ -1120,7 +1125,8 @@ var oldConfCache *visorconfig.V1
 //
 //   - operator-toggled fields on apps present in both (AutoStart, Args,
 //     LauncherMode, RestartPolicy) are restored from the old entry — so a regen
-//     doesn't reset e.g. a skysocks-client's --srv or an app you enabled;
+//     doesn't reset e.g. a skysocks-client's --srv or an app you enabled
+//     (an autostart set in skywire.conf or by flag still wins, #6184);
 //   - custom apps present only in the old config are carried over verbatim; and
 //   - brand-new default apps (added since the old config was written) still
 //     appear.
@@ -1178,6 +1184,7 @@ func mergeExistingApps(log *logging.Logger) {
 	for _, a := range old {
 		oldByName[a.Name] = a
 	}
+	declared := declaredAutostarts()
 	newByName := make(map[string]struct{}, len(conf.Launcher.Apps))
 	var added []string
 	for i := range conf.Launcher.Apps {
@@ -1209,6 +1216,9 @@ func mergeExistingApps(log *logging.Logger) {
 				conf.Launcher.Apps[i].Args = setFlag(conf.Launcher.Apps[i].Args, "--ca", resolverCA)
 			}
 		}
+		if on, ok := declared[name]; ok {
+			conf.Launcher.Apps[i].AutoStart = on
+		}
 		// Env belongs with the args it was written for: an old skycoin-web entry
 		// reaches its .dmsg node through HTTP_PROXY, which its args do not carry.
 		if len(prev.Env) > 0 {
@@ -1234,6 +1244,31 @@ func mergeExistingApps(log *logging.Logger) {
 	if len(carried) > 0 {
 		log.Infof("regen: preserved %d custom app(s): %s", len(carried), strings.Join(carried, ", "))
 	}
+}
+
+// declaredAutostarts returns the autostart of each app whose toggle is set on
+// the command line or in skywire.conf. A regen keeps the old autostart for the rest.
+func declaredAutostarts() map[string]bool {
+	toggles := []struct {
+		app, flag, key string
+		on             bool
+	}{
+		{skyenv.SkychatName, "servechat", "SKYCHAT", skychatEnable},
+		{skyenv.SkysocksName, "serveproxy", "PROXYSERVER", proxyServerEnable},
+		{skyenv.VPNServerName, "servevpn", "VPNSERVER", vpnServerEnable},
+		{skyenv.VPNRouterName, "servevpnrouter", "VPNROUTER", vpnRouterEnable},
+		{skyenv.SkyDNSName, "skydns", "SKYDNS", skyDNSEnable},
+		{skyenv.SkycoinWebName, "skycoinweb", "SKYCOINWEB", skycoinWebEnable},
+		{skyenv.SkycoinDaemonName, "skycoind", "SKYCOIND", skycoinDaemonEnable},
+	}
+	fs := genFlags
+	out := make(map[string]bool, len(toggles))
+	for _, t := range toggles {
+		if (fs != nil && fs.Changed(t.flag)) || scriptExecString("${"+t.key+"}") != "" {
+			out[t.app] = t.on
+		}
+	}
+	return out
 }
 
 // noServerAppsOn turns off vpn-server and skysocks autostart on js. A browser

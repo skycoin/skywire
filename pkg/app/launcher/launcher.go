@@ -84,6 +84,13 @@ func (l *AppLauncher) ResetConfig(conf AppLauncherConfig) {
 	defer l.mx.Unlock()
 
 	list, apps := withOwn(conf.Apps, l.conf.Own)
+	// An internal app the visor added outside the own list stays too, as
+	// on develop (#6280).
+	for name, ac := range l.apps {
+		if _, ok := apps[name]; !ok && ac.LauncherMode == string(appcommon.RunModeInternal) {
+			apps[name] = ac
+		}
+	}
 	l.apps = apps
 
 	// we shouldn't change directories of apps, it causes

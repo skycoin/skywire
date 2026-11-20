@@ -339,6 +339,7 @@ func (r *router) DialRoutes(
 	// siblingRouteGroupExclusions reports the same hop on its own. See
 	// dial_first_hop_holds.go (#5125).
 	var claimReleases []func()
+	claimLosses := 0
 	defer func() {
 		for _, release := range claimReleases {
 			release()
@@ -592,14 +593,17 @@ func (r *router) DialRoutes(
 		if opts != nil && opts.DiversifyTransports && len(forwardPath) > 0 {
 			release, claimed := r.claimFirstHop(rPK, rPort, forwardPath)
 			if !claimed {
+				claimLosses++
 				opts.note("first hop %s is claimed by an in-flight sibling dial; re-picking", forwardPath[0].TpID.String()[:8])
-				opts.ExcludeTransportIDs = append(opts.ExcludeTransportIDs, forwardPath[0].TpID)
-				opts.ExcludeFirstHopPeers = append(opts.ExcludeFirstHopPeers, forwardPath[0].To)
-				if attempt < maxFetchAttempts {
+				r.excludeHeldFirstHops(lPK, rPK, rPort, forwardPath, opts)
+				// A lost claim says nothing about the topology, so it does not
+				// spend a fetch attempt and never reports the pool as settled.
+				if claimLosses <= maxFirstHopClaimLosses {
+					attempt--
 					continue
 				}
 				if opts.RequireDisjointFirstHop {
-					return nil, noDisjointFirstHopErr(rPK, 1)
+					return nil, errFirstHopClaimContention
 				}
 			} else {
 				claimReleases = append(claimReleases, release)

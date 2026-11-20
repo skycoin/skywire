@@ -34,6 +34,7 @@ skywire cli rewards
 - [loginchain](loginchain/README.md) — start the login chain nodes (block publisher + peer)
 - [run](run/README.md) — run the full hourly reward cycle in-process (no bash)
 - [script](script/README.md) — print reward system scripts
+- [send](send/README.md) — build the day's reward transaction and send it to the reward system
 - [svc](svc/README.md) — verify a visor's service config against the deployment
 - [systemd](systemd/README.md) — set up systemd services for reward system
 - [tp-collect](tp-collect/README.md) — collect transport data and track visors with sufficient transports

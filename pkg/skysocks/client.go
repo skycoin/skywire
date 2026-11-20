@@ -3648,6 +3648,9 @@ const (
 	wsPingInterval = 25 * time.Second
 	wsReadTimeout  = 90 * time.Second
 	wsWriteTimeout = 10 * time.Second
+
+	// wsFragmentBufMax is the largest push buffer kept for the next tick.
+	wsFragmentBufMax = 1 << 20
 )
 
 // RFC6455 opcodes (only the ones this endpoint uses).
@@ -3770,8 +3773,20 @@ func (c *Client) serveStatusWS(conn net.Conn) {
 		}
 	}()
 
+	// One buffer for every push instead of a fresh fragment each tick.
+	var frag bytes.Buffer
+	pushFragment := func() error {
+		frag.Reset()
+		proxystatus.WriteFragment(&frag, c.statusSnapshot())
+		err := w.write(wsOpText, frag.Bytes())
+		if frag.Cap() > wsFragmentBufMax {
+			frag = bytes.Buffer{}
+		}
+		return err
+	}
+
 	// Push once immediately so the browser syncs without waiting a full tick.
-	if err := w.write(wsOpText, proxystatus.RenderFragment(c.statusSnapshot())); err != nil {
+	if err := pushFragment(); err != nil {
 		stop()
 		return
 	}
@@ -3787,7 +3802,7 @@ func (c *Client) serveStatusWS(conn net.Conn) {
 		case <-stopC:
 			return
 		case <-push.C:
-			if err := w.write(wsOpText, proxystatus.RenderFragment(c.statusSnapshot())); err != nil {
+			if err := pushFragment(); err != nil {
 				stop()
 				return
 			}

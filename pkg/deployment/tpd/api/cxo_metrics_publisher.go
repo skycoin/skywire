@@ -111,6 +111,9 @@ type MetricsCXOPublisher struct {
 	// it.
 	unsaved map[string][][]byte
 
+	// now is the clock, time.Now when nil.
+	now func() time.Time
+
 	mu        sync.Mutex
 	lastError error
 }
@@ -222,7 +225,11 @@ const maxPublishBody = 12 * 1024 * 1024
 // used to be re-read every 30 minutes — one HGETALL per transport per day,
 // over ~180k transports — to re-encode 29 leaves to the bytes they held.
 func (m *MetricsCXOPublisher) publish(ctx context.Context, full bool) {
-	now := time.Now().UTC()
+	now := time.Now()
+	if m.now != nil {
+		now = m.now()
+	}
+	now = now.UTC()
 	window := store.MetricsWindowDates(now, metricsWindowDays)
 	open := store.OpenMetricsDays(now)
 	days := open

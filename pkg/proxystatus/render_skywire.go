@@ -2,9 +2,9 @@
 package proxystatus
 
 import (
+	"bytes"
 	"fmt"
 	"html"
-	"strings"
 
 	"github.com/0magnet/bitree"
 )
@@ -13,7 +13,7 @@ import (
 // tunnel census, the layer legend when there is more than one tunnel, and the
 // tree itself. Shared by a proxy surface's mux section and each consumer on
 // the skywire surface.
-func writeRouteTree(b *strings.Builder, snap Snapshot) {
+func writeRouteTree(b *bytes.Buffer, snap Snapshot) {
 	hLeft, hLabel, hCols := TreeHeader()
 	// Per-hop color classes, keyed by PK: the exit red, each intermediate hop
 	// LEVEL its own hue (see hopClassMap). Captured in the StyleCell closure so the
@@ -56,7 +56,7 @@ func consumerSnapshot(snap Snapshot, c Consumer) Snapshot {
 // writeConsumersSection is the skywire surface's content: a table of every
 // app and subsystem holding a route or a direct stream, then each one's route
 // tree.
-func writeConsumersSection(b *strings.Builder, snap Snapshot) {
+func writeConsumersSection(b *bytes.Buffer, snap Snapshot) {
 	if snap.Surface != SurfaceSkywire {
 		return
 	}
@@ -118,7 +118,7 @@ func writeConsumersSection(b *strings.Builder, snap Snapshot) {
 
 // writeDomainRoutes is the table of per-domain upstreams: which exit each
 // domain leaves through. Nothing is written when no rule is set.
-func writeDomainRoutes(b *strings.Builder, routes []DomainRoute) {
+func writeDomainRoutes(b *bytes.Buffer, routes []DomainRoute) {
 	if len(routes) == 0 {
 		return
 	}

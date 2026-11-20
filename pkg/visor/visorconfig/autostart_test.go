@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -44,4 +45,31 @@ func TestUpdateAppAutostartKeepsRuntimeApps(t *testing.T) {
 	require.NoError(t, conf.UpdateAppAutostart(l, "skymail", true))
 	st, _ = l.AppState("skymail")
 	require.True(t, st.AutoStart, "a runtime app's autostart changes in the launcher")
+}
+
+// Any other config change resets the launcher, and must keep the runtime apps too.
+func TestUpdateAppArgKeepsRuntimeApps(t *testing.T) {
+	dir := t.TempDir()
+	_, sk := cipher.GenerateKeyPair()
+	cc, err := NewCommon(nil, filepath.Join(dir, "config.json"), &sk)
+	require.NoError(t, err)
+	conf := MakeBaseConfig(cc, true, nil, nil)
+	conf.Launcher.Apps = []appserver.AppConfig{{Name: "skychat"}}
+
+	pm := &appserver.MockProcManager{}
+	pm.On("ErrorByName", mock.Anything).Return("", false)
+	pm.On("ProcByName", mock.Anything).Return((*appserver.Proc)(nil), false)
+	l, err := launcher.NewLauncher(logging.New(), launcher.AppLauncherConfig{
+		BinPath:   filepath.Join(dir, "bin"),
+		LocalPath: filepath.Join(dir, "local"),
+		Apps: []appserver.AppConfig{
+			{Name: "skychat"},
+			{Name: "skymail", LauncherMode: string(appcommon.RunModeInternal)},
+		},
+	}, nil, nil, pm)
+	require.NoError(t, err)
+
+	require.NoError(t, conf.UpdateAppArg(l, "skychat", "--addr", ":8002"))
+	_, ok := l.AppState("skymail")
+	require.True(t, ok, "a runtime app stays listed")
 }

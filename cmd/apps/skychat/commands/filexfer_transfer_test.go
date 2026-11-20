@@ -325,6 +325,53 @@ func TestAcceptInbound_AcceptsAnAcceptedPeerWithoutAConn(t *testing.T) {
 	_ = w.Close() //nolint:errcheck
 }
 
+// A peer this visor has written to is known without a chat conn open. Two
+// phones seldom keep one, and the other side's voice message was held.
+func TestAcceptInbound_AcceptsAPeerWeWroteTo(t *testing.T) {
+	withXferEnv(t)
+	withCleanDownloads(t)
+	restoreHistoryStore(t)
+	historyStore = newTempStore(t, history.Limits{})
+	from, _ := cipher.GenerateKeyPair()
+	offer := xfer.Offer{ID: "ai-wrote-1", Name: "voice-20261120-171651.oga", Size: 3}
+
+	persistMessage(history.Message{Peer: from.Hex(), From: from.Hex(), Text: "hi", Timestamp: time.Now().UTC(), ID: "in-1"})
+	if w, ok := acceptInbound(from, offer); ok || w != xfer.Held {
+		t.Fatalf("acceptInbound from a peer that only wrote to us = (%v, %v), want (xfer.Held, false)", w, ok)
+	}
+
+	persistMessage(history.Message{Peer: from.Hex(), Outgoing: true, Text: "hello", Timestamp: time.Now().UTC(), ID: "out-1"})
+	w, ok := acceptInbound(from, offer)
+	if !ok || w == nil {
+		t.Fatalf("acceptInbound from a peer we wrote to = (%v, %v), want a handle and true", w, ok)
+	}
+	_ = w.Close() //nolint:errcheck
+}
+
+// A manager whose context ended no longer listens, so a restart of the app in
+// the same process must build a new one.
+func TestFileXferServing_EndsWithItsContext(t *testing.T) {
+	withXferEnv(t)
+	fileMgrMu.Lock()
+	defer fileMgrMu.Unlock()
+	origCtx := fileMgrCtx
+	defer func() { fileMgrCtx = origCtx }()
+
+	fileMgr, fileMgrCtx = nil, nil
+	if fileXferServing() {
+		t.Error("serving without a manager")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	fileMgr, fileMgrCtx = xfer.NewManager(xfer.Config{}), ctx
+	if !fileXferServing() {
+		t.Error("a manager under a live context is not serving")
+	}
+	cancel()
+	if fileXferServing() {
+		t.Error("a manager whose context ended still counts as serving")
+	}
+}
+
 func TestAcceptInbound_AcceptsEstablishedPeer(t *testing.T) {
 	withXferEnv(t)
 	dir := withCleanDownloads(t)

@@ -219,10 +219,18 @@ func (c *captureWriter) errText() string {
 	return http.StatusText(c.code)
 }
 
+// innerReq clones r for an in-process handler call. It drops Accept-Encoding
+// so a compressing handler hands back a body that can be parsed.
+func innerReq(r *http.Request) *http.Request {
+	r2 := r.Clone(r.Context())
+	r2.Header.Del("Accept-Encoding")
+	return r2
+}
+
 // callJSON runs a JSON handler with v as the request body.
 func callJSON(w http.ResponseWriter, r *http.Request, h http.Handler, v any) *captureWriter {
 	b, _ := json.Marshal(v) //nolint:errcheck
-	r2 := r.Clone(r.Context())
+	r2 := innerReq(r)
 	r2.Body = io.NopCloser(bytes.NewReader(b))
 	r2.ContentLength = int64(len(b))
 	r2.Header.Set("Content-Type", "application/json")

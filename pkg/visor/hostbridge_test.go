@@ -69,6 +69,24 @@ func freeLoopbackAddr(t *testing.T) string {
 	return addr
 }
 
+// echoTry reports whether msg comes back from the echo server behind addr.
+func echoTry(addr, msg string) bool {
+	c, err := net.DialTimeout("tcp", addr, time.Second)
+	if err != nil {
+		return false
+	}
+	defer c.Close() //nolint:errcheck
+	if c.SetDeadline(time.Now().Add(time.Second)) != nil {
+		return false
+	}
+	if _, err := io.WriteString(c, msg); err != nil {
+		return false
+	}
+	b := make([]byte, len(msg))
+	_, err = io.ReadFull(c, b)
+	return err == nil && string(b) == msg
+}
+
 func echoOnce(t *testing.T, addr, msg string) {
 	t.Helper()
 	c, err := net.DialTimeout("tcp", addr, 5*time.Second)
