@@ -26,6 +26,22 @@ import java.io.BufferedReader
 import java.io.IOException
 import kotlin.coroutines.coroutineContext
 
+private const val FILE_ICON = "\uD83D\uDCCE"
+private val FILE_KIND = Regex("$FILE_ICON (?:Image|Video|Audio|PDF|Archive|Document|File): ")
+private val CLIP = Regex("$FILE_ICON (?:Audio: |Video: |File: )?(voice|video)-(?:sq-)?\\d\\S*", RegexOption.IGNORE_CASE)
+
+/**
+ * A notification body with its file named the way the chat names it. SkyChat writes "📎 <name>" in a
+ * group and "📎 <Kind>: <name>" in a chat (osnotify.go fileKindLabel); a recorded clip is voice-<stamp> or video-<stamp>.
+ */
+internal fun localizeFileBody(body: String, voice: String, video: String): String =
+    FILE_KIND.replace(
+        CLIP.replace(body) { m ->
+            if (m.groupValues[1].equals("voice", ignoreCase = true)) "\uD83C\uDFA4 $voice" else "\uD83D\uDCF9 $video"
+        },
+        "$FILE_ICON ",
+    )
+
 /** One notification, exactly as the visor's hub publishes it. */
 @Serializable
 internal data class NotifyEvent(
@@ -172,11 +188,14 @@ internal class NotificationBridge(context: Context) {
         return thread !in prefs.muted && event.tag !in prefs.muted
     }
 
-    // SkyChat titles these two in English (group.go scanPendingJoins, skychat.go onChatEvent).
+    // SkyChat titles these in English (group.go scanPendingJoins and deliverGroupMessages,
+    // skychat.go onChatEvent). A group post is tagged with the group's id.
     private fun shownTitle(event: NotifyEvent): String = when {
         event.app != SKYCHAT -> event.title
         event.title == JOIN_TITLE -> AppLocale.localized(app).getString(R.string.chat_notif_join_request)
         event.title == REQUEST_TITLE -> AppLocale.localized(app).getString(R.string.chat_notif_message_request)
+        event.title == GROUP_TITLE -> ChatRepository.get(app).groupInfo(event.tag)?.name?.takeIf { it.isNotBlank() }
+            ?: AppLocale.localized(app).getString(R.string.chat_notif_group_message)
         else -> event.title
     }
 
@@ -198,7 +217,12 @@ internal class NotificationBridge(context: Context) {
         if (message && !ChatRepository.get(app).store.notif.value.preview) {
             return AppLocale.localized(app).getString(R.string.chat_notif_new_message)
         }
-        return event.body
+        return if (message) localizedFile(event.body) else event.body
+    }
+
+    private fun localizedFile(body: String): String {
+        val text = AppLocale.localized(app)
+        return localizeFileBody(body, text.getString(R.string.chat_voice_message), text.getString(R.string.chat_video_message))
     }
 
     /**
@@ -257,6 +281,7 @@ internal class NotificationBridge(context: Context) {
         private val JOIN_WAITING = Regex("(\\d+) waiting to join (.*)", RegexOption.DOT_MATCHES_ALL)
         private const val JOIN_TITLE = "Group join request"
         private const val REQUEST_TITLE = "Message request"
+        private const val GROUP_TITLE = "Group message"
         private const val DATA_PREFIX = "data: "
         private const val RETRY_MS = 2_000L
 

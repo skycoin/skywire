@@ -10,12 +10,16 @@ import com.skycoin.skywire.chat.SseMessage
 import com.skycoin.skywire.chat.humanSize
 import com.skycoin.skywire.chat.isSquareVideoMessage
 import com.skycoin.skywire.chat.isVideoMessage
+import com.skycoin.skywire.chat.isOwnUpload
 import com.skycoin.skywire.chat.isVoiceMessage
 import com.skycoin.skywire.chat.isoMillis
 import com.skycoin.skywire.chat.nanoText
 import com.skycoin.skywire.chat.parseTime
+import com.skycoin.skywire.chat.sameMessage
 import com.skycoin.skywire.chat.thumbPath
 import com.skycoin.skywire.chat.tickStatus
+import com.skycoin.skywire.chat.withStored
+import com.skycoin.skywire.chat.withoutFailedTwins
 import com.skycoin.skywire.ui.chat.cannotPostRes
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
@@ -157,5 +161,77 @@ class ChatProtocolTest {
         assertEquals(codes.size, res.toSet().size)
         assertNull(cannotPostRes(""))
         assertNull(cannotPostRes("something_newer"))
+    }
+
+    /**
+     * A voice message whose send failed or lost its answer has no transfer id,
+     * and its caption is not the text skychat stores. It showed twice once the
+     * stored record was merged in.
+     */
+    @Test
+    fun aStoredFileIsItsOwnBubbleNotASecondOne() {
+        val clip = ChatFile(name = "voice-20261120-171651.oga", size = 12_493, status = "failed", localPath = "/cache/voice.oga")
+        val bubble = ChatMessage(ts = 1_000_000, text = "\uD83C\uDFA4 Voice message", file = clip)
+        val stored = ChatMessage(
+            key = "h:b0d8", ts = 1_009_000, text = "\uD83D\uDCCE voice-20261120-171651.oga (12.2 KB)", wireId = "b0d8", status = "sent",
+            file = ChatFile(id = "b0d8", name = clip.name, size = clip.size, status = "failed"),
+        )
+        assertTrue(sameMessage(bubble, stored))
+        // The failed try keeps its Retry and gets no tick.
+        val failed = withStored(bubble, stored)
+        assertEquals("b0d8", failed.file!!.id)
+        assertEquals("failed", failed.file!!.status)
+        assertEquals("", failed.wireId)
+
+        // The retry got another id: the failed try's record is still this bubble.
+        val retried = bubble.copy(file = clip.copy(id = "c1e9", status = "sent"))
+        assertTrue(sameMessage(retried, stored))
+        assertEquals("c1e9", withStored(retried, stored).file!!.id)
+
+        // The answer was lost but the file went out.
+        val sent = stored.copy(file = stored.file!!.copy(status = "sent", url = "/files/b0d8.oga"))
+        val healed = withStored(bubble, sent)
+        assertEquals("sent", healed.file!!.status)
+        assertEquals("/files/b0d8.oga", healed.file!!.url)
+        assertEquals("b0d8", healed.wireId)
+        assertEquals("sent", healed.status)
+
+        // Two sends of one picked file both arrived: two messages.
+        val first = ChatMessage(ts = 1_000_000, text = "a.pdf", file = ChatFile(id = "aa", name = "a.pdf", size = 9, status = "sent"))
+        val second = ChatMessage(ts = 1_030_000, text = "a.pdf", file = ChatFile(id = "bb", name = "a.pdf", size = 9, status = "sent"))
+        assertFalse(sameMessage(first, second))
+        // Another recording, a peer's file of the same name, and a late record are not this bubble.
+        assertFalse(sameMessage(bubble, stored.copy(file = stored.file!!.copy(name = "voice-20261120-171700.oga"))))
+        assertFalse(sameMessage(bubble, stored.copy(from = "02ab")))
+        assertFalse(sameMessage(bubble, stored.copy(ts = 1_000_000 + 121_000)))
+        // Text is matched as before.
+        assertTrue(sameMessage(ChatMessage(ts = 5, text = "hi"), ChatMessage(ts = 9, text = "hi", wireId = "x")))
+        assertFalse(sameMessage(ChatMessage(ts = 5, text = "hi", wireId = "y"), ChatMessage(ts = 9, text = "hi", wireId = "x")))
+    }
+
+    /** group.go echoes an own file post; it can reach the app before `/send-file` answers with the id. */
+    @Test
+    fun anOwnGroupFileEchoIsKnownBeforeItsId() {
+        val pending = ChatFile(name = "voice-20261120-134400.m4a", size = 4_608, status = "sending")
+        assertTrue(isOwnUpload(pending, "f1", "voice-20261120-134400.m4a", 4_608))
+        assertFalse(isOwnUpload(pending, "f1", "voice-20261120-134401.m4a", 4_608))
+        assertFalse(isOwnUpload(pending, "", "voice-20261120-134400.m4a", 4_608))
+        assertTrue(isOwnUpload(pending.copy(id = "f1"), "f1", "other", 1))
+        assertFalse(isOwnUpload(pending.copy(id = "f2"), "f1", "voice-20261120-134400.m4a", 4_608))
+        assertFalse(isOwnUpload(null, "f1", "x", 1))
+    }
+
+    /** 0.0.12 filed the stored record of a failed try as a second bubble; it goes when the thread is next merged. */
+    @Test
+    fun aFailedTwinFromAnOlderVersionIsDropped() {
+        val clip = ChatFile(id = "c1e9", name = "voice-20261120-171830.oga", size = 12_493, status = "sent")
+        val bubble = ChatMessage(key = "k1", ts = 1_000_000, text = "\uD83C\uDFA4 Voice message", file = clip)
+        val twin = ChatMessage(key = "h:b0d8", ts = 1_009_000, text = "\uD83D\uDCCE voice (12.2 KB)", wireId = "b0d8", file = clip.copy(id = "b0d8", status = "failed"))
+        val alone = ChatMessage(key = "h:77aa", ts = 2_000_000, wireId = "77aa", file = ChatFile(id = "77aa", name = "sent-from-the-cli.pdf", size = 5, status = "failed"))
+        val theirs = twin.copy(key = "h:9f", from = "02ab")
+        val list = listOf(bubble, twin, alone, theirs)
+        assertEquals(listOf(bubble, alone, theirs), withoutFailedTwins(list))
+        val clean = listOf(bubble, alone)
+        assertTrue(withoutFailedTwins(clean) === clean)
     }
 }

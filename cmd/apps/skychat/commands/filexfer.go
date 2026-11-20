@@ -8,10 +8,10 @@
 // text messages, so a UI renders it inline like any other message.
 //
 // Auto-accept policy (operator decision): once you've ESTABLISHED a chat with a
-// peer (there's a live conn) or you share a GROUP, inbound files are accepted
-// automatically — no per-file prompt. Files from a peer you've never talked to
-// are declined. Everything is encrypted by the skywire transport; nothing
-// touches the clearnet.
+// peer (a live conn, or a message of yours in the stored conversation) or you
+// share a GROUP, inbound files are accepted automatically — no per-file prompt.
+// Files from a peer you've never talked to are held until asked for. Everything
+// is encrypted by the skywire transport; nothing touches the clearnet.
 package commands
 
 import (
@@ -46,9 +46,11 @@ import (
 )
 
 // fileMgr is the process-wide file-transfer manager, initialized by startFileXfer.
+// fileMgrCtx is the context its listeners serve under.
 var (
-	fileMgr   *xfer.Manager
-	fileMgrMu sync.Mutex
+	fileMgr    *xfer.Manager
+	fileMgrCtx context.Context
+	fileMgrMu  sync.Mutex
 )
 
 // downloadsDir returns (and creates) the directory received files are saved to:
@@ -73,6 +75,27 @@ func downloadsDir() (string, error) {
 // policy. Group membership is handled by the group path (filexfer_group.go).
 func isEstablishedPeer(pk cipher.PubKey) bool {
 	return chatCtrl != nil && chatCtrl.Connected(pk)
+}
+
+// writtenToScan bounds how far back haveWrittenTo looks in a conversation.
+const writtenToScan = 200
+
+// haveWrittenTo reports whether the stored conversation with pk holds a
+// message of ours. Two phones seldom keep a chat conn open between messages.
+func haveWrittenTo(pk cipher.PubKey) bool {
+	if historyStore == nil {
+		return false
+	}
+	msgs, err := historyStore.ListByPeer(pk.Hex(), writtenToScan)
+	if err != nil {
+		return false
+	}
+	for i := range msgs {
+		if msgs[i].Outgoing {
+			return true
+		}
+	}
+	return false
 }
 
 // fileDialFunc opens a fresh transfer stream to peer on the file port, trying
@@ -115,8 +138,9 @@ func acceptInbound(from cipher.PubKey, offer xfer.Offer) (io.WriteCloser, bool) 
 	case offer.Group != "":
 		accept = isGroupMember(offer.Group, from) && !isChannelGroup(offer.Group)
 	default:
-		// Someone accepted or named is known whether or not a chat conn is open.
-		known := isEstablishedPeer(from) || privacyStore.Accepted(from.Hex()) || (contactStore != nil && contactStore.Name(from.Hex()) != "")
+		// Someone accepted, named or written to is known whether or not a chat conn is open.
+		known := isEstablishedPeer(from) || privacyStore.Accepted(from.Hex()) ||
+			(contactStore != nil && contactStore.Name(from.Hex()) != "") || haveWrittenTo(from)
 		accept = known && verdict == privacy.Allow
 	}
 	// A file we explicitly requested (backfill) is accepted even from a peer we
@@ -390,16 +414,22 @@ func onXferDone(dir xfer.Direction, peer cipher.PubKey, offer xfer.Offer, err er
 	}
 }
 
+// fileXferServing reports whether a manager serves under a context that has
+// not ended. The caller holds fileMgrMu.
+func fileXferServing() bool {
+	return fileMgr != nil && (fileMgrCtx == nil || fileMgrCtx.Err() == nil)
+}
+
 // startFileXfer builds the file-transfer manager and starts listeners on the
-// file port over the enabled networks. Safe to call once during startup; a nil
-// appCl (standalone/no-net) disables it.
+// file port over the enabled networks. A nil appCl (standalone/no-net) disables
+// it. A manager whose context ended is replaced, as an in-process restart needs.
 func startFileXfer(ctx context.Context) {
 	if appCl == nil {
 		return
 	}
 	fileMgrMu.Lock()
 	defer fileMgrMu.Unlock()
-	if fileMgr != nil {
+	if fileXferServing() {
 		return
 	}
 	mgr := xfer.NewManager(xfer.Config{
@@ -409,7 +439,7 @@ func startFileXfer(ctx context.Context) {
 		Accept:  acceptInbound,
 		OnDone:  onXferDone,
 	})
-	fileMgr = mgr
+	fileMgr, fileMgrCtx = mgr, ctx
 
 	var listeners []net.Listener
 	for _, netType := range enabledFileNets() {

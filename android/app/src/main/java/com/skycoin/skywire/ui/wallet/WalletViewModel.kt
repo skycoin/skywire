@@ -134,8 +134,12 @@ data class WalletUiState(
     val nodeReachable: Boolean = true,
     /** The user turned USD prices on; they are fetched only then. */
     val pricesEnabled: Boolean = false,
-    /** One [coin] in US dollars, when prices are on and the coin has one. */
+    /** One [coin] in US dollars, when prices are on and a quote under an hour old is known. */
     val usdPrice: Double? = null,
+    /** The last quote known, however old: the balance shows it with its time. */
+    val usdQuote: WalletPrices.Quote? = null,
+    /** Prices are on, the service did not answer and no quote is stored. */
+    val usdMissing: Boolean = false,
 )
 
 class WalletViewModel(app: Application) : AndroidViewModel(app) {
@@ -149,10 +153,11 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     private var actionJob: Job? = null
 
     init {
+        WalletPrices.open(app)
         viewModelScope.launch {
             prefs.boolean(WalletPrices.PREF_KEY).collectLatest { on ->
-                mutable.update { it.copy(pricesEnabled = on, usdPrice = it.usdPrice.takeIf { _ -> on }) }
-                if (on) refreshPrice()
+                mutable.update { it.copy(pricesEnabled = on) }
+                refreshPrice()
             }
         }
         viewModelScope.launch {
@@ -240,22 +245,34 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         mutable.update { if (it.coin.id == coin.id) it.copy(node = info, nodeReachable = info != null) else it }
     }
 
-    /** The coin's USD price, when the user turned prices on; a failed fetch keeps the last one. */
+    /** The coin's USD price, when the user turned prices on; a failed fetch keeps the last quote, stored ones too. */
     private suspend fun refreshPrice() {
         val st = mutable.value
         val id = st.coin.priceId
         if (!st.pricesEnabled || id == null) {
-            mutable.update { it.copy(usdPrice = null) }
+            mutable.update { it.copy(usdPrice = null, usdQuote = null, usdMissing = false) }
             return
         }
-        val price = try {
+        // What is known shows at once: the fetch can take its time, or fail.
+        showQuote(id, failed = false)
+        val fetched = try {
             WalletPrices.usd(id)
+            true
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            null
+            false
         }
-        mutable.update { if (it.coin.priceId == id && it.pricesEnabled) it.copy(usdPrice = price ?: it.usdPrice) else it }
+        showQuote(id, failed = !fetched)
+    }
+
+    private fun showQuote(id: String, failed: Boolean) {
+        val quote = WalletPrices.last(id)
+        val current = quote?.takeIf { System.currentTimeMillis() - it.at < WalletPrices.FRESH_MS }
+        mutable.update {
+            if (it.coin.priceId != id || !it.pricesEnabled) it
+            else it.copy(usdPrice = current?.usd, usdQuote = quote, usdMissing = quote == null && (failed || it.usdMissing))
+        }
     }
 
     fun refreshNow() {
@@ -328,7 +345,9 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
 
     fun selectCoin(coinId: String) = action {
         repo.setSelectedCoin(coinId)
-        mutable.update { it.copy(send = SendState(), receiveIndex = 0, node = null, nodeReachable = true, usdPrice = null) }
+        mutable.update {
+            it.copy(send = SendState(), receiveIndex = 0, node = null, nodeReachable = true, usdPrice = null, usdQuote = null, usdMissing = false)
+        }
     }
 
     /**

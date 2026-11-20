@@ -215,6 +215,57 @@ func TestReceiveWaitsForSenderClose(t *testing.T) {
 	}
 }
 
+// A decline is handed over the same way. Closing right after writing it cost
+// the sender the reason: a held file showed as "read accept: EOF".
+func TestReceiveWaitsForSenderCloseOnDecline(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		dst    io.WriteCloser
+		reason string
+	}{
+		{"declined", nil, "declined"},
+		{"held", Held, HeldReason},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, b := net.Pipe()
+			defer func() { _ = b.Close() }() //nolint:errcheck
+
+			from, _ := cipher.GenerateKeyPair()
+			offer := Offer{ID: "h1", Name: "voice-1.oga", Size: 4, From: from}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			recvDone := make(chan error, 1)
+			go func() {
+				_, err := Receive(ctx, from, b, func(cipher.PubKey, Offer) (io.WriteCloser, bool) {
+					return tc.dst, false
+				})
+				recvDone <- err
+			}()
+
+			rc, sErr := Send(ctx, a, offer, bytes.NewReader([]byte("nope")))
+			if sErr != nil || rc.OK || rc.Err != tc.reason {
+				t.Fatalf("Send: err=%v receipt=%+v, want a decline with reason %q", sErr, rc, tc.reason)
+			}
+			select {
+			case err := <-recvDone:
+				t.Fatalf("Receive returned before the sender closed (err=%v)", err)
+			case <-time.After(100 * time.Millisecond):
+			}
+			_ = a.Close() //nolint:errcheck // the sender hangs up, as Manager.SendFile does
+			select {
+			case err := <-recvDone:
+				if !IsDeclined(err) {
+					t.Fatalf("Receive err = %v, want the declined sentinel", err)
+				}
+			case <-time.After(3 * time.Second):
+				t.Fatal("Receive did not return after the sender closed")
+			}
+		})
+	}
+}
+
 // TestManagerSendFile drives the full Manager path: a receiving Manager serving a
 // listener, a sending Manager dialing it, over an in-memory listener/dialer.
 func TestManagerSendFile(t *testing.T) {

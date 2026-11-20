@@ -110,9 +110,9 @@ const (
 	IdleWindow = 60 * time.Second
 
 	// drainWindow bounds how long the receiver waits for the sender to hang up
-	// after the receipt is written. Short: the sender closes as soon as it has
-	// read the receipt, so this only ever absorbs the round-trip. See
-	// waitPeerClose.
+	// after its last frame, a receipt or a decline. Short: the sender closes
+	// as soon as it has read that frame, so this only ever absorbs the
+	// round-trip. See waitPeerClose.
 	drainWindow = 2 * time.Second
 
 	// copyChunk is the body copy's granularity — every chunk re-arms the idle
@@ -296,7 +296,11 @@ func Receive(ctx context.Context, from cipher.PubKey, conn net.Conn, accept Acce
 		if dst == Held {
 			reason = HeldReason
 		}
-		_ = sendAccept(conn, false, reason) //nolint:errcheck
+		if err := sendAccept(conn, false, reason); err == nil {
+			// The sender hangs up once it has read the decline. Closing first
+			// can cost it the reason, a held file then reads as a failed send.
+			waitPeerClose(raw, drainWindow)
+		}
 		return offer, errDeclined
 	}
 	if err := sendAccept(conn, true, ""); err != nil {

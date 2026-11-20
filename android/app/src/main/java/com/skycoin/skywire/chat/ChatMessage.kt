@@ -94,6 +94,65 @@ fun statusRank(status: String): Int = when (status) {
     else -> -1
 }
 
+/** How far apart a bubble and its stored record may be dated. */
+const val SAME_WINDOW_MS = 120_000L
+
+/** File states the stored record of an own send has once the file left: filexfer.go, fileoffer.go. */
+private val WENT_OUT = setOf("sent", "parked")
+
+/**
+ * Whether [b], a stored or echoed message, is the one the thread shows as [a]. A file is one
+ * message whatever ids its tries got: a failed try and its retry are stored apart.
+ */
+fun sameMessage(a: ChatMessage, b: ChatMessage): Boolean {
+    val ids = a.dmWireId.isNotEmpty() && b.dmWireId.isNotEmpty()
+    if (ids && a.dmWireId == b.dmWireId) return true
+    val near = a.mine == b.mine && kotlin.math.abs(a.ts - b.ts) < SAME_WINDOW_MS
+    val fa = a.file
+    val fb = b.file
+    if (fa != null && fb != null) {
+        val oneFile = near && fa.name == fb.name && fa.size == fb.size
+        return oneFile && (!ids || fa.status == "failed" || fb.status == "failed")
+    }
+    return !ids && near && a.text == b.text
+}
+
+/** The bubble [e] with what its stored record [m] adds: the transfer id, the served copy, that it went out. */
+fun withStored(e: ChatMessage, m: ChatMessage): ChatMessage {
+    val f = e.file
+    val nf = m.file
+    var out = e
+    if (f != null && nf != null) {
+        val went = e.mine && f.status == "failed" && nf.status in WENT_OUT
+        out = out.copy(file = f.copy(id = f.id.ifEmpty { nf.id }, url = f.url.ifEmpty { nf.url }, status = if (went) nf.status else f.status))
+    }
+    val failedTry = nf?.status == "failed"
+    if (e.wireId.isEmpty() && m.wireId.isNotEmpty() && !failedTry) {
+        out = out.copy(wireId = m.wireId, status = if (e.mine && statusRank(e.status) < statusRank("sent")) "sent" else e.status)
+    }
+    return out
+}
+
+/** [list] without the stored failed tries that sit beside the bubble of the same file, as 0.0.12 filed them. */
+fun withoutFailedTwins(list: List<ChatMessage>): List<ChatMessage> {
+    val kept = list.filterNot { m ->
+        val f = m.file
+        m.mine && m.key.startsWith(STORED_KEY) && f != null && f.status == "failed" && list.any { o ->
+            o !== m && o.mine && !o.key.startsWith(STORED_KEY) && o.file?.name == f.name && o.file.size == f.size
+        }
+    }
+    return if (kept.size == list.size) list else kept
+}
+
+/** The key prefix of a bubble made from a stored record rather than typed or recorded here. */
+const val STORED_KEY = "h:"
+
+/** Whether our group post that came back as [fileId], [fileName], [fileSize] is the upload [f]; it can beat the id. */
+fun isOwnUpload(f: ChatFile?, fileId: String, fileName: String, fileSize: Long): Boolean {
+    if (f == null || fileId.isEmpty()) return false
+    return if (f.id.isNotEmpty()) f.id == fileId else f.name == fileName && f.size == fileSize
+}
+
 /** What a tick shows for [m], including the file-transfer states (index.html _msgTickStatus). */
 fun tickStatus(m: ChatMessage, group: Boolean): String {
     if (!m.mine) return ""

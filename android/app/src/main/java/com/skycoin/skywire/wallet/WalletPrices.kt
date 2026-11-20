@@ -1,5 +1,7 @@
 package com.skycoin.skywire.wallet
 
+import android.content.Context
+import android.content.SharedPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -20,32 +22,61 @@ import java.util.concurrent.TimeUnit
 /**
  * USD prices from coinpaprika, as skycoin-web shows them. Off unless the user
  * turns them on: asking tells coinpaprika this device's address and which
- * coins it holds. Each price is kept for ten minutes, skycoin-web's interval.
+ * coins it holds. A price is asked for every ten minutes, and the last is stored.
  */
 object WalletPrices {
     /** The AppPreferences key of the on switch; off by default. */
     const val PREF_KEY = "wallet_usd_prices"
 
+    /** A quote older than this is shown with its time and converts no amounts. */
+    const val FRESH_MS = 60 * 60 * 1000L
+
+    /** One coin in US dollars at the time [at], epoch ms, the service answered. */
+    data class Quote(val usd: Double, val at: Long)
+
     private const val TTL_MS = 10 * 60 * 1000L
-    private val cache = ConcurrentHashMap<String, Pair<Double, Long>>()
+    private const val STORE = "wallet_prices"
+    private val cache = ConcurrentHashMap<String, Quote>()
+
+    @Volatile
+    private var store: SharedPreferences? = null
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
 
+    /** Where the last quotes are kept across restarts. */
+    fun open(context: Context) {
+        if (store == null) store = context.applicationContext.getSharedPreferences(STORE, Context.MODE_PRIVATE)
+    }
+
+    /** The last price known for [priceId], from this run or an earlier one. */
+    fun last(priceId: String): Quote? =
+        cache[priceId] ?: store?.getString(priceId, null)?.let(::decode)?.also { cache.putIfAbsent(priceId, it) }
+
     suspend fun usd(priceId: String): Double = withContext(Dispatchers.IO) {
-        cache[priceId]?.takeIf { System.currentTimeMillis() - it.second < TTL_MS }?.let { return@withContext it.first }
+        last(priceId)?.takeIf { System.currentTimeMillis() - it.at < TTL_MS }?.let { return@withContext it.usd }
         val req = Request.Builder().url("https://api.coinpaprika.com/v1/tickers/$priceId?quotes=USD").build()
         val price = client.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) throw IOException("price service answered HTTP ${resp.code}")
             parse(resp.body.string())
         }
-        cache[priceId] = price to System.currentTimeMillis()
+        val quote = Quote(price, System.currentTimeMillis())
+        cache[priceId] = quote
+        store?.edit()?.putString(priceId, encode(quote))?.apply()
         price
     }
 
     internal fun parse(body: String): Double =
         Json.parseToJsonElement(body).jsonObject["quotes"]!!.jsonObject["USD"]!!.jsonObject["price"]!!.jsonPrimitive.double
+
+    internal fun encode(q: Quote): String = "${q.usd}|${q.at}"
+
+    internal fun decode(s: String): Quote? {
+        val usd = s.substringBefore('|').toDoubleOrNull()?.takeIf { it > 0.0 && it.isFinite() } ?: return null
+        val at = s.substringAfter('|', "").toLongOrNull()?.takeIf { it > 0 } ?: return null
+        return Quote(usd, at)
+    }
 }
 
 /** [units] of this coin in USD at [price], as the user's locale writes money. */
