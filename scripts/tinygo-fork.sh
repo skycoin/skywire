@@ -6,8 +6,8 @@
 # updates it whenever the release checksum changes. The fork's CI rebuilds that
 # release on every push to its develop branch.
 #
-# Elsewhere, under CI, or with TINYGO_FORK=0 it prints the tinygo on PATH.
-# Offline it keeps using the copy it already has.
+# Elsewhere, under CI, with GOPROXY=off, or with TINYGO_FORK=0 it prints the
+# tinygo on PATH. Offline it keeps using the copy it already has.
 set -u
 
 say() { echo "tinygo-fork: $*" >&2; }
@@ -39,6 +39,8 @@ fetch() {
 
 # CI tests against the upstream TinyGo release it installs.
 [ -n "${CI:-}" ] && TINYGO_FORK=${TINYGO_FORK:-0}
+# A build with the module proxy off downloads nothing, a toolchain included.
+[ "${GOPROXY:-}" = off ] && TINYGO_FORK=${TINYGO_FORK:-0}
 [ "${TINYGO_FORK:-1}" = 0 ] && { command -v tinygo || echo tinygo; exit 0; }
 [ "$(uname -s)/$(uname -m)" = Linux/x86_64 ] || use_path
 
