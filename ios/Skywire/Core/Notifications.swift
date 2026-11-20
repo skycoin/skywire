@@ -169,7 +169,7 @@ final class NotificationBridge: NSObject, ObservableObject {
         if event.app == SkychatProfile.app && !Self.chatAllows(event, ChatRepository.shared.store.notif) { return }
         let style = Self.presentation(of: event.app)
         let content = UNMutableNotificationContent()
-        let title = Self.shownTitle(event)
+        let title = Self.shownTitle(event, groupName: ChatRepository.shared.groupInfo(event.tag)?.name)
         content.title = title.isEmpty ? style.label : title
         content.body = Self.shownBody(event, ChatRepository.shared.store.notif)
         content.sound = style.sound ? .default : nil
@@ -201,12 +201,15 @@ final class NotificationBridge: NSObject, ObservableObject {
         return !prefs.isMuted(event.tag)
     }
 
-    /// SkyChat titles these two in English (group.go scanPendingJoins, skychat.go onChatEvent).
-    static func shownTitle(_ event: NotifyEvent) -> String {
+    /// SkyChat titles these in English (group.go scanPendingJoins and deliverGroupMessages, skychat.go
+    /// onChatEvent). A group post is tagged with the group's id, and `groupName` is that group's name.
+    static func shownTitle(_ event: NotifyEvent, groupName: String? = nil) -> String {
         guard event.app == SkychatProfile.app else { return event.title }
         return switch event.title {
         case "Group join request": L10n.text("chat_notif_join_request")
         case "Message request": L10n.text("chat_notif_message_request")
+        case "Group message":
+            if let groupName, !groupName.trimmingCharacters(in: .whitespaces).isEmpty { groupName } else { L10n.text("chat_notif_group_message") }
         default: event.title
         }
     }
@@ -220,7 +223,24 @@ final class NotificationBridge: NSObject, ObservableObject {
             return L10n.format("chat_notif_join_waiting", waiting.count, waiting.group)
         }
         let message = !event.tag.isEmpty && !event.tag.hasPrefix("join:") && !event.body.hasPrefix("📞")
-        return message && !prefs.preview ? L10n.text("chat_notif_new_message") : event.body
+        guard message else { return event.body }
+        if !prefs.preview { return L10n.text("chat_notif_new_message") }
+        return localizeFileBody(event.body, voice: L10n.text("chat_voice_message"), video: L10n.text("chat_video_message"))
+    }
+
+    /// A body with its file named the way the chat names it. SkyChat writes "📎 <name>" in a group and
+    /// "📎 <Kind>: <name>" in a chat (osnotify.go fileKindLabel); a recorded clip is voice-<stamp> or video-<stamp>.
+    static func localizeFileBody(_ body: String, voice: String, video: String) -> String {
+        let kind = "(?:Audio: |Video: |File: )?"
+        let clip = "-(?:sq-)?\\d\\S*"
+        var out = body
+        for (name, label) in [("voice", "🎤 " + voice), ("video", "📹 " + video)] {
+            out = out.replacingOccurrences(
+                of: "📎 " + kind + name + clip, with: NSRegularExpression.escapedTemplate(for: label),
+                options: [.regularExpression, .caseInsensitive]
+            )
+        }
+        return out.replacingOccurrences(of: "📎 (?:Image|Video|Audio|PDF|Archive|Document|File): ", with: "📎 ", options: .regularExpression)
     }
 
     /// The parts of "<n> waiting to join <group name>".

@@ -45,6 +45,32 @@ final class NotificationTextTests: XCTestCase {
         XCTAssertNotEqual(NotificationBridge.shownBody(missed, NotifPrefs()), "📞 Missed call")
     }
 
+    /// group.go titles a group or channel post "Group message"; the phone shows the group's name.
+    func testAGroupPostIsTitledWithItsGroup() {
+        let post = chat("Group message", "Acer: hola", tag: "g1")
+        XCTAssertEqual(NotificationBridge.shownTitle(post, groupName: "Liuli"), "Liuli")
+        XCTAssertEqual(NotificationBridge.shownTitle(post), L10n.text("chat_notif_group_message"))
+        XCTAssertEqual(NotificationBridge.shownTitle(post, groupName: " "), L10n.text("chat_notif_group_message"))
+        XCTAssertNotEqual(NotificationBridge.shownTitle(post), "Group message")
+    }
+
+    /// A file arrives named in English: "📎 <name>" in a group, "📎 <Kind>: <name>" in a chat.
+    func testARecordedClipIsNamedInTheAppsLanguage() {
+        func shown(_ body: String) -> String { NotificationBridge.localizeFileBody(body, voice: "语音消息", video: "视频消息") }
+        XCTAssertEqual(shown("Acer: 📎 voice-20261116-134400.m4a"), "Acer: 🎤 语音消息")
+        XCTAssertEqual(shown("Acer: 📎 video-sq-20261116-134400.mp4"), "Acer: 📹 视频消息")
+        XCTAssertEqual(shown("📎 Audio: voice-20261120-171651.oga"), "🎤 语音消息")
+        XCTAssertEqual(shown("📎 Video: video-20261120-171651.mp4"), "📹 视频消息")
+        // An attachment keeps its name without the English kind in front.
+        XCTAssertEqual(shown("📎 Image: photo.jpg"), "📎 photo.jpg")
+        XCTAssertEqual(shown("Acer: 📎 report.pdf"), "Acer: 📎 report.pdf")
+        // A name that only starts like a clip, and plain text, are left alone.
+        XCTAssertEqual(shown("📎 File: voice-notes.txt"), "📎 voice-notes.txt")
+        XCTAssertEqual(shown("Acer: Audio: later"), "Acer: Audio: later")
+        let clip = chat("Group message", "Acer: 📎 voice-20261116-134400.m4a", tag: "g1")
+        XCTAssertEqual(NotificationBridge.shownBody(clip, NotifPrefs()), "Acer: 🎤 " + L10n.text("chat_voice_message"))
+    }
+
     /// Anything else passes as it came: a name, another app's text, a body that only looks alike.
     func testOtherTextIsLeftAlone() {
         XCTAssertEqual(NotificationBridge.shownTitle(chat("Ana", "hola", tag: "02ab")), "Ana")
