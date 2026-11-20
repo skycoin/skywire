@@ -1,0 +1,282 @@
+================================================================================
+SSS Standards — Go (golang) Adaptation
+================================================================================
+
+version:     1.0 (Go adaptation of SSS v3.1 + the 71 c1-gui code-rules)
+date:        2026-07-02
+applies-to:  Go modules (github.com/skycoin/skywire and siblings)
+source:      derived from sss-standards.txt (v3.1) + sss-review-guide.txt +
+             code-rules/Rule*.cs (71 rules), which are explicitly C#-only
+             ("these standards do not apply to Go/Python" — sss-review-guide.txt
+             line 18 and line 273).
+
+--------------------------------------------------------------------------------
+0. WHY THIS FILE EXISTS (READ FIRST)
+--------------------------------------------------------------------------------
+
+The SSS standard is a C#/.NET *data-oriented-design game-engine* standard. It
+assumes: one type = one .csproj assembly = one namespace, generational-ID object
+pools, no language-level error model (C# exceptions), no generics, no closures,
+`var`/`Nullable`/`ImplicitUsings` toggles, `.csproj` build knobs. None of that
+exists in Go, and several rules are the *direct opposite* of idiomatic, correct
+Go. Its own review guide tells you not to apply it to Go.
+
+So "% compliance with SSS-C#" is not a meaningful number for a Go repo — the
+denominator is mostly rules that cannot be expressed in the language. What IS
+meaningful is the *portable kernel* of SSS — the ideas that survive translation —
+plus the Go toolchain's own hard guarantees. This file:
+
+  (A) translates each SSS rule into one of ADOPT / ADAPT / N-A-FOR-GO,
+  (B) states what the Go toolchain enforces for free (gofmt/vet/golangci-lint),
+  (C) defines the Go quality kernel we actually hold ourselves to.
+
+Guiding principle: **idiomatic Go beats transliterated C#.** Where SSS and Go
+idiom conflict, Go idiom wins; the conflict is documented here, not "fixed."
+
+--------------------------------------------------------------------------------
+1. THE 16 SSS RULES → GO VERDICTS
+--------------------------------------------------------------------------------
+
+R1  One type per file
+    ADAPT (soft). Go groups by *package*, not by type-per-file. Idiomatic Go
+    puts a coherent type + its methods + tightly-related small types in one
+    file. RULE (Go): one *exported primary* type/concept per file where it aids
+    navigation; filename matches the concept (snake_case). Do NOT split every
+    struct into its own file — that is anti-idiomatic. gofmt/goimports govern.
+
+R2  One namespace per assembly
+    N/A. Go has no assemblies/namespaces. The Go analogue: one package per
+    directory, package name == last path element. `go build` enforces this.
+    Already 100% by construction.
+
+R3  Interfaces in their own assembly
+    N/A / ANTI-IDIOM. Go's rule is the inverse: **define interfaces in the
+    consumer package, next to where they're used** ("accept interfaces, return
+    structs"). A dedicated interface-only package is a C#-ism and a smell in Go.
+    DROP.
+
+R4  State / Manager / Object pattern
+    ADAPT (spirit only). The portable kernel is *state/logic separation*: keep
+    data types (structs) distinct from the code that mutates them; centralize
+    ownership of a collection in one type. Go expresses this with a struct that
+    owns a map/slice + a mutex, exposing methods — NOT generational-ID arrays.
+    skywire already does this (SessionManager, procManager, dtm, router). Do NOT
+    retrofit Slot+Gen arrays; that solves a cache-locality problem this codebase
+    does not have.
+
+R5  No state in System
+    ADOPT (spirit). Stateless helpers should be stateless. But Go's idiom is
+    methods on a receiver that owns state, not free `static` functions over a
+    passed-in god-struct. Keep pure helpers pure; keep owned state behind its
+    owner. Don't smuggle package-level mutable globals (this one is real and
+    worth linting — see kernel §4).
+
+R6  System has a single Update()
+    N/A / ANTI-IDIOM. Game-loop tick model. Irrelevant to an event-driven
+    network daemon. DROP.
+
+R7  Nothing imports System except main
+    ADAPT → becomes the Go **layering / import-direction** rule (see R11).
+    Enforced via package dependency direction, not assembly refs.
+
+R8  Fof/Fon ("Of" = read, "On" = write) naming
+    N/A / ANTI-IDIOM. Go uses Get-less getters (`Name()` not `NameOf()`) and
+    verb methods (`Close`, `Dial`, `Serve`). Do NOT rename the codebase to
+    VelocityOfX/ApplyForceOnX. DROP. (Portable sliver: name mutators with
+    verbs; that is already Go idiom.)
+
+R9  Event/queue assembly per system
+    ADAPT (spirit). "Systems communicate via queues, not direct calls" → Go
+    channels / an event struct + a channel, when decoupling is actually needed.
+    Do not mandate it everywhere. Use where it earns its keep.
+
+R10 Two-stage init (InitStage1 → InitStage2 → content)
+    ADAPT (weak). Go idiom: constructors returning (T, error); wire dependencies
+    by passing them to constructors (dependency injection by argument). The
+    portable kernel — "allocate, then wire cross-refs, fail loudly" — is already
+    how skywire's visor init (initStack) works. Keep the ordering discipline;
+    skip the literal InitStage1/2 method names.
+
+R11 C0–C4 layering, downward-only deps
+    ADOPT (this is the crown jewel and it PORTS). Go analogue: acyclic package
+    dependency graph, dependencies point toward more-generic packages.
+      Go layers (skywire): pkg/skywire-utilities & cipher (C0) → dmsg/transport
+      data types (C1) → managers/router/tpd-client (C2) → visor assembly (C3) →
+      cmd/* (C4). `go build` already forbids import cycles (hard compile error) —
+      Go gives you R11's no-cycles guarantee for FREE. What it does NOT give free
+      is *direction*; enforce with a depguard/import-boundary lint if desired.
+
+R12 No inheritance / abstract / virtual
+    ADOPT (free). Go has no inheritance, no classes, no virtual/override. 100%
+    by construction. Embedding exists but is composition, not inheritance.
+
+R13 Build standards (ImplicitUsings/RootNamespace/Nullable disable)
+    N/A. No such knobs. Go analogue: `go.mod` pins the toolchain; gofmt/goimports
+    make imports explicit and ordered; there is no nullable-ref-type toggle
+    (Go has typed zero values + explicit pointers). Effectively already enforced.
+
+R14 Typed generational ID per object
+    N/A / ANTI-IDIOM here. Generational IDs are a game-engine object-pool
+    technique. skywire's identifiers are cryptographic public keys, dmsg addrs,
+    route IDs, transport UUIDs — already strongly typed (cipher.PubKey,
+    routing.RouteID, uuid.UUID). Do NOT add Slot+Gen structs. DROP; the *goal*
+    (typed handles, not bare ints/strings) is already met.
+
+R15 All references by Gid — no object pointers
+    N/A / ANTI-IDIOM. Same as R14. Go passes pointers and interface values by
+    design; the GC makes "stale pointer" a non-problem. DROP.
+
+R16 Central allocation in Manager only
+    ADAPT (spirit). "One owner per resource, allocation/free goes through it" is
+    good and portable (it's just RAII/ownership). Go expresses it as: the owning
+    struct exposes New…/Close, callers don't reach into internals. Already the
+    pattern for pooled resources (transport manager, session manager). Keep it;
+    drop the array/free-list machinery.
+
+Supplementary bans (SSS "additional restrictions"):
+    No generics ............ N/A/DROP. Go 1.18+ has generics; use them where they
+                             reduce duplication (sparingly — skywire uses ~none,
+                             which is fine).
+    No IEnumerable/yield ... N/A (no such construct). Go uses slices + range.
+    No var ................. N/A. Go's `:=` is idiomatic; gofmt-blessed. DROP.
+    No mutex/concurrency ... HARD DROP / opposite. Go is built on goroutines +
+                             channels + sync. Single-threaded mandate is
+                             inapplicable to a network daemon. The real Go rule:
+                             use the race detector + sync primitives correctly.
+    No events/delegates .... N/A. Go uses funcs-as-values + channels idiomatically.
+    Prefer for over foreach  N/A. Go has only `for`/`for range`. Free.
+    Prefer static functions  ADAPT weakly (prefer pure funcs where no state).
+    No try/catch, error enums
+                             ADOPT (already Go's model!). Go returns `error`;
+                             this is *closer to SSS's stated preference* than C#.
+                             Go rule: return errors, wrap with %w, don't panic in
+                             library code. (See §4; 5.5k funcs already return error.)
+
+--------------------------------------------------------------------------------
+2. THE 71 code-rules → GO BUCKETS
+--------------------------------------------------------------------------------
+
+N/A — language mechanic Go lacks or the toolchain moots (≈45 rules):
+  AlwaysUseBraces (gofmt: Go requires braces already), SingleLineNamespaces,
+  BanAutoProperties, BanBomEncoding[Xml], EnforceNet80, EnforceNullablesDisabled,
+  Nullable, BanNullCoalescing, BanPartialClasses, BanGenerics, BanEnumerables,
+  BanFuncInSignature, BanLambdas, BanEvents, BanFinally, NoAsyncAwait,
+  ExplicitlyTyped(var), BanMethodOverloads (Go has no overloads),
+  BanDoubleInheritance/SingleInheritanceLevel/BanFunctionOverriding/NoAbstractClass
+  (Go has no inheritance), BanNestedTypes/BanNestedEnums (Go allows, harmless),
+  BanGlobalNamespace, DuplicateNamespaces, OneNamespacePerAssembly,
+  NamespaceNaming, BanSeparateEnumIdAssembly, InterfaceDedicatedAssembly,
+  BanInterfaceInheritance, InterfaceChaining, InterfaceNaming (Go: no "I"/"Interface"
+  suffix — use -er), NonPolymorphicInterface, InterfaceGetterAbuse,
+  PascalCaseClassNames/MethodNames (Go: exported=Upper, unexported=lower — vet-
+  adjacent), PublicFieldsPascalCase, BanNonPublicFields (OPPOSITE in Go —
+  unexported fields are the norm/good), AsyncMethodNaming, EnumNaming/EnumFirstValue
+  (Go has no enums; iota consts — the zero-value-invalid idea DOES port, see below),
+  BanLocalization, PragmaSuppressionDocumentation, BanXmlComments,
+  ImplicitToString, IdeaFoldersInRoot.
+
+ADOPT — ports cleanly, mostly already enforced by our toolchain (≈15 rules):
+  OneClassPerFile        → soft one-concept-per-file (R1).
+  TypeNameMatchesFileName → soft; snake_case filename ~ its primary type.
+  FileNamingConvention / SourceDirectoryNaming → Go: lower_snake_case .go files,
+                           _test.go, _<goos>.go / build-tag splits (skywire does
+                           this well: *_js.go, *_native.go, *_tinygo.go).
+  FlatFolderStructure / FolderNestingDepth → keep package trees shallow; one pkg
+                           per dir. skywire is moderately deep but bounded.
+  CircularDependencyDetection / LayerDependency → **`go build` enforces acyclic
+                           imports as a hard error** (free). Direction = lint.
+  BanDebugLogs           → no stray debug logging committed (revive/manual).
+  BooleanNamingPrefix    → INVERTED for Go. Bool variables, parameters and
+                           fields take plain names (enabled, closed), no Is/Has.
+                           Predicate funcs may keep Is/Has like the stdlib.
+  BooleanEnumFirstValue-analogue → make the zero value the invalid/unset state
+                           (iota starts at 0 → reserve 0 = Unknown/Invalid). ADOPT.
+  DescriptiveLoopVariables → allow idiomatic short `i`,`k`,`v` (Go norm) but no
+                           single letters for non-trivial scopes. ADAPT.
+  ImportOrganization     → goimports groups stdlib / external / local. ADOPT
+                           (already done; run goimports).
+  SingleOperationPerLine → readability; loosely, gofmt handles most.
+  BanSymlinks            → no symlinks in repo. ADOPT (trivially true).
+  BanExternalLibraryDirectUsage (xlib wrapper) → ADAPT: wrap volatile external
+                           deps behind a local interface at the seam you own
+                           (Go idiom anyway); do not build a global xlib.
+  DiscourageDefaultParameters → Go HAS no default params → satisfied for free;
+                           the intent (no hidden optional args) = use option
+                           structs / functional options deliberately.
+  StateActionMixture     → the one genuinely architectural rule that ports: a
+                           type that is BOTH a big data bag AND a big logic bag
+                           is a smell. Prefer data structs + methods with clear
+                           ownership. ADOPT as guidance (not auto-linted).
+
+--------------------------------------------------------------------------------
+3. WHAT THE GO TOOLCHAIN ENFORCES FOR FREE (the real baseline)
+--------------------------------------------------------------------------------
+
+  gofmt/goimports  canonical formatting, brace style, import grouping — NON-
+                   NEGOTIABLE, machine-applied. (SSS R1/braces/import-org/single-
+                   line ~ subsumed.)
+  go build         no unused imports; NO IMPORT CYCLES (subsumes Circular/Layer
+                   dependency detection as a compile error); package==dir.
+  go vet           shadowing, printf, struct-tag, lock-copy, unreachable checks.
+  -race            data-race detection (the correct answer to "no concurrency",
+                   inverted for Go).
+  golangci-lint    repo config .golangci.yml enables: errcheck, gosec,
+                   ineffassign, misspell, nakedret, revive, staticcheck,
+                   unconvert, unparam, unused; gofmt(simplify) as formatter;
+                   line-length 120, gocyclo 10, goconst. THIS is skywire's
+                   machine-checkable standard and it already runs in CI.
+
+Net: a large fraction of the *portable* SSS intent (formatting, no dead code, no
+cycles, explicit imports, no unchecked errors) is already enforced on every PR by
+gofmt + go build + golangci-lint. That is the honest "compliance engine."
+
+--------------------------------------------------------------------------------
+4. THE GO QUALITY KERNEL (what we hold ourselves to, beyond the linters)
+--------------------------------------------------------------------------------
+
+  K1  Package layering is acyclic AND downward (generic ← specific). Guaranteed
+      acyclic by the compiler; direction is reviewer-enforced (optionally
+      depguard). [SSS R7/R11]
+  K2  State/logic separation: data structs are distinct from the code that
+      drives them; each shared collection has exactly ONE owning type that
+      guards it (mutex/channel) and exposes New…/Close. No package-level mutable
+      globals for shared state. [SSS R4/R5/R16]
+  K3  Errors are returned, wrapped with %w, and checked (errcheck). Library/pkg
+      code does not panic on recoverable conditions; panic only for
+      truly-unreachable invariants, and log with the panic-safe accessors.
+      [SSS "error enums", inverted from C# exceptions]
+  K4  Typed identifiers, not bare ints/strings, for domain handles — already met
+      by cipher.PubKey / routing.RouteID / uuid.UUID / transport.ID. [SSS R14 goal]
+  K5  Zero value is the invalid/unset state for iota const groups (0 = Unknown).
+      [SSS EnumFirstValue]
+  K6  Build-tag / filename discipline for platform splits (_js.go, _native.go,
+      _tinygo.go, //go:build) — this is how skywire keeps js/wasm + TinyGo + native
+      coherent. Keep untagged files pure; push hostile deps behind tags. [SSS R1 goal]
+  K7  Interfaces defined at the consumer, named -er, kept small. Accept
+      interfaces, return concrete types. [inverts SSS R3, follows Go]
+  K8  No is/has prefix on boolean variables, parameters or struct fields.
+      Use plain idiomatic Go names (enabled, closed, verbose). Predicate
+      functions and methods may keep Is/Has as Go's stdlib does (errors.Is,
+      strings.HasPrefix, os.IsNotExist). Mutators are verbs. No Get prefix
+      on getters. [SSS BooleanNamingPrefix inverted to Go idiom]
+  K9  Shallow, one-package-per-dir tree; snake_case filenames named for their
+      primary concept. [SSS Flat/FileNaming]
+  K10 No committed debug logs / dead code (unused linter + review). [SSS BanDebugLogs]
+
+--------------------------------------------------------------------------------
+5. REVIEW PROCEDURE (Go)
+--------------------------------------------------------------------------------
+
+  1. gofmt -l $(git ls-files '*.go' | grep -v vendor)        # must be empty
+  2. go vet ./...                                            # must be clean
+  3. golangci-lint run                                       # repo .golangci.yml
+  4. go build ./...                                          # no cycles / unused
+  5. Reviewer (not automatable) checks K1,K2,K7 — layering direction, single
+     ownership of shared state, interface placement — the parts a linter can't see.
+
+The first four are the "compliance %" that actually matters for Go and they are
+binary (pass/fail) and already gate CI. The fifth is judgement, per-PR.
+
+================================================================================
+END — Go adaptation
+================================================================================
