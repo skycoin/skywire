@@ -85,7 +85,11 @@ internal object SseDispatch {
             return
         }
         val peer = m.to.lowercase()
-        if (!isPk(peer) || m.id.isEmpty() || m.fileId.isNotEmpty()) return
+        if (!isPk(peer) || m.id.isEmpty()) return
+        if (m.fileId.isNotEmpty()) {
+            ownFileOut(repo, peer, m)
+            return
+        }
         val list = repo.thread(peer).value
         if (list.any { it.wireId == m.id }) return
         val target = list.lastOrNull { it.mine && it.wireId.isEmpty() && it.file == null && it.text == m.message && it.status in setOf("pending", "failed", "queued") }
@@ -104,6 +108,19 @@ internal object SseDispatch {
         }
         repo.updateMessage(peer, target.key) { it.copy(wireId = m.id, status = advance(it.status, "sent")) }
         claimOrphan(repo, peer, target.key, m.id)
+    }
+
+    /** Our own file left: this names its id when the `/send-file` answer is late or lost. */
+    private fun ownFileOut(repo: ChatRepository, peer: String, m: SseMessage) {
+        if (m.fileStatus != "sent" && m.fileStatus != "parked") return
+        val target = repo.thread(peer).value.lastOrNull {
+            it.mine && (it.file?.status == "sending" || it.file?.status == "failed") && isOwnUpload(it.file, m.fileId, m.fileName, m.fileSize)
+        } ?: return
+        repo.updateMessage(peer, target.key) {
+            val f = it.file ?: return@updateMessage it
+            it.copy(file = f.copy(id = m.fileId, url = f.url.ifEmpty { m.fileUrl }, status = "sent"))
+        }
+        claimOrphan(repo, peer, target.key, m.fileId)
     }
 
     private fun dmStatus(repo: ChatRepository, m: SseMessage) {
@@ -160,9 +177,16 @@ internal object SseDispatch {
         if (sender == me) {
             // Our own post coming back: give the pending bubble its feed id.
             val text = m.message
-            val own = list.lastOrNull { it.mine && it.tsNano.isEmpty() && (it.text == text || it.file?.id == m.fileId && m.fileId.isNotEmpty()) }
+            val own = list.lastOrNull { it.mine && it.tsNano.isEmpty() && (it.text == text || isOwnUpload(it.file, m.fileId, m.fileName, m.fileSize)) }
             if (own != null) {
-                repo.updateMessage(gid, own.key) { it.copy(tsNano = nano, status = advance(it.status, "sent")) }
+                repo.updateMessage(gid, own.key) {
+                    val f = it.file?.takeIf { _ -> m.fileId.isNotEmpty() }
+                    it.copy(
+                        tsNano = nano,
+                        status = advance(it.status, "sent"),
+                        file = f?.copy(id = f.id.ifEmpty { m.fileId }, url = f.url.ifEmpty { m.fileUrl }) ?: it.file,
+                    )
+                }
                 return
             }
         }

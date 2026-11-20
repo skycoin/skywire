@@ -409,35 +409,24 @@ class ChatRepository private constructor(internal val app: Context) {
     internal fun mergeHistory(pk: String, records: List<HistoryRecord>) {
         if (records.isEmpty()) return
         mutate(pk) { current ->
-            val out = current.toMutableList()
-            var changed = false
+            val out = withoutFailedTwins(current).toMutableList()
+            var changed = out.size != current.size
             for (r in records) {
                 val m = fromHistory(pk, r) ?: continue
-                val i = out.indexOfFirst { same(it, m) }
-                if (i >= 0) {
-                    val e = out[i]
-                    val f = e.file
-                    val nf = m.file
-                    if (f != null && nf != null && (f.url.isEmpty() && nf.url.isNotEmpty() || f.id.isEmpty())) {
-                        out[i] = e.copy(file = f.copy(url = f.url.ifEmpty { nf.url }, id = f.id.ifEmpty { nf.id }))
-                        changed = true
-                    }
-                    if (e.wireId.isEmpty() && m.wireId.isNotEmpty()) {
-                        out[i] = out[i].copy(wireId = m.wireId, status = if (e.mine && statusRank(e.status) < statusRank("sent")) "sent" else e.status)
-                        changed = true
-                    }
+                val i = out.indexOfFirst { sameMessage(it, m) }
+                if (i < 0) {
+                    out += m
+                    changed = true
                     continue
                 }
-                out += m
-                changed = true
+                val merged = withStored(out[i], m)
+                if (merged != out[i]) {
+                    out[i] = merged
+                    changed = true
+                }
             }
             if (!changed) current else out.sortedBy { it.ts }
         }
-    }
-
-    private fun same(a: ChatMessage, b: ChatMessage): Boolean {
-        if (a.dmWireId.isNotEmpty() && b.dmWireId.isNotEmpty()) return a.dmWireId == b.dmWireId
-        return a.mine == b.mine && a.text == b.text && kotlin.math.abs(a.ts - b.ts) < SAME_WINDOW_MS
     }
 
     private fun fromHistory(pk: String, r: HistoryRecord): ChatMessage? {
@@ -453,7 +442,7 @@ class ChatRepository private constructor(internal val app: Context) {
             null
         }
         return ChatMessage(
-            key = "h:" + (r.id.ifEmpty { r.fileId }.ifEmpty { "$ts:${r.text.hashCode()}" }),
+            key = STORED_KEY + (r.id.ifEmpty { r.fileId }.ifEmpty { "$ts:${r.text.hashCode()}" }),
             ts = ts,
             from = from,
             text = r.text,
@@ -718,7 +707,6 @@ class ChatRepository private constructor(internal val app: Context) {
         private const val FOCUS_REFRESH_MS = 5_000L
         private const val RETRIES = 15
         private const val CATCH_UP = 300
-        private const val SAME_WINDOW_MS = 120_000L
         const val NAME_MAX = 40
 
         @Volatile
