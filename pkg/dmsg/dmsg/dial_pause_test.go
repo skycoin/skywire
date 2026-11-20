@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/0magnet/yamux"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -70,21 +71,23 @@ func TestPauseDropsASessionDialedDuringIt(t *testing.T) {
 	go func() { _ = srv.Serve(lis, lis.Addr().String()) }() //nolint:errcheck
 	t.Cleanup(func() { _ = srv.Close() })                   //nolint:errcheck
 
+	// Dial the session by hand, as dialSession would, so it is fresh and
+	// unshared when it reaches the registration tail.
 	pk, sk := GenKeyPair(t, "pause-client")
 	c := NewClient(pk, sk, dc, &Config{MinSessions: 1})
-	go c.Serve(context.Background())
 	t.Cleanup(func() { _ = c.Close() }) //nolint:errcheck
-	var ses ClientSession
-	require.Eventually(t, func() bool {
-		var ok bool
-		ses, ok = c.Session(srvPK)
-		return ok
-	}, 15*time.Second, 50*time.Millisecond)
+	conn, err := net.Dial("tcp", lis.Addr().String())
+	require.NoError(t, err)
+	ses, err := makeClientSession(&c.EntityCommon, c.porter, conn, srvPK)
+	require.NoError(t, err)
+	ses.sm.yamux, err = yamux.Client(conn, YamuxConfig())
+	require.NoError(t, err)
 
 	c.SetDialPaused(true)
 	_, err = c.finishDialedSession(context.Background(), ses, CarrierTCP, lis.Addr().String(), entry)
 	require.ErrorIs(t, err, ErrDialPaused)
-	require.Eventually(t, func() bool { return c.SessionCount() == 0 }, 5*time.Second, 20*time.Millisecond)
+	require.Equal(t, 0, c.SessionCount())
+	require.True(t, ses.sm.yamux.IsClosed(), "the refused session is closed")
 }
 
 func TestRelayPausedRefusesSlots(t *testing.T) {
