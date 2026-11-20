@@ -8,10 +8,10 @@
 // text messages, so a UI renders it inline like any other message.
 //
 // Auto-accept policy (operator decision): once you've ESTABLISHED a chat with a
-// peer (there's a live conn) or you share a GROUP, inbound files are accepted
-// automatically — no per-file prompt. Files from a peer you've never talked to
-// are declined. Everything is encrypted by the skywire transport; nothing
-// touches the clearnet.
+// peer (a live conn, or a message of yours in the stored conversation) or you
+// share a GROUP, inbound files are accepted automatically — no per-file prompt.
+// Files from a peer you've never talked to are held until asked for. Everything
+// is encrypted by the skywire transport; nothing touches the clearnet.
 package commands
 
 import (
@@ -75,6 +75,27 @@ func isEstablishedPeer(pk cipher.PubKey) bool {
 	return chatCtrl != nil && chatCtrl.Connected(pk)
 }
 
+// writtenToScan bounds how far back haveWrittenTo looks in a conversation.
+const writtenToScan = 200
+
+// haveWrittenTo reports whether the stored conversation with pk holds a
+// message of ours. Two phones seldom keep a chat conn open between messages.
+func haveWrittenTo(pk cipher.PubKey) bool {
+	if historyStore == nil {
+		return false
+	}
+	msgs, err := historyStore.ListByPeer(pk.Hex(), writtenToScan)
+	if err != nil {
+		return false
+	}
+	for i := range msgs {
+		if msgs[i].Outgoing {
+			return true
+		}
+	}
+	return false
+}
+
 // fileDialFunc opens a fresh transfer stream to peer on the file port, trying
 // skynet first (on-mesh, IP-anonymous) then dmsg — the same preference order as
 // the chat conn. It always uses SkychatFilePort on both networks.
@@ -115,8 +136,9 @@ func acceptInbound(from cipher.PubKey, offer xfer.Offer) (io.WriteCloser, bool) 
 	case offer.Group != "":
 		accept = isGroupMember(offer.Group, from) && !isChannelGroup(offer.Group)
 	default:
-		// Someone accepted or named is known whether or not a chat conn is open.
-		known := isEstablishedPeer(from) || privacyStore.Accepted(from.Hex()) || (contactStore != nil && contactStore.Name(from.Hex()) != "")
+		// Someone accepted, named or written to is known whether or not a chat conn is open.
+		known := isEstablishedPeer(from) || privacyStore.Accepted(from.Hex()) ||
+			(contactStore != nil && contactStore.Name(from.Hex()) != "") || haveWrittenTo(from)
 		accept = known && verdict == privacy.Allow
 	}
 	// A file we explicitly requested (backfill) is accepted even from a peer we
