@@ -43813,6 +43813,64 @@
         }
       }
     },
+    "wallet_usd_as_of" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Price from %1$@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Precio del %1$@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prix du %1$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "价格更新于 %1$@"
+          }
+        }
+      }
+    },
+    "wallet_usd_unavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "USD price not available now: coinpaprika.com did not answer."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Precio en USD no disponible ahora: coinpaprika.com no respondió."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prix en USD indisponible pour le moment : coinpaprika.com n'a pas répondu."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂时无法获取美元价格：coinpaprika.com 没有响应。"
+          }
+        }
+      }
+    },
     "wallet_usd_value" : {
       "extractionState" : "manual",
       "localizations" : {

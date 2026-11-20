@@ -29,4 +29,28 @@ final class WalletPricesTests: XCTestCase {
         XCTAssertEqual([CoinSpec.sky, .btc, .eth, .usdt].map(\.priceId), ["sky-skycoin", "btc-bitcoin", "eth-ethereum", "usdt-tether"])
         XCTAssertNil(CoinSpec(id: "fiber-1", name: "Testcoin", ticker: "TST", kind: .skyFiber, nodeUrl: "https://node.example").priceId)
     }
+
+    /// The stored form of a quote, Android's: a price kept across a restart, or nothing when it does not read.
+    func testAQuoteSurvivesBeingStored() {
+        let quote = WalletPrices.Quote(usd: 0.042841804154099855, at: Date(timeIntervalSince1970: 1_795_000_000))
+        XCTAssertEqual(WalletPrices.encode(quote), "0.042841804154099855|1795000000000")
+        XCTAssertEqual(WalletPrices.decode(WalletPrices.encode(quote)), quote)
+        for unreadable in ["", "0.04", "0.0|1795000000000", "nan|1795000000000", "abc|def", "0.04|0"] {
+            XCTAssertNil(WalletPrices.decode(unreadable), unreadable)
+        }
+    }
+
+    /// The wallet lost its price at every restart: the last quote now comes back from the store.
+    @MainActor
+    func testTheLastQuoteComesBackAfterARestart() throws {
+        let suite = "WalletPricesTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+        let id = "test-\(UUID().uuidString)"
+        XCTAssertNil(WalletPrices.last(id, defaults: defaults))
+        let quote = WalletPrices.Quote(usd: 0.0431, at: Date(timeIntervalSince1970: 1_795_169_348))
+        WalletPrices.keep(quote, for: id, defaults: defaults)
+        WalletPrices.dropCache()
+        XCTAssertEqual(WalletPrices.last(id, defaults: defaults), quote)
+    }
 }

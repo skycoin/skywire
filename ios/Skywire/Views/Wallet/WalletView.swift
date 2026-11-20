@@ -131,10 +131,21 @@ struct WalletHome: View {
                 Text(verbatim: model.coin.ticker).skyText(.titleMedium).foregroundStyle(Color.skyOnSurfaceVariant)
                 if model.refreshing { MaterialSpinner(size: 14, stroke: 2) }
             }
-            if let price = model.usdPrice {
-                Text(verbatim: L10n.format("wallet_usd_value", model.coin.usdText(model.snapshot?.confirmed ?? 0, price: price)))
+            if let quote = model.usdQuote {
+                Text(verbatim: L10n.format("wallet_usd_value", model.coin.usdText(model.snapshot?.confirmed ?? 0, price: quote.usd)))
                     .skyText(.titleMedium).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 4)
                     .accessibilityIdentifier("wallet-balance-usd")
+                // An old quote says when it is from: the price service was not reached since.
+                if model.usdPrice == nil {
+                    Text(verbatim: L10n.format("wallet_usd_as_of", fullDateTime(Int64(quote.at.timeIntervalSince1970))))
+                        .skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
+                        .accessibilityIdentifier("wallet-balance-usd-date")
+                }
+            }
+            if model.usdMissing {
+                Text(verbatim: L10n.text("wallet_usd_unavailable"))
+                    .skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 4)
+                    .accessibilityIdentifier("wallet-balance-usd-missing")
             }
             Text(verbatim: subLine).skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 9)
         }

@@ -95,8 +95,12 @@ final class WalletModel: ObservableObject {
     @Published private(set) var node: NodeInfo?
     /// False when the last node check got no answer.
     @Published private(set) var nodeReachable = true
-    /// One of the coin in US dollars, when the user turned prices on and the coin has one.
+    /// One of the coin in US dollars, when the user turned prices on and a quote under an hour old is known.
     @Published private(set) var usdPrice: Double?
+    /// The last quote known, however old: the balance shows it with its time.
+    @Published private(set) var usdQuote: WalletPrices.Quote?
+    /// Prices are on, the service did not answer and no quote is stored.
+    @Published private(set) var usdMissing = false
     /// A one-line outcome or refusal, shown briefly over the screen.
     @Published var message: String?
 
@@ -135,7 +139,7 @@ final class WalletModel: ObservableObject {
         if coin.id != self.coin.id {
             node = nil
             nodeReachable = true
-            usdPrice = nil
+            clearPrice()
         }
         self.coin = coin
         let shipped = store.defaultCoins[coin.id]
@@ -165,7 +169,7 @@ final class WalletModel: ObservableObject {
     func run() async {
         visible = true
         // Turned off in Settings while the tab was away: no price stays on screen.
-        if !WalletPrices.enabled { usdPrice = nil }
+        if !WalletPrices.enabled { clearPrice() }
         startRefreshing()
         while !Task.isCancelled {
             do { try await Task.sleep(for: .seconds(3600)) } catch { break }
@@ -217,15 +221,30 @@ final class WalletModel: ObservableObject {
         nodeReachable = info != nil
     }
 
-    /// The coin's USD price, when the user turned prices on; a failed fetch keeps the last one.
+    /// The coin's USD price, when the user turned prices on; a failed fetch keeps the last quote, stored ones too.
     private func refreshPrice() async {
         guard WalletPrices.enabled, let id = coin.priceId else {
-            usdPrice = nil
+            clearPrice()
             return
         }
-        let price = try? await WalletPrices.usd(id)
+        // What is known shows at once: the fetch can take its time, or fail.
+        showQuote(id, failed: false)
+        let fetched = (try? await WalletPrices.usd(id)) != nil
         if Task.isCancelled || coin.priceId != id || !WalletPrices.enabled { return }
-        usdPrice = price ?? usdPrice
+        showQuote(id, failed: !fetched)
+    }
+
+    private func showQuote(_ id: String, failed: Bool) {
+        let quote = WalletPrices.last(id)
+        usdQuote = quote
+        usdPrice = quote.flatMap { Date().timeIntervalSince($0.at) < WalletPrices.fresh ? $0.usd : nil }
+        usdMissing = quote == nil && (failed || usdMissing)
+    }
+
+    private func clearPrice() {
+        usdPrice = nil
+        usdQuote = nil
+        usdMissing = false
     }
 
     func messageShown() { message = nil }
