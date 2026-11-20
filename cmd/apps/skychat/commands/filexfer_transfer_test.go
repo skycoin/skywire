@@ -348,6 +348,30 @@ func TestAcceptInbound_AcceptsAPeerWeWroteTo(t *testing.T) {
 	_ = w.Close() //nolint:errcheck
 }
 
+// A manager whose context ended no longer listens, so a restart of the app in
+// the same process must build a new one.
+func TestFileXferServing_EndsWithItsContext(t *testing.T) {
+	withXferEnv(t)
+	fileMgrMu.Lock()
+	defer fileMgrMu.Unlock()
+	origCtx := fileMgrCtx
+	defer func() { fileMgrCtx = origCtx }()
+
+	fileMgr, fileMgrCtx = nil, nil
+	if fileXferServing() {
+		t.Error("serving without a manager")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	fileMgr, fileMgrCtx = xfer.NewManager(xfer.Config{}), ctx
+	if !fileXferServing() {
+		t.Error("a manager under a live context is not serving")
+	}
+	cancel()
+	if fileXferServing() {
+		t.Error("a manager whose context ended still counts as serving")
+	}
+}
+
 func TestAcceptInbound_AcceptsEstablishedPeer(t *testing.T) {
 	withXferEnv(t)
 	dir := withCleanDownloads(t)

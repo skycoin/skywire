@@ -46,9 +46,11 @@ import (
 )
 
 // fileMgr is the process-wide file-transfer manager, initialized by startFileXfer.
+// fileMgrCtx is the context its listeners serve under.
 var (
-	fileMgr   *xfer.Manager
-	fileMgrMu sync.Mutex
+	fileMgr    *xfer.Manager
+	fileMgrCtx context.Context
+	fileMgrMu  sync.Mutex
 )
 
 // downloadsDir returns (and creates) the directory received files are saved to:
@@ -412,16 +414,22 @@ func onXferDone(dir xfer.Direction, peer cipher.PubKey, offer xfer.Offer, err er
 	}
 }
 
+// fileXferServing reports whether a manager serves under a context that has
+// not ended. The caller holds fileMgrMu.
+func fileXferServing() bool {
+	return fileMgr != nil && (fileMgrCtx == nil || fileMgrCtx.Err() == nil)
+}
+
 // startFileXfer builds the file-transfer manager and starts listeners on the
-// file port over the enabled networks. Safe to call once during startup; a nil
-// appCl (standalone/no-net) disables it.
+// file port over the enabled networks. A nil appCl (standalone/no-net) disables
+// it. A manager whose context ended is replaced, as an in-process restart needs.
 func startFileXfer(ctx context.Context) {
 	if appCl == nil {
 		return
 	}
 	fileMgrMu.Lock()
 	defer fileMgrMu.Unlock()
-	if fileMgr != nil {
+	if fileXferServing() {
 		return
 	}
 	mgr := xfer.NewManager(xfer.Config{
@@ -431,7 +439,7 @@ func startFileXfer(ctx context.Context) {
 		Accept:  acceptInbound,
 		OnDone:  onXferDone,
 	})
-	fileMgr = mgr
+	fileMgr, fileMgrCtx = mgr, ctx
 
 	var listeners []net.Listener
 	for _, netType := range enabledFileNets() {
