@@ -151,8 +151,9 @@ Builds:
       - tinygo version
       # From here on nothing is downloaded: skywire builds from vendor/, and
       # with the module proxy off, a toolchain fetch would be an error, not a
-      # prebuilt Go.
-      - export GOPROXY=off
+      # prebuilt Go. TINYGO_FORK=0 keeps the Makefile on the TinyGo built
+      # above: scripts/tinygo-fork.sh would fetch a prebuilt toolchain instead.
+      - export GOPROXY=off TINYGO_FORK=0
       # The presets removed above, built with TinyGo from
       # docs/examples/routing-policies/wasm/bundle; the target then checks
       # that the fresh build decides exactly as the native presets do.
