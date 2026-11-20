@@ -1,0 +1,9 @@
+{
+  "body": "{\"from\":\"mail@ak623g2y5qylsdvspzsvgc7rcwnyagob7zyplyg2etsroggeyu7s6.dmsg\",\"to\":\"mail@ak623g2y5qylsdvspzsvgc7rcwnyagob7zyplyg2etsroggeyu7s6.dmsg\",\"subject\":\"Fixture\",\"date\":\"Mon, 12 Oct 2026 11:11:36 +0800\",\"message_id\":\"<1791774696434924000.M778f0d34b2e5f76d.skymail@ak623g2y5qylsdvspzsvgc7rcwnyagob7zyplyg2etsroggeyu7s6.dmsg>\",\"peer_pk\":\"02bdad9b58ec30b90eb27e65530bf1159b8019c1fe70f5e0da24e51718c4c53f2f\",\"from_verified\":true,\"text\":\"Hello from the recorder.\\r\\n\\r\\n\",\"attachments\":[{\"name\":\"note.txt\",\"content_type\":\"text/plain\",\"size\":6}]}\n",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "method": "GET",
+  "path": "/api/visors/02bdad9b58ec30b90eb27e65530bf1159b8019c1fe70f5e0da24e51718c4c53f2f/mail/INBOX/1791774696435084000.M15c6d813fc2b0c96.skymail",
+  "status": 200
+}

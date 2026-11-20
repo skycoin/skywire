@@ -1,4 +1,4 @@
-//go:build tinygo && darwin
+//go:build tinygo && darwin && !mobile
 
 // Package visor pkg/visor/api_host_stats_tinygo_darwin.go c3-vis-core
 package visor

@@ -238,11 +238,13 @@ func (p *Proc) startInProcess() error {
 	envs := p.conf.Envs()
 	appcommon.SetInternalAppEnv(p.conf.ProcKey, envs)
 
+	runDone := make(chan struct{})
 	go func() {
 		// Internal apps use their isolated logger directly via p.log
 		// Do NOT replace global os.Stdout/os.Stderr as it causes race conditions
 		// when multiple internal apps run concurrently
 
+		defer close(runDone)
 		defer func() {
 			if r := recover(); r != nil {
 				p.errMx.Lock()
@@ -379,6 +381,13 @@ func (p *Proc) startInProcess() error {
 		p.rpcGW.cm.CloseAll()
 		p.rpcGW.lm.CloseAll()
 
+		// Stop returns once waitMx is free. Until RunFunc has returned the app
+		// still serves its listeners and writes its files.
+		select {
+		case <-runDone:
+		case <-time.After(inProcessStopWait):
+			p.log.Warnf("App had not returned %s after it was stopped", inProcessStopWait)
+		}
 		p.waitMx.Unlock()
 	}()
 
@@ -630,10 +639,29 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 	return summaries
 }
 
+// appLogHooks keeps one hook per log file for the life of the process. Each
+// lumberjack.Logger starts a goroutine that its Close does not stop (v2.2.1).
+var appLogHooks sync.Map // path -> *appLogHook
+
 // storeLog attaches the app's file log hook at <local_path>/log/skywire.log.
 func storeLog(log *logging.MasterLogger, localPath string) {
-	path := localPath + "/log/skywire.log"
-	log.Hooks.Add(newAppLogHook(path))
+	log.Hooks.Add(sharedAppLogHook(localPath + "/log/skywire.log"))
+}
+
+// sharedAppLogHook returns the process's hook for path, building it once.
+func sharedAppLogHook(path string) *appLogHook {
+	if h, ok := appLogHooks.Load(path); ok {
+		return h.(*appLogHook)
+	}
+	actual, _ := appLogHooks.LoadOrStore(path, newAppLogHook(path))
+	return actual.(*appLogHook)
+}
+
+// appLogHook writes every level of an app's log to one rotating file. It
+// holds its writer so it can be closed, since Windows does not remove an open file.
+type appLogHook struct {
+	*logging.WriteHook
+	w *lumberjack.Logger
 }
 
 // newAppLogHook builds the file hook for the app log at path.
@@ -643,15 +671,17 @@ func storeLog(log *logging.MasterLogger, localPath string) {
 // crossed MaxSize renamed the file while the others kept writing to the
 // renamed, then reaped, inode, and the INFO, WARN and ERROR lines were lost.
 // One writer keeps every level on a single rotating file.
-func newAppLogHook(path string) logging.Hook {
-	return logging.NewFormatterHook(&lumberjack.Logger{
-		Filename:   path,
-		MaxSize:    1,
-		MaxBackups: 1,
-		MaxAge:     1,
-	}, logging.TraceLevel, &logging.TextFormatter{
-		DisableColors:   true,
-		FullTimestamp:   true,
-		ForceFormatting: true,
-	})
+func newAppLogHook(path string) *appLogHook {
+	w := &lumberjack.Logger{Filename: path, MaxSize: 1, MaxBackups: 1, MaxAge: 1}
+	return &appLogHook{
+		WriteHook: logging.NewFormatterHook(w, logging.TraceLevel, &logging.TextFormatter{
+			DisableColors:   true,
+			FullTimestamp:   true,
+			ForceFormatting: true,
+		}),
+		w: w,
+	}
 }
+
+// Close closes the log file. The next Fire opens it again.
+func (h *appLogHook) Close() error { return h.w.Close() }

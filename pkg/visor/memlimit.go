@@ -3,7 +3,9 @@ package visor
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"math"
 	"os"
 	"runtime/debug"
 	"strconv"
@@ -12,10 +14,17 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
+// minMemoryLimit is the lowest limit applyMemoryLimit sets: a smaller value
+// is raised to it. Below it a limit only buys GC thrash — the phone core's
+// live heap is 18–19 MB after a GC — and the iOS profile asks for 40 MiB, so
+// the floor has to sit under that.
+const minMemoryLimit = 32 * 1024 * 1024
+
 // applyMemoryLimit sets GOMEMLIMIT based on the config value.
 // Supported values:
-//   - "auto": set to 90% of the total system RAM (or cgroup limit)
-//   - "256MiB", "512MiB", "1GiB", etc.: explicit limit
+//   - "auto": set to 90% of the total system RAM (or cgroup limit). Linux and
+//     Android only: on macOS and iOS it sets nothing and warns
+//   - "256MiB", "512MiB", "1GiB", etc.: explicit limit, at least 32 MiB
 //   - "none", or "": no limit (the default)
 //
 // A GOMEMLIMIT in the environment wins, so a service unit can size the
@@ -28,30 +37,45 @@ func applyMemoryLimit(log *logging.Logger, limit string) {
 		log.Infof("GOMEMLIMIT=%s from the environment, ignoring memory_limit %q", env, limit)
 		return
 	}
+	bytes, err := resolveMemoryLimit(limit, totalMemoryBytes)
+	switch {
+	case errors.Is(err, errNoMemInfo):
+		log.Warn(`memory_limit "auto" could not read the total memory (it reads /proc/meminfo and the cgroup limit, which macOS and iOS do not have), so GOMEMLIMIT is not set: set memory_limit to an explicit size instead, such as "512MiB"`)
+		return
+	case err != nil:
+		log.WithError(err).Warnf("Invalid memory_limit %q, skipping", limit)
+		return
+	}
+	prev := debug.SetMemoryLimit(bytes)
+	was := "none"
+	if prev != math.MaxInt64 {
+		was = formatBytes(prev)
+	}
+	log.Infof("GOMEMLIMIT set to %s (was %s)", formatBytes(bytes), was)
+}
 
+// errNoMemInfo is resolveMemoryLimit's answer to "auto" on a system whose
+// memory size it cannot read.
+var errNoMemInfo = errors.New("total memory unknown")
+
+// resolveMemoryLimit turns a memory_limit value other than "" and "none" into
+// the limit to set, raised to minMemoryLimit. total reports the memory "auto"
+// sizes against (0 when unknown).
+func resolveMemoryLimit(limit string, total func() int64) (int64, error) {
 	var bytes int64
 	if limit == "auto" {
-		total := totalMemoryBytes()
-		if total <= 0 {
-			log.Warn("Could not detect total memory, skipping GOMEMLIMIT")
-			return
+		t := total()
+		if t <= 0 {
+			return 0, errNoMemInfo
 		}
-		bytes = autoMemoryLimit(total)
+		bytes = autoMemoryLimit(t)
 	} else {
 		var err error
-		bytes, err = parseMemorySize(limit)
-		if err != nil {
-			log.WithError(err).Warnf("Invalid memory_limit %q, skipping", limit)
-			return
+		if bytes, err = parseMemorySize(limit); err != nil {
+			return 0, err
 		}
 	}
-
-	if bytes < 64*1024*1024 { // minimum 64 MiB
-		bytes = 64 * 1024 * 1024
-	}
-
-	prev := debug.SetMemoryLimit(bytes)
-	log.Infof("GOMEMLIMIT set to %s (was %s)", formatBytes(bytes), formatBytes(prev))
+	return max(bytes, minMemoryLimit), nil
 }
 
 // autoMemoryLimit returns the "auto" limit for a machine with total bytes of

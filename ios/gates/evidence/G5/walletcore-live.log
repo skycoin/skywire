@@ -1,0 +1,7 @@
+# SKYWIRE_NET_TESTS=1 swift test --filter Live in ios/Packages/WalletCore — 2026-10-02T13:42Z
+# Against the shipped endpoints: http://node.skycoin.com (LiveNodeTest's URL), https://ethereum-rpc.publicnode.com, https://eth.blockscout.com (ETH and USDT).
+passed  EthLiveTests.testNativeBalanceAndHistoryParseFromProduction  (1.945 s)
+passed  EthLiveTests.testTokenBalanceAndTransfersParseFromProduction  (8.526 s)
+passed  LiveNodeTests.testBalanceAndHistoryParseFromProduction  (1.719 s)
+Executed 3 tests, with 0 failures (0 unexpected) in 12.189 (12.192) seconds
+# The first run, at 2026-10-02T09:40Z, passed the same 3.

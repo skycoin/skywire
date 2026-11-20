@@ -42,6 +42,12 @@ const (
 // * SW-Nonce:  The nonce for that public key
 // * SW-Sig:    The signature of the payload + the nonce
 func NewHTTP(addr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.Client, clientPublicIP string, mLogger *logging.MasterLogger) (APIClient, error) {
+	return NewHTTPContext(context.Background(), addr, pk, sk, httpC, clientPublicIP, mLogger)
+}
+
+// NewHTTPContext is NewHTTP whose auth handshake, retried without a limit,
+// ends when ctx does.
+func NewHTTPContext(ctx context.Context, addr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.Client, clientPublicIP string, mLogger *logging.MasterLogger) (APIClient, error) {
 	var client *httpauthclient.Client
 	var err error
 
@@ -49,14 +55,14 @@ func NewHTTP(addr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.Client
 
 	retrier := netutil.NewRetrier(log, createRetryDelay, 0, 10, 2)
 	retrierFunc := func() error {
-		client, err = httpauthclient.NewClient(context.Background(), addr, pk, sk, httpC, clientPublicIP, mLogger)
+		client, err = httpauthclient.NewClient(ctx, addr, pk, sk, httpC, clientPublicIP, mLogger)
 		if err != nil {
 			return fmt.Errorf("uptime tracker httpauth: %w", err)
 		}
 		return nil
 	}
 
-	if err := retrier.Do(context.Background(), retrierFunc); err != nil {
+	if err := retrier.Do(ctx, retrierFunc); err != nil {
 		return nil, err
 	}
 

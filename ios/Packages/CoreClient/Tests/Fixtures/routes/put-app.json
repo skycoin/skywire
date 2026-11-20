@@ -1,0 +1,9 @@
+{
+  "body": "{\"name\":\"skysocks-client\",\"args\":[\"--addr\",\"127.0.0.1:1080\",\"--reconnect\"],\"auto_start\":false,\"port\":13,\"status\":0,\"detailed_status\":\"\"}\n",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "method": "PUT",
+  "path": "/api/visors/02bdad9b58ec30b90eb27e65530bf1159b8019c1fe70f5e0da24e51718c4c53f2f/apps/skysocks-client",
+  "status": 200
+}

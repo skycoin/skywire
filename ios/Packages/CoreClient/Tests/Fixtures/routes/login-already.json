@@ -1,0 +1,9 @@
+{
+  "body": "{\"error\":\"not logged out\"}\n",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "method": "POST",
+  "path": "/api/login",
+  "status": 403
+}

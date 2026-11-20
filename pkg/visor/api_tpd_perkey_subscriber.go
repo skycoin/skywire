@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
-	tpdapi "github.com/skycoin/skywire/pkg/deployment/tpd/api"
+	"github.com/skycoin/skywire/pkg/deployment/tpd/tpdpaths"
 )
 
 // ErrTPDPerKeyNotReady is returned when the per-key feed has nothing fresh
@@ -50,14 +50,17 @@ func (v *Visor) FetchTPDPerKeyCXO() ([]byte, time.Time, error) {
 	return nil, time.Time{}, ErrTPDPerKeyNotReady
 }
 
-// readPerKeyLeaf decodes the published PerKeyStats and re-encodes its keys,
-// the HTTP body. An empty table is a miss: the endpoint answers 404 then.
+// readPerKeyLeaf decodes the keys of the published PerKeyStats and re-encodes
+// them, the HTTP body. An empty table is a miss: the endpoint answers 404 then.
+// Only the keys are read, so the visor need not import the TPD server's api.
 func readPerKeyLeaf(mgr statsSnapshot) ([]byte, time.Time, bool) {
-	raw, ts, ok := mgr.Get(FeedTPDPerKey, tpdapi.PerKeyPath)
+	raw, ts, ok := mgr.Get(FeedTPDPerKey, tpdpaths.PerKeyPath)
 	if !ok || len(raw) == 0 {
 		return nil, time.Time{}, false
 	}
-	var st tpdapi.PerKeyStats
+	var st struct {
+		Keys map[string]map[string]int `json:"keys"`
+	}
 	if err := json.Unmarshal(cxoutils.Gunzip(raw), &st); err != nil || len(st.Keys) == 0 {
 		return nil, time.Time{}, false
 	}

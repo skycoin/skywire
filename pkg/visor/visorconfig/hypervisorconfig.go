@@ -211,10 +211,14 @@ func MakeConfig() HypervisorConfig {
 }
 
 // GenerateWorkDirConfig generates a config with default values and uses db from current working directory.
+// When the working directory cannot be resolved the db path is left relative
+// to it ("users.db"), which names the same file: config gen runs inside the
+// phone core's process (pkg/mobilecore), where a fatal would end the app.
 func GenerateWorkDirConfig() HypervisorConfig {
 	dir, err := os.Getwd()
 	if err != nil {
-		log.Fatalf("failed to generate WD config: %s", dir)
+		log.Printf("hypervisor config: cannot resolve the working directory (%v); db_path stays relative", err)
+		dir = ""
 	}
 	c := MakeConfig()
 	c.DBPath = filepath.Join(dir, "users.db")

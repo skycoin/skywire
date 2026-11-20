@@ -1,0 +1,9 @@
+{
+  "body": "{\"sessions_closed\":2}\n",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "method": "POST",
+  "path": "/api/dmsg/reconnect",
+  "status": 200
+}

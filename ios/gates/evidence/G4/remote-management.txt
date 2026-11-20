@@ -1,0 +1,36 @@
+4.4 remote management, 2026-09-30T09:51Z. Simulator pk 022426544316b01b73fb47543bf97f15cfadf7d70eb851647d177156f09cd31449, its grant pinned hypervisors: [037fff9a…18d9];
+the desktop peer 037fff9a…18d9 is a make build-mobile core with cli_addr localhost:13435; CLI built with go build ./cmd/skywire-cli.
+
+$ skywire-cli --via dmsg://022426544316b01b73fb47543bf97f15cfadf7d70eb851647d177156f09cd31449 visor pk --rpc localhost:13435
+022426544316b01b73fb47543bf97f15cfadf7d70eb851647d177156f09cd31449
+
+$ skywire-cli --via dmsg://022426544316b01b73fb47543bf97f15cfadf7d70eb851647d177156f09cd31449 visor info --rpc localhost:13435
+.:: Visor Summary ::.
+Public key: "022426544316b01b73fb47543bf97f15cfadf7d70eb851647d177156f09cd31449"
+Hostname: <the Mac (redacted)>
+Symmetric NAT: true
+Local IP: <redacted>
+Public IP: <the Mac's public IP>
+Location: US
+DMSG Servers (7 connected):
+              0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13
+              02a49bc0aa1b5b78f638e9189be4ed095bac5d6839c828465a8350f80ac07629c0
+              02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd
+              0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7
+              02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7
+              0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb
+              0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7
+DMSG Latency: 691.065833ms
+Transports: 3 (SQUICR: 1, STCPR: 1, WEBRTC: 1) to 1 visor
+AR Registration:
+  STCPR  <the Mac's public IP>:59926
+  WT     <the Mac's public IP>:52607 (cert fba4d501…c66ad672)
+  SUDPH  (not registered)
+Hypervisor UI: enabled at 127.0.0.1:8000
+Remote Hypervisors (configured, 1):
+  037fff9af758dc346e288d38a4854fde22f64493d65c9e390b6d3b5677e58018d9
+Remote Hypervisors (connected, 2):
+
+control: the peer's own key without --via
+$ skywire-cli visor pk --rpc localhost:13435
+037fff9af758dc346e288d38a4854fde22f64493d65c9e390b6d3b5677e58018d9

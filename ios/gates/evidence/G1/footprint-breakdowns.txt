@@ -1,0 +1,43 @@
+# footprint -p <pid> category tables (dirty/clean/reclaimable), in-app, iPhone 18 Pro Simulator, Debug build
+
+## idle: app launched, core never started (-core.wantsConnected NO), after 30 s
+  Dirty      Clean  Reclaimable    Regions    Category
+    ---        ---          ---        ---    ---
+9088 KB        0 B          0 B         69    untagged (VM_ALLOCATE)
+8472 KB    1024 KB          0 B        516    __DATA
+6896 KB        0 B      3232 KB          5    MALLOC_SMALL
+5902 KB     976 KB          0 B        522    __DATA_CONST
+1606 KB        0 B          0 B          1    page table
+1216 KB        0 B          0 B         11    dyld private memory
+ 651 KB        0 B          0 B        863    unused dyld shared cache area
+ 416 KB        0 B          0 B         30    stack
+ 400 KB        0 B          0 B         10    MALLOC metadata
+ 208 KB        0 B        16 KB         10    CoreAnimation
+
+## connected 2 min, memory_limit 40MiB (the 59 MB sample)
+  Dirty      Clean  Reclaimable    Regions    Category
+  25 MB        0 B          0 B         82    untagged (VM_ALLOCATE)
+  12 MB        0 B       368 KB          5    MALLOC_SMALL
+8773 KB    1344 KB          0 B        522    __DATA
+5902 KB    1072 KB          0 B        528    __DATA_CONST
+2432 KB        0 B        32 KB         45    CoreAnimation
+
+## connected 10 min, memory_limit 40MiB
+  Dirty      Clean  Reclaimable    Regions    Category
+    ---        ---          ---        ---    ---
+  28 MB        0 B      3296 KB         85    untagged (VM_ALLOCATE)
+  12 MB        0 B       976 KB          5    MALLOC_SMALL
+8773 KB     864 KB          0 B        522    __DATA
+5902 KB     800 KB          0 B        528    __DATA_CONST
+2720 KB        0 B        32 KB         36    CoreAnimation
+1606 KB        0 B          0 B          1    page table
+
+## connected 10 min, no memory_limit (-SkywireMemoryLimit none)
+  Dirty      Clean  Reclaimable    Regions    Category
+    ---        ---          ---        ---    ---
+  26 MB        0 B      2752 KB         81    untagged (VM_ALLOCATE)
+  11 MB        0 B       640 KB          5    MALLOC_SMALL
+8789 KB    1344 KB          0 B        522    __DATA
+5902 KB    1072 KB          0 B        528    __DATA_CONST
+3296 KB        0 B        32 KB         37    CoreAnimation
+1606 KB        0 B          0 B          1    page table

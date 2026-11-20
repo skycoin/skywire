@@ -99,6 +99,15 @@ func (hv *Hypervisor) getNotifyStream() http.HandlerFunc {
 		// fills — indistinguishable from "nothing happened" on a sparse feed.
 		w.Header().Set("X-Accel-Buffering", "no")
 		w.WriteHeader(http.StatusOK)
+		// An opening comment, so the stream says something the moment it is
+		// open. Otherwise the first bytes after the head are the first ping,
+		// notifyPingInterval later, and an HTTP client that surfaces a response
+		// only once body bytes arrive (Apple's URLSession, which the iOS app
+		// reads this through) cannot tell a subscribed stream from a hung
+		// connect for that long. SSE readers skip comment lines.
+		if _, err := fmt.Fprint(w, ": connected\n\n"); err != nil {
+			return // client gone
+		}
 		flusher.Flush()
 
 		ping := time.NewTicker(notifyPingInterval)

@@ -1,0 +1,9 @@
+{
+  "body": "[{\"id\":\"1791774696435084000.M15c6d813fc2b0c96.skymail\",\"folder\":\"INBOX\",\"from\":\"mail@ak623g2y5qylsdvspzsvgc7rcwnyagob7zyplyg2etsroggeyu7s6.dmsg\",\"to\":\"mail@ak623g2y5qylsdvspzsvgc7rcwnyagob7zyplyg2etsroggeyu7s6.dmsg\",\"subject\":\"Fixture\",\"date\":\"2026-10-12T11:11:36+08:00\",\"seen\":false,\"size\":1158,\"peer_pk\":\"02bdad9b58ec30b90eb27e65530bf1159b8019c1fe70f5e0da24e51718c4c53f2f\",\"from_verified\":true}]\n",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "method": "GET",
+  "path": "/api/visors/02bdad9b58ec30b90eb27e65530bf1159b8019c1fe70f5e0da24e51718c4c53f2f/mail/INBOX",
+  "status": 200
+}

@@ -1,4 +1,12 @@
+//go:build !mobile
+
 // Package setupmetrics pkg/router/setupmetrics/victoria_metrics.go c2-net-routing
+//
+// The VictoriaMetrics implementation is desktop-only: 0magnet/metrics has no
+// process-metrics source for GOOS=ios, and only the route setup node service
+// (pkg/services/sn) constructs it. The mobile build keeps the Metrics
+// interface (metrics.go), Empty and the stats Collector, none of which import
+// it.
 package setupmetrics
 
 import (
@@ -9,12 +17,6 @@ import (
 	"github.com/skycoin/skywire/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/routing"
 )
-
-// Metrics collects metrics in prometheus format.
-type Metrics interface {
-	RecordRequest() func(*routing.EdgeRules, *error)
-	RecordRoute() func(*error)
-}
 
 // VictoriaMetrics implements `Metrics` using Victoria Metrics.
 type VictoriaMetrics struct {

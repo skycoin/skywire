@@ -11,7 +11,6 @@ import (
 	"github.com/skycoin/skywire/pkg/cxo/cxoaggregate"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/skynet"
 	"github.com/skycoin/skywire/pkg/transport"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
@@ -65,36 +64,6 @@ func handOffHosted(log *logging.Logger, conn net.Conn, v *Visor, msg clientMsg) 
 	log.WithField("service", pk.String()).WithField("port", msg.Port).WithField("caller", origin.String()).
 		Debug("Handed a skynet stream to a hosted service")
 	return true
-}
-
-// hostService records an own-key service as hosted here, signing with its key
-// that this visor is its host, and republishes the transport list so TPD
-// shows the local link visors find it by.
-func (v *Visor) hostService(es *embeddedService) {
-	if es.ownPK.Null() {
-		return
-	}
-	var probe struct {
-		SecKey cipher.SecKey `json:"secret_key"`
-	}
-	if err := json.Unmarshal(es.ownRaw, &probe); err != nil || probe.SecKey.Null() {
-		es.log.WithError(err).Warn("Hosted service has no secret key here; it stays reachable over dmsg only")
-		return
-	}
-	sig, err := skynet.SignHosted(es.ownPK, probe.SecKey, v.conf.PK)
-	if err != nil {
-		es.log.WithError(err).Warn("Could not sign the hosting of this service; it stays reachable over dmsg only")
-		return
-	}
-	v.hostedKeys.Store(es.ownPK, sig)
-	v.republishHosted()
-}
-
-// unhostService drops a stopped service from the hosted set.
-func (v *Visor) unhostService(pk cipher.PubKey) {
-	if _, had := v.hostedKeys.LoadAndDelete(pk); had {
-		v.republishHosted()
-	}
 }
 
 func (v *Visor) republishHosted() {
