@@ -172,6 +172,7 @@
     <string name="call_missed_title">Appel manqué</string>
     <string name="chat_notif_join_request">Demande pour rejoindre le groupe</string>
     <string name="chat_notif_message_request">Demande de message</string>
+    <string name="chat_notif_group_message">Message de groupe</string>
     <plurals name="chat_notif_join_waiting">
         <item quantity="one">%1$d personne attend de rejoindre %2$s</item>
         <item quantity="other">%1$d personnes attendent de rejoindre %2$s</item>

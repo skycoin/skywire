@@ -129,6 +129,7 @@
     <string name="call_missed_title">Missed call</string>
     <string name="chat_notif_join_request">Group join request</string>
     <string name="chat_notif_message_request">Message request</string>
+    <string name="chat_notif_group_message">Group message</string>
     <plurals name="chat_notif_join_waiting">
         <item quantity="one">%1$d waiting to join %2$s</item>
         <item quantity="other">%1$d waiting to join %2$s</item>
