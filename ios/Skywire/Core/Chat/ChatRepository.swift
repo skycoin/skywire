@@ -499,35 +499,23 @@ final class ChatRepository: ObservableObject {
     func mergeHistory(_ pk: String, _ records: [HistoryRecord]) {
         guard !records.isEmpty else { return }
         mutate(pk) { current in
-            var out = current
-            var changed = false
+            var out = Skychat.withoutFailedTwins(current)
+            var changed = out.count != current.count
             for record in records {
                 guard let m = fromHistory(pk, record) else { continue }
-                if let i = out.firstIndex(where: { Self.same($0, m) }) {
-                    let existing = out[i]
-                    if var f = existing.file, let nf = m.file, (f.url.isEmpty && !nf.url.isEmpty) || f.id.isEmpty {
-                        if f.url.isEmpty { f.url = nf.url }
-                        if f.id.isEmpty { f.id = nf.id }
-                        out[i].file = f
-                        changed = true
-                    }
-                    if existing.wireId.isEmpty && !m.wireId.isEmpty {
-                        out[i].wireId = m.wireId
-                        if existing.mine && Skychat.statusRank(existing.status) < Skychat.statusRank("sent") { out[i].status = "sent" }
-                        changed = true
-                    }
+                guard let i = out.firstIndex(where: { Skychat.sameMessage($0, m) }) else {
+                    out.append(m)
+                    changed = true
                     continue
                 }
-                out.append(m)
-                changed = true
+                let merged = Skychat.withStored(out[i], m)
+                if merged != out[i] {
+                    out[i] = merged
+                    changed = true
+                }
             }
             return changed ? out.sorted { $0.ts < $1.ts } : current
         }
-    }
-
-    private static func same(_ a: ChatMessage, _ b: ChatMessage) -> Bool {
-        if !a.dmWireId.isEmpty && !b.dmWireId.isEmpty { return a.dmWireId == b.dmWireId }
-        return a.mine == b.mine && a.text == b.text && abs(a.ts - b.ts) < sameWindowMs
     }
 
     private func fromHistory(_ pk: String, _ r: HistoryRecord) -> ChatMessage? {
@@ -540,7 +528,7 @@ final class ChatRepository: ObservableObject {
         )
         let id = r.id.isEmpty ? r.fileId : r.id
         return ChatMessage(
-            key: "h:" + (id.isEmpty ? "\(ts):\(r.text.hashValue)" : id),
+            key: Skychat.storedKey + (id.isEmpty ? "\(ts):\(r.text.hashValue)" : id),
             ts: ts, from: from, text: r.text, file: file,
             reply: Skychat.replyOf(sender: r.replyToSender, ts: r.replyToTs, preview: r.replyToPreview),
             forwarded: r.forwarded, forwardFrom: r.forwardFrom, wireId: id,
@@ -790,7 +778,6 @@ final class ChatRepository: ObservableObject {
     static let unreadInterval: Duration = .seconds(2)
     static let retries = 15
     static let catchUp = 300
-    static let sameWindowMs: Int64 = 120_000
 }
 
 /// skychat's origin once it answers, nil before: requests made without one

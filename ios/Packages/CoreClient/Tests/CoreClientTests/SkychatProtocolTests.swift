@@ -130,4 +130,85 @@ final class SkychatProtocolTests: XCTestCase {
         XCTAssertEqual(decoded.file?.name, "a.png")
         XCTAssertEqual(decoded.status, "")
     }
+
+    /// A voice message whose send failed or lost its answer has no transfer id, and its caption is
+    /// not the text skychat stores. It showed twice once the stored record was merged in.
+    func testAStoredFileIsItsOwnBubbleNotASecondOne() throws {
+        let clip = ChatFile(name: "voice-20261120-171651.oga", size: 12_493, status: "failed", localPath: "voice.oga")
+        let bubble = ChatMessage(ts: 1_000_000, text: "🎤 Voice message", file: clip)
+        var storedFile = clip
+        storedFile.id = "b0d8"
+        storedFile.localPath = ""
+        let stored = ChatMessage(key: "h:b0d8", ts: 1_009_000, text: "📎 voice-20261120-171651.oga (12.2 KB)", file: storedFile, wireId: "b0d8", status: "sent")
+        XCTAssertTrue(Skychat.sameMessage(bubble, stored))
+        // The failed try keeps its Retry and gets no tick.
+        let failed = Skychat.withStored(bubble, stored)
+        XCTAssertEqual(failed.file?.id, "b0d8")
+        XCTAssertEqual(failed.file?.status, "failed")
+        XCTAssertEqual(failed.wireId, "")
+
+        // The retry got another id: the failed try's record is still this bubble.
+        var retried = bubble
+        retried.file?.id = "c1e9"
+        retried.file?.status = "sent"
+        XCTAssertTrue(Skychat.sameMessage(retried, stored))
+        XCTAssertEqual(Skychat.withStored(retried, stored).file?.id, "c1e9")
+
+        // The answer was lost but the file went out.
+        var sent = stored
+        sent.file?.status = "sent"
+        sent.file?.url = "/files/b0d8.oga"
+        let healed = Skychat.withStored(bubble, sent)
+        XCTAssertEqual(healed.file?.status, "sent")
+        XCTAssertEqual(healed.file?.url, "/files/b0d8.oga")
+        XCTAssertEqual(healed.wireId, "b0d8")
+        XCTAssertEqual(healed.status, "sent")
+
+        // Two sends of one picked file both arrived: two messages.
+        let first = ChatMessage(ts: 1_000_000, text: "a.pdf", file: ChatFile(id: "aa", name: "a.pdf", size: 9, status: "sent"))
+        let second = ChatMessage(ts: 1_030_000, text: "a.pdf", file: ChatFile(id: "bb", name: "a.pdf", size: 9, status: "sent"))
+        XCTAssertFalse(Skychat.sameMessage(first, second))
+        // Another recording, a peer's file of the same name, and a late record are not this bubble.
+        var other = stored
+        other.file?.name = "voice-20261120-171700.oga"
+        XCTAssertFalse(Skychat.sameMessage(bubble, other))
+        var theirs = stored
+        theirs.from = "02ab"
+        XCTAssertFalse(Skychat.sameMessage(bubble, theirs))
+        var late = stored
+        late.ts = 1_000_000 + 121_000
+        XCTAssertFalse(Skychat.sameMessage(bubble, late))
+        // Text is matched as before.
+        XCTAssertTrue(Skychat.sameMessage(ChatMessage(ts: 5, text: "hi"), ChatMessage(ts: 9, text: "hi", wireId: "x")))
+        XCTAssertFalse(Skychat.sameMessage(ChatMessage(ts: 5, text: "hi", wireId: "y"), ChatMessage(ts: 9, text: "hi", wireId: "x")))
+    }
+
+    /// group.go echoes an own file post; it can reach the app before `/send-file` answers with the id.
+    func testAnOwnGroupFileEchoIsKnownBeforeItsId() {
+        var pending = ChatFile(name: "voice-20261120-134400.m4a", size: 4_608, status: "sending")
+        XCTAssertTrue(Skychat.isOwnUpload(pending, fileId: "f1", fileName: "voice-20261120-134400.m4a", fileSize: 4_608))
+        XCTAssertFalse(Skychat.isOwnUpload(pending, fileId: "f1", fileName: "voice-20261120-134401.m4a", fileSize: 4_608))
+        XCTAssertFalse(Skychat.isOwnUpload(pending, fileId: "", fileName: "voice-20261120-134400.m4a", fileSize: 4_608))
+        pending.id = "f1"
+        XCTAssertTrue(Skychat.isOwnUpload(pending, fileId: "f1", fileName: "other", fileSize: 1))
+        pending.id = "f2"
+        XCTAssertFalse(Skychat.isOwnUpload(pending, fileId: "f1", fileName: "voice-20261120-134400.m4a", fileSize: 4_608))
+        XCTAssertFalse(Skychat.isOwnUpload(nil, fileId: "f1", fileName: "x", fileSize: 1))
+    }
+
+    /// An earlier build filed the stored record of a failed try as a second bubble; it goes at the next merge.
+    func testAFailedTwinFromAnEarlierBuildIsDropped() {
+        let clip = ChatFile(id: "c1e9", name: "voice-20261120-171830.oga", size: 12_493, status: "sent")
+        let bubble = ChatMessage(key: "k1", ts: 1_000_000, text: "🎤 Voice message", file: clip)
+        var failedClip = clip
+        failedClip.id = "b0d8"
+        failedClip.status = "failed"
+        let twin = ChatMessage(key: "h:b0d8", ts: 1_009_000, text: "📎 voice (12.2 KB)", file: failedClip, wireId: "b0d8")
+        let alone = ChatMessage(key: "h:77aa", ts: 2_000_000, file: ChatFile(id: "77aa", name: "sent-from-the-cli.pdf", size: 5, status: "failed"), wireId: "77aa")
+        var theirs = twin
+        theirs.key = "h:9f"
+        theirs.from = "02ab"
+        XCTAssertEqual(Skychat.withoutFailedTwins([bubble, twin, alone, theirs]), [bubble, alone, theirs])
+        XCTAssertEqual(Skychat.withoutFailedTwins([bubble, alone]), [bubble, alone])
+    }
 }

@@ -169,6 +169,56 @@ public enum Skychat {
         list.filter { !($0.tsNano == nano && ($0.from == by || ($0.mine && by == me))) }
     }
 
+    /// How far apart a bubble and its stored record may be dated.
+    public static let sameWindowMs: Int64 = 120_000
+    /// The key prefix of a bubble made from a stored record rather than typed or recorded here.
+    public static let storedKey = "h:"
+    /// File states the stored record of an own send has once the file left: filexfer.go, fileoffer.go.
+    private static let wentOut: Set<String> = ["sent", "parked"]
+
+    /// Whether `b`, a stored or echoed message, is the one the thread shows as `a` (Android: sameMessage).
+    /// A file is one message whatever ids its tries got: a failed try and its retry are stored apart.
+    public static func sameMessage(_ a: ChatMessage, _ b: ChatMessage) -> Bool {
+        let ids = !a.dmWireId.isEmpty && !b.dmWireId.isEmpty
+        if ids && a.dmWireId == b.dmWireId { return true }
+        let near = a.mine == b.mine && abs(a.ts - b.ts) < sameWindowMs
+        if let fa = a.file, let fb = b.file {
+            let oneFile = near && fa.name == fb.name && fa.size == fb.size
+            return oneFile && (!ids || fa.status == "failed" || fb.status == "failed")
+        }
+        return !ids && near && a.text == b.text
+    }
+
+    /// The bubble `e` with what its stored record `m` adds: the transfer id, the served copy, that it went out.
+    public static func withStored(_ e: ChatMessage, _ m: ChatMessage) -> ChatMessage {
+        var out = e
+        if var f = e.file, let nf = m.file {
+            if e.mine && f.status == "failed" && wentOut.contains(nf.status) { f.status = nf.status }
+            if f.id.isEmpty { f.id = nf.id }
+            if f.url.isEmpty { f.url = nf.url }
+            out.file = f
+        }
+        if e.wireId.isEmpty && !m.wireId.isEmpty && m.file?.status != "failed" {
+            out.wireId = m.wireId
+            if e.mine && statusRank(e.status) < statusRank("sent") { out.status = "sent" }
+        }
+        return out
+    }
+
+    /// `list` without the stored failed tries that sit beside the bubble of the same file, as earlier builds filed them.
+    public static func withoutFailedTwins(_ list: [ChatMessage]) -> [ChatMessage] {
+        list.filter { m in
+            guard m.mine, m.key.hasPrefix(storedKey), let f = m.file, f.status == "failed" else { return true }
+            return !list.contains { $0.key != m.key && $0.mine && !$0.key.hasPrefix(storedKey) && $0.file?.name == f.name && $0.file?.size == f.size }
+        }
+    }
+
+    /// Whether our group post that came back as `fileId`, `fileName`, `fileSize` is the upload `f`; it can beat the id.
+    public static func isOwnUpload(_ f: ChatFile?, fileId: String, fileName: String, fileSize: Int64) -> Bool {
+        guard let f, !fileId.isEmpty else { return false }
+        return f.id.isEmpty ? f.name == fileName && f.size == fileSize : f.id == fileId
+    }
+
     /// One-line preview of a message for quotes and the touch sheet (at most 120 characters).
     public static func messagePreview(_ m: ChatMessage) -> String {
         if let f = m.file { return f.name.isEmpty ? "Attachment" : f.name }

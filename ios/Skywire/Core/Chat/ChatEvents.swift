@@ -69,7 +69,11 @@ extension ChatRepository {
             return
         }
         let peer = m.to.lowercased()
-        guard Skychat.isPk(peer), !m.id.isEmpty, m.fileId.isEmpty else { return }
+        guard Skychat.isPk(peer), !m.id.isEmpty else { return }
+        if !m.fileId.isEmpty {
+            ownFileOut(peer, m)
+            return
+        }
         let list = messages(peer)
         if list.contains(where: { $0.wireId == m.id }) { return }
         let waiting: Set<String> = ["pending", "failed", "queued"]
@@ -87,6 +91,23 @@ extension ChatRepository {
             msg.status = Skychat.advance(msg.status, "sent")
         }
         claimOrphan(peer, target.key, m.id)
+    }
+
+    /// Our own file left: this names its id when the `/send-file` answer is late or lost.
+    private func ownFileOut(_ peer: String, _ m: SseMessage) {
+        guard m.fileStatus == "sent" || m.fileStatus == "parked" else { return }
+        guard let target = messages(peer).last(where: {
+            $0.mine && ($0.file?.status == "sending" || $0.file?.status == "failed")
+                && Skychat.isOwnUpload($0.file, fileId: m.fileId, fileName: m.fileName, fileSize: m.fileSize)
+        }) else { return }
+        updateMessage(peer, target.key) { msg in
+            guard var f = msg.file else { return }
+            f.id = m.fileId
+            if f.url.isEmpty { f.url = m.fileUrl }
+            f.status = "sent"
+            msg.file = f
+        }
+        claimOrphan(peer, target.key, m.fileId)
     }
 
     private func dmStatus(_ m: SseMessage) {
@@ -138,10 +159,15 @@ extension ChatRepository {
         if !nano.isEmpty && list.contains(where: { $0.tsNano == nano && ($0.from == sender || ($0.mine && sender == me)) }) { return }
         if sender == me {
             // Our own post coming back: give the pending bubble its feed id.
-            if let own = list.last(where: { $0.mine && $0.tsNano.isEmpty && ($0.text == m.message || (!m.fileId.isEmpty && $0.file?.id == m.fileId)) }) {
+            let upload = { (f: ChatFile?) in Skychat.isOwnUpload(f, fileId: m.fileId, fileName: m.fileName, fileSize: m.fileSize) }
+            if let own = list.last(where: { $0.mine && $0.tsNano.isEmpty && ($0.text == m.message || upload($0.file)) }) {
                 updateMessage(gid, own.key) { msg in
                     msg.tsNano = nano
                     msg.status = Skychat.advance(msg.status, "sent")
+                    guard !m.fileId.isEmpty, var f = msg.file else { return }
+                    if f.id.isEmpty { f.id = m.fileId }
+                    if f.url.isEmpty { f.url = m.fileUrl }
+                    msg.file = f
                 }
                 return
             }
