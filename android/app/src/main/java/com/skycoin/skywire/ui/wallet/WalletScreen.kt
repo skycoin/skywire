@@ -492,10 +492,26 @@ private fun BalanceHeader(state: WalletUiState) {
                 CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
             }
         }
-        state.usdPrice?.let { price ->
+        state.usdQuote?.let { quote ->
             Text(
-                stringResource(R.string.wallet_usd_value, coin.usdText(snapshot?.confirmed ?: 0uL, price)),
+                stringResource(R.string.wallet_usd_value, coin.usdText(snapshot?.confirmed ?: 0uL, quote.usd)),
                 style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            // An old quote says when it is from: the price service was not reached since.
+            if (state.usdPrice == null) {
+                Text(
+                    stringResource(R.string.wallet_usd_as_of, fullDateTime(quote.at / 1000)),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        if (state.usdMissing) {
+            Text(
+                stringResource(R.string.wallet_usd_unavailable),
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp),
             )

@@ -708,6 +708,8 @@
     <string name="wallet_pending_removed">已从节点服务器的交易池移除</string>
     <string name="wallet_outputs_none_wallet">本钱包没有未花费输出。</string>
     <string name="wallet_usd_value">≈ %1$s</string>
+    <string name="wallet_usd_as_of">价格更新于 %1$s</string>
+    <string name="wallet_usd_unavailable">暂时无法获取美元价格：coinpaprika.com 没有响应。</string>
     <string name="wallet_tx_usd_now">当前价值</string>
     <string name="settings_wallet_prices">以美元显示价格</string>
     <string name="settings_wallet_prices_hint">同时以美元显示钱包余额和金额。价格来自 coinpaprika.com，它会因此看到这部手机的网络地址以及你查看的币种。默认关闭。</string>
