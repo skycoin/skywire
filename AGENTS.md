@@ -35,6 +35,41 @@ Omit redundant comments. Where a comment is needed, keep it to two lines.
 Where a comment records a specific requirement, cite the source, including the
 section number, page number or URL.
 
+## Naming
+
+Every name says what it is. A reader should know what a function does or what
+a type holds from its name alone, without opening the definition. A name that
+does not describe itself is a defect, and review treats it as one.
+
+Build names from the general to the specific, so related names share a prefix
+and sort next to each other. Prefer `RouteGroupClose` and `RouteGroupOpen`
+over `CloseGroup` and `OpenRouteGroup`. The package name is part of every call
+site, so do not repeat it. Write `rewards.ServerRun`, not
+`rewards.RewardsServerRun`.
+
+These names do not describe anything and are not used for new code: `Data`,
+`Info`, `Tmp`, `Temp`, `Item`, `Thing`, `Stuff`, `Misc`, `Do`, `Handle`,
+`Handler`, `Process`, `Manager`, `Helper` and `Util`, alone or as the whole
+meaning of a longer name. The same applies to packages. Name a package after
+its subject, never `util`, `common`, `helpers` or `misc`. A bare `Get` is
+only acceptable on a type whose name already says what it returns.
+
+Booleans take no `is` or `has` prefix. Write `connected`, not `isConnected`.
+
+Abbreviations are allowed only where they are the usual name, such as `ID`,
+`PK`, `RPC`, `TCP` or `JSON`.
+
+Go keeps a few conventions that these rules do not override. Error types keep
+the `Error`, `Unwrap`, `Is` and `As` methods that the standard library calls.
+Receivers and loop indexes keep their short names.
+
+Renaming an exported identifier is a change of its own. Open an issue with a
+table of the old and new names, do the rename in its own pull request after
+other work on the same files has merged, and add a CHANGELOG line. Never
+rename anything that leaves the process: REST paths, JSON fields, RPC method
+names, CLI commands, flags and config keys are used by other programs and by
+nodes that are already deployed.
+
 ## No coding tool attributions
 
 Never add `Co-Authored-By`, a "Generated with" footer, or any other coding tool
