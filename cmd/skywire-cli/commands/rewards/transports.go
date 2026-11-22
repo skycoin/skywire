@@ -2,8 +2,11 @@
 package clirewards
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"slices"
@@ -455,19 +458,14 @@ func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logg
 		return nil, fmt.Errorf("TPD fetch failed: %w", err)
 	}
 
-	var rawTransports []tpdTransport
-	if err := json.Unmarshal(body, &rawTransports); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON: %w", err)
-	}
-
-	bwLog.Infof("Fetched %d transports from TPD", len(rawTransports))
-
-	out := make([]TransportBW, 0, len(rawTransports))
+	out := []TransportBW{}
 	sameLANCount := 0
 
-	for _, tp := range rawTransports {
+	// The body holds every transport of the day, so each is decoded and
+	// reduced on its own rather than held as one slice.
+	fetched, err := eachTPDTransport(body, func(tp *tpdTransport) {
 		if len(tp.Edges) != 2 {
-			continue
+			return
 		}
 
 		// Verified sender-side per-edge totals, by the rule TPD's settled
@@ -485,7 +483,7 @@ func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logg
 			sentB += b
 		}
 		if sentA == 0 && sentB == 0 {
-			continue
+			return
 		}
 
 		edgeA := tp.Edges[0]
@@ -499,7 +497,7 @@ func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logg
 			sameLANCount++
 			bwLog.Debugf("Excluding same-LAN transport %s: %s and %s both on %s (sent_a=%d sent_b=%d)",
 				tp.ID[:8], edgeA[:12], edgeB[:12], ipA, sentA, sentB)
-			continue
+			return
 		}
 
 		out = append(out, TransportBW{
@@ -508,7 +506,11 @@ func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logg
 			SentA: sentA,
 			SentB: sentB,
 		})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse JSON: %w", err)
 	}
+	bwLog.Infof("Fetched %d transports from TPD", fetched)
 
 	bwLog.Infof("Excluded %d same-LAN transports, %d remaining in per-edge sender-side dataset",
 		sameLANCount, len(out))
@@ -589,4 +591,36 @@ func fetchTPDData(cmdFlags *pflag.FlagSet, tpLog *logging.Logger, bypassCache bo
 	}
 
 	return stats, nil
+}
+
+// eachTPDTransport decodes a /metrics body one transport at a time, passing
+// each to fn, and returns how many it decoded. It refuses what unmarshalling
+// the body into a []tpdTransport would.
+func eachTPDTransport(body []byte, fn func(*tpdTransport)) (int, error) {
+	dec := json.NewDecoder(bytes.NewReader(body))
+	tok, err := dec.Token()
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	if tok != nil { // null is an empty list
+		if tok != json.Delim('[') {
+			return 0, fmt.Errorf("want a list of transports, got %v", tok)
+		}
+		for dec.More() {
+			var tp tpdTransport
+			if err := dec.Decode(&tp); err != nil {
+				return n, err
+			}
+			fn(&tp)
+			n++
+		}
+		if _, err := dec.Token(); err != nil {
+			return n, err
+		}
+	}
+	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
+		return n, fmt.Errorf("data after the list of transports")
+	}
+	return n, nil
 }
