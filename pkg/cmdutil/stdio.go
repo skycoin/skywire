@@ -45,7 +45,7 @@ func Stdin() io.Reader {
 }
 
 // current is the run of the calling goroutine: its own, its creator's, or the
-// only one in progress. It never stops the world as Exit's search does.
+// only one in progress if that is not a Contain. It never stops the world.
 func current() *inproc {
 	if active.Load() == 0 {
 		return nil
@@ -69,10 +69,8 @@ func current() *inproc {
 	if r == nil {
 		r = family[parent]
 	}
-	if r == nil && len(runs) == 1 {
-		for _, v := range runs {
-			r = v
-		}
+	if r == nil {
+		r = onlyRun()
 	}
 	if r != nil {
 		if len(family) >= maxFamily {
