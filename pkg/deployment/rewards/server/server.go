@@ -45,9 +45,7 @@ func buildRouter() http.Handler {
 	if err != nil {
 		pk, sk = cipher.GenerateKeyPair()
 	}
-	// Set RPC_ADDR so skywire skycoin cli targets the explicit Skycoin mainnet node
 	if skycoinNode != "" {
-		os.Setenv("RPC_ADDR", skycoinNode) //nolint:errcheck,gosec // G104
 		cmdutil.Printf("Skycoin mainnet node: %s\n", skycoinNode)
 	}
 
@@ -422,7 +420,7 @@ func buildRouter() http.Handler {
 			flush(w)
 			w.Write([]byte("<p style='margin:6px 0;'>View: <a href='/log-collection/tree'>flat list</a> &middot; <b>detail tree (per-PK health.json + version inline)</b></p>\n")) //nolint:errcheck,gosec
 			flush(w)
-			st, err := script.Exec(`skywire cli log st -d ` + wd + `/log_backups -r`).Bytes()
+			st, err := runSkywireCLI("log", "st", "-d", logBackupsDir(), "-r")
 			if err != nil {
 				log.WithError(err).Error()
 				w.Write([]byte(err.Error())) //nolint:errcheck,gosec
@@ -465,8 +463,8 @@ func buildRouter() http.Handler {
 			surveycount, _ := script.FindFiles(wd + `/` + "log_backups/").Match("node-info.json").CountLines() //nolint:errcheck,gosec
 			w.Write([]byte(fmt.Sprintf("Total surveys: %v\n", surveycount)))                                   //nolint:errcheck,gosec,staticcheck
 			flush(w)
-			st, _ := script.Exec(`skywire cli log st -d rewards/log_backups -rup ` + r.PathValue("pk")).Bytes() //nolint:errcheck,gosec
-			w.Write(ansihtml.ConvertToHTML(st))                                                                 //nolint:errcheck,gosec
+			st, _ := runSkywireCLI("log", "st", "-d", logBackupsDir(), "-rup", r.PathValue("pk")) //nolint:errcheck
+			w.Write(ansihtml.ConvertToHTML(st))                                                   //nolint:errcheck,gosec
 			flush(w)
 			// For whitelisted keys, show clickable file links
 			if isWhitelisted(r) {
@@ -509,8 +507,8 @@ func buildRouter() http.Handler {
 			if err != nil {
 				fmt.Fprintf(w, "<p style='color:red'>Error fetching TPD data: %v</p>", err) //nolint:errcheck,gosec
 				// Fallback to shell-out
-				tp, _ := script.Exec(`skywire cli log tp -d rewards/log_backups`).String() //nolint:errcheck,gosec
-				fmt.Fprintf(w, "%s\n", ansihtml.ConvertToHTML([]byte(tp)))                 //nolint:errcheck,gosec
+				tp, _ := runSkywireCLI("log", "tp", "-d", logBackupsDir()) //nolint:errcheck
+				fmt.Fprintf(w, "%s\n", ansihtml.ConvertToHTML(tp))         //nolint:errcheck,gosec
 			} else {
 				renderTPDBandwidthTable(w, tpdData, tpdSrc)
 			}
@@ -1017,7 +1015,7 @@ func buildRouter() http.Handler {
 				return
 			}
 			//check that wallet is running
-			status, err := script.Exec("skywire skycoin cli status").String()
+			status, err := skycoinCLI().Exec("skywire skycoin cli status").String()
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 				w.Write([]byte("skywire skycoin cli status:\n\n" + status + "\n\nskywire skycoin cli status error:\n\n" + err.Error())) //nolint:errcheck,gosec
@@ -1025,13 +1023,13 @@ func buildRouter() http.Handler {
 			}
 			// The raw transaction is the request body. Pay the oldest
 			// undistributed day with it, if it pays that day's csv.
-			if decoded, err := script.Exec("skywire skycoin cli decodeRawTransaction " + string(body)).String(); err != nil {
+			if decoded, err := skycoinCLI().Exec("skywire skycoin cli decodeRawTransaction " + string(body)).String(); err != nil {
 				w.WriteHeader(http.StatusBadRequest)
 				w.Write([]byte("skywire skycoin cli decodeRawTransaction:\n\n" + decoded + "\n\nskywire skycoin cli decodeRawTransaction error:\n\n" + err.Error())) //nolint:errcheck,gosec
 				return
 			}
 			_, txid, err := sendPayout(wd+`/hist`, string(body), r.Header.Get(PayoutCSVHeader), func() (string, error) {
-				return script.Exec("skywire skycoin cli broadcastTransaction " + string(body)).String()
+				return skycoinCLI().Exec("skywire skycoin cli broadcastTransaction " + string(body)).String()
 			})
 			if pe := (*payoutError)(nil); errors.As(err, &pe) {
 				w.WriteHeader(pe.code)
