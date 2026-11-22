@@ -156,7 +156,7 @@ check: ## Run linters and tests (lint, check-cg, check-help, test). Serialized v
 		$(MAKE) --no-print-directory -f $(firstword $(MAKEFILE_LIST)) check-inner; \
 	fi
 
-check-inner: lint check-descriptors check-cg check-browseui check-help test ## Internal: the actual check targets, run inside flock by 'make check'. Don't call directly unless you've already acquired .make-check.lock.
+check-inner: lint check-descriptors check-names check-ifaces check-inits check-cg check-browseui check-help test ## Internal: the actual check targets, run inside flock by 'make check'. Don't call directly unless you've already acquired .make-check.lock.
 
 
 # BROWSEUI_ENTRYPOINTS: embedded browser scripts that define a global when they
@@ -216,7 +216,7 @@ check-help: ## Cursory check of the help menus
 vet: ## Run go vet (the non-golangci-lint half of 'lint')
 	CGO_ENABLED=0 ${OPTS} go vet -mod=vendor -tags 'withoutsystray withoutgotop' ./...
 
-check-ci: vet check-descriptors check-cg check-help test ## CI check: like 'check' but skips golangci-lint (CI runs it as a separate pinned, cached step). Keeps go vet + config-gen smoke + tests.
+check-ci: vet check-descriptors check-names check-ifaces check-inits check-cg check-help test ## CI check: like 'check' but skips golangci-lint (CI runs it as a separate pinned, cached step). Keeps go vet + config-gen smoke + tests.
 
 check-windows: lint-windows test-windows ## Run linters and tests on windows image
 
@@ -801,6 +801,15 @@ build-ui: install-deps-ui  ## Builds the UI
 
 check-descriptors: ## Fail if a Go file lacks a c<layer>-<domain>-<system> descriptor, or a package mixes two (docs/code-descriptors.md)
 	bash scripts/check-descriptors.sh
+
+check-names: ## Fail on a new generic name, generic package or is/has bool (AGENTS.md Naming, scripts/guard/names-allowlist.txt only shrinks)
+	go run ./scripts/guard names
+
+check-ifaces: ## Fail on a new interface that embeds another interface (scripts/guard/iface-allowlist.txt only shrinks)
+	go run ./scripts/guard ifaces
+
+check-inits: ## Fail on a new func init() outside package main (scripts/guard/init-allowlist.txt only shrinks)
+	go run ./scripts/guard inits
 
 check-dead-api-fields: ## Fail if a json-tagged API field is never assigned (always serializes as its zero value)
 	bash scripts/check-dead-api-fields.sh
