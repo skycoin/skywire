@@ -184,6 +184,17 @@ It prints the xpub and the first five addresses derived from it. Rewards go to
 these in order, each day to the next one not used yet, so they should be the
 first addresses your wallet lists. If they are not, the wrong xpub is set.
 
+A wallet lists only the addresses it has made, so each payout lands on an
+address past the end of that list. The wallet finds it by scanning past its
+last address. `skywire skycoin daemon` does that on each new block and
+`skywire skycoin web --wallet-dir` once a minute. If a payout shows on the
+explorer but not in your wallet, scan by hand with **Scan addresses** in the
+wallet's options, or with the CLI pointed at the wallet's API.
+
+```
+skywire skycoin cli walletScanAddresses <wallet-file> -n 20
+```
+
 In the hypervisor UI, open the visor, find **Rewards** and press
 **Set address** or **Change address**. To set it on several visors at once,
 use **Change rewards address** in the visor list menu. Both fields take the
