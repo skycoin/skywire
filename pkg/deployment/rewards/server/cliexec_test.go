@@ -4,6 +4,7 @@ package rewardsserver
 import (
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -57,9 +58,12 @@ func TestSurveyPageUsesTheWorkDir(t *testing.T) {
 func TestSkycoinCLIGetsTheNodeInItsOwnEnvironment(t *testing.T) {
 	skycoinNode = "http://127.0.0.1:6420"
 	t.Cleanup(func() { skycoinNode = "" })
-	out, err := skycoinCLI().Exec(os.Args[0] + " -test.run=^TestPrintRPCAddr$").String()
+	// exec directly: script splits its command line, which breaks a windows path.
+	cmd := exec.Command(os.Args[0], "-test.run=^TestPrintRPCAddr$") //nolint:gosec
+	cmd.Env = skycoinCLIEnv()
+	out, err := cmd.Output()
 	require.NoError(t, err)
-	require.Contains(t, out, "RPC_ADDR=http://127.0.0.1:6420")
+	require.Contains(t, string(out), "RPC_ADDR=http://127.0.0.1:6420")
 	_, set := os.LookupEnv("RPC_ADDR")
 	if set {
 		require.NotEqual(t, "http://127.0.0.1:6420", os.Getenv("RPC_ADDR"))
