@@ -200,22 +200,30 @@ func TestSchedulerUntilDayClose(t *testing.T) {
 
 func TestSchedulerFailureContinues(t *testing.T) {
 	var n atomic.Int32
+	// The second run waits until the first failure was read: at a 20ms
+	// interval it otherwise finishes first on a slow runner.
+	release := make(chan struct{})
 	calc := func(context.Context, string) (CalcResult, error) {
 		switch n.Add(1) {
 		case 1:
 			return CalcResult{}, errors.New("uptime fetch failed")
 		case 2:
+			<-release
 			panic("calc blew up")
 		}
 		return CalcResult{}, nil
 	}
 	s := &Scheduler{Interval: 20 * time.Millisecond, Cycle: Cycle{Calc: calc}}
 	startScheduler(t, s)
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(release) }) }
+	t.Cleanup(unblock) // before the scheduler's own cleanup, which waits for the run
 
 	waitFor(t, func() bool { return s.Status().Cycles >= 1 }, time.Second)
 	if st := s.Status(); st.LastResult != "failed" || st.LastError != "uptime fetch failed" {
 		t.Fatalf("after error %+v", st)
 	}
+	unblock()
 	waitFor(t, func() bool { return s.Status().Cycles >= 3 }, time.Second)
 	st := s.Status()
 	if st.Failures != 2 || st.LastResult != "ok" || st.LastError != "" {
