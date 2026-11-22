@@ -122,6 +122,16 @@ over.
 checks, and the tests. It serializes itself with a lock file, so two concurrent
 runs will not fight over the machine.
 
+`make check-names` enforces the Naming section. Existing names are listed in
+`scripts/guard/names-allowlist.txt`, which only shrinks.
+
+`make check-ifaces` fails when an interface embeds another interface. List the
+methods instead. `scripts/guard/iface-allowlist.txt` only shrinks.
+
+`make check-inits` fails on a `func init()` outside package main. Call an
+explicit setup function from main instead. `scripts/guard/init-allowlist.txt`
+only shrinks.
+
 `make format` fixes import order and formatting. `make lint` needs
 `make install-linters` first.
 
