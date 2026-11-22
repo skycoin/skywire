@@ -525,9 +525,11 @@ func ParseHistoricUptimeData(histDir string, minUptime float64) ([]VersionHistor
 		return cmp.Compare(b, a)
 	})
 
-	// Track which visor+date combinations we've already processed to avoid double-counting
-	// Key: "date|pk", Value: version (already recorded)
-	seen := make(map[string]string)
+	// Which visors each date has counted already, so an older file does not
+	// count them again: a bitset over visor indexes per date. A map keyed by
+	// "date|pk" held millions of strings, ~300 MB for two years of files.
+	pkIndex := make(map[string]int)
+	seen := make(map[string][]uint64)
 
 	// Map of date -> version -> count
 	dateVersionCounts := make(map[string]map[string]int)
@@ -562,11 +564,20 @@ func ParseHistoricUptimeData(histDir string, minUptime float64) ([]VersionHistor
 				}
 
 				// Check if we've already counted this visor for this date
-				key := date + "|" + v.PK
-				if _, exists := seen[key]; exists {
+				idx, ok := pkIndex[v.PK]
+				if !ok {
+					idx = len(pkIndex)
+					pkIndex[v.PK] = idx
+				}
+				bits := seen[date]
+				if w := idx / 64; w >= len(bits) {
+					bits = append(bits, make([]uint64, w+1-len(bits))...)
+					seen[date] = bits
+				}
+				if bits[idx/64]&(1<<(idx%64)) != 0 {
 					continue
 				}
-				seen[key] = version
+				bits[idx/64] |= 1 << (idx % 64)
 
 				if dateVersionCounts[date] == nil {
 					dateVersionCounts[date] = make(map[string]int)
