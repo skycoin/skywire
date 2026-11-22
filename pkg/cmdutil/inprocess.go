@@ -29,9 +29,12 @@ type exitCode int
 // command started, which cannot be unwound to Run.
 type inproc struct {
 	exited chan int
-	stdin  io.Reader
-	stdout io.Writer
-	stderr io.Writer
+	// contained marks a Contain run, which shares its process with goroutines
+	// that are not its own, so it is never the fallback for an unknown one.
+	contained bool
+	stdin     io.Reader
+	stdout    io.Writer
+	stderr    io.Writer
 }
 
 var (
@@ -42,6 +45,9 @@ var (
 
 	runsMu sync.Mutex
 	runs   = map[uint64]*inproc{}
+
+	// osExit is os.Exit, a variable so a test can see Exit reach it.
+	osExit = os.Exit
 )
 
 func init() {
@@ -160,11 +166,11 @@ func Exit(code int) {
 			case r.exited <- code:
 			default:
 			}
+			// A goroutine that is not the run's own cannot be unwound to Run.
+			runtime.Goexit()
 		}
-		// A goroutine that is not the run's own cannot be unwound to Run.
-		runtime.Goexit()
 	}
-	os.Exit(code)
+	osExit(code)
 }
 
 // ancestorRun is the run of the nearest ancestor of goroutine id that is a
@@ -192,10 +198,22 @@ func ancestorRun(id uint64) *inproc {
 		if r, ok := runs[id]; ok {
 			return r
 		}
+		if r, ok := family[id]; ok {
+			return r
+		}
 		id = parents[id]
 	}
-	if len(runs) == 1 {
-		for _, r := range runs {
+	return onlyRun()
+}
+
+// onlyRun is the one run in progress, the guess for a goroutine whose ancestry
+// is lost, unless it is a Contain run. runsMu is held.
+func onlyRun() *inproc {
+	if len(runs) != 1 {
+		return nil
+	}
+	for _, r := range runs {
+		if !r.contained {
 			return r
 		}
 	}

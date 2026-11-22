@@ -10,7 +10,7 @@ import (
 // or a Fatal log line inside it returns an error here instead of ending the
 // process. A panic in fn is returned as an error too.
 func Contain(fn func()) (err error) {
-	r := &inproc{exited: make(chan int, 1), stdin: Stdin(), stdout: Stdout(), stderr: Stderr()}
+	r := &inproc{exited: make(chan int, 1), contained: true, stdin: Stdin(), stdout: Stdout(), stderr: Stderr()}
 	id := goid()
 	runsMu.Lock()
 	runs[id] = r
