@@ -846,12 +846,12 @@ func calcRewards(o rewardOpts) *rewardResult {
 	// Initialize GeoIP database for regional saturation scaling
 	var geoDB *geoip2.Reader
 	if saturationExponent < 1.0 {
-		geoDB, err = geoip2.OpenBytes(geoip.EmbeddedDB())
+		// The shared reader is memory mapped, so the 60 MB database stays out
+		// of the heap of a long running serve.
+		geoDB, err = geoip.Shared()
 		if err != nil {
 			log.Warn("Failed to load embedded GeoIP database, disabling regional saturation: ", err)
 			saturationExponent = 1.0
-		} else {
-			defer func() { _ = geoDB.Close() }() //nolint:errcheck
 		}
 	}
 
