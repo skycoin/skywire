@@ -1902,6 +1902,7 @@ func serve(ctx context.Context, h http.Handler, bindAddr string, log *logging.Lo
 	// holds.
 	setStatsCXOSubMgrFromDmsg(dmsgClient)
 	defer closeStatsCXO()
+	startMetricsDigest(ctx, metricsInterval, log)
 	startVisorBWWriter(ctx, filepath.Join(wd, "hist"))
 	log.Info("stats pages: TPD aggregates sourced over CXO (HTTP-over-dmsg kept as fallback)")
 

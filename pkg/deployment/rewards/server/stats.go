@@ -1440,23 +1440,26 @@ func fillTPDCountsHTTP(tpdURL string, summary *tpdNetworkSummary) error {
 // fillTPDBandwidth adds the verified-bandwidth total. Separate from the counts
 // so a failure here costs only that one line of the summary.
 //
-// The records now come from TPD's CXO metrics feed when it has them —
-// specifically the CURRENT day's leaf, which is what a 1-day window is. What
+// The total comes from the metrics digest, summed from the CURRENT day's
+// leaf of TPD's CXO metrics feed, which is what a 1-day window is. What
 // does NOT change is the arithmetic: this figure is the min()-verified one
 // that mirrors the reward calculation, and TPD's own cumulative aggregate
 // (stats/daily, /metric) is a DIFFERENT number. Moving the read must not
 // become swapping the number, so both paths decode into the same record type
 // and hand it to the same accumulator below.
 func fillTPDBandwidth(tpdURL string, summary *tpdNetworkSummary) error {
-	metrics, src, cxoErr := cxoTransportMetrics(1)
-	if cxoErr == nil {
-		summary.TotalBandwidth = 0
-		accumulateVerifiedBandwidth(metrics, summary)
+	d := currentMetricsDigest()
+	if d != nil && d.dayErr == "" {
+		summary.TotalBandwidth = d.dayTotal
 		summary.BandwidthOK = true
-		summary.BandwidthSrc = src.String()
+		summary.BandwidthSrc = d.src.String()
 		return nil
 	}
-	summary.BandwidthSrc = httpStatsSource("/metrics?days=1", cxoErr.Error()).String()
+	why := "metrics digest not built yet"
+	if d != nil {
+		why = d.dayErr
+	}
+	summary.BandwidthSrc = httpStatsSource("/metrics?days=1", why).String()
 	return fillTPDBandwidthHTTP(tpdURL, summary)
 }
 

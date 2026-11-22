@@ -61,6 +61,9 @@ type Config struct {
 	LoginNode        string          `json:"login_node,omitempty"`
 	CanonicalDomain  string          `json:"canonical_domain,omitempty"`
 	SurveyMinVersion string          `json:"survey_min_version,omitempty"`
+	// MetricsInterval is how often the stats pages rebuild their digest of
+	// TPD's metrics feed (default 3h).
+	MetricsInterval services.Duration `json:"metrics_interval,omitempty"`
 
 	// The cycle: none with no_cycle. cycle_interval is the fallback check,
 	// the other intervals are those of `rewards serve`.
@@ -164,6 +167,7 @@ func (s *service) Run(ctx context.Context) error {
 		SecKey:           c.SecKey,
 		DmsgPort:         c.DmsgPort,
 		SurveyMinVersion: c.SurveyMinVersion,
+		MetricsInterval:  time.Duration(c.MetricsInterval),
 	}, c.Addr, s.log)
 }
 

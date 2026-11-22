@@ -104,7 +104,7 @@ bytes. See `reward rules` for the human eligibility rules.
   (plain HTTP, none by default), `dmsg_port`, `canonical_domain`, `login_node`, `survey_min_version`,
   `skip_collect`, `fetch` + `proxy` (e.g. the visor's survey-whitelist proxy `127.0.0.1:4443`),
   `min_version`, `prune_below_version`, `cycle_interval`, `collect_interval`, `debounce`,
-  `watch_interval`, `day_close_delay` (durations, defaults as serve), `no_cycle`, `bot_token_file` + `bot_chat_id`
+  `watch_interval`, `day_close_delay` (durations, defaults as serve), `metrics_interval` (3h, as `--metrics-interval`), `no_cycle`, `bot_token_file` + `bot_chat_id`
   (else `TG_BOT_TOKEN`/`TG_CHAT_ID` from the visor's environment; the token never goes in the block).
   `visor state --select services` shows it with `detail.reward_cycle`; `visor services
   start|stop|restart rewards` controls it; a failed start is retried with backoff. `skywire svc run`
@@ -127,7 +127,7 @@ bytes. See `reward rules` for the human eligibility rules.
   (served by the fiber based reward service). `--bind host:port` (default `:80`; `-p/--port` deprecated),
   dmsg serve `-d/--dport`/`-e/--dsess`/`-D/--dmsg-disc`/`-s/--sk`, `-w/--wl` broadcast
   whitelist, `-W/--wd` workdir, `--login-node`/`--skycoin-node`/`--login-chain-flags`,
-  `--canonical`, `--survey-min-version`, `--health-only`. (Also embeddable in the visor via
+  `--canonical`, `--survey-min-version`, `--health-only`, `--metrics-interval` (3h: how often the stats pages rebuild their digest of TPD's per-transport metrics feed; the feed is filled, reduced and dropped, never held). (Also embeddable in the visor via
   `ConfigureAndBuild`.)
 - **`rewards loginchain`** → start the 2-node login chain (block publisher :6001/:6421 +
   peer :6002/:6422) for wallet-ownership verification. Wipes chain data each start; preserves
