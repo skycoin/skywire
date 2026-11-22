@@ -1921,10 +1921,11 @@ func serve(ctx context.Context, h http.Handler, bindAddr string, log *logging.Lo
 		return fmt.Errorf("listen on dmsg port %d: %w", dmsgPort, err)
 	}
 
+	// /debug/* (pprof) answers only the survey whitelist, as on the other services.
 	// Increased timeouts for dmsg latency characteristics
 	// DMSG has higher latency than direct TCP due to multi-hop routing
 	dmsgSrv := &http.Server{
-		Handler:           h,
+		Handler:           dmsghttp.WithDebug(h, deployment.Prod.SurveyWhitelist, nil),
 		ReadTimeout:       30 * time.Second, // Allow for dmsg multi-hop latency
 		WriteTimeout:      60 * time.Second, // Allow time to generate large responses
 		IdleTimeout:       90 * time.Second, // Keep connections alive longer
