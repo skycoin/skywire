@@ -4,6 +4,7 @@ package rewardsserver
 import (
 	"cmp"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -124,11 +125,21 @@ func fetchVisorBandwidth() (*visorBandwidthData, error) {
 
 	tpdURL := strings.TrimSuffix(deployment.Prod.TransportDiscovery, "/")
 
-	// One CXO read serves both halves of this page: the bandwidth series,
-	// and — only if the per-key index fetch fails — the ranking too.
-	metrics, metricsSrc, metricsErr := cxoTransportMetrics(tpdDailyDays)
+	// The metrics digest serves both halves of this page: the bandwidth
+	// series, and — only if the per-key index fetch fails — the ranking too.
+	var daily *visorDays
+	var edges map[string]int
+	var metricsSrc statsSource
+	metricsErr := errors.New("metrics digest not built yet")
+	switch d := currentMetricsDigest(); {
+	case d == nil:
+	case d.winErr != "":
+		metricsErr = errors.New(d.winErr)
+	default:
+		daily, edges, metricsSrc, metricsErr = d.daily, d.edges, d.src, nil
+	}
 
-	counts, rankSrc, err := visorTransportCounts(tpdURL, metrics)
+	counts, rankSrc, err := visorTransportCounts(tpdURL, edges)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +161,7 @@ func fetchVisorBandwidth() (*visorBandwidthData, error) {
 	cxoMiss := "not attempted"
 	if metricsErr != nil {
 		cxoMiss = metricsErr.Error()
-	} else if bwErr := fillVisorBandwidthFromMetrics(out, metrics); bwErr != nil {
+	} else if bwErr := fillVisorBandwidthFromDaily(out, daily); bwErr != nil {
 		cxoMiss = bwErr.Error()
 	} else {
 		out.BandwidthSrc = metricsSrc.String()
@@ -183,7 +194,7 @@ func fetchVisorBandwidth() (*visorBandwidthData, error) {
 // metrics row is missing from it. Using it as the primary would silently
 // change what the column means; using it as a fallback keeps the page
 // rendering when the index fetch dies, with the substitution labeled.
-func visorTransportCounts(tpdURL string, metrics []tpdstore.TransportMetric) (map[string]int, statsSource, error) {
+func visorTransportCounts(tpdURL string, edges map[string]int) (map[string]int, statsSource, error) {
 	counts, err := fetchPerKeyTransportCounts(tpdURL)
 	if err == nil && len(counts) > 0 {
 		return counts, statsSource{Via: "HTTP over dmsg", Path: "/all-transports/per-key-stats"}, nil
@@ -192,19 +203,13 @@ func visorTransportCounts(tpdURL string, metrics []tpdstore.TransportMetric) (ma
 	if err != nil {
 		why = err.Error()
 	}
-	if len(metrics) == 0 {
+	if edges == nil {
 		return nil, statsSource{}, fmt.Errorf("TPD per-key stats unavailable (%s) and the CXO metrics feed is cold", why)
 	}
-	derived := make(map[string]int)
-	for i := range metrics {
-		for _, edge := range metrics[i].Edges {
-			derived[edge]++
-		}
-	}
-	if len(derived) == 0 {
+	if len(edges) == 0 {
 		return nil, statsSource{}, fmt.Errorf("TPD per-key stats unavailable (%s) and the CXO metrics feed named no edges", why)
 	}
-	return derived, statsSource{
+	return edges, statsSource{
 		Via:  "CXO",
 		Path: tpdstore.MetricsDayPrefix + "* (edges)",
 		Note: "per-key index unavailable (" + why + "); counts are transports SEEN IN THE METRICS WINDOW, not registered transports",
@@ -226,39 +231,15 @@ func visorTransportCounts(tpdURL string, metrics []tpdstore.TransportMetric) (ma
 // derivation attributes half to each edge. Such rows expire at 35 days and the
 // window here is 30.
 func fillVisorBandwidthFromMetrics(out *visorBandwidthData, metrics []tpdstore.TransportMetric) error {
-	selected := make(map[string]struct{}, len(out.Visors))
-	for _, v := range out.Visors {
-		selected[v.PK] = struct{}{}
-	}
+	return fillVisorBandwidthFromDaily(out, visorDailyFromMetrics(metrics))
+}
 
-	// pk -> date -> bytes, for the selected visors only.
-	byPK := make(map[string]map[string]uint64, len(selected))
-	add := func(pk, date string, n uint64) {
-		if n == 0 {
-			return
-		}
-		if _, want := selected[pk]; !want {
-			return
-		}
-		days, ok := byPK[pk]
-		if !ok {
-			days = make(map[string]uint64)
-			byPK[pk] = days
-		}
-		days[date] += n
-	}
-	for i := range metrics {
-		m := &metrics[i]
-		if len(m.Edges) != 2 {
-			continue
-		}
-		for _, d := range m.Daily {
-			if d.A != nil {
-				add(m.Edges[0], d.Date, d.A.Sent+d.A.Recv)
-			}
-			if d.B != nil {
-				add(m.Edges[1], d.Date, d.B.Sent+d.B.Recv)
-			}
+// fillVisorBandwidthFromDaily fills the selected visors' series from daily.
+func fillVisorBandwidthFromDaily(out *visorBandwidthData, daily *visorDays) error {
+	byPK := make(map[string]map[string]uint64, len(out.Visors))
+	for _, v := range out.Visors {
+		if days := daily.of(v.PK); len(days) > 0 {
+			byPK[v.PK] = days
 		}
 	}
 

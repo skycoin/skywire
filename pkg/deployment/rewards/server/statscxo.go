@@ -59,7 +59,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"sync"
 	"time"
 
@@ -81,6 +80,9 @@ import (
 var statsCXO struct {
 	sync.RWMutex
 	mgr *cxosub.Manager
+	// newMgr builds another manager over the same client and feeds, for a
+	// feed read once and then dropped whole by Close.
+	newMgr func() *cxosub.Manager
 }
 
 // setStatsCXOSubMgrFromDmsg wires the statistics pages' CXO subscriber
@@ -118,21 +120,21 @@ func setStatsCXOSubMgrFromDmsg(dmsgC *dmsg.Client) {
 		return cipher.PubKey{}, 0, "", fmt.Errorf("feed %d not used by the statistics pages", f)
 	}
 
-	mgr := cxosub.NewManager(cxosub.Deps{
-		Dmsg:     func() *dmsg.Client { return dmsgC },
-		FeedSpec: feedSpec,
-		Log:      logging.MustGetLogger("reward-stats-cxosub"),
-	}, 0) // 0 → default cycle interval
+	newMgr := func() *cxosub.Manager {
+		return cxosub.NewManager(cxosub.Deps{
+			Dmsg:     func() *dmsg.Client { return dmsgC },
+			FeedSpec: feedSpec,
+			Log:      logging.MustGetLogger("reward-stats-cxosub"),
+		}, 0) // 0 → default cycle interval
+	}
+	mgr := newMgr()
 
-	// Pin both feeds for the process lifetime. Without a pin the ~10s
+	// Pin the small feeds for the process lifetime. Without a pin the ~10s
 	// grace teardown closes each subscription as soon as the page that
-	// read it finishes, and the NEXT page load pays a cold first sync —
-	// 45s for the per-transport feed, on every request more than ten
-	// seconds after the last. A reward server exists to serve these
-	// pages continuously, so the snapshot should simply stay warm and
-	// every read should be a memory hit.
+	// read it finishes, and the NEXT page load pays a cold first sync.
+	// The per-transport metrics feed is NOT pinned: it is hundreds of
+	// megabytes, and the pages read a digest of it (metricsdigest.go).
 	mgr.Pin(cxosub.FeedTPDStats)
-	mgr.Pin(cxosub.FeedTPDMetrics)
 	// The uptime feed too: the visors-online plot and the per-visor
 	// timeline panel both read the tracker's v3 dump, which was being
 	// pulled by running `skywire cli ut tpd graph --json` as a subprocess
@@ -142,6 +144,7 @@ func setStatsCXOSubMgrFromDmsg(dmsgC *dmsg.Client) {
 
 	statsCXO.Lock()
 	statsCXO.mgr = mgr
+	statsCXO.newMgr = newMgr
 	statsCXO.Unlock()
 }
 
@@ -150,6 +153,7 @@ func closeStatsCXO() {
 	statsCXO.Lock()
 	mgr := statsCXO.mgr
 	statsCXO.mgr = nil
+	statsCXO.newMgr = nil
 	statsCXO.Unlock()
 	if mgr != nil {
 		mgr.Close()
@@ -392,85 +396,63 @@ func cxoTransportMetrics(days int) ([]tpdstore.TransportMetric, statsSource, err
 	if days < 1 {
 		days = 1
 	}
-	mgr := statsCXOMgr()
-	if mgr == nil {
-		return nil, statsSource{}, fmt.Errorf("CXO not wired")
-	}
-	mgr.AcquireFor(cxosub.TabTransportMetrics)
-	defer mgr.ReleaseFor(cxosub.TabTransportMetrics)
-
-	recs, newest, err := readCXOTransportMetrics(mgr, days)
-	if err == nil {
-		return recs, statsSource{Via: "CXO", Path: tpdstore.MetricsDayPrefix + "*", At: newest}, nil
-	}
-	// Cold cache: hold the reference across the wait, or the grace
-	// teardown kills the fill this call started (#4525).
-	ctx, cancel := context.WithTimeout(context.Background(), cxosub.FeedFirstSyncTimeout(cxosub.FeedTPDMetrics))
-	defer cancel()
-	if !mgr.WaitForFirstSync(ctx, cxosub.FeedTPDMetrics, cxosub.FeedFirstSyncTimeout(cxosub.FeedTPDMetrics)) {
-		return nil, statsSource{}, err
-	}
-	recs, newest, err = readCXOTransportMetrics(mgr, days)
+	var recs []tpdstore.TransportMetric
+	var newest time.Time
+	err := withMetricsFeed(cxosub.FeedFirstSyncTimeout(cxosub.FeedTPDMetrics), func(mgr *cxosub.Manager) (err error) {
+		recs, newest, err = readCXOTransportMetrics(mgr, days)
+		return err
+	})
 	if err != nil {
 		return nil, statsSource{}, err
 	}
 	return recs, statsSource{Via: "CXO", Path: tpdstore.MetricsDayPrefix + "*", At: newest}, nil
 }
 
-// readCXOTransportMetrics does the assembly against a synced snapshot.
-func readCXOTransportMetrics(mgr *cxosub.Manager, days int) ([]tpdstore.TransportMetric, time.Time, error) {
-	byDate := make(map[string][][]byte)
-	var newest time.Time
-	ok := mgr.Walk(cxosub.FeedTPDMetrics, tpdstore.MetricsDayPrefix, func(path string, body []byte) bool {
-		date, day := tpdstore.MetricsDayDate(path)
-		if !day || len(body) == 0 {
-			return true
-		}
-		// Only the newest days are decompressed, below. The snapshot's
-		// bodies are never modified in place, so holding them is safe.
-		byDate[date] = append(byDate[date], body)
-		if ts, found := mgr.SyncedAt(cxosub.FeedTPDMetrics, path); found && ts.After(newest) {
-			newest = ts
-		}
-		return true
-	})
-	if !ok || len(byDate) == 0 {
-		return nil, time.Time{}, fmt.Errorf("no metrics day leaves on the feed")
-	}
+// metricsFeedMu lets one fill of the metrics feed run at a time, so a page
+// read during a digest build does not hold the feed a second time.
+var metricsFeedMu sync.Mutex
 
-	dates := make([]string, 0, len(byDate))
-	for d := range byDate {
-		dates = append(dates, d)
+// withMetricsFeed fills the metrics feed on a manager of its own, runs fn on
+// it and closes the manager, which drops the whole snapshot. A closed feed's
+// snapshot would otherwise stay referenced after its grace teardown.
+func withMetricsFeed(wait time.Duration, fn func(*cxosub.Manager) error) error {
+	statsCXO.RLock()
+	newMgr := statsCXO.newMgr
+	statsCXO.RUnlock()
+	if newMgr == nil {
+		return fmt.Errorf("CXO not wired")
 	}
-	// The date format sorts lexically into chronological order.
-	sort.Sort(sort.Reverse(sort.StringSlice(dates)))
+	if !metricsFeedMu.TryLock() {
+		return fmt.Errorf("the metrics feed is being read")
+	}
+	defer metricsFeedMu.Unlock()
+	mgr := newMgr()
+	defer mgr.Close()
+	mgr.Pin(cxosub.FeedTPDMetrics)
+	ctx, cancel := context.WithTimeout(context.Background(), wait)
+	defer cancel()
+	if !mgr.WaitForFirstSync(ctx, cxosub.FeedTPDMetrics, wait) {
+		return fmt.Errorf("metrics feed not synced within %s", wait)
+	}
+	return fn(mgr)
+}
+
+// readCXOTransportMetrics does the assembly against a synced snapshot. A day
+// too big for one CXO object arrives as several "<day>/part/<NNNN>" leaves,
+// disjoint slices of one array, and a day with a malformed part is left out.
+func readCXOTransportMetrics(mgr *cxosub.Manager, days int) ([]tpdstore.TransportMetric, time.Time, error) {
+	byDate, dates, newest, err := metricsDayBodies(mgr)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
 	if len(dates) > days {
 		dates = dates[:days]
 	}
-
 	perDay := make([][]tpdstore.TransportMetric, 0, len(dates))
 	for _, date := range dates {
-		bodies := byDate[date]
-		// A day too big for one CXO object arrives as several
-		// "<day>/part/<NNNN>" leaves. The parts are disjoint slices of
-		// the same array, so decoding each and concatenating is the same
-		// answer as splicing them — and it validates every part by
-		// parsing, which is the only trustworthy check.
-		var recs []tpdstore.TransportMetric
-		for _, body := range bodies {
-			var chunk []tpdstore.TransportMetric
-			if err := json.Unmarshal(cxoutils.Gunzip(body), &chunk); err != nil {
-				// One malformed leaf must not take the whole window
-				// down; the day is simply not represented.
-				recs = nil
-				break
-			}
-			recs = append(recs, chunk...)
+		if recs, ok := decodeMetricsDay(byDate[date]); ok {
+			perDay = append(perDay, recs)
 		}
-		if len(recs) == 0 {
-			continue
-		}
-		perDay = append(perDay, recs)
 	}
 	if len(perDay) == 0 {
 		return nil, time.Time{}, fmt.Errorf("no metrics day leaf parsed")
