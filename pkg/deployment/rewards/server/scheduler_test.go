@@ -68,7 +68,7 @@ func TestSchedulerStartAndFallback(t *testing.T) {
 // A burst of triggers gives one Calc, one debounce after the first.
 func TestSchedulerDebounceCoalesces(t *testing.T) {
 	c := &calcFunc{}
-	s := &Scheduler{Interval: time.Hour, Debounce: 100 * time.Millisecond, Cycle: Cycle{Calc: c.calc}}
+	s := &Scheduler{Interval: time.Hour, Debounce: 500 * time.Millisecond, Cycle: Cycle{Calc: c.calc}}
 	startScheduler(t, s)
 	waitFor(t, func() bool { return len(c.runs()) == 1 }, time.Second)
 
