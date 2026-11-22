@@ -89,6 +89,11 @@ Where a real implementation is the oracle, check against it rather than against
 your own reasoning. For this repository that means a live visor, and for a
 network change a second visor to talk to.
 
+A speed claim about a hot loop needs more than one build to back it. Where the
+linker places a loop can move a benchmark by 30 to 40 percent with no change
+to the code (skycoin-cx #470). Compare medians over several builds, or count
+the operations, before calling a change faster or slower.
+
 ## Commits
 
 The subject line is `package: lowercase summary` with no trailing period. Use a
