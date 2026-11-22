@@ -99,11 +99,16 @@ func (c *stcprClient) serve() {
 		c.log.Errorf("Failed to extract port from addr %v: %v", localAddr, err)
 		return
 	}
-	bind := func() error { return c.ar.BindSTCPR(context.Background(), port) }
+	ctx, cancel := c.closeContext()
+	bind := func() error { return c.ar.BindSTCPR(ctx, port) }
 	if !c.bindUntilBound("STCPR", bind) {
+		cancel()
 		return
 	}
-	go c.reRegister("STCPR", bind, nil)
+	go func() {
+		defer cancel()
+		c.reRegister("STCPR", bind, nil)
+	}()
 
 	c.acceptTransports(lis)
 }

@@ -1,0 +1,9 @@
+{
+  "body": "{\"exists\":true}\n",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "method": "GET",
+  "path": "/api/user-exists",
+  "status": 200
+}
