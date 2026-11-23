@@ -102,6 +102,9 @@ type cycleConfig struct {
 	proxy       string
 	// dayCloseDelay is how long after midnight UTC a day is final, defaultDayCloseDelay when zero.
 	dayCloseDelay time.Duration
+	// tpdLocal finds transport discovery in this process, whose records the
+	// bandwidth collection then reads directly. Nil fetches them over dmsg.
+	tpdLocal tpdMetricsLookup
 }
 
 // cycleMu keeps two cycles in one process from sharing the package state.
@@ -186,7 +189,7 @@ func collectAll(o rewardOpts, c cycleConfig) {
 
 	log.Info("Collecting bandwidth (bw-collect)")
 	histPath, bwSurveyPath, bwDate, bwDays, noCache = o.histDir, o.surveyPath, "", 1, true
-	if err := collectBandwidth(bwCollectCmd.Flags(), logging.MustGetLogger("bw-collect")); err != nil {
+	if err := collectBandwidth(bwCollectCmd.Flags(), logging.MustGetLogger("bw-collect"), c.tpdLocal); err != nil {
 		log.Errorf("Bandwidth collection failed, so a date with no bandwidth file pays pool 2 as pool 1: %v", err)
 	}
 }

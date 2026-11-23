@@ -152,6 +152,9 @@ type RewardConfig struct {
 	SurveyMinVersion string
 	// MetricsInterval is how often the metrics digest is rebuilt.
 	MetricsInterval time.Duration
+	// TransportDiscovery finds transport discovery in this process, whose
+	// records the metrics digest then reads directly. Nil fills the feed.
+	TransportDiscovery TransportDiscoveryLookup
 }
 
 // ConfigureAndBuild sets the reward system's internal state from the
@@ -196,7 +199,7 @@ func Serve(ctx context.Context, cfg RewardConfig, bind string, l *logging.Logger
 	if cfg.MetricsInterval > 0 {
 		metricsInterval = cfg.MetricsInterval
 	}
-	return serve(ctx, ConfigureAndBuild(cfg), bind, l)
+	return serve(ctx, ConfigureAndBuild(cfg), bind, cfg.TransportDiscovery, l)
 }
 
 // The SKYENV file is parsed in Go, never sourced by a shell: these run in

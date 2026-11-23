@@ -1851,14 +1851,15 @@ func serveStandalone(h http.Handler, bindAddr string) {
 	log := logging.MustGetLogger("dmsghttp")
 	ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 	defer cancel()
-	if err := serve(ctx, h, bindAddr, log); err != nil {
+	if err := serve(ctx, h, bindAddr, nil, log); err != nil {
 		log.Fatal(err)
 	}
 }
 
 // serve runs the dmsg listener under sk, and bindAddr when set, until ctx
-// ends. Everything it starts stops with ctx.
-func serve(ctx context.Context, h http.Handler, bindAddr string, log *logging.Logger) error {
+// ends. Everything it starts stops with ctx. tpd finds transport discovery in this
+// process, if it runs here.
+func serve(ctx context.Context, h http.Handler, bindAddr string, tpd TransportDiscoveryLookup, log *logging.Logger) error {
 	if dmsgDisc == "" {
 		return errors.New("dmsg discovery URL not specified")
 	}
@@ -1900,7 +1901,7 @@ func serve(ctx context.Context, h http.Handler, bindAddr string, log *logging.Lo
 	// holds.
 	setStatsCXOSubMgrFromDmsg(dmsgClient)
 	defer closeStatsCXO()
-	startMetricsDigest(ctx, metricsInterval, log)
+	startMetricsDigest(ctx, metricsInterval, tpd, log)
 	startVisorBWWriter(ctx, filepath.Join(wd, "hist"))
 	log.Info("stats pages: TPD aggregates sourced over CXO (HTTP-over-dmsg kept as fallback)")
 

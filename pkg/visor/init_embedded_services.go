@@ -155,6 +155,7 @@ func (v *Visor) runOwnKeyService(ctx context.Context, es *embeddedService) {
 		runCtx, cancel := context.WithCancel(ctx)
 		svc, err := es.factory(es.ownRaw, es.log)
 		if err == nil {
+			services.NeighborsSetFor(svc, visorNeighbors{v})
 			es.mu.Lock()
 			es.running, es.startErr, es.current, es.cancel = true, nil, svc, cancel
 			es.mu.Unlock()

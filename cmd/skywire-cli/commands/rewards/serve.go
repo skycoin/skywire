@@ -54,6 +54,14 @@ func init() {
 			cc.pruneBelow = c.PruneBelow
 		}
 		cc.dayCloseDelay = c.DayCloseDelay
+		if lookup := c.TransportDiscovery; lookup != nil {
+			cc.tpdLocal = func() tpdMetricsReader {
+				if local := lookup(); local != nil {
+					return local
+				}
+				return nil
+			}
+		}
 		return newCycle(c.WorkDir, runDefaults, cc, c.SkycoinNode)
 	}
 }

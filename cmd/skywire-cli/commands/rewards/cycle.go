@@ -153,7 +153,7 @@ func (d *dayCycle) calcDay(o rewardOpts) (cycleResult, error) {
 		}
 		d.mu.Unlock()
 		if due {
-			if err := closeBW(o, now); err != nil {
+			if err := closeBW(o, now, d.cfg.tpdLocal); err != nil {
 				log.WithError(err).Warnf("Final bandwidth collection for %s failed; calculating from %s as it is", o.date, bwFile)
 			}
 		}
@@ -317,7 +317,7 @@ func surveyKey(b []byte) (string, bool) {
 
 // closeBandwidth collects o.date's bandwidth after the day ended, so the
 // file holds the whole day and not what was known at the last collection.
-func closeBandwidth(o rewardOpts, now time.Time) error {
+func closeBandwidth(o rewardOpts, now time.Time, local tpdMetricsLookup) error {
 	t, err := time.Parse("2006-01-02", o.date)
 	if err != nil {
 		return err
@@ -330,7 +330,7 @@ func closeBandwidth(o rewardOpts, now time.Time) error {
 	h0, s0, d0, n0, c0 := histPath, bwSurveyPath, bwDate, bwDays, noCache
 	histPath, bwSurveyPath, bwDate, bwDays, noCache = o.histDir, o.surveyPath, o.date, days, true
 	defer func() { histPath, bwSurveyPath, bwDate, bwDays, noCache = h0, s0, d0, n0, c0 }()
-	return collectBandwidth(bwCollectCmd.Flags(), logging.MustGetLogger("bw-collect"))
+	return collectBandwidth(bwCollectCmd.Flags(), logging.MustGetLogger("bw-collect"), local)
 }
 
 // surveyInputs are the survey fields calcRewards reads, as it reads them.

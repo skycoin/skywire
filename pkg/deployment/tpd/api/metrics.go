@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"strings"
@@ -201,4 +202,10 @@ func (api *API) getTransportMetricsByVisors(w http.ResponseWriter, r *http.Reque
 	}
 
 	httputil.WriteJSON(w, r, http.StatusOK, metrics)
+}
+
+// TransportMetrics is what GET /metrics answers for query, for a reader in
+// this process.
+func (api *API) TransportMetrics(ctx context.Context, query store.MetricsQuery) ([]store.TransportMetric, error) {
+	return api.store.GetAllTransportMetrics(ctx, query)
 }

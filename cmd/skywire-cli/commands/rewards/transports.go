@@ -2,7 +2,9 @@
 package clirewards
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -71,11 +73,14 @@ func init() {
 	clirpc.RegisterFetchFlags(bwCollectCmd)
 }
 
-const (
-	defaultMinBandwidth = 64 // minimum bytes to qualify; real TPD data shows P5=796B for 2-transport visors
+const defaultMinBandwidth = 64 // minimum bytes to qualify; real TPD data shows P5=796B for 2-transport visors
+
+// bwCacheFile and fetchServiceURL are variables so tests can replace them.
+var (
 	// Bump the cache filename whenever the on-disk shape changes so a
 	// v2 binary doesn't deserialize a leftover v1 cache as garbage.
-	bwCacheFile = "/tmp/tpd_bandwidth_v2.json"
+	bwCacheFile     = "/tmp/tpd_bandwidth_v2.json"
+	fetchServiceURL = clirpc.FetchServiceURL
 )
 
 var (
@@ -302,7 +307,7 @@ sender-side aggregation. Designed to be run hourly by the reward service.`,
 				logging.SetLevel(lvl)
 			}
 		}
-		if err := collectBandwidth(cmd.Flags(), bwLog); err != nil {
+		if err := collectBandwidth(cmd.Flags(), bwLog, nil); err != nil {
 			bwLog.Fatal(err)
 		}
 	},
@@ -310,7 +315,7 @@ sender-side aggregation. Designed to be run hourly by the reward service.`,
 
 // collectBandwidth writes hist/<date>_bandwidth.json. `rewards run` keeps
 // going when it fails, and the calculation then has pool 2 repeat pool 1.
-func collectBandwidth(flags *pflag.FlagSet, bwLog *logging.Logger) error {
+func collectBandwidth(flags *pflag.FlagSet, bwLog *logging.Logger, local tpdMetricsLookup) error {
 	if err := os.MkdirAll(histPath, 0750); err != nil {
 		return fmt.Errorf("create hist directory: %w", err)
 	}
@@ -331,7 +336,7 @@ func collectBandwidth(flags *pflag.FlagSet, bwLog *logging.Logger) error {
 	// Fetch per-transport sender-side bandwidth from TPD (same-LAN
 	// already filtered out; only Daily entries matching targetDate
 	// counted when targetDate is non-empty).
-	transports, err := fetchTransportBandwidthFromTPD(flags, bwLog, pkIPMap, !noCache, bwDays, targetDate)
+	transports, err := fetchTransportBandwidthFromTPD(flags, bwLog, pkIPMap, !noCache, bwDays, targetDate, local.reader())
 	if err != nil {
 		return fmt.Errorf("fetch bandwidth data: %w", err)
 	}
@@ -353,11 +358,7 @@ func collectBandwidth(flags *pflag.FlagSet, bwLog *logging.Logger) error {
 		Version:    BandwidthDataVersion,
 		Transports: transports,
 	}
-	jsonData, err := json.MarshalIndent(out, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal bandwidth data: %w", err)
-	}
-	if err := os.WriteFile(dailyFile, jsonData, 0600); err != nil {
+	if err := writeAtomic(dailyFile, 0600, func(w io.Writer) error { return writeBandwidthData(w, out) }); err != nil {
 		return fmt.Errorf("write bandwidth file: %w", err)
 	}
 
@@ -426,7 +427,7 @@ func buildPKtoIPMap(bwLog *logging.Logger, surveyPath string) map[string]string 
 // pool 1 eligibility set at run time (it's recomputed during calc using
 // the day's surveys + uptime). The calculator does that filter after
 // reading this list.
-func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logger, pkIPMap map[string]string, useCache bool, days int, dateFilter string) ([]TransportBW, error) {
+func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logger, pkIPMap map[string]string, useCache bool, days int, dateFilter string, local tpdMetricsReader) ([]TransportBW, error) {
 	// Check cache
 	if useCache {
 		if info, err := os.Stat(bwCacheFile); err == nil {
@@ -444,26 +445,13 @@ func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logg
 		}
 	}
 
-	// Fetch all transport metrics with edge info via visor RPC → DMSG → HTTP chain.
-	tpdURL := strings.TrimSuffix(deployment.Prod.TransportDiscovery, "/")
 	if days <= 0 {
 		days = 1
-	}
-	url := fmt.Sprintf("%s/metrics?days=%d&bandwidth=true&latency=false&edges=true", tpdURL, days)
-
-	bwLog.Info("Fetching all transport metrics from TPD: ", url)
-
-	body, err := clirpc.FetchServiceURL(cmdFlags, url)
-	if err != nil {
-		return nil, fmt.Errorf("TPD fetch failed: %w", err)
 	}
 
 	out := []TransportBW{}
 	sameLANCount := 0
-
-	// The body holds every transport of the day, so each is decoded and
-	// reduced on its own rather than held as one slice.
-	fetched, err := eachTPDTransport(body, func(tp *tpdTransport) {
+	reduce := func(tp *tpdTransport) {
 		if len(tp.Edges) != 2 {
 			return
 		}
@@ -496,7 +484,7 @@ func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logg
 		if okA && okB && ipA == ipB {
 			sameLANCount++
 			bwLog.Debugf("Excluding same-LAN transport %s: %s and %s both on %s (sent_a=%d sent_b=%d)",
-				tp.ID[:8], edgeA[:12], edgeB[:12], ipA, sentA, sentB)
+				tp.ID, edgeA, edgeB, ipA, sentA, sentB)
 			return
 		}
 
@@ -506,21 +494,44 @@ func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logg
 			SentA: sentA,
 			SentB: sentB,
 		})
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse JSON: %w", err)
 	}
-	bwLog.Infof("Fetched %d transports from TPD", fetched)
+
+	fetched := -1
+	if local != nil {
+		n, err := eachLocalTPDTransport(context.Background(), local, days, reduce)
+		if err == nil {
+			fetched = n
+			bwLog.Infof("Read %d transports from transport discovery in this process", fetched)
+		} else {
+			bwLog.WithError(err).Warn("Could not read transport discovery in this process; fetching over dmsg")
+		}
+	}
+	if fetched < 0 {
+		// Fetch all transport metrics with edge info via visor RPC → DMSG → HTTP chain.
+		tpdURL := strings.TrimSuffix(deployment.Prod.TransportDiscovery, "/")
+		url := fmt.Sprintf("%s/metrics?days=%d&bandwidth=true&latency=false&edges=true", tpdURL, days)
+		bwLog.Info("Fetching all transport metrics from TPD: ", url)
+		body, err := fetchServiceURL(cmdFlags, url)
+		if err != nil {
+			return nil, fmt.Errorf("TPD fetch failed: %w", err)
+		}
+		// The body holds every transport of the day, so each is decoded and
+		// reduced on its own rather than held as one slice.
+		if fetched, err = eachTPDTransport(body, reduce); err != nil {
+			return nil, fmt.Errorf("failed to parse JSON: %w", err)
+		}
+		bwLog.Infof("Fetched %d transports from TPD", fetched)
+	}
+	// TPD lists transports in no fixed order. Sorted, the same day's figures
+	// give the same file, and the reward cycle's input hash does not change.
+	slices.SortFunc(out, compareTransportBW)
 
 	bwLog.Infof("Excluded %d same-LAN transports, %d remaining in per-edge sender-side dataset",
 		sameLANCount, len(out))
 
 	// Update cache
-	cacheData, err := json.Marshal(out)
-	if err == nil {
-		if err := os.WriteFile(bwCacheFile, cacheData, 0600); err != nil {
-			bwLog.WithError(err).Warn("Failed to update bandwidth cache file")
-		}
+	if err := writeAtomic(bwCacheFile, 0600, func(w io.Writer) error { return writeTransportBWList(w, out) }); err != nil {
+		bwLog.WithError(err).Warn("Failed to update bandwidth cache file")
 	}
 
 	return out, nil
@@ -623,4 +634,50 @@ func eachTPDTransport(body []byte, fn func(*tpdTransport)) (int, error) {
 		return n, fmt.Errorf("data after the list of transports")
 	}
 	return n, nil
+}
+
+// writeBandwidthData writes d as json.MarshalIndent(d, "", "  ") does, one
+// transport at a time, so the whole document is never held in memory.
+func writeBandwidthData(w io.Writer, d BandwidthData) error {
+	if len(d.Transports) == 0 {
+		b, err := json.MarshalIndent(d, "", "  ")
+		if err != nil {
+			return err
+		}
+		_, err = w.Write(b)
+		return err
+	}
+	bw := bufio.NewWriter(w)
+	fmt.Fprintf(bw, "{\n  \"version\": %d,\n  \"transports\": [", d.Version) //nolint:errcheck // Flush reports it
+	for i := range d.Transports {
+		if i > 0 {
+			bw.WriteByte(',') //nolint:errcheck,gosec // Flush reports it
+		}
+		bw.WriteString("\n    ") //nolint:errcheck,gosec // Flush reports it
+		b, err := json.MarshalIndent(&d.Transports[i], "    ", "  ")
+		if err != nil {
+			return err
+		}
+		bw.Write(b) //nolint:errcheck,gosec // Flush reports it
+	}
+	bw.WriteString("\n  ]\n}") //nolint:errcheck,gosec // Flush reports it
+	return bw.Flush()
+}
+
+// writeTransportBWList writes ts as a JSON array one transport at a time.
+func writeTransportBWList(w io.Writer, ts []TransportBW) error {
+	bw := bufio.NewWriter(w)
+	bw.WriteByte('[') //nolint:errcheck,gosec // Flush reports it
+	for i := range ts {
+		if i > 0 {
+			bw.WriteByte(',') //nolint:errcheck,gosec // Flush reports it
+		}
+		b, err := json.Marshal(&ts[i])
+		if err != nil {
+			return err
+		}
+		bw.Write(b) //nolint:errcheck,gosec // Flush reports it
+	}
+	bw.WriteByte(']') //nolint:errcheck,gosec // Flush reports it
+	return bw.Flush()
 }

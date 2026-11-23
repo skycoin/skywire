@@ -95,6 +95,18 @@ func Run(ctx context.Context, file File, master *logging.MasterLogger) error {
 		svcs = append(svcs, built{block: b, svc: s})
 	}
 
+	// Every block runs for the life of the process, so each type's service
+	// is fixed: the first of its type.
+	neighbors := runNeighbors{}
+	for _, s := range svcs {
+		if _, dup := neighbors[s.block.Type]; !dup {
+			neighbors[s.block.Type] = s.svc
+		}
+	}
+	for _, s := range svcs {
+		NeighborsSetFor(s.svc, neighbors)
+	}
+
 	// Shared context: any service erroring cancels everyone, and
 	// SIGINT/SIGTERM also cancel everyone. The signal goroutine is
 	// joined via the wait group below so the process doesn't exit
@@ -153,3 +165,9 @@ func Run(ctx context.Context, file File, master *logging.MasterLogger) error {
 	wg.Wait()
 	return firstErr
 }
+
+// runNeighbors are the services of one `svc run`, by type.
+type runNeighbors map[string]Service
+
+// NeighborByType implements Neighbors.
+func (n runNeighbors) NeighborByType(svcType string) Service { return n[svcType] }

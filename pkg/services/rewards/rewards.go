@@ -90,6 +90,8 @@ type service struct {
 	mu    sync.Mutex
 	sched *rewardsserver.Scheduler
 	bot   bool
+	// neighbors are the services of the same process, set before Run.
+	neighbors services.Neighbors
 }
 
 func factory(raw json.RawMessage, log *logging.Logger) (services.Service, error) {
@@ -124,14 +126,15 @@ func (s *service) Run(ctx context.Context) error {
 		}
 		sched := &rewardsserver.Scheduler{
 			Cycle: rewardsserver.NewCycle(rewardsserver.CycleConfig{
-				WorkDir:       c.WorkDir,
-				SkycoinNode:   c.SkycoinNode,
-				SkipCollect:   c.SkipCollect,
-				Fetch:         c.Fetch,
-				Proxy:         c.Proxy,
-				MinVersion:    c.MinVersion,
-				PruneBelow:    c.PruneBelow,
-				DayCloseDelay: time.Duration(c.DayCloseDelay),
+				WorkDir:            c.WorkDir,
+				SkycoinNode:        c.SkycoinNode,
+				SkipCollect:        c.SkipCollect,
+				Fetch:              c.Fetch,
+				Proxy:              c.Proxy,
+				MinVersion:         c.MinVersion,
+				PruneBelow:         c.PruneBelow,
+				DayCloseDelay:      time.Duration(c.DayCloseDelay),
+				TransportDiscovery: s.transportDiscovery,
 			}),
 			Interval:        time.Duration(c.CycleInterval),
 			CollectInterval: time.Duration(c.CollectInterval),
@@ -158,16 +161,17 @@ func (s *service) Run(ctx context.Context) error {
 	}
 
 	return rewardsserver.Serve(ctx, rewardsserver.RewardConfig{
-		WorkDir:          c.WorkDir,
-		WhitelistPKs:     c.Whitelist,
-		CanonicalDomain:  c.CanonicalDomain,
-		SkycoinNode:      c.SkycoinNode,
-		LoginNode:        c.LoginNode,
-		DisableTpVizAPI:  true,
-		SecKey:           c.SecKey,
-		DmsgPort:         c.DmsgPort,
-		SurveyMinVersion: c.SurveyMinVersion,
-		MetricsInterval:  time.Duration(c.MetricsInterval),
+		WorkDir:            c.WorkDir,
+		WhitelistPKs:       c.Whitelist,
+		CanonicalDomain:    c.CanonicalDomain,
+		SkycoinNode:        c.SkycoinNode,
+		LoginNode:          c.LoginNode,
+		DisableTpVizAPI:    true,
+		SecKey:             c.SecKey,
+		DmsgPort:           c.DmsgPort,
+		SurveyMinVersion:   c.SurveyMinVersion,
+		MetricsInterval:    time.Duration(c.MetricsInterval),
+		TransportDiscovery: s.transportDiscovery,
 	}, c.Addr, s.log)
 }
 
@@ -198,10 +202,13 @@ func (s *service) botCredentials() (string, int64, error) {
 
 // detail is the service's part of `visor state`.
 type detail struct {
-	WorkDir     string                     `json:"work_dir"`
-	SkycoinNode string                     `json:"skycoin_node,omitempty"`
-	Bot         bool                       `json:"bot"`
-	Cycle       *rewardsserver.CycleStatus `json:"reward_cycle,omitempty"`
+	WorkDir     string `json:"work_dir"`
+	SkycoinNode string `json:"skycoin_node,omitempty"`
+	Bot         bool   `json:"bot"`
+	// TransportDiscoveryLocal is set when transport discovery runs in this
+	// process and its records are read directly.
+	TransportDiscoveryLocal bool                       `json:"transport_discovery_local"`
+	Cycle                   *rewardsserver.CycleStatus `json:"reward_cycle,omitempty"`
 }
 
 // State implements services.Stater.
@@ -214,6 +221,34 @@ func (s *service) State() services.State {
 		st := sched.Status()
 		d.Cycle = &st
 	}
+	d.TransportDiscoveryLocal = s.transportDiscovery() != nil
 	raw, _ := json.Marshal(d) //nolint:errcheck
 	return services.State{Store: "files", Detail: raw}
+}
+
+// transportDiscoveryType is the block type of transport discovery (tpd.Type).
+const transportDiscoveryType = "transport-discovery"
+
+// NeighborsSet implements services.NeighborsUser.
+func (s *service) NeighborsSet(n services.Neighbors) {
+	s.mu.Lock()
+	s.neighbors = n
+	s.mu.Unlock()
+}
+
+// transportDiscovery returns transport discovery when it runs in this
+// process, so the reward cycle and the metrics digest read its records
+// directly. Nil sends them over dmsg and CXO.
+func (s *service) transportDiscovery() rewardsserver.TransportDiscoveryLocal {
+	s.mu.Lock()
+	n := s.neighbors
+	s.mu.Unlock()
+	if n == nil {
+		return nil
+	}
+	local, ok := n.NeighborByType(transportDiscoveryType).(rewardsserver.TransportDiscoveryLocal)
+	if !ok {
+		return nil
+	}
+	return local
 }

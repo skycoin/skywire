@@ -18,6 +18,7 @@ import (
 	"io"
 	"maps"
 	"runtime/debug"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -67,7 +68,7 @@ func currentMetricsDigest() *metricsDigest {
 
 // startMetricsDigest builds the digest now and then every interval until ctx
 // ends.
-func startMetricsDigest(ctx context.Context, interval time.Duration, log *logging.Logger) {
+func startMetricsDigest(ctx context.Context, interval time.Duration, tpd TransportDiscoveryLookup, log *logging.Logger) {
 	if interval <= 0 {
 		interval = DefaultMetricsDigestInterval
 	}
@@ -75,7 +76,7 @@ func startMetricsDigest(ctx context.Context, interval time.Duration, log *loggin
 		for {
 			next := interval
 			start := time.Now()
-			if err := buildMetricsDigest(); err != nil {
+			if err := memoryPeakExclusive(func() error { return buildMetricsDigest(tpd, log) }); err != nil {
 				log.WithError(err).Warn("Could not build the metrics digest")
 				next = min(interval, metricsDigestRetry)
 			} else {
@@ -94,23 +95,71 @@ func startMetricsDigest(ctx context.Context, interval time.Duration, log *loggin
 // live heap is about its size, and the default of 100 lets garbage double it.
 const metricsDigestGCPercent = 20
 
-func buildMetricsDigest() error {
+func buildMetricsDigest(tpd TransportDiscoveryLookup, log *logging.Logger) error {
 	defer debug.SetGCPercent(debug.SetGCPercent(metricsDigestGCPercent))
 	// The closed feed leaves hundreds of megabytes free at once; hand them
 	// back now rather than at the scavenger's pace.
 	defer debug.FreeOSMemory()
+	if local := tpd.local(); local != nil {
+		d, err := metricsDigestLocal(local)
+		if err == nil {
+			metricsDigestSet(d)
+			return nil
+		}
+		log.WithError(err).Warn("Could not build the metrics digest from transport discovery in this process; filling the feed")
+	}
 	return withMetricsFeed(metricsDigestFillWait, func(mgr *cxosub.Manager) error {
 		byDate, dates, newest, err := metricsDayBodies(mgr)
 		if err != nil {
 			return err
 		}
-		d := digestMetricsDays(byDate, dates, tpdDailyDays)
+		d := digestMetricsDays(metricsDayPartsOf(byDate), dates, tpdDailyDays)
 		d.src = statsSource{Via: "CXO", Path: tpdstore.MetricsDayPrefix + "*", At: newest}
-		metricsDigestState.Lock()
-		metricsDigestState.d = d
-		metricsDigestState.Unlock()
+		metricsDigestSet(d)
 		return nil
 	})
+}
+
+// metricsDigestSet makes d the digest the pages read.
+func metricsDigestSet(d *metricsDigest) {
+	metricsDigestState.Lock()
+	metricsDigestState.d = d
+	metricsDigestState.Unlock()
+}
+
+// metricsDayPartsOf reads the day leaves of one fill of the feed.
+func metricsDayPartsOf(byDate map[string][][]byte) func(date string) [][]byte {
+	return func(date string) [][]byte { return byDate[date] }
+}
+
+// metricsDigestHeldDays is how many of the newest days a local build keeps
+// between its two passes. They are the days TPD still republishes
+// (store.OpenMetricsDays), and both passes must read the same bytes.
+const metricsDigestHeldDays = 2
+
+// metricsDigestLocal builds the digest from the day leaves transport
+// discovery publishes in this process, the bytes a fill of the feed would
+// bring. A settled day never changes, so it is read again for the second
+// pass rather than held, and only one day is in memory at a time.
+func metricsDigestLocal(tpd TransportDiscoveryLocal) (*metricsDigest, error) {
+	dates := tpd.MetricsDaysRead()
+	if len(dates) == 0 {
+		return nil, errors.New("transport discovery has published no metrics day leaves yet")
+	}
+	held := make(map[string][][]byte, metricsDigestHeldDays)
+	parts := func(date string) [][]byte {
+		if p, ok := held[date]; ok {
+			return p
+		}
+		p, _ := tpd.MetricsDayPartsRead(date)
+		if slices.Index(dates, date) < metricsDigestHeldDays {
+			held[date] = p
+		}
+		return p
+	}
+	d := digestMetricsDays(parts, dates, tpdDailyDays)
+	d.src = statsSource{Via: "transport discovery in this process", Path: tpdstore.MetricsDayPrefix + "*", At: time.Now().UTC()}
+	return d, nil
 }
 
 // metricsDayBodies groups the feed's day leaves by date, newest date first,
@@ -203,7 +252,7 @@ func eachMetric(bodies [][]byte, fn func(*tpdstore.TransportMetric)) bool {
 // tpdstore.MergeDailyMetrics over the same days: a transport's edges are the
 // first non-empty ones in newest-first order, and every row of the transport
 // is attributed to them.
-func digestMetricsDays(byDate map[string][][]byte, dates []string, days int) *metricsDigest {
+func digestMetricsDays(dayParts func(date string) [][]byte, dates []string, days int) *metricsDigest {
 	d := &metricsDigest{dayErr: "no metrics day leaf parsed"}
 	if len(dates) > days {
 		dates = dates[:days]
@@ -233,7 +282,7 @@ func digestMetricsDays(byDate map[string][][]byte, dates []string, days int) *me
 	for i, date := range dates {
 		staged := make(map[string][]string)
 		var s tpdNetworkSummary
-		ok := eachMetric(byDate[date], func(m *tpdstore.TransportMetric) {
+		ok := eachMetric(dayParts(date), func(m *tpdstore.TransportMetric) {
 			if i == 0 {
 				accumulateVerifiedBandwidth([]tpdstore.TransportMetric{*m}, &s)
 			}
@@ -270,7 +319,7 @@ func digestMetricsDays(byDate map[string][][]byte, dates []string, days int) *me
 	// Pass 2: each visor's bytes per day, over the days that parsed.
 	d.daily = newVisorDays()
 	for _, date := range parsed {
-		eachMetric(byDate[date], func(m *tpdstore.TransportMetric) {
+		eachMetric(dayParts(date), func(m *tpdstore.TransportMetric) {
 			addVisorDaily(d.daily, edgesByID[m.ID], m.Daily)
 		})
 	}

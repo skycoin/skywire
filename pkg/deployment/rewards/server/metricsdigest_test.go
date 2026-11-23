@@ -2,7 +2,10 @@
 package rewardsserver
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -25,10 +28,8 @@ func digestLeaf(t *testing.T, recs ...tpdstore.TransportMetric) []byte {
 	return b
 }
 
-// TestMetricsDigestMatchesMergedRecords checks the digest, built one day at a
-// time, against the figures computed from MergeDailyMetrics over the same
-// leaves, which is what the pages computed before the digest.
-func TestMetricsDigestMatchesMergedRecords(t *testing.T) {
+// digestFixture is four days of feed leaves, newest first.
+func digestFixture(t *testing.T) (map[string][][]byte, []string) {
 	byDate := map[string][][]byte{
 		// Two parts, one gzipped. tp-1 has no edges on its newest day.
 		"2026-11-22": {
@@ -54,9 +55,17 @@ func TestMetricsDigestMatchesMergedRecords(t *testing.T) {
 		},
 	}
 	dates := []string{"2026-11-22", "2026-11-21", "2026-11-20", "2026-11-19"}
+	return byDate, dates
+}
+
+// TestMetricsDigestMatchesMergedRecords checks the digest, built one day at a
+// time, against the figures computed from MergeDailyMetrics over the same
+// leaves, which is what the pages computed before the digest.
+func TestMetricsDigestMatchesMergedRecords(t *testing.T) {
+	byDate, dates := digestFixture(t)
 
 	for _, days := range []int{1, 2, 3, 30} {
-		got := digestMetricsDays(byDate, dates, days)
+		got := digestMetricsDays(metricsDayPartsOf(byDate), dates, days)
 
 		window := dates
 		if len(window) > days {
@@ -90,7 +99,7 @@ func TestMetricsDigestMatchesMergedRecords(t *testing.T) {
 
 func TestMetricsDigestNamesAnUnparsedWindow(t *testing.T) {
 	byDate := map[string][][]byte{"2026-11-22": {[]byte("{")}}
-	got := digestMetricsDays(byDate, []string{"2026-11-22"}, 30)
+	got := digestMetricsDays(metricsDayPartsOf(byDate), []string{"2026-11-22"}, 30)
 	require.NotEmpty(t, got.dayErr)
 	require.NotEmpty(t, got.winErr)
 	require.Nil(t, got.edges)
@@ -135,4 +144,55 @@ func TestEachMetricAgreesWithDecodeMetricsDay(t *testing.T) {
 			require.Equal(t, want, got, name)
 		}
 	}
+}
+
+// metricsFeedLocal is transport discovery in this process over day leaves,
+// counting the reads of each day.
+type metricsFeedLocal struct {
+	byDate map[string][][]byte
+	dates  []string
+	reads  map[string]int
+}
+
+func (l *metricsFeedLocal) TransportMetricsRead(context.Context, tpdstore.MetricsQuery) ([]tpdstore.TransportMetric, error) {
+	return nil, errors.New("not read by the digest")
+}
+
+func (l *metricsFeedLocal) MetricsDaysRead() []string { return l.dates }
+
+func (l *metricsFeedLocal) MetricsDayPartsRead(date string) ([][]byte, bool) {
+	l.reads[date]++
+	p, ok := l.byDate[date]
+	// A subscriber walks a day's parts in no fixed order, so give them reversed.
+	r := slices.Clone(p)
+	slices.Reverse(r)
+	return r, ok && len(p) > 0
+}
+
+// TestMetricsDigestLocalMatchesFeed checks that the digest built from
+// transport discovery in this process equals the one built from a fill of
+// the feed over the same day leaves, and that only the open days are held
+// between the two passes.
+func TestMetricsDigestLocalMatchesFeed(t *testing.T) {
+	byDate, dates := digestFixture(t)
+	local := &metricsFeedLocal{byDate: byDate, dates: dates, reads: map[string]int{}}
+
+	fromFeed := digestMetricsDays(metricsDayPartsOf(byDate), dates, tpdDailyDays)
+	fromLocal, err := metricsDigestLocal(local)
+	require.NoError(t, err)
+
+	require.Equal(t, visorDaysMap(fromFeed.daily), visorDaysMap(fromLocal.daily))
+	require.Equal(t, fromFeed.edges, fromLocal.edges)
+	require.Equal(t, fromFeed.dayTotal, fromLocal.dayTotal)
+	require.Equal(t, fromFeed.dayErr, fromLocal.dayErr)
+	require.Equal(t, fromFeed.winErr, fromLocal.winErr)
+	require.NotZero(t, fromLocal.dayTotal)
+	require.NotEmpty(t, fromLocal.edges)
+
+	// The two open days are read once, settled days once per pass, and the
+	// malformed day only once, since the second pass skips it.
+	require.Equal(t, map[string]int{"2026-11-22": 1, "2026-11-21": 1, "2026-11-20": 1, "2026-11-19": 2}, local.reads)
+
+	_, err = metricsDigestLocal(&metricsFeedLocal{reads: map[string]int{}})
+	require.Error(t, err, "nothing published yet")
 }
