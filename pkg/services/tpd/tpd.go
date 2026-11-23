@@ -67,10 +67,13 @@ func New(cfg *Config, log *logging.Logger) services.Service {
 }
 
 type service struct {
-	// chartsAPI is the running API, whose charts the host shows on its status page.
-	chartsAPI atomic.Pointer[api.API]
-	cfg       *Config
-	log       *logging.Logger
+	// runningAPI is the running API, whose charts the host shows on its status
+	// page and whose records a neighbor reads (neighbors.go).
+	runningAPI atomic.Pointer[api.API]
+	// metricsPub is the running metrics feed publisher, or nil.
+	metricsPub atomic.Pointer[api.MetricsCXOPublisher]
+	cfg        *Config
+	log        *logging.Logger
 
 	// state, set by build and startCXO, is reported by State.
 	store, nonceStore string
@@ -190,7 +193,7 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 		ua.SetUptimeArchive(filepath.Join(storeDataPath, "tp-uptime"))
 	}
 	tpdAPI := api.New(logger, st, nonceStore, enableMetrics, m, dmsgAddr, storeDataPath)
-	s.chartsAPI.Store(tpdAPI)
+	s.runningAPI.Store(tpdAPI)
 	tpdAPI.SetEntryTimeout(cfg.EntryTimeout.Std())
 	if live {
 		if err := tpdAPI.SeedReconcile(ctx); err != nil {
@@ -334,6 +337,9 @@ func (s *service) startCXO(
 	})
 
 	mp, err := api.StartMetricsCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger)
+	if mp != nil {
+		s.metricsPub.Store(mp)
+	}
 	s.cxo.AddPublisher(ctx, logger, "metrics", skyenv.DmsgTPDMetricsCXOPort, mp, err)
 	up, err := api.StartUptimeCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger)
 	s.cxo.AddPublisher(ctx, logger, "uptime", skyenv.DmsgTPDUptimeCXOPort, up, err)
@@ -463,7 +469,7 @@ func arBindingsFeed(dmsgC *dmsg.Client, arURL string, log *logging.Logger) *cxos
 // ChartsPage is the charts page of the running service, for the host's status
 // page. Nil before the service has started.
 func (s *service) ChartsPage() *charts.Page {
-	if a := s.chartsAPI.Load(); a != nil {
+	if a := s.runningAPI.Load(); a != nil {
 		return a.Charts()
 	}
 	return nil

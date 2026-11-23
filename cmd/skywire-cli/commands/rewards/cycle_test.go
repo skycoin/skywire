@@ -66,7 +66,7 @@ func newCycleFixtureAt(t *testing.T, date string) *cycleFixture {
 		f.fetches++
 		return os.WriteFile(filepath.Join(histDir, date+"_ut.txt"), []byte(f.utBody), 0o600)
 	}
-	closeBW = func(o rewardOpts, _ time.Time) error {
+	closeBW = func(o rewardOpts, _ time.Time, _ tpdMetricsLookup) error {
 		f.closes++
 		if f.closeErr != nil {
 			return f.closeErr

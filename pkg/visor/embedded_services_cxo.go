@@ -106,6 +106,7 @@ func (v *Visor) embeddedServices() []*embeddedService {
 				es.err = fmt.Errorf("block #%d (%s): build: %w", i, es.label, err)
 				continue
 			}
+			services.NeighborsSetFor(svc, visorNeighbors{v})
 			emb, ok := svc.(services.Embeddable)
 			if !ok {
 				if keyFound {
@@ -243,4 +244,28 @@ func (v *Visor) embeddedServiceStates() []visorapi.EmbeddedServiceState {
 		out = append(out, st)
 	}
 	return out
+}
+
+// visorNeighbors implements services.Neighbors over the embedded services,
+// so a service can read another's records in this process.
+type visorNeighbors struct{ v *Visor }
+
+// NeighborByType returns the running embedded service of svcType, or nil.
+func (n visorNeighbors) NeighborByType(svcType string) services.Service {
+	for _, es := range n.v.embeddedServices() {
+		if es.block.Type != svcType {
+			continue
+		}
+		es.mu.Lock()
+		running, current := es.running, es.current
+		es.mu.Unlock()
+		switch {
+		case !running:
+		case es.standalone && current != nil:
+			return current
+		case !es.standalone && es.svc != nil:
+			return es.svc
+		}
+	}
+	return nil
 }

@@ -2,6 +2,7 @@
 package clirewards
 
 import (
+	"bytes"
 	"encoding/json"
 	"testing"
 
@@ -34,6 +35,34 @@ func TestEachTPDTransportAgreesWithUnmarshal(t *testing.T) {
 			if n > 0 {
 				require.Equal(t, want, got, name)
 			}
+		}
+	}
+}
+
+// TestWriteBandwidthDataMatchesMarshalIndent checks the streamed bandwidth
+// file is byte for byte what json.MarshalIndent wrote, and the streamed cache
+// reads back to the same list.
+func TestWriteBandwidthDataMatchesMarshalIndent(t *testing.T) {
+	for name, ts := range map[string][]TransportBW{
+		"nil":   nil,
+		"empty": {},
+		"one":   {{A: "a", B: "b", SentA: 1, SentB: 2}},
+		"three": {{A: "a<&>", B: "b", SentA: 0, SentB: 1 << 62}, {A: "c", B: "d"}, {A: "e\"", B: "f\\", SentA: 9}},
+	} {
+		d := BandwidthData{Version: BandwidthDataVersion, Transports: ts}
+		want, err := json.MarshalIndent(d, "", "  ")
+		require.NoError(t, err)
+		var got bytes.Buffer
+		require.NoError(t, writeBandwidthData(&got, d), name)
+		require.Equal(t, string(want), got.String(), name)
+
+		got.Reset()
+		require.NoError(t, writeTransportBWList(&got, ts), name)
+		var back []TransportBW
+		require.NoError(t, json.Unmarshal(got.Bytes(), &back), name)
+		require.Equal(t, len(ts), len(back), name)
+		if len(ts) > 0 {
+			require.Equal(t, ts, back, name)
 		}
 	}
 }

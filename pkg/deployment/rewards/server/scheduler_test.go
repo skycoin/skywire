@@ -307,3 +307,53 @@ func waitFor(t *testing.T, cond func() bool, d time.Duration) {
 		time.Sleep(2 * time.Millisecond)
 	}
 }
+
+// TestSchedulerMemoryPeakExclusive checks that the metrics digest waits for a
+// collection in progress, and that a payout waits neither for the digest nor
+// for a calculation queued behind it.
+func TestSchedulerMemoryPeakExclusive(t *testing.T) {
+	collecting, release := make(chan struct{}), make(chan struct{})
+	s := &Scheduler{Cycle: Cycle{
+		Calc: func(context.Context, string) (CalcResult, error) { return CalcResult{}, nil },
+		Collect: func(context.Context) error {
+			close(collecting)
+			<-release
+			return nil
+		},
+	}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go s.collect(ctx)
+	<-collecting
+
+	var digested atomic.Bool
+	digestDone := make(chan struct{})
+	go func() {
+		_ = s.MemoryPeakExclusive(func() error { digested.Store(true); return nil }) //nolint:errcheck
+		close(digestDone)
+	}()
+	time.Sleep(20 * time.Millisecond)
+	if digested.Load() {
+		t.Fatal("the digest ran during a collection")
+	}
+	close(release)
+	<-digestDone
+
+	// A digest in progress holds no payout back.
+	digesting, digestRelease := make(chan struct{}), make(chan struct{})
+	go func() {
+		_ = s.MemoryPeakExclusive(func() error { close(digesting); <-digestRelease; return nil }) //nolint:errcheck
+	}()
+	<-digesting
+	// A calculation waiting for the digest holds no payout back either.
+	go func() { _ = s.RunOnce(ctx, "queued") }() //nolint:errcheck
+	time.Sleep(20 * time.Millisecond)
+	paid := make(chan struct{})
+	go func() { _ = s.Exclusive(func() error { close(paid); return nil }) }() //nolint:errcheck
+	select {
+	case <-paid:
+	case <-time.After(time.Second):
+		t.Fatal("a payout waited for the digest")
+	}
+	close(digestRelease)
+}

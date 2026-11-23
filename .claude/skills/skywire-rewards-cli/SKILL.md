@@ -109,6 +109,11 @@ bytes. See `reward rules` for the human eligibility rules.
   `visor state --select services` shows it with `detail.reward_cycle`; `visor services
   start|stop|restart rewards` controls it; a failed start is retried with backoff. `skywire svc run`
   runs the same block outside a visor.
+  When a `transport-discovery` block runs in the same visor (or the same `svc run`), bw-collect
+  reads TPD's metrics in-process and the metrics digest reads TPD's own day leaves, instead of
+  dmsg and a CXO fill (`services.Neighbors`, `rewardsserver.TransportDiscoveryLocal`).
+  `detail.transport_discovery_local` says whether it does. A failed local read falls back to dmsg.
+  The digest build never runs beside a collection or calculation (`Scheduler.MemoryPeakExclusive`).
 - **`rewards tp-collect`** → fetch per-key transport stats from TPD
   (`/all-transports/per-key-stats`, cached 5min in `/tmp/tpd.json`), append PKs with
   >= `-m/--min` (default 2) p2p transports (dmsg excluded) to `hist/YYYY-MM-DD_transports.txt`.

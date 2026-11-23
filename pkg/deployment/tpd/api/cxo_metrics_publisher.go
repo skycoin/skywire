@@ -116,6 +116,8 @@ type MetricsCXOPublisher struct {
 
 	mu        sync.Mutex
 	lastError error
+	// published is the dates of m.parts, newest first, for PublishedDays.
+	published []string
 }
 
 // StartMetricsCXOPublisher constructs a publisher backed by the
@@ -284,7 +286,7 @@ func (m *MetricsCXOPublisher) publish(ctx context.Context, full bool) {
 		m.recordError(err)
 		return
 	}
-	m.parts = next
+	m.setParts(next)
 	// Only the days built here are settled; the saved ones are saved already.
 	m.settle(ctx, bodies, window[:open])
 }
@@ -306,7 +308,7 @@ func (m *MetricsCXOPublisher) publishSaved(ctx context.Context, dates, window []
 			m.recordError(err)
 			continue
 		}
-		m.parts = next
+		m.setParts(next)
 		have[date] = true
 		// The tree holds a copy until it is published; wait for that so the
 		// next day's copy does not pile on top of it.
@@ -640,4 +642,35 @@ func (m *MetricsCXOPublisher) settle(ctx context.Context, bodies map[string][][]
 		}
 		delete(m.unsaved, date)
 	}
+}
+
+// setParts records next as the part counts of the published days. Only the
+// publish loop calls it.
+func (m *MetricsCXOPublisher) setParts(next map[string]int) {
+	m.parts = next
+	dates := slices.Collect(maps.Keys(next))
+	// The date format sorts lexically into chronological order.
+	slices.Sort(dates)
+	slices.Reverse(dates)
+	m.mu.Lock()
+	m.published = dates
+	m.mu.Unlock()
+}
+
+// PublishedDays returns the dates of the day leaves on the feed, newest first.
+func (m *MetricsCXOPublisher) PublishedDays() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return slices.Clone(m.published)
+}
+
+// PublishedDayParts returns the parts of date's day leaf as the feed carries
+// them, in path order, or false when the feed has none.
+func (m *MetricsCXOPublisher) PublishedDayParts(date string) ([][]byte, bool) {
+	var parts [][]byte
+	m.pub.Walk(store.MetricsDayPath(date), func(_ string, value []byte) bool {
+		parts = append(parts, value)
+		return true
+	})
+	return parts, len(parts) > 0
 }

@@ -79,13 +79,18 @@ type Scheduler struct {
 	Log           *logging.Logger
 
 	// run is held for the whole of a Calc, a Collect or a payout, so two never overlap.
-	run      sync.Mutex
-	mu       sync.Mutex
-	st       CycleStatus
-	pending  []string
-	dropped  int
-	kick     chan struct{}
-	kickOnce sync.Once
+	run sync.Mutex
+	// memoryPeak is held for the whole of a Calc or a Collect, and by
+	// MemoryPeakExclusive, so the bandwidth collection and the metrics digest
+	// never hold their data at once. Taken before run, so a Calc waiting for
+	// the digest holds no payout back.
+	memoryPeak sync.Mutex
+	mu         sync.Mutex
+	st         CycleStatus
+	pending    []string
+	dropped    int
+	kick       chan struct{}
+	kickOnce   sync.Once
 }
 
 // CycleStatus is the scheduler's state, as /health shows it.
@@ -276,6 +281,8 @@ func (s *Scheduler) takePending() string {
 
 // RunOnce runs one Calc for reason, after any work in progress has finished.
 func (s *Scheduler) RunOnce(ctx context.Context, reason string) (err error) {
+	s.memoryPeak.Lock()
+	defer s.memoryPeak.Unlock()
 	s.run.Lock()
 	defer s.run.Unlock()
 	if ctx.Err() != nil {
@@ -335,6 +342,23 @@ func (s *Scheduler) Exclusive(fn func() error) error {
 	return fn()
 }
 
+// MemoryPeakExclusive runs fn with no Calc or Collect running, waiting for
+// one in progress. A payout may run beside it.
+func (s *Scheduler) MemoryPeakExclusive(fn func() error) error {
+	s.memoryPeak.Lock()
+	defer s.memoryPeak.Unlock()
+	return fn()
+}
+
+// memoryPeakExclusive is MemoryPeakExclusive on the scheduler of this
+// process, or fn alone when there is none.
+func memoryPeakExclusive(fn func() error) error {
+	if s := currentScheduler(); s != nil {
+		return s.MemoryPeakExclusive(fn)
+	}
+	return fn()
+}
+
 // calc runs Calc, turning a panic into an error so the server lives on.
 func (s *Scheduler) calc(ctx context.Context, reason string) (res CalcResult, err error) {
 	defer func() {
@@ -350,6 +374,8 @@ func (s *Scheduler) calc(ctx context.Context, reason string) (res CalcResult, er
 
 // collect runs Collect. A failure is logged, and the next collection tries again.
 func (s *Scheduler) collect(ctx context.Context) {
+	s.memoryPeak.Lock()
+	defer s.memoryPeak.Unlock()
 	s.run.Lock()
 	defer s.run.Unlock()
 	if ctx.Err() != nil {
@@ -480,6 +506,10 @@ type CycleConfig struct {
 	PruneBelow string
 	// DayCloseDelay is when, after midnight UTC, a day is final, DefaultDayCloseDelay when zero.
 	DayCloseDelay time.Duration
+	// TransportDiscovery finds transport discovery in this process, whose
+	// records the bandwidth collection then reads directly. Nil fetches them
+	// over dmsg.
+	TransportDiscovery TransportDiscoveryLookup
 }
 
 // NewCycle returns the reward cycle for c. The skywire cli rewards package
