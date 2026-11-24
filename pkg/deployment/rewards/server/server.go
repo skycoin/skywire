@@ -269,6 +269,12 @@ func buildRouter() http.Handler {
 			r1.HandleFunc("GET /api/dmsg/entries", tpvizHandler.ServeHTTP)
 			r1.HandleFunc("GET /api/dmsg/health", tpvizHandler.ServeHTTP)
 			r1.HandleFunc("GET /bundle.js", tpvizHandler.ServeHTTP)
+			// The default Go WebGL view, the globe texture and the latency view.
+			r1.HandleFunc("GET /tpviz-gl.wasm", tpvizHandler.ServeHTTP)
+			r1.HandleFunc("GET /tpviz-gl-exec.js", tpvizHandler.ServeHTTP)
+			r1.HandleFunc("GET /textures/", tpvizHandler.ServeHTTP)
+			r1.HandleFunc("GET /api/tp-latency", tpvizHandler.ServeHTTP)
+			r1.HandleFunc("GET /api/dmsg/servers/clients", tpvizHandler.ServeHTTP)
 		}
 
 		r1.HandleFunc("GET /transport-graph", func(w http.ResponseWriter, r *http.Request) {
