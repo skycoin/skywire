@@ -96,8 +96,8 @@ require (
 	github.com/rivo/uniseg v0.4.7
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/shirou/gopsutil/v3 v3.24.5
-	github.com/sirupsen/logrus v1.10.3-0.20261117174421-40042a1bf4df
-	github.com/skycoin/skycoin v0.28.8-0.20261124173918-1b1f1f0b69b2
+	github.com/sirupsen/logrus v1.10.3-0.20261118153946-954b418844d9
+	github.com/skycoin/skycoin v0.28.8
 	github.com/soheilhy/cmux v0.1.5
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.2
@@ -182,7 +182,7 @@ require (
 	github.com/itchyny/timefmt-go v0.1.9 // indirect
 	github.com/jaypipes/pcidb v1.1.1 // indirect
 	github.com/jezek/xgb v1.3.1 // indirect
-	github.com/klauspost/compress v1.20.4 // indirect
+	github.com/klauspost/compress v1.20.5 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.2 // indirect
 	github.com/klauspost/reedsolomon v1.14.2 // indirect
 	github.com/kr/fs v0.1.0 // indirect
@@ -268,10 +268,10 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20261110000943-09e21b237f2c // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	howett.net/plist v1.0.2-0.20250314012144-ee69052608d9 // indirect
-	modernc.org/libc v1.81.2 // indirect
+	modernc.org/libc v1.82.13 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.13.0 // indirect
-	modernc.org/sqlite v1.62.0 // indirect
+	modernc.org/sqlite v1.63.0 // indirect
 	mvdan.cc/sh/v3 v3.14.1 // indirect
 )
 
