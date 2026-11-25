@@ -195,6 +195,13 @@ func tpUptimeOnlineKey(date string) string {
 	return fmt.Sprintf("%s:tp-uptime:online:%s", serviceName, date)
 }
 
+// tpUptimeOnlineWanted reports whether a heartbeat for date belongs in that
+// day's online set. Only today's set is read, and a visor replaying an old
+// sample kept a week of past sets alive at 13 MB each (prod01, 2026-11-25).
+func tpUptimeOnlineWanted(date string, now time.Time) bool {
+	return date >= now.UTC().Format("2006-01-02")
+}
+
 // tracksUptime reports whether a transport type gets an uptime timeline:
 // every type but dmsg, as for a visor's online count.
 func tracksUptime(tpType string) bool {
@@ -227,8 +234,10 @@ func (s *redisStore) RecordTransportHeartbeat(ctx context.Context, tpID uuid.UUI
 	pipe.HSet(ctx, key, "last_seen", at.Unix())
 	pipe.Expire(ctx, key, tpUptimeTodayTTL)
 
-	pipe.SAdd(ctx, tpUptimeOnlineKey(date), idStr)
-	pipe.Expire(ctx, tpUptimeOnlineKey(date), tpUptimeTodayTTL)
+	if tpUptimeOnlineWanted(date, time.Now()) {
+		pipe.SAdd(ctx, tpUptimeOnlineKey(date), idStr)
+		pipe.Expire(ctx, tpUptimeOnlineKey(date), tpUptimeTodayTTL)
+	}
 
 	tlKey := tpUptimeTimelineKey(idStr, date)
 	pipe.SetBit(ctx, tlKey, currentTimelineSlot(at), 1)
