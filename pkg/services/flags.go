@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/pflag"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 )
@@ -55,7 +56,7 @@ func (f *Flags) Bind(fs *pflag.FlagSet, d FlagDefaults) {
 func (f *Flags) Resolve() (Common, error) {
 	c := f.Common
 	if f.KeyFile != "" {
-		if err := cmdutil.LoadOrGenerateKey(f.KeyFile, &c.SecKey); err != nil {
+		if err := cipher.LoadOrGenerateKey(f.KeyFile, &c.SecKey); err != nil {
 			return Common{}, err
 		}
 	}

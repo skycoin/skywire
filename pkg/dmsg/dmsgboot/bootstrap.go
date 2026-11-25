@@ -1,5 +1,5 @@
-// Package cmdutil pkg/cmdutil/dmsg_bootstrap.go c1-com-util
-package cmdutil
+// Package dmsgboot pkg/dmsg/dmsgboot/bootstrap.go c1-net-dmsg
+package dmsgboot
 
 import (
 	"context"

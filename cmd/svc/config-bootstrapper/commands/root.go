@@ -134,7 +134,7 @@ HTTP Endpoints:
 		config := readConfig(logger, stunPath)
 
 		if keyFile != "" {
-			if err := cmdutil.LoadOrGenerateKey(keyFile, &sk); err != nil {
+			if err := cipher.LoadOrGenerateKey(keyFile, &sk); err != nil {
 				logger.Fatal("Failed to load keyfile: ", err)
 			}
 		}

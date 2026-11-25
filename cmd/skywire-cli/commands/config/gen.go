@@ -35,6 +35,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgboot"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -970,7 +971,7 @@ func fetchServiceConfigDmsg(log *logging.Logger) bool {
 		dmsgLog = &logging.Logger{FieldLogger: silentLogger}
 	}
 
-	dmsgBoot, err := cmdutil.BootstrapDmsg(ctx, dmsgLog, pk, sk,
+	dmsgBoot, err := dmsgboot.BootstrapDmsg(ctx, dmsgLog, pk, sk,
 		dmsg.Prod.DmsgServers, embeddedConf.DmsgDiscovery, "", "")
 	if err != nil {
 		logIfNotStdout(log, err, "DMSG bootstrap failed for config fetch")

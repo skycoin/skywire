@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/deployment/ar/api"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgboot"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/services/ar"
@@ -156,7 +157,7 @@ func buildConfig() (*ar.Config, error) {
 		PublicUDPAddr: publicUDPAddr,
 		ChartsAddr:    chartsAddr,
 		Whitelist:     cmdutil.CommaSplit(whitelistKeys),
-		Dmsg: cmdutil.DmsgConfig{
+		Dmsg: dmsgboot.DmsgConfig{
 			Discovery:  dmsgDisc,
 			ServerType: dmsgServerType,
 		},

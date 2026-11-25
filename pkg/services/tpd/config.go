@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgboot"
 	"github.com/skycoin/skywire/pkg/services"
 )
 
@@ -59,7 +59,7 @@ type Config struct {
 
 	// Dmsg is the dmsg-related config block — same shape across
 	// every deployment service that uses it.
-	Dmsg cmdutil.DmsgConfig `json:"dmsg,omitempty"`
+	Dmsg dmsgboot.DmsgConfig `json:"dmsg,omitempty"`
 }
 
 // LoadFile reads and strict-parses a Config from path. Used by the

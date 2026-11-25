@@ -27,11 +27,11 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	dmsgmetrics "github.com/skycoin/skywire/pkg/dmsg/dmsg/metrics"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgboot"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgctrl"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
@@ -458,7 +458,7 @@ func upgradeDmsgDiscToDmsgOnly(dmsgC *dmsg.Client, primaryDmsgC *dmsg.Client, co
 	upgraded := make([]dmsgdisc.APIClient, len(deployments))
 	anyUpgraded := false
 	for i, d := range deployments {
-		pk := cmdutil.PKFromDmsgURL(d.DiscoveryDmsg)
+		pk := dmsgboot.PKFromDmsgURL(d.DiscoveryDmsg)
 		if pk == (cipher.PubKey{}) {
 			upgraded[i] = dmsgdisc.NewHTTP(d.Discovery, &http.Client{}, log)
 			continue
@@ -1132,9 +1132,9 @@ func initDmsgServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// Discovery PK for dmsg-only registration: the visor's dmsg discovery
 	// URL is dmsg://<pk>:port. Without a resolvable discovery PK the server
 	// can't register over dmsg; log and no-op rather than fail visor init.
-	discPK := cmdutil.PKFromDmsgURL(v.conf.Dmsg.DiscoveryDmsg)
+	discPK := dmsgboot.PKFromDmsgURL(v.conf.Dmsg.DiscoveryDmsg)
 	if discPK == (cipher.PubKey{}) {
-		discPK = cmdutil.PKFromDmsgURL(v.conf.Dmsg.Discovery)
+		discPK = dmsgboot.PKFromDmsgURL(v.conf.Dmsg.Discovery)
 	}
 	if discPK == (cipher.PubKey{}) {
 		log.Warn("in-process dmsg server enabled but no dmsg discovery PK (Dmsg.DiscoveryDmsg); not starting")

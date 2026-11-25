@@ -1,5 +1,5 @@
-// Package cmdutil pkg/dmsg/cmdutil/keyfile_test.go c1-net-dmsg
-package cmdutil
+// Package cipher pkg/cipher/keyfile_test.go c0-com-crypto
+package cipher
 
 import (
 	"os"
@@ -8,15 +8,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 func TestLoadOrGenerateKey_GeneratesNew(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.key")
 
-	var sk cipher.SecKey
+	var sk SecKey
 	err := LoadOrGenerateKey(path, &sk)
 	require.NoError(t, err)
 	assert.False(t, sk.Null(), "secret key should be generated")
@@ -32,12 +30,12 @@ func TestLoadOrGenerateKey_LoadsExisting(t *testing.T) {
 	path := filepath.Join(dir, "test.key")
 
 	// Generate first
-	var sk1 cipher.SecKey
+	var sk1 SecKey
 	err := LoadOrGenerateKey(path, &sk1)
 	require.NoError(t, err)
 
 	// Load same file
-	var sk2 cipher.SecKey
+	var sk2 SecKey
 	err = LoadOrGenerateKey(path, &sk2)
 	require.NoError(t, err)
 
@@ -51,7 +49,7 @@ func TestLoadOrGenerateKey_EmptyFile(t *testing.T) {
 	err := os.WriteFile(path, []byte(""), 0600)
 	require.NoError(t, err)
 
-	var sk cipher.SecKey
+	var sk SecKey
 	err = LoadOrGenerateKey(path, &sk)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "empty")
@@ -64,7 +62,7 @@ func TestLoadOrGenerateKey_WhitespaceOnlyFile(t *testing.T) {
 	err := os.WriteFile(path, []byte("  \n\t  \n"), 0600)
 	require.NoError(t, err)
 
-	var sk cipher.SecKey
+	var sk SecKey
 	err = LoadOrGenerateKey(path, &sk)
 	assert.Error(t, err)
 }
@@ -76,7 +74,7 @@ func TestLoadOrGenerateKey_InvalidContent(t *testing.T) {
 	err := os.WriteFile(path, []byte("not-a-valid-secret-key"), 0600)
 	require.NoError(t, err)
 
-	var sk cipher.SecKey
+	var sk SecKey
 	err = LoadOrGenerateKey(path, &sk)
 	assert.Error(t, err)
 }

@@ -10,11 +10,11 @@ import (
 	"net/http"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgboot"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/svcmode"
 )
@@ -50,7 +50,7 @@ func (c *Common) Identity(log *logging.Logger) Identity {
 
 // DmsgDiscovery is the dmsg discovery address of cfg, the deployment's when
 // unset. Discovery is reached over dmsg only.
-func DmsgDiscovery(cfg cmdutil.DmsgConfig) string {
+func DmsgDiscovery(cfg dmsgboot.DmsgConfig) string {
 	if cfg.DiscoveryDmsg != "" {
 		return cfg.DiscoveryDmsg
 	}
@@ -79,7 +79,7 @@ type Listener struct {
 	// DefaultAddr is the plain HTTP address when Common.Addr is empty.
 	DefaultAddr string
 	Handler     http.Handler
-	Dmsg        cmdutil.DmsgConfig
+	Dmsg        dmsgboot.DmsgConfig
 	Stats       *charts.ServiceStats
 	// OnDmsgServersUpdated receives the dmsg servers the service is on.
 	OnDmsgServersUpdated func([]string)

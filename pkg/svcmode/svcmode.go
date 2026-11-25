@@ -16,7 +16,7 @@
 //   - Mode selection (http | dmsg | dual) via the --mode flag, with a
 //     sensible default derived from whether a DMSG secret key was
 //     provided.
-//   - DMSG bootstrap via the existing cmdutil.BootstrapDmsg helper
+//   - DMSG bootstrap via the existing dmsgboot.BootstrapDmsg helper
 //     (which uses the embedded services-config.json dmsg_servers list
 //     so services can come up against private deployments without a
 //     pre-populated dmsg-discovery).
@@ -42,9 +42,9 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgboot"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/tcpproxy"
@@ -216,7 +216,7 @@ type Handle struct {
 	Mode Mode
 
 	log       *logging.Logger
-	boot      *cmdutil.DmsgBootstrap
+	boot      *dmsgboot.DmsgBootstrap
 	errCh     chan error
 	closeOnce func()
 }
@@ -316,7 +316,7 @@ func Start(ctx context.Context, cfg Config) (*Handle, error) {
 	// client is kept regardless of whether we're going to spawn
 	// a dmsghttp listener — see note at top of Start.
 	if wantDmsgBootstrap {
-		boot, err := cmdutil.BootstrapDmsg(ctx, cfg.Log, cfg.PK, cfg.SK,
+		boot, err := dmsgboot.BootstrapDmsg(ctx, cfg.Log, cfg.PK, cfg.SK,
 			cfg.EmbeddedDmsgServers, cfg.DmsgDiscovery, cfg.DmsgDiscoveryDmsg, cfg.DmsgServerType)
 		if err != nil {
 			return nil, fmt.Errorf("svcmode: dmsg bootstrap: %w", err)

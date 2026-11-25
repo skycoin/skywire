@@ -30,6 +30,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgboot"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
 )
@@ -147,7 +148,7 @@ var logCmd = &cobra.Command{
 			// Route the bootstrap's per-PK Entry() fallback over dmsg-HTTP by default;
 			// plain-HTTP discovery is only taken with a non-prod --dmsg-disc URL.
 			httpURL, dmsgURL := dmsgDiscArgs(dmsgDisc)
-			bootstrap, berr := cmdutil.BootstrapDmsg(ctx, log, pk, sk, dmsg.Prod.DmsgServers, httpURL, dmsgURL, "")
+			bootstrap, berr := dmsgboot.BootstrapDmsg(ctx, log, pk, sk, dmsg.Prod.DmsgServers, httpURL, dmsgURL, "")
 			if berr != nil {
 				log.WithError(berr).Error("Failed to bootstrap dmsg client.")
 				return

@@ -22,7 +22,6 @@ import (
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/cxo/cxosub"
 	"github.com/skycoin/skywire/pkg/cxo/node"
 	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
@@ -33,6 +32,7 @@ import (
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/dmsg/discovery/serverfeed"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgboot"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -408,7 +408,7 @@ var (
 	DefaultStoreDataPath = "/var/lib/skywire/tpd/bandwidth"
 	DefaultUptimeDB      = "/var/lib/skywire/tpd/uptime.db"
 	DefaultRedisPoolSize = 10
-	_                    = cmdutil.DmsgConfig{} // keep cmdutil import in this file when refactored
+	_                    = dmsgboot.DmsgConfig{} // keep cmdutil import in this file when refactored
 )
 
 // AggregatorPorts implements services.CXOAggregating.
@@ -427,7 +427,7 @@ func (s *service) chartStore(sc storeconfig.Config) (charts.Store, error) {
 // dmsgdFeed holds dmsg discovery's clients-by-server feed for the marking of
 // dmsg server visors, or returns nil when dmsg discovery has no dmsg key.
 func dmsgdFeed(dmsgC *dmsg.Client, discURL string, log *logging.Logger) *cxosub.Manager {
-	pk := cmdutil.PKFromDmsgURL(discURL)
+	pk := dmsgboot.PKFromDmsgURL(discURL)
 	if pk.Null() {
 		return nil
 	}
@@ -448,7 +448,7 @@ func dmsgdFeed(dmsgC *dmsg.Client, discURL string, log *logging.Logger) *cxosub.
 // arBindingsFeed subscribes to the address resolver's bindings feed at arURL,
 // or returns nil when arURL names no dmsg peer.
 func arBindingsFeed(dmsgC *dmsg.Client, arURL string, log *logging.Logger) *cxosub.Manager {
-	pk := cmdutil.PKFromDmsgURL(arURL)
+	pk := dmsgboot.PKFromDmsgURL(arURL)
 	if pk.Null() {
 		return nil
 	}

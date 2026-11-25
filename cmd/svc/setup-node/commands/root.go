@@ -22,6 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgboot"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgc"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router"
@@ -155,14 +156,14 @@ var checkHealthCmd = &cobra.Command{
 		// Create logger
 		log := logging.MustGetLogger("health-check")
 
-		// Start DMSG client. Use cmdutil.BootstrapDmsg in dmsg-only
+		// Start DMSG client. Use dmsgboot.BootstrapDmsg in dmsg-only
 		// mode (dmsgDisc empty, dmsgDiscoveryDmsg set) so the
 		// ephemeral client routes all discovery via dmsg-HTTP — no
 		// plain-HTTP egress to dmsg-discovery (Caddy fronting was
 		// retired in #3174's wake; HTTP is 404 in prod). Embedded
 		// dmsg-server set seeds the initial bootstrap.
 		ctx := context.Background()
-		bootstrap, err := cmdutil.BootstrapDmsg(ctx, log, pk, sk,
+		bootstrap, err := dmsgboot.BootstrapDmsg(ctx, log, pk, sk,
 			dmsg.Prod.DmsgServers, "", dmsg.DiscAddr(), "")
 		if err != nil {
 			cmdutil.Fatalf("Failed to bootstrap dmsg: %v", err)
