@@ -31,6 +31,7 @@ import (
 // most-complete single observation when both edges report. Falls back to the
 // legacy combined field only for old redis data lacking per-reporter fields.
 func transportDailyBandwidth(result map[string]string) uint64 {
+	// Keyed by the reporter's key, so its hex and label fields add up.
 	perReporter := make(map[string]uint64)
 	for k, v := range result {
 		var suffix string
@@ -44,7 +45,11 @@ func transportDailyBandwidth(result map[string]string) uint64 {
 		}
 		var n uint64
 		fmt.Sscanf(v, "%d", &n) //nolint:errcheck,gosec
-		perReporter[strings.TrimSuffix(k, suffix)] += n
+		reporter := strings.TrimSuffix(k, suffix)
+		if pk, _, ok := reporterFieldSplit(k); ok {
+			reporter = string(pk[:])
+		}
+		perReporter[reporter] += n
 	}
 	if len(perReporter) > 0 {
 		var best uint64
@@ -628,15 +633,16 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 	var dateStrs []string
 
 	// A visor is an edge of many transports; encode each key once and share it.
-	hexes := make(map[cipher.PubKey]string)
-	hexOf := func(pk cipher.PubKey) string {
-		h, ok := hexes[pk]
+	names := make(map[cipher.PubKey]reporterFieldNames)
+	namesOf := func(pk cipher.PubKey) reporterFieldNames {
+		n, ok := names[pk]
 		if !ok {
-			h = pk.Hex()
-			hexes[pk] = h
+			n = reporterFieldNamesOf(pk)
+			names[pk] = n
 		}
-		return h
+		return n
 	}
+	hexOf := func(pk cipher.PubKey) string { return namesOf(pk).hex }
 
 	if query.Bandwidth {
 		dateStrs = make([]string, days)
@@ -676,11 +682,7 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 			n := 0
 			for i := lo; i < hi; i++ {
 				f := filtered[i]
-				// The four field keys depend only on the entry.
-				edgeAHex := hexOf(f.entry.Edges[0])
-				edgeBHex := hexOf(f.entry.Edges[1])
-				kASent, kARecv := edgeAHex+":sent", edgeAHex+":recv"
-				kBSent, kBRecv := edgeBHex+":sent", edgeBHex+":recv"
+				edgeA, edgeB := namesOf(f.entry.Edges[0]), namesOf(f.entry.Edges[1])
 				for _, d := range bwDays[i-lo] {
 					result, err := cmds[n].Result()
 					cmds[n] = nil
@@ -688,7 +690,7 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 					if err != nil || len(result) == 0 {
 						continue
 					}
-					if m, ok := dailyBandwidth(result, dateStrs[d], kASent, kARecv, kBSent, kBRecv); ok {
+					if m, ok := dailyBandwidth(result, dateStrs[d], edgeA, edgeB); ok {
 						bwByEntry[i] = append(bwByEntry[i], m)
 					}
 				}
@@ -764,25 +766,12 @@ const metricsChunkCmds = 2000
 // dailyBandwidth reads one transport's day from its hash. The k* arguments are
 // the sent and recv fields of its two edges, A then B. It reports false when
 // the day carries no bandwidth.
-func dailyBandwidth(result map[string]string, dateStr, kASent, kARecv, kBSent, kBRecv string) (DailyEdgeBandwidth, bool) {
-	var aSent, aRecv, bSent, bRecv uint64
-	perEdge := false
-	if val, ok := result[kASent]; ok {
-		aSent = parseBWUint(val)
-		perEdge = true
-	}
-	if val, ok := result[kARecv]; ok {
-		aRecv = parseBWUint(val)
-		perEdge = true
-	}
-	if val, ok := result[kBSent]; ok {
-		bSent = parseBWUint(val)
-		perEdge = true
-	}
-	if val, ok := result[kBRecv]; ok {
-		bRecv = parseBWUint(val)
-		perEdge = true
-	}
+func dailyBandwidth(result map[string]string, dateStr string, edgeA, edgeB reporterFieldNames) (DailyEdgeBandwidth, bool) {
+	aSent, okAS := reporterFieldSum(result, edgeA.sent)
+	aRecv, okAR := reporterFieldSum(result, edgeA.recv)
+	bSent, okBS := reporterFieldSum(result, edgeB.sent)
+	bRecv, okBR := reporterFieldSum(result, edgeB.recv)
+	perEdge := okAS || okAR || okBS || okBR
 	if perEdge && (aSent+aRecv+bSent+bRecv) > 0 {
 		_, sameNet := result[sameNetworkField]
 		m := DailyEdgeBandwidth{
@@ -791,8 +780,8 @@ func dailyBandwidth(result map[string]string, dateStr, kASent, kARecv, kBSent, k
 			B:           &EdgeBandwidth{Sent: bSent, Recv: bRecv},
 			SameNetwork: sameNet,
 		}
-		verifiedFields(result, kASent, m.A)
-		verifiedFields(result, kBSent, m.B)
+		verifiedFields(result, edgeA, m.A)
+		verifiedFields(result, edgeB, m.B)
 		return m, true
 	}
 	// Old data keeps one combined total, split equally.

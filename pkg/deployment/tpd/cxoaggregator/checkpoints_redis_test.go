@@ -70,8 +70,8 @@ func TestPacedCheckpointsStillMatchOnABusyLink(t *testing.T) {
 		agg.dispatchCheckpoints(p, blob, b)
 	}
 	day := rc.HGetAll(ctx, "transport-discovery:bw:daily:"+id.String()+":"+time.Now().UTC().Format("2006-01-02")).Val()
-	require.Equal(t, "1", day[a.Hex()+":vck"])
-	require.NotEmpty(t, day[a.Hex()+":vsent"], "matched across the phase")
+	require.Equal(t, "1", day[a.DNSLabel()+":vck"])
+	require.NotEmpty(t, day[a.DNSLabel()+":vsent"], "matched across the phase")
 
 	// What pacing each edge on its own clock would do: records minutes apart
 	// share no offset, and nothing is verified.
@@ -81,7 +81,7 @@ func TestPacedCheckpointsStillMatchOnABusyLink(t *testing.T) {
 	require.NoError(t, st.(CheckpointSink).ApplyCheckpoints(ctx, id2, a, sa.Sent, sa.Recv))
 	require.NoError(t, st.(CheckpointSink).ApplyCheckpoints(ctx, id2, b, sb.Sent, sb.Recv))
 	day = rc.HGetAll(ctx, "transport-discovery:bw:daily:"+id2.String()+":"+time.Now().UTC().Format("2006-01-02")).Val()
-	require.Empty(t, day[a.Hex()+":vsent"])
+	require.Empty(t, day[a.DNSLabel()+":vsent"])
 }
 
 type aggSinkWithCheckpoints struct {

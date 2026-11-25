@@ -32,6 +32,7 @@ detected before it is opened.
 -   tpd/store: write only today's transport online set
 -   cxo/cxoutils: return gzip bodies without spare capacity
 -   tpd/store: drop decoded archived bandwidth days after 5 idle minutes
+-   tpd/store: name bw:daily reporter fields by key label so the hashes stay listpack
 -   rewards/server: serve the tp-viz Go WebGL assets  [#6309](https://github.com/skycoin/skywire/pull/6309)
 -   deps: bump skycoin to v0.28.8  [#6308](https://github.com/skycoin/skywire/pull/6308)
 -   deps: bump skycoin to develop for the ui2 csrf notice fix  [#6307](https://github.com/skycoin/skywire/pull/6307)

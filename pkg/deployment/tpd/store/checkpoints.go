@@ -64,7 +64,7 @@ func encodeCheckpoints(d telemetrywire.DirCheckpoints) string {
 //
 // KEYS: ck hash, today's bw:daily hash of the transport
 // ARGV: reporter hex, sent record, recv record, ck TTL, daily TTL
-var checkpointScript = redis.NewScript(`
+var checkpointScript = redis.NewScript(luaReporterLabel + `
 local function parse(enc)
   if not enc then return nil, nil end
   local epoch, rest = string.match(enc, '^(%d+);(.*)$')
@@ -77,7 +77,8 @@ local function match(sender, sEnc, rEnc)
   local se, sp = parse(sEnc)
   local re, rp = parse(rEnc)
   if not se or not re or se == '0' or se ~= re then return end
-  redis.call('HSET', KEYS[2], sender .. ':vck', '1')
+  local lab = label(sender)
+  redis.call('HSET', KEYS[2], lab .. ':vck', '1')
   local best, bad = 0, false
   for o, d in pairs(sp) do
     local rd = rp[o]
@@ -91,14 +92,14 @@ local function match(sender, sEnc, rEnc)
     end
   end
   if bad and redis.call('HSETNX', KEYS[1], sender .. ':bad:' .. se, '1') == 1 then
-    redis.call('HINCRBY', KEYS[2], sender .. ':vbad', 1)
+    redis.call('HINCRBY', KEYS[2], lab .. ':vbad', 1)
   end
   if best == 0 then return end
   local vf = sender .. ':v:' .. se
   local old = tonumber(redis.call('HGET', KEYS[1], vf) or '0')
   if best > old then
     redis.call('HSET', KEYS[1], vf, string.format('%d', best))
-    redis.call('HINCRBY', KEYS[2], sender .. ':vsent', string.format('%d', best - old))
+    redis.call('HINCRBY', KEYS[2], lab .. ':vsent', string.format('%d', best - old))
   end
 end
 redis.call('HSET', KEYS[1], ARGV[1] .. ':s', ARGV[2], ARGV[1] .. ':r', ARGV[3])
@@ -129,11 +130,9 @@ func (s *redisStore) ApplyCheckpoints(ctx context.Context, id uuid.UUID, reporte
 }
 
 // verifiedFields fills an edge's verified bytes from its day's bw:daily hash.
-// sentField is the edge's "<pk>:sent" field, whose prefix the others share.
-func verifiedFields(h map[string]string, sentField string, e *EdgeBandwidth) {
-	pk := strings.TrimSuffix(sentField, ":sent")
-	if v, ok := h[pk+":"+verifiedSentField]; ok {
-		e.Verified = parseBWUint(v)
+func verifiedFields(h map[string]string, edge reporterFieldNames, e *EdgeBandwidth) {
+	if v, ok := reporterFieldSum(h, edge.vsent); ok {
+		e.Verified = v
 	}
-	_, e.Checked = h[pk+":"+verifiedCheckField]
+	_, e.Checked = reporterFieldSum(h, edge.vck)
 }
