@@ -19,6 +19,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgboot"
 	"github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/services/tpd"
 )
@@ -140,7 +141,7 @@ func TestMergeFile_AllFieldsOverride(t *gotesting.T) {
 		Whitelist:       []string{"a"},
 		StoreDataPath:   "/data",
 		UptimeDB:        "/uptime.db",
-		Dmsg: cmdutil.DmsgConfig{
+		Dmsg: dmsgboot.DmsgConfig{
 			Discovery:     "http://disc",
 			DiscoveryDmsg: "dmsg://disc",
 			ServerType:    "stcpr",
@@ -158,7 +159,7 @@ func TestMergeFile_ZeroSrcLeavesDst(t *gotesting.T) {
 		Tag:           "keep",
 		RedisPoolSize: 9,
 		DmsgPort:      80,
-		Dmsg:          cmdutil.DmsgConfig{Discovery: "http://keep"},
+		Dmsg:          dmsgboot.DmsgConfig{Discovery: "http://keep"},
 	}
 	dst := *orig // copy
 

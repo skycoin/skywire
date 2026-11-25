@@ -23,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgboot"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -386,7 +387,7 @@ func startDmsgClient(ctx context.Context, log *logging.Logger, pk cipher.PubKey,
 
 	// Bootstrap with the embedded prod server set + dmsg-only Entry()
 	// fallback. No plain-HTTP egress to dmsg-discovery occurs.
-	bootstrap, err := cmdutil.BootstrapDmsg(ctx, log, pk, sk, dmsg.Prod.DmsgServers,
+	bootstrap, err := dmsgboot.BootstrapDmsg(ctx, log, pk, sk, dmsg.Prod.DmsgServers,
 		"", deployment.Prod.DmsgDiscoveryDmsg, "")
 	if err != nil {
 		return nil, nil, fmt.Errorf("dmsg bootstrap: %w", err)
@@ -437,8 +438,8 @@ func startDmsgClientWT(ctx context.Context, log *logging.Logger, pk cipher.PubKe
 	// discovery, and resolve the request's destination PK over the same HTTP
 	// discovery. dmsgDiscoveryDmsg is left empty (we want HTTP discovery, not
 	// dmsg-only, since the WT bootstrap has no prior session to read it over).
-	bootstrap, err := cmdutil.BootstrapDmsg(ctx, log, pk, sk, nil, discURL, "", "",
-		cmdutil.WithCarriers(dmsg.CarrierWT), cmdutil.WithStrictCarrier())
+	bootstrap, err := dmsgboot.BootstrapDmsg(ctx, log, pk, sk, nil, discURL, "", "",
+		dmsgboot.WithCarriers(dmsg.CarrierWT), dmsgboot.WithStrictCarrier())
 	if err != nil {
 		return nil, nil, fmt.Errorf("dmsg bootstrap (wt): %w", err)
 	}

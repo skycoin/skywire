@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/cmdutil"
 )
 
 // withKeyFile resolves a block's "keyfile" into its "secret_key" (and
@@ -27,7 +26,7 @@ func withKeyFile(raw json.RawMessage) (json.RawMessage, error) {
 		return raw, nil
 	}
 	var sk cipher.SecKey
-	if err := cmdutil.LoadOrGenerateKey(probe.KeyFile, &sk); err != nil {
+	if err := cipher.LoadOrGenerateKey(probe.KeyFile, &sk); err != nil {
 		return nil, fmt.Errorf("keyfile %s: %w", probe.KeyFile, err)
 	}
 	pk, err := sk.PubKey()

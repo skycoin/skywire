@@ -15,12 +15,12 @@ import (
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
 	"github.com/skycoin/skywire/pkg/deployment/rf/api"
 	rfstore "github.com/skycoin/skywire/pkg/deployment/rf/store"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgboot"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/metricsutil"
@@ -41,7 +41,7 @@ type Config struct {
 	services.Common
 
 	// Dmsg is the dmsg-related config block.
-	Dmsg cmdutil.DmsgConfig `json:"dmsg,omitempty"`
+	Dmsg dmsgboot.DmsgConfig `json:"dmsg,omitempty"`
 
 	// ChartsAddr serves only the charts page over plain HTTP. Empty disables it.
 	ChartsAddr string `json:"charts_addr,omitempty"`

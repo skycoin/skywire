@@ -41,6 +41,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgboot"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -327,7 +328,7 @@ func startPTYFSDmsgClient(ctx context.Context, pk cipher.PubKey, sk cipher.SecKe
 	log := logging.MustGetLogger("ptyfs-dmsg")
 	// Bootstrap with the embedded prod server set + dmsg-only Entry()
 	// fallback. No plain-HTTP egress to dmsg-discovery occurs.
-	bootstrap, err := cmdutil.BootstrapDmsg(ctx, log, pk, sk, dmsg.Prod.DmsgServers,
+	bootstrap, err := dmsgboot.BootstrapDmsg(ctx, log, pk, sk, dmsg.Prod.DmsgServers,
 		"", deployment.Prod.DmsgDiscoveryDmsg, "")
 	if err != nil {
 		return nil, nil, fmt.Errorf("ptyfs: dmsg bootstrap: %w", err)

@@ -1,5 +1,5 @@
-// Package cmdutil pkg/cmdutil/svcconfig.go c1-com-util
-package cmdutil
+// Package dmsgboot pkg/dmsg/dmsgboot/svcconfig.go c1-net-dmsg
+package dmsgboot
 
 import (
 	"net/url"

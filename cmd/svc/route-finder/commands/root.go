@@ -17,6 +17,7 @@ import (
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgboot"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/services/rf"
@@ -124,7 +125,7 @@ func buildConfig() (*rf.Config, error) {
 		Common:                 common,
 		ChartsAddr:             chartsAddr,
 		DisableLandmarkRouting: noLandmark,
-		Dmsg: cmdutil.DmsgConfig{
+		Dmsg: dmsgboot.DmsgConfig{
 			Discovery:  dmsgDisc,
 			ServerType: dmsgServerType,
 		},

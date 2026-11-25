@@ -26,8 +26,8 @@ import (
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgboot"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -97,7 +97,7 @@ func dmsgHTTPClient(ctx context.Context, timeout time.Duration) (*http.Client, f
 	// Default to dmsg-only discovery; plain HTTP only when the
 	// operator explicitly overrides --dmsg-disc to a custom URL.
 	httpURL, dmsgURL := dmsgDiscArgs(dmsgDiscURL)
-	bootstrap, err := cmdutil.BootstrapDmsg(ctx, log, pk, resolvedSK, dmsg.Prod.DmsgServers, httpURL, dmsgURL, "")
+	bootstrap, err := dmsgboot.BootstrapDmsg(ctx, log, pk, resolvedSK, dmsg.Prod.DmsgServers, httpURL, dmsgURL, "")
 	if err != nil {
 		return nil, func() {}, fmt.Errorf("dmsg bootstrap: %w", err)
 	}

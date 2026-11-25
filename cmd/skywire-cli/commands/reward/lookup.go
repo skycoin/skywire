@@ -17,8 +17,8 @@ import (
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgboot"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
 )
@@ -240,11 +240,11 @@ func renderLookupTable(results []lookupVisorReward, days int, rewardedOnly bool)
 }
 
 // lookupDmsgClient brings up an ephemeral dmsg client for the request.
-// Uses cmdutil.BootstrapDmsg with the embedded prod server set + dmsg-only
+// Uses dmsgboot.BootstrapDmsg with the embedded prod server set + dmsg-only
 // Entry() fallback, so no plain-HTTP egress to dmsg-discovery occurs even
 // during bootstrap.
 func lookupDmsgClient(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey) (*dmsg.Client, func(), error) {
-	bootstrap, err := cmdutil.BootstrapDmsg(ctx, log, pk, sk, dmsg.Prod.DmsgServers,
+	bootstrap, err := dmsgboot.BootstrapDmsg(ctx, log, pk, sk, dmsg.Prod.DmsgServers,
 		"", deployment.Prod.DmsgDiscoveryDmsg, "")
 	if err != nil {
 		return nil, nil, fmt.Errorf("dmsg bootstrap: %w", err)

@@ -12,10 +12,10 @@ import (
 	"io/fs"
 	"os"
 
-	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/deployment/conf/api"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgboot"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/svcmode"
@@ -36,8 +36,8 @@ type Config struct {
 	// transport setup keys to serve. A missing file serves the defaults.
 	ConfigPath string `json:"config_path,omitempty"`
 	// Domain is the domain of the endpoints (default skywire.skycoin.com).
-	Domain string             `json:"domain,omitempty"`
-	Dmsg   cmdutil.DmsgConfig `json:"dmsg,omitempty"`
+	Domain string              `json:"domain,omitempty"`
+	Dmsg   dmsgboot.DmsgConfig `json:"dmsg,omitempty"`
 }
 
 // ParseBlock decodes a services.json block into a Config.
