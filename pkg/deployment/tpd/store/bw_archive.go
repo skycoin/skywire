@@ -25,10 +25,29 @@ var bandwidthDailyTTLSeconds = int64(bandwidthDailyTTL / time.Second)
 // of queries over the same window decodes each day once.
 const archivedDayCacheSize = 2
 
+// archivedDayIdle is how long the decoded days stay after their last use.
+// They are about 35 MB each and only metrics queries past the live window
+// read them, so between such queries they are dropped.
+var archivedDayIdle = 5 * time.Minute
+
 type archivedDayCache struct {
 	mu    sync.Mutex
 	days  map[string]map[string]DailyEdgeBandwidth
 	order []string
+	idle  *time.Timer
+}
+
+// touch restarts the idle timer that drops every cached day. Callers hold mu.
+func (c *archivedDayCache) touch() {
+	if c.idle != nil {
+		c.idle.Reset(archivedDayIdle)
+		return
+	}
+	c.idle = time.AfterFunc(archivedDayIdle, func() {
+		c.mu.Lock()
+		c.days, c.order = nil, nil
+		c.mu.Unlock()
+	})
 }
 
 // liveBandwidthDay reports whether day d (0 is today) is still in redis.
@@ -42,6 +61,7 @@ func (s *redisStore) archivedDay(ctx context.Context, date string) map[string]Da
 	c := &s.archived
 	c.mu.Lock()
 	if day, ok := c.days[date]; ok {
+		c.touch()
 		c.mu.Unlock()
 		return day
 	}
@@ -69,6 +89,7 @@ func (s *redisStore) archivedDay(ctx context.Context, date string) map[string]Da
 		}
 	}
 	c.days[date] = day
+	c.touch()
 	return day
 }
 
