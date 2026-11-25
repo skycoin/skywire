@@ -656,8 +656,12 @@ func (s *VStream) writeRaw(p []byte) (int, error) {
 	return n, nil
 }
 
-// Close closes the virtual stream.
+// Close closes the virtual stream. A nil stream is already closed: an
+// interface holding a failed dial's nil *VStream must not crash the visor.
 func (s *VStream) Close() error {
+	if s == nil {
+		return nil
+	}
 	s.once.Do(func() {
 		close(s.closed)
 		s.mux.streamsMu.Lock()
@@ -673,6 +677,9 @@ func (s *VStream) Close() error {
 // ride is the thing that went away. It shares Close's sync.Once, so a stream
 // closed either way is closed exactly once and the reader gets its EOF.
 func (s *VStream) closeSilently() {
+	if s == nil {
+		return
+	}
 	s.once.Do(func() {
 		close(s.closed)
 		s.mux.streamsMu.Lock()
