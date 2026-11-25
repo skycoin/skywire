@@ -544,51 +544,76 @@ func (c *Cache) cleanDown(vol int) (err error) {
 		return cmp.Compare(a.it.cachePoints, b.it.cachePoints)
 	})
 
+	// Pick the victims first, then evict them together: each one with a
+	// pending rc change used to write it with its own batched Inc, and a
+	// serial run of those waits out bbolt's batch delay per item under c.mx.
+	var (
+		amount = c.amount
+		volume = c.volume
+		i      int // rank[:i] are the victims
+	)
+
 	// clean by amount first
 
-	if c.amount+1 > c.c.conf.CacheMaxAmount {
-
-		var (
-			i  int      // to reduce the rank slice
-			ri rankItem // for the range (we need the i)
-		)
-
-		for i, ri = range rank {
-
-			if c.amount < c.amountc { // actually, `amount + 1 == ...`
+	if amount+1 > c.c.conf.CacheMaxAmount {
+		for ; i < len(rank); i++ {
+			if amount < c.amountc { // actually, `amount + 1 == ...`
 				break
 			}
-
-			// delete item from the Cache
-			if err = c.delete(ri.key, ri.it); err != nil { //nolint:errcheck,gosec
-				return err // fail on first error
-			}
-
+			amount--
+			volume -= len(rank[i].it.val)
 		}
-
-		rank = rank[i:] // shift
-
 	}
 
 	// clean by volume if need
 
-	if c.volume+vol < c.c.conf.CacheMaxVolume {
-		return err // enough
+	if volume+vol >= c.c.conf.CacheMaxVolume {
+		for ; i < len(rank); i++ {
+			if volume+vol <= c.volumec {
+				break
+			}
+			volume -= len(rank[i].it.val)
+		}
 	}
 
-	for _, ri := range rank {
+	return c.deleteMany(rank[:i])
+}
 
-		if c.volume+vol <= c.volumec {
+// deleteMany evicts items, writing their pending rc changes to the store in
+// one transaction.
+func (c *Cache) deleteMany(victims []rankItem) error {
+	pending := false
+	for _, ri := range victims {
+		if ri.it.cc != ri.it.rc {
+			pending = true
 			break
 		}
-
-		if err = c.delete(ri.key, ri.it); err != nil { //nolint:errcheck,gosec
-			return err // fail on first error
-		}
-
 	}
-
-	return err
+	if pending {
+		err := c.db().RunBatch(func(db data.CXDS) error {
+			for _, ri := range victims {
+				if inc := ri.it.cc - ri.it.rc; inc != 0 {
+					if _, err := db.Inc(ri.key, inc); err != nil {
+						return err
+					}
+					c.stat.addWritingDBRequest()
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		for _, ri := range victims {
+			ri.it.rc = ri.it.cc // written above, so delete has nothing left to write
+		}
+	}
+	for _, ri := range victims {
+		if err := c.delete(ri.key, ri.it); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // create regular item in the cache
