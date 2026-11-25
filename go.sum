@@ -73,8 +73,8 @@ github.com/0magnet/bitree v0.0.1-0.20261019212016-c15975be5d89 h1:IivTLMqDb3/EvV
 github.com/0magnet/bitree v0.0.1-0.20261019212016-c15975be5d89/go.mod h1:fXaS+dltJcAnMAHKz1LR5X4/hE+S3QoxlMgni9wlVhw=
 github.com/0magnet/bottle v0.0.1-0.20261028202309-2b922f28f74e h1:mVhZH+mh1N2+Z1Cp+FXqSrtZmAmliiM+NRZE6k2kdSk=
 github.com/0magnet/bottle v0.0.1-0.20261028202309-2b922f28f74e/go.mod h1:02z8sWzqF3QH4SjMxnx5bnysFUqsw9CdUTtIj+CIxkw=
-github.com/0magnet/calvin v0.0.1-0.20261109140133-887794fc87eb h1:TIRm6eSE+ZJWf7dCmHl10i9AcGov9Z99rsbEFpMnbjQ=
-github.com/0magnet/calvin v0.0.1-0.20261109140133-887794fc87eb/go.mod h1:tA4Bml06K/K3kO3d3IqSP2Uks2E3ycaBrzo4b0dzLgM=
+github.com/0magnet/calvin v0.0.1-0.20261123113739-17ec6c31723c h1:8JV9+t2ME+Oc54muPd01mDLY/8uP1grQZm3JdDjbe5Y=
+github.com/0magnet/calvin v0.0.1-0.20261123113739-17ec6c31723c/go.mod h1:tA4Bml06K/K3kO3d3IqSP2Uks2E3ycaBrzo4b0dzLgM=
 github.com/0magnet/coloredcobra v1.0.4-0.20261012213101-faa6bd8f94c5 h1:EitsijGOC/B/n+ziuxUBkIy9xhgVnmcDZVOW4eE1xGc=
 github.com/0magnet/coloredcobra v1.0.4-0.20261012213101-faa6bd8f94c5/go.mod h1:XOyBWsYWPuG3gboQHaOve/ubY8HaTqCGjJ+791sF5cM=
 github.com/0magnet/cosmos-go v0.0.1-0.20261106130325-ce8fe4be8ffe h1:o9Td4NovUI+uX/htsE3QNX4ChEjPSqJCQy9nLyi2RmU=
@@ -97,8 +97,8 @@ github.com/0magnet/got v0.0.1-0.20261013224534-da4158f4280a h1:6vP717cbSKbxJ1QPc
 github.com/0magnet/got v0.0.1-0.20261013224534-da4158f4280a/go.mod h1:ZZgL3y3o1H7WqJJKQGsm8eNyy7I1puJzb6SSWaENMeM=
 github.com/0magnet/gotop/v4 v4.2.1-0.20261013215112-c72a4dc29a54 h1:7BESgOFFEUIW18pvXA6fstxrfDPpOiwlDblatUyA1qo=
 github.com/0magnet/gotop/v4 v4.2.1-0.20261013215112-c72a4dc29a54/go.mod h1:SgxWmIgu46cajN0KsBsKJXEVugmpNLZjNhz+KH44hXU=
-github.com/0magnet/img2txt-go v0.0.1-0.20261013220954-ae0d760b7d2b h1:TvuDIGb7WMqMMkip/5U/OkthwVhRHWY9kLgFsCvfRTU=
-github.com/0magnet/img2txt-go v0.0.1-0.20261013220954-ae0d760b7d2b/go.mod h1:M/nZ3W+0x5ti9fZDs6Cx+6eTZnwVdGMjeMuRDmOB5es=
+github.com/0magnet/img2txt-go v0.0.1-0.20261123111343-1b18c2c35849 h1:7+wG1wCgQlJhf8dp5cuHrFYrU2Z0DOng8VXwsz/B0J8=
+github.com/0magnet/img2txt-go v0.0.1-0.20261123111343-1b18c2c35849/go.mod h1:SO1pJ+kD+8bL1SnSM+wG6m2r10kgI2ZOfa6cv3MZw2Y=
 github.com/0magnet/kcp-go/v5 v5.6.84 h1:oxyCqV3YYgjL8NAxvqjUCfRPfOgCNyrU1z1AsDUy7BY=
 github.com/0magnet/kcp-go/v5 v5.6.84/go.mod h1:f9AyOlxJMQQz1LCr85Cv06db6r+z3iN8NIXeesFzGBg=
 github.com/0magnet/lolcat-go v0.0.1-0.20261013220959-57aa27491489 h1:e9oQciGjDuTPFtS0t9cX+C6pOcVVIJIsa5AjcTPsjtA=
@@ -123,8 +123,8 @@ github.com/0magnet/sh/v3 v3.13.2-0.20261024150911-145e01c63128 h1:ABhMGezW+gg1dk
 github.com/0magnet/sh/v3 v3.13.2-0.20261024150911-145e01c63128/go.mod h1:lkiwBghlcHik7Hli9029uD/KoJSNyBOUCCYd02IQHi4=
 github.com/0magnet/spheregraph v0.0.1-0.20261013221036-b8e448a97be5 h1:yS/lq1hf4A3lDWHkV01GhwzIWwb5iSDl2d0LzsSRP2s=
 github.com/0magnet/spheregraph v0.0.1-0.20261013221036-b8e448a97be5/go.mod h1:Lo6dEOjpVn+ra0q7gNWsvxxcd/SUF7Pg3dkRhykOScI=
-github.com/0magnet/termanim v0.0.1-0.20261013224625-c801aece6dff h1:R5EjBAYkLdJAX2pwj4z9pb21U2c3T5CSlxKTE7UIHkA=
-github.com/0magnet/termanim v0.0.1-0.20261013224625-c801aece6dff/go.mod h1:sPb6ZYeBx+TFCOBfDTHIaKXn+7DjQasS5vARJaiWP0Y=
+github.com/0magnet/termanim v0.0.1-0.20261125035614-47ce7bc89a83 h1:va6Pe6kv0rMxTPkAXOlMzQ3vLDLw92GQq+Y8cVgZ3DQ=
+github.com/0magnet/termanim v0.0.1-0.20261125035614-47ce7bc89a83/go.mod h1:XtbRXldk5lUdkOQBDydcqRe8no6Gewp/L5oF4bzvtVg=
 github.com/0magnet/u-root v0.16.1-0.20261003214924-44e47b732754 h1:wK2MncQOnEea7yqiOHvv3oD89sc+YC1dAw4zw1o48mQ=
 github.com/0magnet/u-root v0.16.1-0.20261003214924-44e47b732754/go.mod h1:9N1kqBjNdAUT/pfrWKyty4zS5ZQgG1OvsTmhdcpAWB0=
 github.com/0magnet/webrtc/v4 v4.2.24 h1:d2qdtJRYvjS730nfnT3ISK7S5DL3CoDClGb2Ohe9FGg=

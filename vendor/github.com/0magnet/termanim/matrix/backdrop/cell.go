@@ -126,9 +126,21 @@ func (f *Frame) SetMask(m Mask) { f.mask = m }
 // asked to light up, so every cell of the grid is visited. The unmasked path
 // is kept because it is the common one and it is the cheaper of the two.
 func (f *Frame) FromMatrix(m *matrix.Matrix, dim int) {
+	f.FromRain(m, m.Palette, dim)
+}
+
+// Rain is a grid of glyphs, some of them lit. *matrix.Matrix is one, and so is
+// the periodic rain in matrix/loop.
+type Rain interface {
+	CellAt(x, y int) (matrix.Cell, bool)
+	GlyphAt(x, y int) rune
+	Cells(fn func(x, y int, c matrix.Cell))
+}
+
+// FromRain is FromMatrix for any rain, read through the palette given.
+func (f *Frame) FromRain(m Rain, pal canvas.Palette, dim int) {
 	fitMask(f.mask, f.cols, f.rows)
 	f.Clear()
-	pal := m.Palette
 
 	if f.mask == nil {
 		m.Cells(func(x, y int, c matrix.Cell) {

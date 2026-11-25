@@ -66,3 +66,34 @@ func TestLeafPackagesStayLight(t *testing.T) {
 		}
 	}
 }
+
+// skycloud is imported by programs outside skywire, so it may use nothing
+// beyond termanim and what termanim itself needs.
+func TestSkycloudNeedsOnlyTermanim(t *testing.T) {
+	modules := func(pkgs ...string) map[string]string {
+		args := append([]string{"list", "-deps", "-f", "{{if not .Standard}}{{.ImportPath}} {{with .Module}}{{.Path}}{{end}}{{end}}"}, pkgs...)
+		out, err := exec.Command("go", args...).Output() //nolint:gosec // fixed arguments
+		if err != nil {
+			t.Fatalf("go list %v: %v", pkgs, err)
+		}
+		m := map[string]string{}
+		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			if f := strings.Fields(line); len(f) == 2 {
+				m[f[0]] = f[1]
+			}
+		}
+		return m
+	}
+	allowed := map[string]bool{}
+	for _, mod := range modules("github.com/0magnet/termanim/matrix/loop", "github.com/0magnet/termanim/matrix/backdrop") {
+		allowed[mod] = true
+	}
+	for pkg, mod := range modules(module + "pkg/skycloud") {
+		if strings.HasPrefix(pkg, module) && pkg != module+"pkg/skycloud" {
+			t.Errorf("pkg/skycloud imports %s", pkg)
+		}
+		if !strings.HasPrefix(pkg, module) && !allowed[mod] {
+			t.Errorf("pkg/skycloud needs %s from %s, which termanim does not", pkg, mod)
+		}
+	}
+}

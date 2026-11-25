@@ -10,7 +10,7 @@ require (
 	github.com/0magnet/bbolt v1.5.1-0.20261004204806-45fff0d5382d
 	github.com/0magnet/bitree v0.0.1-0.20261019212016-c15975be5d89
 	github.com/0magnet/bottle v0.0.1-0.20261028202309-2b922f28f74e
-	github.com/0magnet/calvin v0.0.1-0.20261109140133-887794fc87eb
+	github.com/0magnet/calvin v0.0.1-0.20261123113739-17ec6c31723c
 	github.com/0magnet/coloredcobra v1.0.4-0.20261012213101-faa6bd8f94c5
 	github.com/0magnet/cosmos-go v0.0.1-0.20261106130325-ce8fe4be8ffe
 	github.com/0magnet/desk v0.0.3-0.20261020181434-20cf2197122e
@@ -32,7 +32,7 @@ require (
 	github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076
 	github.com/0magnet/sh/v3 v3.13.2-0.20261024150911-145e01c63128
 	github.com/0magnet/spheregraph v0.0.1-0.20261013221036-b8e448a97be5
-	github.com/0magnet/termanim v0.0.1-0.20261013224625-c801aece6dff
+	github.com/0magnet/termanim v0.0.1-0.20261125035614-47ce7bc89a83
 	github.com/0magnet/webrtc/v4 v4.2.24
 	github.com/0magnet/websh v0.0.1-0.20261114122934-ffd57803ff74
 	github.com/0magnet/wfdrive v0.3.3-0.20261013224635-8e5aa89d1aa6
@@ -133,7 +133,7 @@ require (
 	gioui.org/shader v1.0.9 // indirect
 	github.com/0magnet/dtls/v3 v3.1.11 // indirect
 	github.com/0magnet/go-dsp v0.0.1-0.20261013221717-1ec76fa9affb // indirect
-	github.com/0magnet/img2txt-go v0.0.1-0.20261013220954-ae0d760b7d2b // indirect
+	github.com/0magnet/img2txt-go v0.0.1-0.20261123111343-1b18c2c35849 // indirect
 	github.com/0magnet/u-root v0.16.1-0.20261003214924-44e47b732754 // indirect
 	github.com/0magnet/xterm-go v0.0.1-0.20261113221359-36e33e634de1 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20261013165250-51075c6ea6bc // indirect

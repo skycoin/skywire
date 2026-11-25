@@ -32,7 +32,7 @@ github.com/0magnet/bitree
 github.com/0magnet/bottle
 github.com/0magnet/bottle/proc
 github.com/0magnet/bottle/vnet
-# github.com/0magnet/calvin v0.0.1-0.20261109140133-887794fc87eb
+# github.com/0magnet/calvin v0.0.1-0.20261123113739-17ec6c31723c
 ## explicit; go 1.26.0
 github.com/0magnet/calvin
 # github.com/0magnet/coloredcobra v1.0.4-0.20261012213101-faa6bd8f94c5
@@ -146,7 +146,7 @@ github.com/0magnet/gotop/v4/termui
 github.com/0magnet/gotop/v4/termui/drawille-go
 github.com/0magnet/gotop/v4/utils
 github.com/0magnet/gotop/v4/widgets
-# github.com/0magnet/img2txt-go v0.0.1-0.20261013220954-ae0d760b7d2b
+# github.com/0magnet/img2txt-go v0.0.1-0.20261123111343-1b18c2c35849
 ## explicit; go 1.26.0
 github.com/0magnet/img2txt-go/shape
 # github.com/0magnet/kcp-go/v5 v5.6.84
@@ -195,12 +195,13 @@ github.com/0magnet/sh/v3/syntax
 # github.com/0magnet/spheregraph v0.0.1-0.20261013221036-b8e448a97be5
 ## explicit; go 1.25.0
 github.com/0magnet/spheregraph
-# github.com/0magnet/termanim v0.0.1-0.20261013224625-c801aece6dff
+# github.com/0magnet/termanim v0.0.1-0.20261125035614-47ce7bc89a83
 ## explicit; go 1.26.0
 github.com/0magnet/termanim/canvas
 github.com/0magnet/termanim/matrix
 github.com/0magnet/termanim/matrix/backdrop
 github.com/0magnet/termanim/matrix/backdrop/cobrarain
+github.com/0magnet/termanim/matrix/loop
 # github.com/0magnet/u-root v0.16.1-0.20261003214924-44e47b732754
 ## explicit; go 1.26.6
 github.com/0magnet/u-root/pkg/ls
