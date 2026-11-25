@@ -79,3 +79,33 @@ func TestBandwidthEdgesTTLWithArchive(t *testing.T) {
 	require.NoError(t, err)
 	require.InDelta(t, bandwidthDailyTTL+24*time.Hour, ttl, float64(time.Minute))
 }
+
+// Decoded archived days leave memory once unused for archivedDayIdle, and a
+// later read decodes the same rows again.
+func TestArchivedDayCacheDropsWhenIdle(t *testing.T) {
+	s := newTestRedisStore(t)
+	s.SetLeafArchive(t.TempDir())
+	ctx := context.Background()
+	old := archivedDayIdle
+	archivedDayIdle = 50 * time.Millisecond
+	t.Cleanup(func() { archivedDayIdle = old })
+	date := time.Now().UTC().AddDate(0, 0, -5).Format(MetricsDateFormat)
+	id := uuid.New().String()
+	rec := []TransportMetric{{ID: id, Type: "stcpr", Daily: []DailyEdgeBandwidth{{
+		Date: date, A: &EdgeBandwidth{Sent: 100, Recv: 50},
+	}}}}
+	body, err := json.Marshal(rec)
+	require.NoError(t, err)
+	require.NoError(t, s.SaveMetricsLeaf(ctx, date, [][]byte{cxoutils.Gzip(body)}))
+
+	first := s.archivedDay(ctx, date)
+	require.Contains(t, first, id)
+	cached := func() int {
+		s.archived.mu.Lock()
+		defer s.archived.mu.Unlock()
+		return len(s.archived.days)
+	}
+	require.Equal(t, 1, cached())
+	require.Eventually(t, func() bool { return cached() == 0 }, 2*time.Second, 10*time.Millisecond)
+	require.Equal(t, first, s.archivedDay(ctx, date))
+}
