@@ -28,22 +28,22 @@ func TestLeafArchive(t *testing.T) {
 	require.Equal(t, parts, onDisk)
 
 	// Leaves saved before the archive existed: one old, one recent.
-	for _, d := range []string{day(20), day(3)} {
+	for _, d := range []string{day(20), day(1)} {
 		require.NoError(t, s.client.RPush(ctx, s.metricsLeafKey(d), "a", "b").Err())
 	}
 	require.NoError(t, s.archiveLeaves(ctx, now))
 	n, err := s.client.Exists(ctx, s.metricsLeafKey(day(20))).Result()
 	require.NoError(t, err)
 	require.Zero(t, n, "an archived leaf past leafLiveDays leaves redis")
-	n, err = s.client.Exists(ctx, s.metricsLeafKey(day(3))).Result()
+	n, err = s.client.Exists(ctx, s.metricsLeafKey(day(1))).Result()
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n, "a recent leaf stays in redis")
-	_, err = os.Stat(s.leafFile(day(3)))
+	_, err = os.Stat(s.leafFile(day(1)))
 	require.NoError(t, err, "a recent leaf is archived too")
 
-	got, err := s.LoadMetricsLeaves(ctx, []string{day(20), day(3), day(40)})
+	got, err := s.LoadMetricsLeaves(ctx, []string{day(20), day(1), day(40)})
 	require.NoError(t, err)
 	require.Equal(t, [][]byte{[]byte("a"), []byte("b")}, got[day(20)], "an old day is read from the archive")
-	require.Contains(t, got, day(3))
+	require.Contains(t, got, day(1))
 	require.NotContains(t, got, day(40))
 }

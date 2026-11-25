@@ -19,8 +19,10 @@ import (
 	"time"
 )
 
-// leafLiveDays is how many recent settled days keep their leaf in redis.
-const leafLiveDays = 14
+// leafLiveDays is how many recent settled days keep their leaf in redis. The
+// archive holds the same bytes and loads fall back to it, so more days only
+// cost redis about 19 MB each.
+const leafLiveDays = 2
 
 // SetLeafArchive keeps settled metrics leaves in dir as well as in redis, and
 // lets leaves older than leafLiveDays leave redis. Empty keeps them in redis.
