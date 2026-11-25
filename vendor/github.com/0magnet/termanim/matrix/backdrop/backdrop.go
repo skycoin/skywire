@@ -142,6 +142,12 @@ type Options struct {
 	// pixel animation is driven in.
 	Warm float64
 
+	// Screen proportions the rain to a screen this many rows tall in a frame
+	// that is taller — a document's pages, each a screen, drawn as one frame
+	// so the rain runs on from one page to the next. Zero is the frame's own
+	// height. See matrix.Matrix.Screen.
+	Screen int
+
 	// Off returns the text unchanged, whatever else is set.
 	//
 	// It is for the caller that decides per call rather than per program. A
@@ -226,6 +232,7 @@ func Render(text string, o Options) string {
 	m.Words = o.Words
 	m.WordGap = o.WordGap
 	m.FreshWords = o.FreshWords
+	m.Screen = o.Screen
 	m.Resize(l.cols, l.rows)
 	m.Advance(steps)
 

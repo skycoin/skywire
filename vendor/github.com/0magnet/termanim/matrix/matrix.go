@@ -66,7 +66,6 @@ type column struct {
 	head   float64 // row of the leading glyph, fractional so speeds can differ
 	speed  float64 // rows per simulation step
 	length int     // trail length in rows
-	active bool
 
 	// hot marks a stream whose leading glyph is highlighted — drawn white and
 	// bold rather than in the palette's brightest green.
@@ -87,7 +86,9 @@ type column struct {
 // Matrix is the animation. The zero value is not usable; call New.
 type Matrix struct {
 	cols, rows int
-	col        []column
+	// col holds each column's streams, oldest first. Only one at a time
+	// unless Screen is set.
+	col [][]column
 	// glyph holds the character shown at each cell. Keeping them lets the
 	// trail stay stable between frames instead of reshuffling every glyph
 	// every frame, which looks like static rather than falling text.
@@ -160,6 +161,20 @@ type Matrix struct {
 	// between two characters, which is what the crossfade looks like.
 	Blend int
 
+	// Screen is the rows the rain is proportioned to: a stream's trail is up
+	// to a screen long, and a column starts its next stream once the last one
+	// has fallen a screen clear of the top. Zero is the grid's own height,
+	// which is how the rain has always behaved — a column starts again only
+	// once its stream has left the bottom.
+	//
+	// It is for a grid several screens tall: a document's pages, drawn as one
+	// frame so the rain runs on from one page to the next. Proportioned to the
+	// whole grid, each column there carries a single stream down all of it,
+	// trailing hundreds of rows, and a page gets a stream or two where a
+	// screen of rain has a dozen. Set to the page's height, every page rains
+	// like a screen does.
+	Screen int
+
 	// acc carries the fraction of a step left over from the last frame.
 	acc float64
 	// tick counts simulation steps, for the change cadence and the stammer.
@@ -191,7 +206,7 @@ func New(seed int64) *Matrix {
 // Resize allocates per-column state.
 func (m *Matrix) Resize(cols, rows int) {
 	m.cols, m.rows = cols, rows
-	m.col = make([]column, cols)
+	m.col = make([][]column, cols)
 	m.glyph = make([]rune, cols*rows)
 	m.changed = make([]int, cols*rows)
 	for i := range m.changed {
@@ -202,7 +217,7 @@ func (m *Matrix) Resize(cols, rows int) {
 	// releasing at once.
 	for x := range m.col {
 		if m.rng.Intn(3) == 0 {
-			m.col[x] = m.newColumn(float64(-m.rng.Intn(rows)))
+			m.col[x] = []column{m.newColumn(float64(-m.rng.Intn(rows)))}
 		}
 	}
 }
@@ -276,8 +291,7 @@ func (m *Matrix) newColumn(head float64) column {
 		word:   word,
 		head:   head,
 		speed:  0.25 + m.rng.Float64()*0.75,
-		length: 6 + m.rng.Intn(m.rows),
-		active: true,
+		length: 6 + m.rng.Intn(m.screen()),
 		hot:    m.Hot > 0 && m.rng.Intn(m.Hot) == 0,
 	}
 }
@@ -347,41 +361,64 @@ func (m *Matrix) step() {
 	}
 
 	for x := 0; x < m.cols; x++ {
-		c := &m.col[x]
-		if !c.active {
+		streams := m.col[x]
+		n := len(streams)
+
+		// A column with no stream may start one. With Screen set, so may one
+		// whose newest stream has fallen a screen clear of the top; otherwise
+		// a column carries one stream at a time, as it always has.
+		var started column
+		ok := false
+		if n == 0 || m.Screen > 0 && int(streams[n-1].head)-streams[n-1].length > m.Screen {
 			if m.rng.Intn(m.Density) == 0 {
-				*c = m.newColumn(0)
+				started, ok = m.newColumn(0), true
 				// The head only writes when it MOVES to a new row, so the row
 				// it starts on would otherwise keep whatever the buffer was
 				// seeded with. One cell per stream, and with Words set it is
 				// a letter from the wrong place in the wrong word.
-				m.setGlyph(x, int(c.head), m.nextGlyph(c))
-			}
-			continue
-		}
-
-		if !(stammer && c.hot) {
-			prev := int(c.head)
-			c.head += c.speed
-			// The glyph the head has just moved onto is new, so it is drawn new
-			// whatever the beat is doing.
-			if int(c.head) != prev {
-				m.setGlyph(x, int(c.head), m.nextGlyph(c))
+				m.setGlyph(x, int(started.head), m.nextGlyph(&started))
 			}
 		}
 
-		// One glyph somewhere in the trail turns over, on the beat.
-		// One glyph somewhere in the trail turns over, on the beat. A word
-		// stream is exempt: swapping a letter mid-fall spells something else.
-		if changing && len(c.word) == 0 && m.rng.Intn(3) == 0 {
-			m.changeGlyph(x, m.rng.Intn(m.rows), m.randGlyph())
-		}
+		kept := streams[:0]
+		for i := range n {
+			c := streams[i]
+			if !(stammer && c.hot) {
+				prev := int(c.head)
+				c.head += c.speed
+				// The glyph the head has just moved onto is new, so it is drawn
+				// new whatever the beat is doing.
+				if int(c.head) != prev {
+					m.setGlyph(x, int(c.head), m.nextGlyph(&c))
+				}
+			}
 
-		// Retire the column once its whole trail is off the bottom.
-		if int(c.head)-c.length > m.rows {
-			c.active = false
+			// One glyph somewhere in the trail turns over, on the beat. A word
+			// stream is exempt: swapping a letter mid-fall spells something
+			// else.
+			if changing && len(c.word) == 0 && m.rng.Intn(3) == 0 {
+				m.changeGlyph(x, m.rng.Intn(m.rows), m.randGlyph())
+			}
+
+			// Retire the stream once its whole trail is off the bottom.
+			if int(c.head)-c.length > m.rows {
+				continue
+			}
+			kept = append(kept, c)
 		}
+		if ok {
+			kept = append(kept, started)
+		}
+		m.col[x] = kept
 	}
+}
+
+// screen is the rows the rain is proportioned to. See Screen.
+func (m *Matrix) screen() int {
+	if m.Screen > 0 {
+		return m.Screen
+	}
+	return m.rows
 }
 
 // setGlyph writes a glyph without marking it as a change.
@@ -422,12 +459,16 @@ type Cell struct {
 // looks — the falloff, which heads go white, the crossfade — is decided once,
 // in this function.
 func (m *Matrix) cellAt(x, y int) (Cell, bool) {
-	c := m.col[x]
-	if !c.active {
-		return Cell{}, false
+	// The stream whose head is nearest above the cell draws it: a faster
+	// stream that has caught up with a slower one is in front of it.
+	var c column
+	d := -1 // distance behind the head
+	for _, s := range m.col[x] {
+		if sd := int(s.head) - y; sd >= 0 && sd < s.length && (d < 0 || sd < d) {
+			c, d = s, sd
+		}
 	}
-	d := int(c.head) - y // distance behind the head
-	if d < 0 || d >= c.length {
+	if d < 0 {
 		return Cell{}, false
 	}
 	// Intensity falls off along the trail, and the leading glyph is the
