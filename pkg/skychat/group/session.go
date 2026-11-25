@@ -1674,7 +1674,8 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) ([]cipher.PubKey, error)
 			evicted = append(evicted, pk)
 		}
 	}
-	// Add new peers.
+	// Add new peers. They are dialed after the lock is released.
+	added := make(map[cipher.PubKey]*treestore.Subscriber)
 	for pk := range desired {
 		if _, exists := s.peerSubs[pk]; exists {
 			continue
@@ -1689,25 +1690,39 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) ([]cipher.PubKey, error)
 		s.peerLastInboundNs[pk] = new(atomic.Int64)
 		s.peerUpdateCount[pk] = new(atomic.Uint64)
 		ps.OnUpdate(s.makePeerOnUpdate(pk))
-		// Best-effort connect — same semantics as Connect's per-peer
-		// retry: a peer that's offline now will be picked up on the
-		// next reconnect tick once the publisher comes back. Bound
-		// the dial with a short timeout so a single unreachable peer
-		// in the allowlist doesn't block roster expansion. The retry
-		// loop will pick it up on a later tick with its own deadline.
-		dctx, dcancel := context.WithTimeout(context.Background(), reconnectAttemptTimeout)
-		err = s.connectSub(dctx, ps, pk)
-		dcancel()
-		if err != nil {
-			s.log.WithError(err).WithField("peer", pk.String()).
-				Debug("group: SetAllowlist: peer-sub Connect failed; will retry on next reconnect tick")
-		} else if a := s.peerLastInboundNs[pk]; a != nil {
-			a.Store(time.Now().UnixNano())
-		}
 		s.peerSubs[pk] = ps
+		added[pk] = ps
 	}
 	s.peerSubsMu.Unlock()
+	s.peerSubsDial(added, "SetAllowlist")
 	return evicted, nil
+}
+
+// peerSubsDial connects each new peer subscriber on its own goroutine, so an
+// unreachable member costs the caller and every peerSubsMu reader nothing.
+func (s *Session) peerSubsDial(added map[cipher.PubKey]*treestore.Subscriber, caller string) {
+	parent := s.relayCtx
+	if parent == nil {
+		parent = context.Background()
+	}
+	for pk, ps := range added {
+		go func() {
+			ctx, cancel := context.WithTimeout(parent, reconnectAttemptTimeout)
+			defer cancel()
+			if err := s.connectSub(ctx, ps, pk); err != nil {
+				s.log.WithError(err).WithField("peer", pk.String()).
+					Debugf("group: %s: peer-sub Connect failed; will retry on next reconnect tick", caller)
+				return
+			}
+			s.peerSubsMu.RLock()
+			a := s.peerLastInboundNs[pk]
+			current := s.peerSubs[pk] == ps
+			s.peerSubsMu.RUnlock()
+			if current && a != nil {
+				a.Store(time.Now().UnixNano())
+			}
+		}()
+	}
 }
 
 // defaultPeerFanout is how many non-admin peers a non-admin member
@@ -1951,7 +1966,8 @@ func (s *Session) SetAdminRoster(admins []cipher.PubKey) ([]cipher.PubKey, error
 			evicted = append(evicted, pk)
 		}
 	}
-	// Add newly-desired peers.
+	// Add newly-desired peers. They are dialed after the lock is released.
+	added := make(map[cipher.PubKey]*treestore.Subscriber)
 	for pk := range desired {
 		if _, exists := s.peerSubs[pk]; exists {
 			continue
@@ -1966,21 +1982,11 @@ func (s *Session) SetAdminRoster(admins []cipher.PubKey) ([]cipher.PubKey, error
 		s.peerLastInboundNs[pk] = new(atomic.Int64)
 		s.peerUpdateCount[pk] = new(atomic.Uint64)
 		ps.OnUpdate(s.makePeerOnUpdate(pk))
-		// Best-effort connect — same per-peer retry contract as
-		// SetAllowlist. A peer that's offline now will be picked up
-		// on the next reconnect tick once the publisher comes back.
-		dctx, dcancel := context.WithTimeout(context.Background(), reconnectAttemptTimeout)
-		err = s.connectSub(dctx, ps, pk)
-		dcancel()
-		if err != nil {
-			s.log.WithError(err).WithField("peer", pk.String()).
-				Debug("group: SetAdminRoster: peer-sub Connect failed; will retry on next reconnect tick")
-		} else if a := s.peerLastInboundNs[pk]; a != nil {
-			a.Store(time.Now().UnixNano())
-		}
 		s.peerSubs[pk] = ps
+		added[pk] = ps
 	}
 	s.peerSubsMu.Unlock()
+	s.peerSubsDial(added, "SetAdminRoster")
 	return evicted, nil
 }
 

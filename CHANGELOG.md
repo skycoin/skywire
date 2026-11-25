@@ -27,6 +27,7 @@ we have written to. vpn says when iptables or the tun driver is missing, a
 config reset keeps the visor's internal apps, and a truncated bbolt file is
 detected before it is opened.
 
+-   skychat/group: dial a newly added member after the session lock is released, so an unreachable one blocks no other call
 -   visor, transport, logging: stop a late failed hypervisor call back from crashing the visor, keep goroutine traces in skywire-crash.log
 -   tpd/store: keep a reporter's last bandwidth counters 48 h, not 7 days
 -   tpd/store: keep settled metrics leaves in redis 2 days, the archive holds the rest
