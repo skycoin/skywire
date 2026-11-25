@@ -85,3 +85,19 @@ func TestGunzipPooledReaderAndForgedSize(t *testing.T) {
 		t.Fatalf("hint %d for a %d byte stream", h, len(forged))
 	}
 }
+
+// The returned body is kept by publishers, so it must not carry the spare
+// capacity a grown bytes.Buffer has.
+func TestGzipOutputFitsItsLength(t *testing.T) {
+	orig := make([]byte, 4<<20)
+	for i := range orig {
+		orig[i] = byte(i * 7 % 251) // little to compress, so the buffer grows
+	}
+	gz := Gzip(orig)
+	if spare := cap(gz) - len(gz); spare > len(gz)/8 {
+		t.Fatalf("Gzip output len %d cap %d: %d spare bytes", len(gz), cap(gz), spare)
+	}
+	if !bytes.Equal(Gunzip(gz), orig) {
+		t.Errorf("Gunzip(Gzip(x)) != x")
+	}
+}

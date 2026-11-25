@@ -39,7 +39,16 @@ func Gzip(b []byte) []byte {
 	_, _ = zw.Write(b) //nolint:errcheck // writing to a bytes.Buffer cannot fail
 	_ = zw.Close()     //nolint:errcheck // flush; the Buffer never errors
 	gzipWriterPool.Put(zw)
-	return buf.Bytes()
+	return fitBytes(buf.Bytes())
+}
+
+// fitBytes copies b when more than an eighth of its capacity is unused. A
+// grown bytes.Buffer is up to half empty, and callers keep the published body.
+func fitBytes(b []byte) []byte {
+	if cap(b)-len(b) > len(b)/8 {
+		return bytes.Clone(b)
+	}
+	return b
 }
 
 // Gunzip returns the decompressed form of b if it is a gzip stream (detected by
