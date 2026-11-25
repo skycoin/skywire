@@ -3,6 +3,7 @@ package skyobject
 import (
 	"encoding/binary"
 	"testing"
+	"time"
 
 	"github.com/skycoin/skycoin/src/cipher"
 )
@@ -52,4 +53,60 @@ func BenchmarkCacheCleanDown(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	fillCache(b, c, 20000, 20000+b.N)
+}
+
+// Evicting items with pending rc changes writes all of them in one
+// transaction. One batched Inc each waited out bbolt's batch delay in turn,
+// about 10 ms per item, while holding the cache lock.
+func TestCacheCleanDownWritesPendingRCInOneBatch(t *testing.T) {
+	conf := NewConfig()
+	conf.DataDir = t.TempDir()
+	conf.NoSyncCXDS = true
+	conf.CacheMaxAmount = 400
+	cont, err := NewContainer(conf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cont.Close() }) //nolint:errcheck
+	c := &cont.Cache
+
+	keys := make([]cipher.SHA256, 0, 400)
+	for i := range 400 {
+		val := make([]byte, 40)
+		binary.LittleEndian.PutUint64(val, uint64(i)) //nolint:gosec
+		key := cipher.SumSHA256(val)
+		if _, err := c.Set(key, val, 1); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := c.Get(key, 1); err != nil { // pending in the cache only
+			t.Fatal(err)
+		}
+		keys = append(keys, key)
+	}
+
+	start := time.Now()
+	fillCache(t, c, 1000, 1001) // one more evicts about a fifth
+	if d := time.Since(start); d > 2*time.Second {
+		t.Fatalf("eviction took %s", d)
+	}
+	c.mx.Lock()
+	var evicted []cipher.SHA256
+	for _, k := range keys {
+		if _, ok := c.is[k]; !ok {
+			evicted = append(evicted, k)
+		}
+	}
+	c.mx.Unlock()
+	if len(evicted) < 50 {
+		t.Fatalf("only %d items evicted", len(evicted))
+	}
+	for _, k := range evicted {
+		_, rc, err := c.db().Get(k, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rc != 2 {
+			t.Fatalf("evicted item has rc %d in the store, want 2", rc)
+		}
+	}
 }
