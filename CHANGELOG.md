@@ -6,6 +6,78 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.113
+
+Wallets now scan ahead for new addresses, so daily reward payouts to fresh
+xpub addresses show up without a manual scan. This comes with skycoin
+v0.28.8, which also drops the false CSRF warning from the wallet and reloads
+the browser wallet when a new build is out.
+
+Mux routes keep spare routes for leg fail-over and tell the peer when a leg
+dies. Transport packets are dispatched off the read goroutine, and the
+router keeps filling its pool after a lost first-hop claim.
+
+The reward system recalculates when its inputs change instead of hourly,
+reads transport discovery in the same process when both are embedded, and
+uses far less memory. `skywire cli rewards send` replaces the payout script.
+The transport graph on the reward site now loads its default Go WebGL view.
+
+Skychat file transfer recovers after a restart and accepts files from peers
+we have written to. vpn says when iptables or the tun driver is missing, a
+config reset keeps the visor's internal apps, and a truncated bbolt file is
+detected before it is opened.
+
+-   rewards/server: serve the tp-viz Go WebGL assets  [#6309](https://github.com/skycoin/skywire/pull/6309)
+-   deps: bump skycoin to v0.28.8  [#6308](https://github.com/skycoin/skywire/pull/6308)
+-   deps: bump skycoin to develop for the ui2 csrf notice fix  [#6307](https://github.com/skycoin/skywire/pull/6307)
+-   rewards, services, visor: read transport discovery in the same process  [#6305](https://github.com/skycoin/skywire/pull/6305)
+-   rewards/server: exec the RPC_ADDR test child directly  [#6304](https://github.com/skycoin/skywire/pull/6304)
+-   rewards/server: keep RPC_ADDR off the process and use the work dir for survey pages  [#6303](https://github.com/skycoin/skywire/pull/6303)
+-   rewards/server: hold the second run in TestSchedulerFailureContinues  [#6302](https://github.com/skycoin/skywire/pull/6302)
+-   cli/rewards: decode the bw-collect body one transport at a time  [#6301](https://github.com/skycoin/skywire/pull/6301)
+-   rewards/server: count version history with a bitset per day  [#6300](https://github.com/skycoin/skywire/pull/6300)
+-   rewards/server: keep a digest of the TPD metrics feed instead of holding it  [#6299](https://github.com/skycoin/skywire/pull/6299)
+-   cli/rewards: read the geoip database through the shared mapped reader  [#6298](https://github.com/skycoin/skywire/pull/6298)
+-   docs: say how to back a speed claim in AGENTS.md  [#6297](https://github.com/skycoin/skywire/pull/6297)
+-   rewards/server: serve pprof to the survey whitelist  [#6296](https://github.com/skycoin/skywire/pull/6296)
+-   ci: add naming, interface and init guards  [#6295](https://github.com/skycoin/skywire/pull/6295)
+-   rewards/server: widen the debounce in the coalescing test  [#6294](https://github.com/skycoin/skywire/pull/6294)
+-   docs: add a naming section to AGENTS.md  [#6293](https://github.com/skycoin/skywire/pull/6293)
+-   cmdutil: let an unrelated goroutine's exit end the process  [#6292](https://github.com/skycoin/skywire/pull/6292)
+-   all: update skycoin so wallets scan for new reward addresses  [#6291](https://github.com/skycoin/skywire/pull/6291)
+-   android/fdroid, scripts: build the F-Droid presets with the TinyGo built from source  [#6290](https://github.com/skycoin/skywire/pull/6290)
+-   skychat, android: fixes from the Skywire Mobile 0.0.12 tester  [#6289](https://github.com/skycoin/skywire/pull/6289)
+-   pkg/deployment/tpd/api: pin the clock in the metrics startup test  [#6288](https://github.com/skycoin/skywire/pull/6288)
+-   pkg/dmsg/dmsg: dial a fresh session in the pause drop test  [#6287](https://github.com/skycoin/skywire/pull/6287)
+-   proxystatus, skysocks, httputil: reuse render and JSON buffers  [#6286](https://github.com/skycoin/skywire/pull/6286)
+-   transport: dispatch packets off the read goroutine  [#6285](https://github.com/skycoin/skywire/pull/6285)
+-   hypervisor ui, all: drop the node CSRF warning from the wallet  [#6284](https://github.com/skycoin/skywire/pull/6284)
+-   router: keep filling the pool after a lost first-hop claim  [#6283](https://github.com/skycoin/skywire/pull/6283)
+-   bbolthealth: detect a truncated file before opening it  [#6282](https://github.com/skycoin/skywire/pull/6282)
+-   bbolthealth: catch memory faults while probing a truncated file  [#6281](https://github.com/skycoin/skywire/pull/6281)
+-   launcher: keep the visor's internal apps when the config resets  [#6280](https://github.com/skycoin/skywire/pull/6280)
+-   cli/rewards: give native wallet paths to rewards send on windows  [#6279](https://github.com/skycoin/skywire/pull/6279)
+-   Makefile, scripts: build TinyGo targets with the current fork toolchain  [#6278](https://github.com/skycoin/skywire/pull/6278)
+-   all: import upstream logrus again  [#6277](https://github.com/skycoin/skywire/pull/6277)
+-   cli/config: let skywire.conf set app autostart on regen  [#6276](https://github.com/skycoin/skywire/pull/6276)
+-   rewardsserver, cli/rewards: never let a SKYENV file run skywire again  [#6275](https://github.com/skycoin/skywire/pull/6275)
+-   cli/rewards: refuse unknown arguments to the bare command  [#6274](https://github.com/skycoin/skywire/pull/6274)
+-   cli/rewards: add send for the reward distribution  [#6273](https://github.com/skycoin/skywire/pull/6273)
+-   visor: wait for an echo, not a dial, after a host bridge reconnect  [#6272](https://github.com/skycoin/skywire/pull/6272)
+-   rewardsserver: check payouts against the csv hash, allow any change address  [#6271](https://github.com/skycoin/skywire/pull/6271)
+-   rewardsserver: hold payouts against the reward recalculation  [#6270](https://github.com/skycoin/skywire/pull/6270)
+-   all: update skycoin for the node build commit  [#6269](https://github.com/skycoin/skywire/pull/6269)
+-   vpn: declare errIPTablesMissing in the linux file  [#6268](https://github.com/skycoin/skywire/pull/6268)
+-   visor: drop Accept-Encoding on in-process ui2 calls  [#6267](https://github.com/skycoin/skywire/pull/6267)
+-   vpn: say when iptables or the tun driver is missing  [#6266](https://github.com/skycoin/skywire/pull/6266)
+-   config, docs: describe maxtransports and ar-transport-limit as they work  [#6265](https://github.com/skycoin/skywire/pull/6265)
+-   android, fastlane: fix the stretched app icon, center it and use #1677FF  [#6264](https://github.com/skycoin/skywire/pull/6264)
+-   skynet-client, router: hold spare routes for leg fail-over  [#6263](https://github.com/skycoin/skywire/pull/6263)
+-   router, routing: tell the peer when a leg dies  [#6262](https://github.com/skycoin/skywire/pull/6262)
+-   visor: push the survey at once when the reward address changes  [#6261](https://github.com/skycoin/skywire/pull/6261)
+-   cli/rewards, rewardsserver: recalculate on input changes, not hourly  [#6260](https://github.com/skycoin/skywire/pull/6260)
+-   cli/rewards: fetch a finished day once and skip unchanged inputs  [#6259](https://github.com/skycoin/skywire/pull/6259)
+
 ## 1.3.112
 
 Skychat group fixes reported by a mobile tester. A member that reconnects to
