@@ -37,7 +37,9 @@ const bandwidthHistoryTTL = 14 * 24 * time.Hour
 // bandwidthPrevTTL keeps a reporter's last counters past any gap in applied
 // reports, such as a TPD restart or a stalled feed, so the bytes sent during
 // the gap still come out as one delta. A report with no snapshot credits 0.
-const bandwidthPrevTTL = 7 * 24 * time.Hour
+// Two days covers any outage someone would notice. At seven, 42% of the keys
+// belonged to transports gone for more than two days (prod01, 2026-11-25).
+const bandwidthPrevTTL = 48 * time.Hour
 
 var bandwidthPrevTTLSeconds = int64(bandwidthPrevTTL / time.Second)
 
