@@ -193,7 +193,11 @@ func openDmsgStream(ctx context.Context, dmsgC *dmsg.Client, targetPK cipher.Pub
 	}
 	dialCtx, cancel := context.WithTimeout(ctx, bridgeDialTimeout)
 	defer cancel()
-	return dmsgC.Dial(dialCtx, dmsg.Addr{PK: targetPK, Port: targetPort})
+	stream, err := dmsgC.Dial(dialCtx, dmsg.Addr{PK: targetPK, Port: targetPort})
+	if err != nil {
+		return nil, err
+	}
+	return stream, nil
 }
 
 // openSkynetStream opens a VStream via the visor's transport-RPC
@@ -207,5 +211,9 @@ func openSkynetStream(v *Visor, targetPK cipher.PubKey) (io.ReadWriteCloser, err
 	if err := v.ensureFastTransport(targetPK); err != nil {
 		return nil, err
 	}
-	return v.transportRPCMux.Dial(targetPK, "")
+	stream, err := v.transportRPCMux.Dial(targetPK, "")
+	if err != nil {
+		return nil, err
+	}
+	return stream, nil
 }

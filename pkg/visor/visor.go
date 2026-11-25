@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime/debug"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -1509,7 +1508,7 @@ func storeLog(conf *visorconfig.V1, logJSON bool) {
 	if cf, err := os.OpenFile(crashPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err != nil { //nolint:gosec
 		mLog.WithError(err).Warn("Failed to open crash-output file; panics will print to stderr only")
 	} else {
-		if err := debug.SetCrashOutput(cf, debug.CrashOptions{}); err != nil {
+		if err := logging.CrashOutputTo(cf); err != nil {
 			mLog.WithError(err).Warn("Failed to set crash output; panics will print to stderr only")
 		}
 		_ = cf.Close() //nolint:errcheck // SetCrashOutput dup'd the fd; this handle is no longer needed

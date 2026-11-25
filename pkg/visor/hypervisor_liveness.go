@@ -298,12 +298,20 @@ func (hv *Hypervisor) callBack(ctx context.Context, pk cipher.PubKey) dialBackRe
 	var dials []func(context.Context) (io.ReadWriteCloser, error)
 	if v.transportRPCMux != nil && hasFastTransportTo(v.tpM, pk) {
 		dials = append(dials, func(context.Context) (io.ReadWriteCloser, error) {
-			return v.transportRPCMux.Dial(pk, "")
+			stream, err := v.transportRPCMux.Dial(pk, "")
+			if err != nil {
+				return nil, err
+			}
+			return stream, nil
 		})
 	}
 	if v.dmsgC != nil {
 		dials = append(dials, func(ctx context.Context) (io.ReadWriteCloser, error) {
-			return v.dmsgC.Dial(ctx, dmsg.Addr{PK: pk, Port: skyenv.DmsgVisorRPCPort})
+			stream, err := v.dmsgC.Dial(ctx, dmsg.Addr{PK: pk, Port: skyenv.DmsgVisorRPCPort})
+			if err != nil {
+				return nil, err
+			}
+			return stream, nil
 		})
 	}
 	res := dialNoAnswer
@@ -322,7 +330,8 @@ func (hv *Hypervisor) callBack(ctx context.Context, pk cipher.PubKey) dialBackRe
 	return res
 }
 
-// dialWithin runs dial with a timeout, closing a conn that arrives late.
+// dialWithin runs dial with a timeout, closing a conn that arrives late. A
+// failed dial's conn is never closed: it may be a typed nil, as a *VStream is.
 func dialWithin(ctx context.Context, d time.Duration, dial func(context.Context) (io.ReadWriteCloser, error)) (io.ReadWriteCloser, error) {
 	ctx, cancel := context.WithTimeout(ctx, d)
 	defer cancel()
@@ -340,7 +349,7 @@ func dialWithin(ctx context.Context, d time.Duration, dial func(context.Context)
 		return r.c, r.err
 	case <-ctx.Done():
 		go func() {
-			if r := <-ch; r.c != nil {
+			if r := <-ch; r.err == nil && r.c != nil {
 				_ = r.c.Close() //nolint:errcheck
 			}
 		}()
