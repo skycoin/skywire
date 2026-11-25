@@ -20,9 +20,10 @@ const maxScriptRows = 256
 // KEYS: visorAll, visorDaily, netDaily, netSince, then prev and daily per row
 // ARGV: reporter, now, prevTTL, histTTL, visorAllTTL, date, dailyTTL, then
 // sent, recv and type per row
-var bandwidthBatchScript = redis.NewScript(`
+var bandwidthBatchScript = redis.NewScript(luaReporterLabel + `
 local function int(v) return string.format('%d', v) end
 local n = (#KEYS - 4) / 2
+local lab = label(ARGV[1])
 local moved = {}
 local vs, vr, grow = 0, 0, 0
 local tgrow = {}
@@ -43,8 +44,9 @@ for i = 1, n do
   moved[i] = 0
   local d = ds + dr
   if d > 0 then
-    local rs = redis.call('HINCRBY', kd, ARGV[1] .. ':sent', int(ds))
-    local rr = redis.call('HINCRBY', kd, ARGV[1] .. ':recv', int(dr))
+    fold(kd, ARGV[1], lab)
+    local rs = redis.call('HINCRBY', kd, lab .. ':sent', int(ds))
+    local rr = redis.call('HINCRBY', kd, lab .. ':recv', int(dr))
     redis.call('HINCRBY', kd, 'bandwidth', int(d))
     redis.call('HSET', kd, 'updated_at', ARGV[2])
     local total = rs + rr

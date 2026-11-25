@@ -56,7 +56,7 @@ func (s *redisStore) netDailySinceKey() string {
 // KEYS: prev, daily, visorAll, visorDaily, netDaily, netSince
 // ARGV: reporter, sent, recv, now, type, prevTTL, histTTL, visorAllTTL, date,
 // dailyTTL (the transport's daily hash; see bw_archive.go)
-var bandwidthScript = redis.NewScript(`
+var bandwidthScript = redis.NewScript(luaReporterLabel + `
 local function int(v) return string.format('%d', v) end
 local cs, cr = tonumber(ARGV[2]), tonumber(ARGV[3])
 local ds, dr = 0, 0
@@ -72,8 +72,10 @@ redis.call('EXPIRE', KEYS[1], ARGV[6])
 local d = ds + dr
 if d <= 0 then return 0 end
 
-local rs = redis.call('HINCRBY', KEYS[2], ARGV[1] .. ':sent', int(ds))
-local rr = redis.call('HINCRBY', KEYS[2], ARGV[1] .. ':recv', int(dr))
+local lab = label(ARGV[1])
+fold(KEYS[2], ARGV[1], lab)
+local rs = redis.call('HINCRBY', KEYS[2], lab .. ':sent', int(ds))
+local rr = redis.call('HINCRBY', KEYS[2], lab .. ':recv', int(dr))
 redis.call('HINCRBY', KEYS[2], 'bandwidth', int(d))
 redis.call('HSET', KEYS[2], 'updated_at', ARGV[4])
 

@@ -175,7 +175,7 @@ func TestApplyTelemetryDatedByArrival(t *testing.T) {
 	n, err := s.client.Exists(ctx, s.bandwidthDailyKey(id.String(), time.Now().UTC())).Result()
 	require.NoError(t, err)
 	require.Zero(t, n, "nothing on today's hash")
-	got, err := s.client.HGet(ctx, s.bandwidthDailyKey(id.String(), yesterday), a.Hex()+":sent").Result()
+	got, err := s.client.HGet(ctx, s.bandwidthDailyKey(id.String(), yesterday), a.DNSLabel()+":sent").Result()
 	require.NoError(t, err)
 	require.Equal(t, "100", got)
 	got, err = s.client.HGet(ctx, s.netDailyKey(day), "bandwidth").Result()
@@ -190,7 +190,7 @@ func TestApplyTelemetryDatedByArrival(t *testing.T) {
 
 	// Today's next report adds only the delta, to today.
 	require.NoError(t, s.ApplyTelemetry(ctx, []TelemetryUpdate{{ID: id, Reporter: a, Sent: 150, Recv: 10, Type: "stcpr"}}))
-	got, err = s.client.HGet(ctx, s.bandwidthDailyKey(id.String(), time.Now().UTC()), a.Hex()+":sent").Result()
+	got, err = s.client.HGet(ctx, s.bandwidthDailyKey(id.String(), time.Now().UTC()), a.DNSLabel()+":sent").Result()
 	require.NoError(t, err)
 	require.Equal(t, "50", got)
 }

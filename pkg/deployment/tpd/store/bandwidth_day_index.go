@@ -112,23 +112,16 @@ func parseBWDailyKey(key, prefix string) (uuid.UUID, time.Time, bool) {
 // legacy combined "bandwidth" field.
 func edgesFromDailyHash(h map[string]string) ([2]cipher.PubKey, bool) {
 	var edges [2]cipher.PubKey
-	seenHex := make(map[string]bool)
+	// A reporter may have fields in both forms; order by hex as before.
+	seen := make(map[cipher.PubKey]bool)
 	var hexes []string
 	for field := range h {
-		var hex string
-		switch {
-		case strings.HasSuffix(field, ":sent"):
-			hex = strings.TrimSuffix(field, ":sent")
-		case strings.HasSuffix(field, ":recv"):
-			hex = strings.TrimSuffix(field, ":recv")
-		default:
+		pk, suffix, ok := reporterFieldSplit(field)
+		if !ok || (suffix != "sent" && suffix != "recv") || seen[pk] {
 			continue
 		}
-		if hex == "" || seenHex[hex] {
-			continue
-		}
-		seenHex[hex] = true
-		hexes = append(hexes, hex)
+		seen[pk] = true
+		hexes = append(hexes, pk.Hex())
 	}
 	if len(hexes) == 0 {
 		return edges, false

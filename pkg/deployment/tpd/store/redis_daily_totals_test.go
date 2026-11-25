@@ -20,15 +20,23 @@ const testRedisEnv = "SKYWIRE_TEST_REDIS"
 
 func newTestRedisStore(t testing.TB) *redisStore {
 	t.Helper()
+	s := openTestRedisStore(t)
+	ctx := context.Background()
+	require.NoError(t, s.client.FlushDB(ctx).Err())
+	t.Cleanup(func() { _ = s.client.FlushDB(ctx).Err() }) //nolint:errcheck
+	return s
+}
+
+// openTestRedisStore opens a store on the test database without flushing it,
+// so a test can read what an earlier store wrote with no cache carried over.
+func openTestRedisStore(t testing.TB) *redisStore {
+	t.Helper()
 	url := os.Getenv(testRedisEnv)
 	if url == "" {
 		t.Skipf("%s unset; no redis to test against", testRedisEnv)
 	}
-	ctx := context.Background()
-	s, err := newRedisStore(ctx, url, "", 4, time.Minute, logging.MustGetLogger("test"))
+	s, err := newRedisStore(context.Background(), url, "", 4, time.Minute, logging.MustGetLogger("test"))
 	require.NoError(t, err)
-	require.NoError(t, s.client.FlushDB(ctx).Err())
-	t.Cleanup(func() { _ = s.client.FlushDB(ctx).Err() }) //nolint:errcheck
 	return s
 }
 
@@ -75,7 +83,7 @@ func TestDailyTotalsBandwidthIsSumOfTransportMaxima(t *testing.T) {
 	h, err := s.client.HGetAll(ctx, s.bandwidthDailyKey(tp1, time.Now().UTC())).Result()
 	require.NoError(t, err)
 	require.Equal(t, "210", h["max"])
-	require.Equal(t, "105", h[a.Hex()+":sent"])
+	require.Equal(t, "105", h[a.DNSLabel()+":sent"])
 }
 
 // Latency is the mean over the day's transports of each one's latest.
@@ -136,7 +144,7 @@ func TestBandwidthPrevOutlivesRestart(t *testing.T) {
 	// Six hours on, the old six hour TTL would have dropped it.
 	require.NoError(t, s.client.Expire(ctx, s.bandwidthPrevKey(id, a.Hex()), bandwidthPrevTTL-6*time.Hour).Err())
 	require.NoError(t, s.UpdateBandwidth(ctx, id, a, 1100, 600, "stcpr"))
-	sent, err := s.client.HGet(ctx, s.bandwidthDailyKey(id, time.Now().UTC()), a.Hex()+":sent").Int64()
+	sent, err := s.client.HGet(ctx, s.bandwidthDailyKey(id, time.Now().UTC()), a.DNSLabel()+":sent").Int64()
 	require.NoError(t, err)
 	require.EqualValues(t, 100, sent, "only the second report's 100 moved")
 }
@@ -160,12 +168,12 @@ func TestBandwidthNoPrevCreditsNothing(t *testing.T) {
 	require.NoError(t, s.UpdateBandwidth(ctx, id, b, 1_000, 40_000, "webrtc"))
 	h, err := s.client.HGetAll(ctx, s.bandwidthDailyKey(id, time.Now().UTC())).Result()
 	require.NoError(t, err)
-	require.Equal(t, "400", h[a.Hex()+":sent"])
-	require.Equal(t, "400", h[b.Hex()+":recv"])
+	require.Equal(t, "400", h[a.DNSLabel()+":sent"])
+	require.Equal(t, "400", h[b.DNSLabel()+":recv"])
 	require.Equal(t, "410", netDaily(t, s)["bandwidth"])
 
 	require.NoError(t, s.UpdateBandwidth(ctx, id, a, 40_100, 1_000, "webrtc"))
 	h, err = s.client.HGetAll(ctx, s.bandwidthDailyKey(id, time.Now().UTC())).Result()
 	require.NoError(t, err)
-	require.Equal(t, "500", h[a.Hex()+":sent"], "later reports count from the new snapshot")
+	require.Equal(t, "500", h[a.DNSLabel()+":sent"], "later reports count from the new snapshot")
 }
