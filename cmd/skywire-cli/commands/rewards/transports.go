@@ -287,8 +287,8 @@ still earns the eligible side credit for what it sent.
 
 This command:
 1. Fetches all transport metrics from TPD /metrics?days=1&bandwidth=true&edges=true
-2. Builds a PK→IP map from hardware surveys to detect same-LAN transports
-3. Excludes transports where both edges share the same external IP (same-LAN sybil)
+2. Reads each visor's dmsg-attested IP and machine keys from the hardware surveys
+3. Excludes transports whose edges share an IP or a machine (same-host sybil)
 4. For each remaining transport, records (a, b, sent_a, sent_b) where
    sent_a = min(A.Sent, B.Recv) and sent_b = min(B.Sent, A.Recv)
    — sender-pays, capped by the receiver's confirmation so a one-sided
@@ -325,18 +325,16 @@ func collectBandwidth(flags *pflag.FlagSet, bwLog *logging.Logger, local tpdMetr
 		targetDate = time.Now().UTC().Format("2006-01-02")
 	}
 
-	// Build PK→IP map from hardware surveys for same-LAN detection.
-	// Same-LAN filtering belongs at this stage rather than calc time
-	// because it depends on visor IP from the survey, not on reward
-	// eligibility — a transport between two PKs on one host is
-	// excluded regardless of whether either side ends up eligible.
-	pkIPMap := buildPKtoIPMap(bwLog, bwSurveyPath)
-	bwLog.Infof("Built PK→IP map with %d entries from %s", len(pkIPMap), bwSurveyPath)
+	// A transport between two visors on one host is excluded whether or
+	// not either side ends up eligible, so this runs before the calculation.
+	day, err := time.Parse("2006-01-02", targetDate)
+	if err != nil {
+		return fmt.Errorf("parse date %q: %w", targetDate, err)
+	}
+	hostKeys := hostKeysByPK(bwLog, bwSurveyPath, day)
+	bwLog.Infof("Read host keys for %d visors from %s", len(hostKeys), bwSurveyPath)
 
-	// Fetch per-transport sender-side bandwidth from TPD (same-LAN
-	// already filtered out; only Daily entries matching targetDate
-	// counted when targetDate is non-empty).
-	transports, err := fetchTransportBandwidthFromTPD(flags, bwLog, pkIPMap, !noCache, bwDays, targetDate, local.reader())
+	transports, err := fetchTransportBandwidthFromTPD(flags, bwLog, hostKeys, !noCache, bwDays, targetDate, local.reader())
 	if err != nil {
 		return fmt.Errorf("fetch bandwidth data: %w", err)
 	}
@@ -378,14 +376,15 @@ func collectBandwidth(flags *pflag.FlagSet, bwLog *logging.Logger, local tpdMetr
 	return nil
 }
 
-// buildPKtoIPMap reads hardware surveys and returns a map of PK hex → external IP
-func buildPKtoIPMap(bwLog *logging.Logger, surveyPath string) map[string]string {
-	pkIPMap := make(map[string]string)
+// hostKeysByPK reads the hardware surveys and returns, per PK hex, the keys
+// of the host the visor runs on: its dmsg-attested IP and its machine keys.
+func hostKeysByPK(bwLog *logging.Logger, surveyPath string, day time.Time) map[string][]string {
+	hostKeys := make(map[string][]string)
 
 	entries, err := os.ReadDir(surveyPath)
 	if err != nil {
 		bwLog.Warnf("Cannot read survey directory %s: %v", surveyPath, err)
-		return pkIPMap
+		return hostKeys
 	}
 
 	for _, entry := range entries {
@@ -396,28 +395,46 @@ func buildPKtoIPMap(bwLog *logging.Logger, surveyPath string) map[string]string 
 		if len(pk) != 66 { // standard PK hex length
 			continue
 		}
-		nodeInfoPath := fmt.Sprintf("%s/%s/node-info.json", surveyPath, pk)
-		data, err := os.ReadFile(nodeInfoPath) //nolint:gosec
+		survey, err := parseSurvey(fmt.Sprintf("%s/%s/node-info.json", surveyPath, pk))
 		if err != nil {
 			continue
 		}
-		var nodeInfo struct {
-			IPAddress string `json:"ip_address"`
+		var keys []string
+		ip, ipErr := surveyIP(survey, pk, day)
+		ip = strings.TrimSpace(ip)
+		if ipErr == nil && ip != "" {
+			keys = append(keys, "ip:"+ip)
 		}
-		if err := json.Unmarshal(data, &nodeInfo); err != nil {
-			continue
+		_, macs := extractInterfaces(survey)
+		mac := ""
+		if len(macs) > 0 {
+			mac = macs[0]
 		}
-		ip := strings.TrimSpace(nodeInfo.IPAddress)
-		if ip != "" && strings.Count(ip, ".") == 3 {
-			pkIPMap[pk] = ip
+		for _, k := range machineKeys(survey, ip, mac) {
+			if k != "mac:" {
+				keys = append(keys, k)
+			}
+		}
+		if len(keys) > 0 {
+			hostKeys[pk] = keys
 		}
 	}
 
-	return pkIPMap
+	return hostKeys
+}
+
+// hostShared returns a key both visors' hosts have, or "" when none.
+func hostShared(a, b []string) string {
+	for _, k := range a {
+		if slices.Contains(b, k) {
+			return k
+		}
+	}
+	return ""
 }
 
 // fetchTransportBandwidthFromTPD fetches per-transport metrics from TPD,
-// filters out same-LAN transports (both edges share an external IP), and
+// filters out same-host transports (both edges share an IP or machine), and
 // returns the per-edge sender-side daily totals. Each entry's SentA is
 // what edge A claims sent capped by what B confirmed receiving (and
 // mirror for SentB) so a one-sided .sent inflation in TPD cannot pump
@@ -427,7 +444,7 @@ func buildPKtoIPMap(bwLog *logging.Logger, surveyPath string) map[string]string 
 // pool 1 eligibility set at run time (it's recomputed during calc using
 // the day's surveys + uptime). The calculator does that filter after
 // reading this list.
-func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logger, pkIPMap map[string]string, useCache bool, days int, dateFilter string, local tpdMetricsReader) ([]TransportBW, error) {
+func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logger, hostKeys map[string][]string, useCache bool, days int, dateFilter string, local tpdMetricsReader) ([]TransportBW, error) {
 	// Check cache
 	if useCache {
 		if info, err := os.Stat(bwCacheFile); err == nil {
@@ -477,14 +494,11 @@ func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logg
 		edgeA := tp.Edges[0]
 		edgeB := tp.Edges[1]
 
-		// Same-LAN: both edges report the same external IP from their
-		// surveys. Drop the whole transport — neither side gets credit.
-		ipA, okA := pkIPMap[edgeA]
-		ipB, okB := pkIPMap[edgeB]
-		if okA && okB && ipA == ipB {
+		// Both edges on one IP or one machine earn nothing for the transport.
+		if k := hostShared(hostKeys[edgeA], hostKeys[edgeB]); k != "" {
 			sameLANCount++
-			bwLog.Debugf("Excluding same-LAN transport %s: %s and %s both on %s (sent_a=%d sent_b=%d)",
-				tp.ID, edgeA, edgeB, ipA, sentA, sentB)
+			bwLog.Debugf("Excluding same-host transport %s: %s and %s share %s (sent_a=%d sent_b=%d)",
+				tp.ID, edgeA, edgeB, k, sentA, sentB)
 			return
 		}
 
