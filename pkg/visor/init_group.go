@@ -61,6 +61,14 @@ func groupStorePath(localPath string) string {
 	return filepath.Join(localPath, "skychat", "groups.db")
 }
 
+// groupMemoryMessages is Skychat.GroupMemoryMessages, zero when unset.
+func groupMemoryMessages(sc *visorconfig.Skychat) int {
+	if sc == nil {
+		return 0
+	}
+	return sc.GroupMemoryMessages
+}
+
 // initGrouping brings up the per-visor chat-group feed manager. Best
 // effort: a failure here logs and disables group chat for this run
 // rather than failing visor startup. Group RPC handlers return
@@ -118,6 +126,7 @@ func initGrouping(_ context.Context, v *Visor, log *logging.Logger) error {
 		// 30s cadence pairs with the member-side 90s stale threshold
 		// for a 2-misses-then-reconnect policy.
 		HeartbeatInterval: skychatgroup.DefaultHeartbeatInterval,
+		MemoryMessages:    groupMemoryMessages(v.conf.Skychat),
 	})
 	if err != nil {
 		_ = store.Close() //nolint:errcheck

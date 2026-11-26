@@ -33,6 +33,7 @@ package group
 
 import (
 	"cmp"
+	"container/heap"
 	"context"
 	cryptoRand "crypto/rand"
 	"encoding/binary"
@@ -77,6 +78,23 @@ var errSessionClosed = errors.New("group: session closed")
 // group feed. Matches the pairing analog so an operator who
 // understands one understands both.
 const MessagePathPrefix = "msgs"
+
+// messagePath is where a message leaf goes: msgs/<sender>/<YYYYMM>/<DD>/<ts>/<seq>
+// in UTC. The month and day levels keep every tree node small, so a publish
+// re-encodes and a fill fetches one day, not the sender's whole history.
+// Older visors wrote msgs/<sender>/<ts>/<seq>, and readers take both.
+func messagePath(sender cipher.PubKey, ts time.Time, seq uint64) string {
+	ts = ts.UTC()
+	return MessagePathPrefix + "/" + sender.Hex() + "/" + ts.Format("200601") + "/" + ts.Format("02") + "/" +
+		strconv.FormatInt(ts.UnixNano(), 10) + "/" + strconv.FormatUint(seq, 10)
+}
+
+// heartbeatPath is the one leaf a publisher's heartbeats overwrite. It sits
+// under msgs/ because that is what older members subscribe to and count as
+// liveness.
+func heartbeatPath(sender cipher.PubKey) string {
+	return MessagePathPrefix + "/" + sender.Hex() + "/heartbeat"
+}
 
 // MirrorPathPrefix WAS the prefix admins used to re-publish observed
 // peer leaves as a redundancy strategy for offline senders (#2584).
@@ -288,6 +306,12 @@ type Config struct {
 	// visor decides how much of it to pay for. Neither can force the
 	// other's hand.
 	PeerFanout int
+
+	// MemoryMessages is how many published messages of the session's own
+	// feed stay in memory when the CXO store is on disk; the rest are read
+	// back from the store. Zero takes DefaultMemoryMessages, negative keeps
+	// the whole feed in memory.
+	MemoryMessages int
 }
 
 // peerFanout resolves the configured fanout, applying the default.
@@ -667,7 +691,10 @@ const relayAckReadTimeout = 5 * time.Second
 // newPublisher builds the session's CXO publisher over the configured
 // transport: DMSG when cfg.DmsgC is set, otherwise the CXO node's
 // native TCP transport on cfg.TCPListenAddr (no dmsg/discovery).
-func (cfg Config) newPublisher(pc treestore.PubConfig) (*treestore.Publisher, error) {
+func (cfg *Config) newPublisher(pc treestore.PubConfig) (*treestore.Publisher, error) {
+	if cfg.storeOnDisk() {
+		pc.MemoryEntries = cfg.memoryEntries()
+	}
 	if cfg.InMemoryDB {
 		// Browser (js/wasm) visor: no filesystem. Run the CXO tree in memory —
 		// content-addressed and republished from the in-memory tree, same as the
@@ -689,6 +716,35 @@ func (cfg Config) newPublisher(pc treestore.PubConfig) (*treestore.Publisher, er
 	// no DataDir on disk, so no work-dir/binary path collision.)
 	pc.InMemoryDB = true
 	return treestore.NewWithTCP(cfg.TCPListenAddr, cfg.MySK, pc)
+}
+
+// DefaultMemoryMessages is how many messages of a group feed stay in memory
+// by default when its CXO store is on disk.
+const DefaultMemoryMessages = 1000
+
+// storeOnDisk reports whether the session's CXO store is a file, so settled
+// history can leave memory.
+func (cfg *Config) storeOnDisk() bool {
+	return cfg.DmsgC != nil && !cfg.InMemoryDB
+}
+
+// memoryEntries is the treestore budget for MemoryMessages: a message is a
+// timestamp node holding one seq leaf, two entries.
+func (cfg *Config) memoryEntries() int {
+	switch {
+	case cfg.MemoryMessages < 0:
+		return 0
+	case cfg.MemoryMessages == 0:
+		return 2 * DefaultMemoryMessages
+	}
+	return 2 * cfg.MemoryMessages
+}
+
+// subConfig is the treestore config of every subscriber the session opens.
+// On disk a subscriber keeps no copy of the peer's feed and diffs each Root
+// against the last one in the store.
+func (cfg *Config) subConfig(log *logging.Logger) treestore.SubConfig {
+	return treestore.SubConfig{Logger: log, StoreBacked: cfg.storeOnDisk()}
 }
 
 func Open(cfg Config) (*Session, error) {
@@ -801,7 +857,7 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 		if peerPK == cfg.MyPK {
 			continue
 		}
-		ps, err := treestore.NewSubscriberOnNode(pub.Node(), peerPK, treestore.SubConfig{Logger: log})
+		ps, err := treestore.NewSubscriberOnNode(pub.Node(), peerPK, cfg.subConfig(log))
 		if err != nil {
 			log.WithError(err).WithField("peer", peerPK.String()).
 				Warn("group: owner peer-sub create failed; group still usable via legacy relay path")
@@ -942,9 +998,7 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 	if err != nil {
 		return nil, fmt.Errorf("group: Open member: build local node: %w", err)
 	}
-	sub, err := treestore.NewSubscriberOnNode(pub.Node(), cfg.Record.OwnerPK, treestore.SubConfig{
-		Logger: log,
-	})
+	sub, err := treestore.NewSubscriberOnNode(pub.Node(), cfg.Record.OwnerPK, cfg.subConfig(log))
 	if err != nil {
 		_ = pub.Close() //nolint:errcheck
 		return nil, fmt.Errorf("group: Open member: attach subscriber: %w", err)
@@ -995,7 +1049,7 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 	// the openMember vs SetAdminRoster behavior in lockstep.
 	desired := desiredPeerSubsForRole(cfg.Record, cfg.MyPK, cfg.peerFanout())
 	for peerPK := range desired {
-		ps, err := treestore.NewSubscriberOnNode(pub.Node(), peerPK, treestore.SubConfig{Logger: log})
+		ps, err := treestore.NewSubscriberOnNode(pub.Node(), peerPK, cfg.subConfig(log))
 		if err != nil {
 			log.WithError(err).WithField("peer", peerPK.String()).
 				Warn("group: member peer-sub create failed; will still receive owner-relayed messages")
@@ -1565,8 +1619,9 @@ func (s *Session) Send(text string) error {
 // own feed can be removed — a publisher controls only its own feed — so
 // unsend is inherently sender-scoped and needs no extra authority check.
 //
-// PrunePrefix wipes the msgs/<myPK>/<ts> subtree, i.e. the single leaf at
-// that timestamp (seq lives one level below ts). CXO's snapshot-diff
+// PrunePrefix wipes the <ts> subtree, i.e. the single leaf at that
+// timestamp (seq lives one level below ts), under both the day layout of
+// messagePath and the older msgs/<myPK>/<ts> one. CXO's snapshot-diff
 // replication then reports the removal to every subscriber (see
 // treestore TestSubscriberApplySnapshotReportsDeletes), so the message is
 // genuinely deleted from members' replicas — not merely hidden locally.
@@ -1576,6 +1631,10 @@ func (s *Session) Send(text string) error {
 func (s *Session) Unsend(tsNano int64) error {
 	if s.pub == nil {
 		return errors.New("group: Unsend: session has no publisher")
+	}
+	dayPath := messagePath(s.cfg.MyPK, time.Unix(0, tsNano), 0)
+	if err := s.pub.PrunePrefix(dayPath[:strings.LastIndexByte(dayPath, '/')]); err != nil {
+		return err
 	}
 	prefix := MessagePathPrefix + "/" + s.cfg.MyPK.Hex() + "/" + strconv.FormatInt(tsNano, 10)
 	return s.pub.PrunePrefix(prefix)
@@ -1680,7 +1739,7 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) ([]cipher.PubKey, error)
 		if _, exists := s.peerSubs[pk]; exists {
 			continue
 		}
-		ps, err := treestore.NewSubscriberOnNode(s.pub.Node(), pk, treestore.SubConfig{Logger: s.log})
+		ps, err := treestore.NewSubscriberOnNode(s.pub.Node(), pk, s.cfg.subConfig(s.log))
 		if err != nil {
 			s.log.WithError(err).WithField("peer", pk.String()).
 				Warn("group: SetAllowlist: peer-sub create failed; will retry on next allowlist change")
@@ -1989,7 +2048,7 @@ func (s *Session) SetAdminRoster(admins []cipher.PubKey) ([]cipher.PubKey, error
 		if _, exists := s.peerSubs[pk]; exists {
 			continue
 		}
-		ps, err := treestore.NewSubscriberOnNode(s.pub.Node(), pk, treestore.SubConfig{Logger: s.log})
+		ps, err := treestore.NewSubscriberOnNode(s.pub.Node(), pk, s.cfg.subConfig(s.log))
 		if err != nil {
 			s.log.WithError(err).WithField("peer", pk.String()).
 				Warn("group: SetAdminRoster: peer-sub create failed; will retry on next admin-roster change")
@@ -2449,7 +2508,12 @@ func (s *Session) publishAs(senderPK cipher.PubKey, text string, ts time.Time) e
 	// parse the path (attribution comes from the JSON body), so the
 	// senderPK segment is purely a uniqueness key on the storage
 	// side.
-	path := MessagePathPrefix + "/" + senderPK.Hex() + "/" + strconv.FormatInt(ts.UnixNano(), 10) + "/" + strconv.FormatUint(seq, 10)
+	path := messagePath(senderPK, ts, seq)
+	if text == HeartbeatMarker {
+		// One leaf per publisher, overwritten: a heartbeat every 30 s would
+		// otherwise add about 2,900 leaves a day to the feed for good.
+		path = heartbeatPath(senderPK)
+	}
 	if err := s.pub.Put(path, body); err != nil {
 		return fmt.Errorf("group: publishAs: put %q: %w", path, err)
 	}
@@ -2652,18 +2716,16 @@ func dialSkynetRelay(ctx context.Context, addr appnet.Addr) (net.Conn, error) {
 // publisher/subscriber tree this session can reach through the
 // given handler. Empty or uninitialized sessions are no-ops.
 //
-// D1 sources walked:
-//   - the local publisher (s.pub) — owner's own sends + heartbeats +
-//     any owner-relay re-publishes; member's own direct sends
-//   - the legacy owner-feed subscriber (s.sub) — present on member
-//     sessions, mirrors the owner's feed
-//   - every D1 per-PK peer subscriber (s.peerSubs) — other members'
-//     direct sends published to their own feeds
+// Sources walked:
+//   - the local publisher (s.pub) — own sends, and when this visor
+//     mirrors (shouldMirrorLeaves) a verbatim copy of every leaf it took
+//     from the others, which makes it the only source needed
+//   - otherwise also the legacy owner-feed subscriber (s.sub) and every
+//     per-PK peer subscriber (s.peerSubs)
 //
-// Sorting is by Message.TS (decoded), not by path, because the D1
-// path layout msgs/<senderHex>/<ts-nano>/<seq> would sort by sender
-// first if compared lexically — yielding per-sender chronological
-// groups but not a global chronological order.
+// The trees live on disk when the store does, so the walk keeps only the
+// newest `cap` messages it has seen rather than the whole history. They
+// are ordered by Message.TS, since paths sort by sender first.
 //
 // Best-effort: per-leaf decode / decrypt failures are silently
 // skipped (consistent with onUpdate's policy — a torn leaf
@@ -2672,37 +2734,51 @@ func (s *Session) ReplayHistoryThrough(handler MessageHandler, cap int) {
 	if handler == nil || cap <= 0 {
 		return
 	}
-	type leaf struct {
-		path  string
-		value []byte
-	}
-	var leaves []leaf
-	// Walk both prefixes on every source: the local publisher carries
-	// our own sends under msgs/ plus (if this visor is an admin) any
-	// mirror/ copies of peers' leaves; peer subscribers may carry
-	// mirror leaves authored by the peer when the peer is an admin.
-	// Dedup is applied by canonical suffix below, so a leaf reachable
-	// through multiple paths produces a single replayed message.
-	seen := make(map[string]struct{})
-	// Walk callbacks always return true — replay is unconditionally
-	// "drain everything available"; we filter duplicates after the
-	// fact rather than short-circuiting the iterator. Returning false
-	// here would tell the treestore to stop walking, which is the
-	// wrong semantics for dedup-by-content (the duplicate may still
-	// have unique siblings in the same subtree).
-	walk := func(path string, value []byte) bool { //nolint:unparam // Walk requires bool return; we never short-circuit on purpose
+	newest := &replayHeap{keys: make(map[string]struct{}, cap)}
+	keys := s.decryptionKeys()
+	walk := func(path string, value []byte) bool { //nolint:unparam // Walk requires bool return; replay never stops early
+		if strings.HasSuffix(path, "/heartbeat") {
+			return true
+		}
 		key := dedupKey(path)
-		if key != "" {
-			if _, dup := seen[key]; dup {
+		if key == "" {
+			key = path
+		}
+		if _, dup := newest.keys[key]; dup {
+			return true
+		}
+		var msg Message
+		if err := json.Unmarshal(value, &msg); err != nil {
+			s.log.WithError(err).WithField("path", path).
+				Debug("group: replay: undecodable leaf, skipping")
+			return true
+		}
+		// The live path drops heartbeats in onUpdate; replay must not
+		// resurrect them as chat, or let them displace real history.
+		if Heartbeat(msg) {
+			return true
+		}
+		if newest.Len() == cap && !msg.TS.After(newest.items[0].msg.TS) {
+			return true
+		}
+		if s.cfg.Record.Mode == ModePrivate && len(msg.Ciphertext) > 0 {
+			// Every key we hold, not just the current one — history
+			// published before a rotation opens under a retired key.
+			plain, dErr := decryptWithRing(keys, msg.Ciphertext, msg.Nonce)
+			if dErr != nil {
+				s.log.WithError(dErr).WithField("path", path).
+					Debug("group: replay: decrypt failed, skipping")
 				return true
 			}
-			seen[key] = struct{}{}
+			msg.Text = string(plain)
+			msg.Ciphertext = nil
+			msg.Nonce = nil
 		}
-		// Defensive copy: tree-store Walk may reuse the value
-		// slice between callback invocations.
-		v := make([]byte, len(value))
-		copy(v, value)
-		leaves = append(leaves, leaf{path: path, value: v})
+		if newest.Len() == cap {
+			delete(newest.keys, heap.Pop(newest).(replayItem).key)
+		}
+		heap.Push(newest, replayItem{key: key, msg: msg})
+		newest.keys[key] = struct{}{}
 		return true
 	}
 	walkBoth := func(walker func(prefix string, f func(path string, value []byte) bool)) {
@@ -2712,71 +2788,49 @@ func (s *Session) ReplayHistoryThrough(handler MessageHandler, cap int) {
 	if s.pub != nil {
 		walkBoth(s.pub.Walk)
 	}
-	if s.sub != nil {
-		walkBoth(s.sub.Walk)
-	}
-	s.peerSubsMu.RLock()
-	peerSubs := make([]*treestore.Subscriber, 0, len(s.peerSubs))
-	for _, ps := range s.peerSubs {
-		peerSubs = append(peerSubs, ps)
-	}
-	s.peerSubsMu.RUnlock()
-	for _, ps := range peerSubs {
-		walkBoth(ps.Walk)
-	}
-	if len(leaves) == 0 {
-		return
-	}
-	// Decode every leaf upfront so we can sort by Message.TS and
-	// drop undecodable leaves before the cap window is applied
-	// (otherwise a window full of garbage leaves would starve the
-	// handler of real messages within the same cap budget).
-	type decoded struct {
-		path string
-		msg  Message
-	}
-	out := make([]decoded, 0, len(leaves))
-	for _, l := range leaves {
-		var msg Message
-		if err := json.Unmarshal(l.value, &msg); err != nil {
-			s.log.WithError(err).WithField("path", l.path).
-				Debug("group: replay: undecodable leaf, skipping")
-			continue
+	if s.pub == nil || !s.shouldMirrorLeaves() {
+		if s.sub != nil {
+			walkBoth(s.sub.Walk)
 		}
-		if s.cfg.Record.Mode == ModePrivate && len(msg.Ciphertext) > 0 {
-			// Every key we hold, not just the current one — history
-			// published before a rotation opens under a retired key.
-			plain, dErr := decryptWithRing(s.decryptionKeys(), msg.Ciphertext, msg.Nonce)
-			if dErr != nil {
-				s.log.WithError(dErr).WithField("path", l.path).
-					Debug("group: replay: decrypt failed, skipping")
-				continue
-			}
-			msg.Text = string(plain)
-			msg.Ciphertext = nil
-			msg.Nonce = nil
+		s.peerSubsMu.RLock()
+		peerSubs := make([]*treestore.Subscriber, 0, len(s.peerSubs))
+		for _, ps := range s.peerSubs {
+			peerSubs = append(peerSubs, ps)
 		}
-		// The live path drops heartbeats in onUpdate; replay must not
-		// resurrect them as chat. Skipped before the cap window so a
-		// heartbeat-heavy feed cannot displace real history within it.
-		if Heartbeat(msg) {
-			continue
+		s.peerSubsMu.RUnlock()
+		for _, ps := range peerSubs {
+			walkBoth(ps.Walk)
 		}
-		out = append(out, decoded{path: l.path, msg: msg})
 	}
-	if len(out) == 0 {
-		return
-	}
-	slices.SortFunc(out, func(a, b decoded) int {
+	out := newest.items
+	slices.SortFunc(out, func(a, b replayItem) int {
 		return a.msg.TS.Compare(b.msg.TS)
 	})
-	start := 0
-	if len(out) > cap {
-		start = len(out) - cap
-	}
-	for _, d := range out[start:] {
+	for _, d := range out {
 		handler(s.cfg.Record.ID, d.msg.SenderPK, d.msg)
 	}
+}
+
+// replayItem is one message ReplayHistoryThrough keeps, under its dedupKey.
+type replayItem struct {
+	key string
+	msg Message
+}
+
+// replayHeap is a min-heap by Message.TS of the newest messages seen.
+type replayHeap struct {
+	items []replayItem
+	keys  map[string]struct{}
+}
+
+func (h *replayHeap) Len() int           { return len(h.items) }
+func (h *replayHeap) Less(i, j int) bool { return h.items[i].msg.TS.Before(h.items[j].msg.TS) }
+func (h *replayHeap) Swap(i, j int)      { h.items[i], h.items[j] = h.items[j], h.items[i] }
+func (h *replayHeap) Push(x any)         { h.items = append(h.items, x.(replayItem)) }
+func (h *replayHeap) Pop() any {
+	last := h.items[len(h.items)-1]
+	h.items = h.items[:len(h.items)-1]
+	return last
 }
 
 // onUpdate is the subscriber callback for member-role sessions.

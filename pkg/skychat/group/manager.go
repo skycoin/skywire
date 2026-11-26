@@ -88,6 +88,8 @@ type Manager struct {
 	// peerFanout is this visor's cap on non-admin peer subscriptions,
 	// passed through to every session. See ManagerConfig.PeerFanout.
 	peerFanout int
+	// memoryMessages is ManagerConfig.MemoryMessages.
+	memoryMessages int
 	// joinBucket throttles join attempts from PKs the group has never
 	// admitted. Per-visor and in memory — see joincost.go.
 	joinBucket *joinBucket
@@ -166,6 +168,10 @@ type ManagerConfig struct {
 	// regardless of what a group's admins chose. See Config.PeerFanout.
 	PeerFanout int
 
+	// MemoryMessages is how many messages of each group feed stay in
+	// memory when the store is on disk. See Config.MemoryMessages.
+	MemoryMessages int
+
 	// JoinBurst / JoinRefill / MaxPendingJoins tune the anti-flood gates:
 	// how many join attempts a group absorbs back-to-back, how fast that
 	// allowance returns, and how deep the approval queue may get. Zero
@@ -211,6 +217,7 @@ func NewManager(cfg ManagerConfig) (*Manager, error) {
 		leaving:            make(map[string]context.CancelFunc),
 		heartbeatInterval:  cfg.HeartbeatInterval,
 		peerFanout:         cfg.PeerFanout,
+		memoryMessages:     cfg.MemoryMessages,
 		joinBucket:         newJoinBucket(cfg.JoinBurst, cfg.JoinRefill),
 		maxPending:         cfg.MaxPendingJoins,
 		reconnectState:     make(map[string]*reconnectState),
@@ -1711,6 +1718,7 @@ func (m *Manager) openLocked(r Record) (*Session, error) {
 		Logger:            m.log,
 		HeartbeatInterval: m.heartbeatInterval,
 		PeerFanout:        m.peerFanout,
+		MemoryMessages:    m.memoryMessages,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("group: open %s: %w", r.ID, err)

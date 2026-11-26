@@ -24,7 +24,6 @@ import (
 	"context"
 	"encoding/json"
 	"net"
-	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -116,8 +115,7 @@ func newRelaySession(t *testing.T, members []cipher.PubKey) *Session {
 // relayLeafPath is the feed path publishAs writes to for the FIRST publish on
 // a fresh publisher (seq starts at 1), which is all these tests make.
 func relayLeafPath(sender cipher.PubKey, ts time.Time) string {
-	return MessagePathPrefix + "/" + sender.Hex() + "/" +
-		strconv.FormatInt(ts.UnixNano(), 10) + "/1"
+	return messagePath(sender, ts, 1)
 }
 
 // driveRelay runs handleRelay against one end of a pipe, writes rawBody from
