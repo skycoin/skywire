@@ -27,6 +27,7 @@ we have written to. vpn says when iptables or the tun driver is missing, a
 config reset keeps the visor's internal apps, and a truncated bbolt file is
 detected before it is opened.
 
+-   skychat/group: hold the first dial to a newly added member back 5 s, so it does not collide with the member's own dial after a join
 -   cxo/cxoutils: mark each object once in the startup sweep, so a disk-backed feed opens in a fraction of the time
 -   cxo/data/cxds: run a refcount change on a NoSync store at once instead of waiting 10 ms for a batch
 -   cxo/treestore: fold published sub-trees past a memory budget into the store, and add store-backed subscribers that keep no copy of the feed
