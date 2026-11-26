@@ -7,6 +7,17 @@
 //	POST /contacts          {pk, name} — set, or forget with an empty name
 //	POST /contacts/import   {names:{…}} — fill gaps only (UI migration)
 //
+//	GET    /contacts/book         {available, contacts:{"<pk>": "<name>", …}}
+//	POST   /contacts/book         {pk, name} — save a key to the visor book
+//	DELETE /contacts/book?pk=     take a key off the visor book
+//	POST   /contacts/book/import  {pks:[…]} — fill gaps only (UI migration)
+//
+// The book routes are the address book itself: which keys the operator
+// keeps. That list is the visor contact book, the one the hypervisor's
+// Contacts page and `skywire cli contacts` edit, so a contact saved in any
+// of them shows in all. The nickname routes above stay separate: a nickname
+// can label any key, saved or not, and it wins over the book's name.
+//
 // Why it is served rather than kept in the UI: a nickname used to live in the
 // chat page's localStorage, where the two surfaces that need it most could not
 // see it — a notification title, composed here in Go, and a phone's native
@@ -18,9 +29,11 @@ import (
 	"encoding/json"
 	"maps"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skychat/contacts"
 )
 
@@ -36,6 +49,8 @@ func registerContactHandlers(mux *http.ServeMux) {
 	// match reaches it; "/contacts" is an exact path and would not shadow it,
 	// but the ordering makes the intent readable.
 	mux.HandleFunc("/contacts/import", requireAuthFunc(contactsImportHandler))
+	mux.HandleFunc("/contacts/book/import", requireAuthFunc(contactsBookImportHandler))
+	mux.HandleFunc("/contacts/book", requireAuthFunc(contactsBookHandler))
 	mux.HandleFunc("/contacts", requireAuthFunc(contactsHandler))
 }
 
@@ -139,6 +154,23 @@ func displayName(pk string) string {
 	return shortHexPK(pk)
 }
 
+// visorBookAPI is the part of the app client that reaches the visor contact
+// book.
+type visorBookAPI interface {
+	ContactNames() (map[string]string, error)
+	ChatContactSave(pk cipher.PubKey, name string) (bool, error)
+	ChatContactForget(pk cipher.PubKey) error
+}
+
+// visorBook is the visor contact book, or nil when skychat runs standalone.
+// A variable so tests can stand in for the visor.
+var visorBook = func() visorBookAPI {
+	if appCl == nil {
+		return nil
+	}
+	return appCl
+}
+
 // bookTTL bounds how stale the visor contact book can be here. It is read on
 // every notification, so it is cached rather than fetched per message.
 const bookTTL = 30 * time.Second
@@ -152,8 +184,9 @@ var book struct {
 // bookNames is the visor contact book as key hex to name. Standalone, or when
 // the visor cannot answer, it is the last copy fetched (empty at first).
 func bookNames() map[string]string {
+	vb := visorBook()
 	book.mu.Lock()
-	stale := appCl != nil && time.Since(book.fetched) >= bookTTL
+	stale := vb != nil && time.Since(book.fetched) >= bookTTL
 	if stale {
 		book.fetched = time.Now()
 	}
@@ -163,7 +196,7 @@ func bookNames() map[string]string {
 		return names
 	}
 	// Fetched outside the lock so a slow visor never stalls other callers.
-	fresh, err := appCl.ContactNames()
+	fresh, err := vb.ContactNames()
 	if err != nil {
 		return names
 	}
@@ -171,6 +204,135 @@ func bookNames() map[string]string {
 	book.names = fresh
 	book.mu.Unlock()
 	return fresh
+}
+
+// bookRefresh fetches the visor contact book now, for a page that has just
+// opened or changed it. ok is false when there is no visor book to read.
+func bookRefresh() (names map[string]string, ok bool) {
+	vb := visorBook()
+	if vb == nil {
+		return nil, false
+	}
+	fresh, err := vb.ContactNames()
+	if err != nil {
+		return nil, false
+	}
+	book.mu.Lock()
+	book.names, book.fetched = fresh, time.Now()
+	book.mu.Unlock()
+	return fresh, true
+}
+
+// bookContactName is the name a key gets when skychat adds it to the visor
+// book: the one given, else the nickname, else the shortened key, because a
+// visor contact needs a name.
+func bookContactName(pk cipher.PubKey, given string) string {
+	if name := strings.TrimSpace(given); name != "" {
+		return name
+	}
+	if name := contactStore.Name(pk.Hex()); name != "" {
+		return name
+	}
+	return shortHexPK(pk.Hex())
+}
+
+func contactsBookHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		names, ok := bookRefresh()
+		if names == nil {
+			names = map[string]string{}
+		}
+		writeJSON(w, map[string]any{"available": ok, "contacts": names})
+		return
+	}
+	vb := visorBook()
+	if vb == nil {
+		http.Error(w, "no visor contact book (skychat runs standalone)", http.StatusServiceUnavailable)
+		return
+	}
+	switch r.Method {
+	case http.MethodPost:
+		var body struct {
+			PK   string `json:"pk"`
+			Name string `json:"name"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		var pk cipher.PubKey
+		if err := pk.Set(strings.TrimSpace(body.PK)); err != nil {
+			http.Error(w, "invalid pk: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		added, err := vb.ChatContactSave(pk, bookContactName(pk, body.Name))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		bookRefresh()
+		writeJSON(w, map[string]any{"pk": pk.Hex(), "added": added})
+	case http.MethodDelete:
+		var pk cipher.PubKey
+		if err := pk.Set(strings.TrimSpace(r.URL.Query().Get("pk"))); err != nil {
+			http.Error(w, "invalid pk: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err := vb.ChatContactForget(pk); err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		bookRefresh()
+		writeJSON(w, map[string]string{"pk": pk.Hex()})
+	default:
+		http.Error(w, "GET, POST or DELETE only", http.StatusMethodNotAllowed)
+	}
+}
+
+// contactsBookImportHandler moves the page's older saved-contacts list
+// (localStorage) into the visor book. Keys the book holds keep their contact,
+// and malformed keys are skipped rather than failing the batch.
+func contactsBookImportHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	vb := visorBook()
+	if vb == nil {
+		http.Error(w, "no visor contact book (skychat runs standalone)", http.StatusServiceUnavailable)
+		return
+	}
+	var body struct {
+		PKs []string `json:"pks"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if len(body.PKs) > contacts.MaxEntries {
+		http.Error(w, "too many keys", http.StatusRequestEntityTooLarge)
+		return
+	}
+	added := 0
+	for _, s := range body.PKs {
+		var pk cipher.PubKey
+		if pk.Set(strings.TrimSpace(s)) != nil {
+			continue
+		}
+		ok, err := vb.ChatContactSave(pk, bookContactName(pk, ""))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		if ok {
+			added++
+		}
+	}
+	bookRefresh()
+	if added > 0 {
+		appLog("Contacts: moved %d saved contact(s) from the UI's local store to the visor contact book", added)
+	}
+	writeJSON(w, map[string]int{"added": added})
 }
 
 // shownNames is what the UI displays: the contact book, overlaid by skychat's

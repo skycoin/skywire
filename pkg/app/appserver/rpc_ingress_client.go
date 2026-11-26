@@ -51,6 +51,9 @@ type RPCIngressClient interface {
 	ChatPark(rcpt cipher.PubKey, msg []byte, ref string) (cipher.PubKey, error)
 	ChatUnpark() ([]ParkedChat, error)
 	ChatAck(refs []ParkedRef) error
+	// ChatContactSave and ChatContactForget edit the visor contact book.
+	ChatContactSave(pk cipher.PubKey, name string) (bool, error)
+	ChatContactForget(pk cipher.PubKey) error
 	Dial(remote appnet.Addr) (connID uint16, localPort routing.Port, err error)
 	// DialWithOptions asks the server to dial req.Addr with the per-call
 	// options req carries — mux route counts, min-hops (symmetric and

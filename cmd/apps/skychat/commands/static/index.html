@@ -205,6 +205,7 @@
       "Enter a name first.": "请先输入名称。",
       "Remove this contact from your address book?\n\nThe conversation and its messages are kept.": "要从通讯录中移除此联系人吗？\n\n会话及其消息将会保留。",
       "Contact removed.": "联系人已移除。",
+      "Could not save the contact to the visor contact book.": "无法将联系人保存到节点通讯录。",
       "Choose a contact": "选择联系人",
       "Address book": "通讯录",
       "Already saved": "已保存",
@@ -821,6 +822,7 @@
       "Enter a name first.": "Primero escribe un nombre.",
       "Remove this contact from your address book?\n\nThe conversation and its messages are kept.": "¿Quitar este contacto de tu agenda?\n\nLa conversación y sus mensajes se conservan.",
       "Contact removed.": "Contacto eliminado de la agenda.",
+      "Could not save the contact to the visor contact book.": "No se pudo guardar el contacto en la agenda del nodo.",
       "Choose a contact": "Elige un contacto",
       "Address book": "Agenda",
       "Already saved": "Ya guardado",
@@ -1437,6 +1439,7 @@
       "Enter a name first.": "Saisissez d’abord un nom.",
       "Remove this contact from your address book?\n\nThe conversation and its messages are kept.": "Retirer ce contact de votre carnet d’adresses ?\n\nLa conversation et ses messages sont conservés.",
       "Contact removed.": "Contact retiré.",
+      "Could not save the contact to the visor contact book.": "Impossible d’enregistrer le contact dans le carnet d’adresses du visor.",
       "Choose a contact": "Choisir un contact",
       "Address book": "Carnet d’adresses",
       "Already saved": "Déjà enregistré",
@@ -6876,6 +6879,9 @@
         // display path already reads — keeps working untouched: a contact is
         // a name plus a deliberate "keep this person".
         this.contacts = this._loadContacts();
+        // True once the list comes from the visor contact book; see
+        // _syncContacts. Standalone it stays false and the list stays local.
+        this.contactsInBook = false;
         // 'browse' (a row opens the chat) or 'pick' (a row goes back to the
         // add-by-address dialog). See openContacts.
         this._contactMode = 'browse';
@@ -11408,6 +11414,7 @@
           }
         }
         this._repaintNames();
+        await this._syncContacts();
       }
 
       // _legacyNames reads the pre-server address book, if this browser still
@@ -11524,9 +11531,53 @@
       // exist. Adding a parallel record with its own copy of the name is
       // how the two would end up disagreeing.
       //
-      // Entirely local. Nothing here is sent anywhere, and a name set here
+      // The list of keys is the visor contact book (GET /contacts/book), the
+      // same one the hypervisor's Contacts page edits, so a contact saved in
+      // either shows in both. Only a skychat with no visor keeps the list in
+      // localStorage. Nothing here is sent to a peer, and a name set here
       // always beats a name a peer publishes for themselves — a label the
       // user chose must not be replaceable by the person it labels.
+
+      // _syncContacts reads the visor book and moves this browser's older
+      // local list into it, fill-the-gaps only, as _syncNames does for names.
+      async _syncContacts() {
+        let book;
+        try {
+          const r = await fetch('/contacts/book');
+          if (!r.ok) return;
+          book = await r.json();
+        } catch (e) {
+          return;
+        }
+        if (!book || !book.available) { this.contactsInBook = false; return; }
+        let local = this._loadContacts();
+        if (local.length) {
+          try {
+            const r = await fetch('/contacts/book/import', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ pks: local }),
+            });
+            if (r.ok) {
+              localStorage.removeItem('skychat_contacts');
+              local = [];
+              const back = await fetch('/contacts/book');
+              if (back.ok) book = await back.json();
+            }
+          } catch (e) {
+            // Keep the local list, shown beside the book, for the next attempt.
+          }
+        }
+        const names = (book && book.contacts) || {};
+        this.contactsInBook = true;
+        this.contacts = [...new Set([...Object.keys(names).map(k => k.toLowerCase()), ...local])];
+        // The book's name shows where there is no nickname.
+        Object.keys(names).forEach(k => {
+          const pk = k.toLowerCase();
+          if (names[k] && !this.names[pk]) { this.names[pk] = names[k]; this._paintPeerLabel(pk); }
+        });
+        this.renderContacts();
+        this._updateContactButton();
+      }
 
       _loadContacts() {
         try {
@@ -11568,7 +11619,15 @@
         }
         if (!this.contacts.includes(key)) {
           this.contacts.push(key);
-          this._saveContacts();
+          if (this.contactsInBook) {
+            fetch('/contacts/book', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ pk: key, name: this.peerName(key) }),
+            }).then(r => { if (!r.ok) this.showToast(t('Could not save the contact to the visor contact book.'), 'error'); })
+              .catch(() => this.showToast(t('Could not save the contact to the visor contact book.'), 'error'));
+          } else {
+            this._saveContacts();
+          }
         }
         this.renderContacts();
         return true;
@@ -11580,7 +11639,11 @@
         if (!this.isContact(key)) return;
         if (!confirm(t('Remove this contact from your address book?\n\nThe conversation and its messages are kept.'))) return;
         this.contacts = this.contacts.filter(v => v !== key);
-        this._saveContacts();
+        if (this.contactsInBook) {
+          fetch(`/contacts/book?pk=${encodeURIComponent(key)}`, { method: 'DELETE' }).catch(() => {});
+        } else {
+          this._saveContacts();
+        }
         // A name lets a peer past approval too, so both go with the contact.
         if (this.peerName(key)) this.setPeerName(key, '');
         this._unaccept(key);
@@ -11631,6 +11694,8 @@
         const search = document.getElementById('contactSearch');
         if (search) search.value = '';
         this.renderContacts();
+        // A contact added on the hypervisor since the page loaded shows on open.
+        this._syncContacts();
         document.getElementById('contactsModal').classList.add('visible');
         if (search) setTimeout(() => search.focus(), 50);
       }

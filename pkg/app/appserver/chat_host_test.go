@@ -20,6 +20,12 @@ func (h fakeChatHost) ChatUnpark() ([]ParkedChat, error) {
 
 func (h fakeChatHost) ChatAck([]ParkedRef) error { return nil }
 
+func (h fakeChatHost) ChatContactSave(pk cipher.PubKey, _ string) (bool, error) {
+	return pk == h.pk, nil
+}
+
+func (h fakeChatHost) ChatContactForget(cipher.PubKey) error { return nil }
+
 // TestChatHostGateway checks the chat calls reach the visor's ChatHost only
 // for the app it serves them to.
 func TestChatHostGateway(t *testing.T) {
@@ -44,6 +50,12 @@ func TestChatHostGateway(t *testing.T) {
 	require.Len(t, parked, 1)
 	refs := []ParkedRef{{Host: pk, ID: "1"}}
 	require.NoError(t, chat.ChatAck(&refs, &struct{}{}))
+	var added bool
+	require.NoError(t, chat.ChatContactSave(&ChatContactSaveReq{PK: pk, Name: "n"}, &added))
+	require.True(t, added)
+	require.NoError(t, chat.ChatContactForget(&pk, &struct{}{}))
+	require.ErrorIs(t, mail.ChatContactSave(&ChatContactSaveReq{PK: pk, Name: "n"}, &added), ErrNoChatHost, "another app may not edit the contact book")
+	require.ErrorIs(t, mail.ChatContactForget(&pk, &struct{}{}), ErrNoChatHost)
 
 	require.ErrorIs(t, mail.ChatUnpark(&struct{}{}, &parked), ErrNoChatHost, "another app may not take the visor's chat messages")
 	require.ErrorIs(t, mail.ChatPark(&ChatParkReq{Rcpt: pk}, &host), ErrNoChatHost)

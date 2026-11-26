@@ -505,3 +505,14 @@ func (c *Client) ChatUnpark() ([]appserver.ParkedChat, error) {
 func (c *Client) ChatAck(refs []appserver.ParkedRef) error {
 	return c.rpcC.ChatAck(refs)
 }
+
+// ChatContactSave puts pk in the visor contact book under name, unless a
+// contact already holds it. added reports whether the book changed.
+func (c *Client) ChatContactSave(pk cipher.PubKey, name string) (added bool, err error) {
+	return c.rpcC.ChatContactSave(pk, name)
+}
+
+// ChatContactForget takes pk off the visor contact book.
+func (c *Client) ChatContactForget(pk cipher.PubKey) error {
+	return c.rpcC.ChatContactForget(pk)
+}
