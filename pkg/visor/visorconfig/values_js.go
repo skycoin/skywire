@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
@@ -47,8 +48,10 @@ type Survey struct {
 	// IPAddr mirrors the native Survey's field so IP-enrichment code (the
 	// survey CLI command) compiles unsplit; on js it is set from the same
 	// dmsg-based IP lookup when one succeeds.
-	IPAddr      string   `json:"ip_address,omitempty"`
-	DmsgServers []string `json:"dmsg_servers,omitempty"`
+	IPAddr string `json:"ip_address,omitempty"`
+	// IPProof is the dmsg server's signed answer that IPAddr came from.
+	IPProof     *dmsg.IPProof `json:"ip_proof,omitempty"`
+	DmsgServers []string      `json:"dmsg_servers,omitempty"`
 }
 
 // SystemSurvey returns an empty Survey on js — no hardware probes.

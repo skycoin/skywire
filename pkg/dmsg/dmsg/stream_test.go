@@ -261,6 +261,33 @@ func TestLookupIP(t *testing.T) {
 			require.Equal(t, net.ParseIP("::1"), ip)
 		}
 
+		proofIP, proof, err := dmsgC.LookupIPProof(context.Background(), srvs)
+		require.NoError(t, err)
+		claim, err := proof.Verify()
+		require.NoError(t, err)
+		require.Equal(t, proofIP, claim.IP)
+		require.Equal(t, pkA, claim.Client)
+		require.Equal(t, pkSrvA, claim.Server)
+		require.WithinDuration(t, time.Now(), claim.Time, time.Minute)
+
+		tampered := IPProof{Request: proof.Request, Response: append(SignedObject{}, proof.Response...)}
+		tampered.Response[len(tampered.Response)-1] ^= 1
+		_, err = tampered.Verify()
+		require.Error(t, err, "a changed response must not verify")
+
+		_, other, err := dmsgC.LookupIPProof(context.Background(), srvs)
+		require.NoError(t, err)
+		_, err = IPProof{Request: other.Request, Response: proof.Response}.Verify()
+		require.ErrorIs(t, err, ErrDialRespInvalidHash, "a response must answer its own request")
+
+		resp, err := proof.Response.ObtainStreamResponse()
+		require.NoError(t, err)
+		resp.Timestamp = 0
+		undated, err := MakeSignedStreamResponse(&resp, skSrvB)
+		require.NoError(t, err)
+		_, err = IPProof{Request: proof.Request, Response: undated}.Verify()
+		require.ErrorIs(t, err, ErrIPProofUndated, "an old server's answer cannot be dated")
+
 		// Ensure all entities are deregistered in discovery before continuing.
 		time.Sleep(time.Second * 2)
 	})

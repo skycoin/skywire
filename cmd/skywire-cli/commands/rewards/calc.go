@@ -33,6 +33,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	deprewards "github.com/skycoin/skywire/pkg/deployment/rewards"
 	tpdstore "github.com/skycoin/skywire/pkg/deployment/tpd/store"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/geoip"
 	"github.com/skycoin/skywire/pkg/logging"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
@@ -162,6 +163,7 @@ type surveyData struct {
 		Address string `json:"address"`
 	} `json:"ip_addr"`
 	Services json.RawMessage `json:"services"`
+	IPProof  *dmsg.IPProof   `json:"ip_proof"`
 }
 
 // parseSurvey reads and parses a node-info.json file into structured data.
@@ -378,6 +380,55 @@ func addressReason(err error) string {
 		return "Reward address has sent coins"
 	}
 	return "Invalid Skycoin address"
+}
+
+// ipProofMaxAge is how long before the reward day an IP proof may be dated.
+// The visor refreshes its survey every 24 h.
+const ipProofMaxAge = 48 * time.Hour
+
+// ipProofServerKnown says whether a dmsg server is one of the deployment's.
+var ipProofServerKnown = deployment.Prod.KnownDmsgServer
+
+var (
+	errIPProofMissing       = errors.New("IP not signed by a dmsg server")
+	errIPProofOtherKey      = errors.New("IP proof is for another visor")
+	errIPProofUnknownServer = errors.New("IP proof from a non deployment dmsg server")
+	errIPProofStale         = errors.New("IP proof too old")
+)
+
+// attestedIP returns the IP that a deployment dmsg server signed for visor pk
+// no earlier than ipProofMaxAge before reward day t.
+func attestedIP(proof *dmsg.IPProof, pk string, t time.Time) (string, error) {
+	if proof == nil {
+		return "", errIPProofMissing
+	}
+	claim, err := proof.Verify()
+	if err != nil {
+		return "", fmt.Errorf("IP proof does not verify: %w", err)
+	}
+	if claim.Client.Hex() != pk {
+		return "", errIPProofOtherKey
+	}
+	if !ipProofServerKnown(claim.Server) {
+		return "", errIPProofUnknownServer
+	}
+	if claim.Time.Before(t.Add(-ipProofMaxAge)) {
+		return "", errIPProofStale
+	}
+	return claim.IP.String(), nil
+}
+
+// surveyIP is the IP a visor is counted at for reward day t: the signed one
+// when the proof holds, else from the reward day IPProofCutoff no IP at all.
+func surveyIP(s *surveyData, pk string, t time.Time) (string, error) {
+	ip, err := attestedIP(s.IPProof, pk, t)
+	if err == nil {
+		return ip, nil
+	}
+	if t.Before(deprewards.IPProofCutoff) {
+		return s.IPAddr, nil
+	}
+	return "", err
 }
 
 // calcPresenceShare computes a visor's share after IP cap and MAC dedup.
@@ -1029,7 +1080,7 @@ func calcRewards(o rewardOpts) *rewardResult {
 		svcconf := checkServiceConfig(surveyPath, sConf, dConf)
 		ifc, macs := extractInterfaces(survey)
 
-		ip := survey.IPAddr
+		ip, ipErr := surveyIP(survey, pk, wDate)
 		sky := survey.SkyAddr
 		arch := survey.Arch
 		hv := survey.SysInfo.Node.Hypervisor
@@ -1059,13 +1110,15 @@ func calcRewards(o rewardOpts) *rewardResult {
 			Bandwidth:  visorBW,
 		}
 
-		baseEligible := archAllowed && strings.Count(ip, ".") == 3 && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" && hv == "null" && addrErr == nil && meetsTransportReq
+		baseEligible := archAllowed && ipErr == nil && strings.Count(ip, ".") == 3 && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" && hv == "null" && addrErr == nil && meetsTransportReq
 
 		if !baseEligible {
 			ni.Reason = func() string {
 				switch {
 				case !archAllowed:
 					return arch
+				case ipErr != nil:
+					return ipErr.Error()
 				case strings.Count(ip, ".") != 3:
 					return ip
 				case uu == "":

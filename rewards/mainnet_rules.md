@@ -307,6 +307,8 @@ For example, if 9 visors at a given ip address meet the minimum uptime requireme
 
 For calc dates in June 2026 only, the cap was temporarily 12 shares.
 
+The ip address is the one a deployment dmsg server saw the visor connect from. The server signs it, and the visor puts the signed answer in its survey as `ip_proof`. From the reward day 2026-12-15, a visor whose survey has no valid `ip_proof` is not eligible. The proof must be for the visor's own key, from a dmsg server in the deployment, and no more than 48 hours older than the reward day. Before that date the ip address in the survey is used when there is no valid proof.
+
 ### Regional Saturation Scaling
 
 To incentivize geographic diversity of the skywire network, a regional saturation scaling factor is applied to each visor's presence share. The factor is a per-visor multiplier (not a country-pot allocation) and depends only on the number of unique IP addresses in the visor's country.

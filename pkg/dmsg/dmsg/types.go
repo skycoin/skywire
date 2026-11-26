@@ -337,6 +337,9 @@ type StreamResponse struct {
 	GeoLon     float64 // longitude
 	ErrCode    errorCode
 	NoiseMsg   []byte
+	// Timestamp is the server's clock in Unix nanoseconds when it answered an
+	// IP request, so an IPProof cannot be replayed later. Older servers send 0.
+	Timestamp int64
 
 	raw SignedObject `enc:"-"` // back reference.
 }
