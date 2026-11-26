@@ -1026,7 +1026,10 @@ func (i *Index) delRootRelatedValues(rootHash cipher.SHA256) (err error) {
 		return
 	}
 
-	return i.c.walkRoot(pack, r, walkFunc)
+	// One transaction for every decrement, rather than one commit each.
+	return i.c.Cache.WithBatch(func() error {
+		return i.c.walkRoot(pack, r, walkFunc)
+	})
 }
 
 // DelRoot deletes Root. The method returns data.ErrNotFound if
