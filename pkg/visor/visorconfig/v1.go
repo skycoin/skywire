@@ -161,6 +161,11 @@ type Skychat struct {
 	// disk. Zero means 1000, negative keeps whole feeds in memory. Browser
 	// visors have no disk store and keep everything regardless.
 	GroupMemoryMessages int `json:"group_memory_messages,omitempty"`
+
+	// GroupHistoryMessages is how many messages of each group the history
+	// store keeps before it drops the oldest. Zero means 5000, negative keeps
+	// every message.
+	GroupHistoryMessages int `json:"group_history_messages,omitempty"`
 }
 
 // CoinNodeConfig describes one fibercoin node this visor exposes over dmsg
