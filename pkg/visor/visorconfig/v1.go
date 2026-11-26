@@ -155,6 +155,12 @@ type Skychat struct {
 	// aware overrides (rate-limit disabled, larger per-group cap).
 	// A future config knob may expose the limits directly.
 	GroupHistoryDB string `json:"group_history_db,omitempty"`
+
+	// GroupMemoryMessages is how many messages of each group feed stay in
+	// memory; the rest of the history is read back from the CXO store on
+	// disk. Zero means 1000, negative keeps whole feeds in memory. Browser
+	// visors have no disk store and keep everything regardless.
+	GroupMemoryMessages int `json:"group_memory_messages,omitempty"`
 }
 
 // CoinNodeConfig describes one fibercoin node this visor exposes over dmsg

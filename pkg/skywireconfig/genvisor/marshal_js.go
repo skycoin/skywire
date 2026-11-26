@@ -1249,6 +1249,10 @@ func marshalSkychat(w *strings.Builder, s *visorconfig.Skychat, indent int) {
 		o.field("group_history_db")
 		writeQuoted(w, s.GroupHistoryDB)
 	}
+	if s.GroupMemoryMessages != 0 {
+		o.field("group_memory_messages")
+		writeInt(w, int64(s.GroupMemoryMessages))
+	}
 	o.close()
 }
 

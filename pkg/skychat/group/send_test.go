@@ -81,7 +81,7 @@ func TestPublishAs_PublicLeafSignedOnFeed(t *testing.T) {
 		t.Fatalf("publishAs: %v", err)
 	}
 	// First publish -> seq 1; path is deterministic from (pk, ts, seq).
-	path := fmt.Sprintf("%s/%s/%d/%d", MessagePathPrefix, s.cfg.MyPK.Hex(), ts.UnixNano(), 1)
+	path := messagePath(s.cfg.MyPK, ts, 1)
 	body := pubReadable(t, s.pub, path)
 
 	var m Message
@@ -113,7 +113,7 @@ func TestPublishAs_PrivateEncryptsLeaf(t *testing.T) {
 	}
 
 	// The stored leaf is ciphertext, not plaintext.
-	path := fmt.Sprintf("%s/%s/%d/%d", MessagePathPrefix, s.cfg.MyPK.Hex(), ts.UnixNano(), 1)
+	path := messagePath(s.cfg.MyPK, ts, 1)
 	body := pubReadable(t, s.pub, path)
 	if bytesContains(body, "secret") {
 		t.Error("private-mode leaf must not contain the plaintext body")
@@ -146,7 +146,7 @@ func TestPublishAs_HeartbeatNotDelivered(t *testing.T) {
 		t.Errorf("heartbeat should not be delivered to the handler, got %+v", msgs)
 	}
 	// But the leaf IS written to the feed (members observe it for liveness).
-	path := fmt.Sprintf("%s/%s/%d/%d", MessagePathPrefix, s.cfg.MyPK.Hex(), ts.UnixNano(), 1)
+	path := heartbeatPath(s.cfg.MyPK)
 	if _, ok := s.pub.Get(path); !ok {
 		// pubReadable would fatal; a direct Get with a short poll is enough
 		// since publishAs above already returned.
@@ -160,7 +160,7 @@ func TestSessionUnsend(t *testing.T) {
 	if err := s.publishAs(s.cfg.MyPK, "delete me", ts); err != nil {
 		t.Fatalf("publishAs: %v", err)
 	}
-	path := fmt.Sprintf("%s/%s/%d/%d", MessagePathPrefix, s.cfg.MyPK.Hex(), ts.UnixNano(), 1)
+	path := messagePath(s.cfg.MyPK, ts, 1)
 	_ = pubReadable(t, s.pub, path) // ensure it landed
 
 	if err := s.Unsend(ts.UnixNano()); err != nil {
@@ -182,4 +182,85 @@ func bytesContains(b []byte, sub string) bool {
 		}
 	}
 	return false
+}
+
+func TestPublishAs_DayLayoutAndOneHeartbeatLeaf(t *testing.T) {
+	s, _ := ownerSendSession(t, ModePublic, nil)
+	day1 := time.Date(2026, 3, 31, 23, 59, 0, 0, time.UTC)
+	day2 := time.Date(2026, 4, 1, 0, 1, 0, 0, time.UTC)
+	for _, ts := range []time.Time{day1, day2} {
+		if err := s.publishAs(s.cfg.MyPK, "hello", ts); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for range 3 {
+		if err := s.publishAs(s.cfg.MyPK, HeartbeatMarker, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := map[string]bool{
+		fmt.Sprintf("msgs/%s/202603/31/%d/1", s.cfg.MyPK.Hex(), day1.UnixNano()): true,
+		fmt.Sprintf("msgs/%s/202604/01/%d/2", s.cfg.MyPK.Hex(), day2.UnixNano()): true,
+		heartbeatPath(s.cfg.MyPK): true,
+	}
+	for p := range want {
+		_ = pubReadable(t, s.pub, p)
+	}
+	n := 0
+	s.pub.Walk(MessagePathPrefix, func(path string, _ []byte) bool {
+		if !want[path] {
+			t.Errorf("unexpected leaf %s", path)
+		}
+		n++
+		return true
+	})
+	if n != len(want) {
+		t.Fatalf("feed holds %d message leaves, want %d", n, len(want))
+	}
+}
+
+// A message an older build published under msgs/<pk>/<ts>/<seq> can still
+// be unsent.
+func TestSessionUnsend_LegacyLayout(t *testing.T) {
+	s, _ := ownerSendSession(t, ModePublic, nil)
+	ts := time.Unix(1700000000, 0).UTC()
+	legacy := fmt.Sprintf("%s/%s/%d/%d", MessagePathPrefix, s.cfg.MyPK.Hex(), ts.UnixNano(), 7)
+	if err := s.pub.Put(legacy, []byte(`{}`)); err != nil {
+		t.Fatal(err)
+	}
+	_ = pubReadable(t, s.pub, legacy)
+	if err := s.Unsend(ts.UnixNano()); err != nil {
+		t.Fatalf("Unsend: %v", err)
+	}
+	if _, ok := s.pub.Get(legacy); ok {
+		t.Error("Unsend left the legacy-layout leaf")
+	}
+}
+
+// Replay keeps only the newest messages, counts a message reachable on two
+// paths once, and skips heartbeats.
+func TestReplayHistoryThrough_NewestOnly(t *testing.T) {
+	s, _ := ownerSendSession(t, ModePublic, nil)
+	ts0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for i := range 50 {
+		if err := s.publishAs(s.cfg.MyPK, fmt.Sprintf("m%d", i), ts0.Add(time.Duration(i)*time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.publishAs(s.cfg.MyPK, HeartbeatMarker, ts0.Add(time.Duration(i)*time.Hour+time.Minute)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	last := messagePath(s.cfg.MyPK, ts0.Add(49*time.Hour), 99)
+	_ = pubReadable(t, s.pub, last)
+	got := &sendCapture{}
+	s.ReplayHistoryThrough(got.deliver, 10)
+	msgs := got.all()
+	if len(msgs) != 10 {
+		t.Fatalf("replayed %d, want 10", len(msgs))
+	}
+	for i, m := range msgs {
+		if want := fmt.Sprintf("m%d", 40+i); m.Text != want {
+			t.Fatalf("replay[%d] = %q, want %q", i, m.Text, want)
+		}
+	}
 }
