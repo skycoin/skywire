@@ -99,11 +99,18 @@ type Subscriber struct {
 	ownsNode bool // when true, Close releases the node; false = caller owns
 	feedPK   cipher.PubKey
 
-	mu       sync.RWMutex
-	cache    map[string][]byte
-	prefixes []string // declared filter; empty = match all
-	callback UpdateCallback
-	onChange func()
+	mu    sync.RWMutex
+	cache map[string][]byte
+	// storeBacked keeps no cache: base is the last applied Root, read from
+	// the store (see subscriber_stored.go). Guarded by mu.
+	storeBacked bool
+	base        *registry.Root
+	// storedApplyMu orders handleRootFilledStored, so two fills of the feed
+	// never diff from the same base.
+	storedApplyMu sync.Mutex
+	prefixes      []string // declared filter; empty = match all
+	callback      UpdateCallback
+	onChange      func()
 	// filled is set once a whole Root has been filled and walked. fillErr is
 	// the last fill or walk failure since then. Both are guarded by mu.
 	filled    bool
@@ -235,6 +242,11 @@ type SubConfig struct {
 	// Dial, when set, is how Connect reaches the publisher instead of a
 	// plain dmsg dial (cxotransport.DMSGFactory.Dial).
 	Dial func(ctx context.Context, addr dmsg.Addr) (net.Conn, error)
+
+	// StoreBacked keeps no copy of the feed in memory. Each Root is diffed
+	// against the last applied one in the store, and Get and Walk read the
+	// store. The node must keep at least two Roots of the feed.
+	StoreBacked bool
 }
 
 // NewSubscriber creates a Subscriber that will receive updates from
@@ -375,6 +387,11 @@ func NewSubscriberOnNode(cxoNode *node.Node, feedPK cipher.PubKey, conf SubConfi
 		feedPK:             feedPK,
 		cache:              make(map[string][]byte),
 		rootObservedSignal: make(chan struct{}),
+	}
+	if conf.StoreBacked {
+		s.storeBacked = true
+		s.cache = nil
+		s.storedBaseLoad()
 	}
 	// SwapOnRootFilled / SwapOnFillingBreaks are atomic under
 	// callbackMu, so a re-attach (Close then NewSubscriberOnNode)
@@ -693,6 +710,15 @@ func (s *Subscriber) SetPrefixes(prefixes []string) {
 // the path is not present in the cache, or if a prefix filter is
 // active and path doesn't match any declared prefix.
 func (s *Subscriber) Get(path string) ([]byte, bool) {
+	if s.storeBacked {
+		s.mu.RLock()
+		match := s.matchesPrefixLocked(path)
+		s.mu.RUnlock()
+		if !match {
+			return nil, false
+		}
+		return s.getStored(path)
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if !s.matchesPrefixLocked(path) {
@@ -713,6 +739,10 @@ func (s *Subscriber) Get(path string) ([]byte, bool) {
 // Visitation order is unspecified (cache map iteration); callers
 // that need sorted output should accumulate and sort.
 func (s *Subscriber) Walk(prefix string, fn func(path string, value []byte) bool) {
+	if s.storeBacked {
+		s.walkStoredPrefix(prefix, fn)
+		return
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for path, value := range s.cache {
@@ -734,6 +764,10 @@ func (s *Subscriber) Walk(prefix string, fn func(path string, value []byte) bool
 // which are never modified in place, so fn may keep them but must not write
 // to them.
 func (s *Subscriber) WalkShared(prefix string, fn func(path string, value []byte) bool) {
+	if s.storeBacked {
+		s.walkStoredPrefix(prefix, fn)
+		return
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for path, value := range s.cache {
@@ -754,6 +788,18 @@ func (s *Subscriber) WalkShared(prefix string, fn func(path string, value []byte
 // total means the publisher's Root really was empty (or only filling
 // reached this subscriber before the inspection ran).
 func (s *Subscriber) CacheSizeAndSampleKeys(maxSample int) (int, []string) {
+	if s.storeBacked {
+		size := 0
+		var out []string
+		s.walkStoredPrefix("", func(path string, _ []byte) bool {
+			if size < maxSample {
+				out = append(out, path)
+			}
+			size++
+			return true
+		})
+		return size, out
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	size := len(s.cache)
@@ -894,6 +940,10 @@ func (s *Subscriber) matchesPrefixLocked(path string) bool {
 // place so the next subscriber in the chain still receives the
 // Root (it'll do its own match check).
 func (s *Subscriber) handleRootFilled(r *registry.Root) {
+	if s.storeBacked {
+		s.handleRootFilledStored(r)
+		return
+	}
 	if r == nil || len(r.Refs) == 0 {
 		// Root with no payload — could happen on startup before
 		// the publisher has put anything. Treat as empty AND
@@ -1102,7 +1152,11 @@ func (s *Subscriber) handleFillingBreaks(r *registry.Root, err error) {
 	// tolerating unfetched objects, and MERGE whatever leaves landed into the
 	// cache. This is the subscriber-side analog of the aggregator's
 	// recoverTransportListOnBreak (pkg/deployment/tpd/cxoaggregator).
-	s.recoverPartialFill(r)
+	// A store-backed subscriber has no cache to merge into; the next whole
+	// fill reports everything since the last applied Root.
+	if !s.storeBacked {
+		s.recoverPartialFill(r)
+	}
 	// Proactive recovery (the follow-up this hook's comment anticipated):
 	// ask the watchdog to re-Connect so the publisher re-pushes the Root and
 	// the fill retries, instead of waiting out the quiet threshold (~90s).

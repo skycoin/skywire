@@ -40,6 +40,10 @@ func (p *Publisher) recoverRoot(r *registry.Root) {
 		return
 	default:
 	}
+	if p.memoryEntries > 0 {
+		p.recoverFolded(r)
+		return
+	}
 	incoming, err := p.treeOf(r)
 	if err != nil {
 		p.log.WithError(err).Warn("treestore-pub: cannot read a newer Root of this feed")
