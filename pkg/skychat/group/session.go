@@ -1698,6 +1698,12 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) ([]cipher.PubKey, error)
 	return evicted, nil
 }
 
+// peerSubDialDelay holds back the first dial to a newly added peer. A member
+// admitted by its own join request opens its session and dials us right after
+// the answer, and when our dial overlapped it in CI both connects waited out
+// the full timeout. Started later, ours reuses the member's conn.
+const peerSubDialDelay = 5 * time.Second
+
 // peerSubsDial connects each new peer subscriber on its own goroutine, so an
 // unreachable member costs the caller and every peerSubsMu reader nothing.
 func (s *Session) peerSubsDial(added map[cipher.PubKey]*treestore.Subscriber, caller string) {
@@ -1707,6 +1713,17 @@ func (s *Session) peerSubsDial(added map[cipher.PubKey]*treestore.Subscriber, ca
 	}
 	for pk, ps := range added {
 		go func() {
+			select {
+			case <-parent.Done():
+				return
+			case <-time.After(peerSubDialDelay):
+			}
+			s.peerSubsMu.RLock()
+			current := s.peerSubs[pk] == ps
+			s.peerSubsMu.RUnlock()
+			if !current {
+				return
+			}
 			ctx, cancel := context.WithTimeout(parent, reconnectAttemptTimeout)
 			defer cancel()
 			if err := s.connectSub(ctx, ps, pk); err != nil {
@@ -1716,7 +1733,7 @@ func (s *Session) peerSubsDial(added map[cipher.PubKey]*treestore.Subscriber, ca
 			}
 			s.peerSubsMu.RLock()
 			a := s.peerLastInboundNs[pk]
-			current := s.peerSubs[pk] == ps
+			current = s.peerSubs[pk] == ps
 			s.peerSubsMu.RUnlock()
 			if current && a != nil {
 				a.Store(time.Now().UnixNano())
