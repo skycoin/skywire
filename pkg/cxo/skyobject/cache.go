@@ -150,6 +150,11 @@ type Cache struct {
 	// Cache; nil outside a WithBatch, so it costs nothing off the publish
 	// path. See WithBatch and recordBatchWrite.
 	batchRec map[cipher.SHA256]struct{}
+
+	// batchMu lets one WithBatch run at a time. Two at once would each pin a
+	// tx and wait on the other: the second holds c.mx while it waits for the
+	// writer the first owns, and the first needs c.mx to go on.
+	batchMu sync.Mutex
 }
 
 // initialize the Cache
@@ -257,9 +262,11 @@ func (c *Cache) db() data.CXDS {
 // CachedKeys up front for this reason), so the wait always ends.
 //
 // fn must not retain the pinned handle past its return — the tx is
-// gone afterward. WithBatch is not reentrant (step 1 would deadlock
-// against itself); it has a single caller, treestore.publishRoot.
+// gone afterward. WithBatch is not reentrant (batchMu and step 1 would
+// deadlock against themselves). Concurrent callers take turns on batchMu.
 func (c *Cache) WithBatch(fn func() error) error {
+	c.batchMu.Lock()
+	defer c.batchMu.Unlock()
 	// (1) Claim the Cache before the writer. RunBatch invokes fn
 	// synchronously on this goroutine, so this plain bool needs no
 	// synchronization of its own.
