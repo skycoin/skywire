@@ -56,7 +56,7 @@ func (hv *Hypervisor) ui2VPNServers() http.HandlerFunc {
 		}
 		var all []ui2.ServerRow
 		if hv.tpvizServer == nil {
-			p.Err = "service discovery view not available on this hypervisor"
+			p.Err = hv.ui2T(r, "ui2.errors.no-service-discovery")
 		} else {
 			r2 := innerReq(r)
 			r2.URL.Path, r2.URL.RawQuery = "/api/services", "type="+want

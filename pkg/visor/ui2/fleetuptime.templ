@@ -30,7 +30,7 @@ templ FleetUptimeBody(f FleetUptime) {
 					if d == 1 {
 						{ T(ctx, "uptime.window-now") }
 					} else {
-						{ strconv.Itoa(d) }d
+						{ T(ctx, "ui2.days-short", "n", strconv.Itoa(d)) }
 					}
 				</button>
 			}

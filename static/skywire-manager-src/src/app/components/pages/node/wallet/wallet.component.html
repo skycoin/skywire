@@ -30,9 +30,9 @@
           <span class="spacer"></span>
           <button mat-stroked-button (click)="toggleBackend()"
                   [class.settings-toggle-open]="backendOpen"
-                  matTooltip="Configure the coin node this wallet uses (over dmsg)">
+                  [matTooltip]="'wallet.node-tooltip' | translate">
             <mat-icon [inline]="true">{{ backendOpen ? 'expand_less' : 'dns' }}</mat-icon>
-            Node
+            {{ 'wallet.node' | translate }}
           </button>
           <button mat-raised-button color="primary" class="wallet-fullscreen" (click)="openWallet()">
             <mat-icon [inline]="true">account_balance_wallet</mat-icon>

@@ -12,6 +12,12 @@
 // to its parent; the wallet reads the keys per request, so nothing needs reloading.
 package browseui
 
+import (
+	"encoding/json"
+	"html"
+	"regexp"
+)
+
 // WalletConfigHTML is the standalone wallet-config page, served at
 // wallet/config by the hypervisor (native, and the tab's). Keys, read by the
 // wallet's interceptor + the BTC gateway:
@@ -35,6 +41,9 @@ package browseui
 // id -2), exactly like every other coin. The interceptor reads it from there
 // (falling back to the legacy skywire-btc-backend key, then a public default),
 // so this panel only owns the skysocks exit the visor routes that egress through.
+//
+// Its text is [[key]] (HTML escaped), [[html:key]] (markup) or [[js:key]] (a
+// JS string) for ui2.wallet-config.<key>, filled in by WalletConfigPage.
 const WalletConfigHTML = `<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
@@ -60,32 +69,32 @@ button.rm{background:transparent;color:#9aa0a6;border:0;cursor:pointer;font:inhe
 .plog{display:none;margin:.2em 0 0;height:130px;overflow:auto;background:#0e0c14;color:#a9b1d6;border:1px solid #2a2342;border-radius:5px;padding:.55em;font:11px/1.5 monospace;white-space:pre-wrap;word-break:break-all}
 .plog.on{display:block}
 </style></head><body><div class="wrap">
-<h1>Wallet storage</h1>
+<h1>[[title]]</h1>
 <div class="modes">
-<button id="mb" title="Keys + wallet files stay in this browser. The host never sees them.">Browser</button>
-<button id="md" style="display:none" title="Wallet files on this host's filesystem, served by the visor's skycoin-web backend. The host holds the keys.">This host (disk)</button>
-<button id="ms" title="Point at another visor's skycoin-web server over dmsg.">Remote</button>
+<button id="mb" title="[[browser-help]]">[[browser]]</button>
+<button id="md" style="display:none" title="[[disk-help]]">[[disk]]</button>
+<button id="ms" title="[[remote-help]]">[[remote]]</button>
 </div>
 <div id="browser">
-<div class="hint">Wallets are created + stored in <b>this browser</b>. Each coin's <b>node</b> — including <b>Bitcoin's</b> <span class="mono">ssl://</span> electrum server — is set in the wallet's own <b>Settings → Nodes</b> (per coin: a mesh node <span class="mono">http://&lt;name&gt;.&lt;base32-pk&gt;.dmsg</span> or a clearnet URL). This panel keeps only the <b>skysocks exit</b> the visor routes that clearnet traffic through.</div>
+<div class="hint">[[html:browser-hint]]</div>
 <div class="sec">
-<div class="hint"><b>Skysocks exit</b> <span id="proxyreq"></span>: the visor PK whose skysocks-server relays the clearnet connection — the BTC electrum egress AND the iframe browser share this exit. <span id="proxynote"></span></div>
-<div class="row"><label>proxy</label><input id="proxy" spellcheck="false" placeholder="skysocks exit PK (66 hex) — blank = auto"><button class="add" id="prun" title="pick from skysocks-client-lite instances already running in this visor">running ▾</button><button class="add" id="psrv" title="list skysocks-server PKs from service discovery">servers ▾</button><button class="add" id="prnd" title="pick a random skysocks server from service discovery">🎲 random</button></div>
+<div class="hint">[[html:exit-hint]]</div>
+<div class="row"><label>[[proxy]]</label><input id="proxy" spellcheck="false" placeholder="[[proxy-placeholder]]"><button class="add" id="prun" title="[[running-help]]">[[running]] ▾</button><button class="add" id="psrv" title="[[servers-help]]">[[servers]] ▾</button><button class="add" id="prnd" title="[[random-help]]">🎲 [[random]]</button></div>
 <div class="row" id="pselrow" style="display:none"><label></label><select id="psel"></select></div>
-<pre id="plog" class="plog" title="live: resolving proxy (dmsg) + skysocks-lite (clearnet)"></pre>
+<pre id="plog" class="plog" title="[[log-help]]"></pre>
 </div>
 </div>
 <div id="disk" style="display:none">
-<div class="hint" style="color:#ffb454"><b>⚠ This flips the trust model.</b> With disk storage the wallet files live on <b>this host's filesystem</b> and the visor's skycoin-web backend holds your keys — unlike Browser, where keys never leave your browser. Only use disk on a machine you control.</div>
-<div class="row"><label>dir</label><input id="dir" spellcheck="false" placeholder="~/.skycoin/wallets (seed-wallet store — one dir, many seed files)"></div>
-<div class="hint">A <b>seed-wallet store</b>: one directory holding N seed files, <i>not</i> one dir per coin (a bip44 seed already spans several chains). Empty = the backend default.</div>
+<div class="hint" style="color:#ffb454">[[html:disk-warning]]</div>
+<div class="row"><label>[[dir]]</label><input id="dir" spellcheck="false" placeholder="[[dir-placeholder]]"></div>
+<div class="hint">[[html:dir-hint]]</div>
 </div>
 <div id="service" style="display:none">
-<div class="hint">Point at a remote <b>skycoin-web server</b> over dmsg. Wallets live on that server; all wallet + node API route to it.</div>
-<div class="row"><label>service</label><input id="svc" spellcheck="false" placeholder="03d1d78e…:8002"></div>
+<div class="hint">[[html:service-hint]]</div>
+<div class="row"><label>[[service]]</label><input id="svc" spellcheck="false" placeholder="03d1d78e…:8002"></div>
 </div>
 <div id="err" class="err"></div>
-<button class="apply" id="apply">Apply</button>
+<button class="apply" id="apply">[[apply]]</button>
 </div>
 <script>(function(){
 var K={mode:"skywire-wallet-mode",nodes:"skywire-coin-nodes",prim:"skywire-coin-node",svc:"skywire-wallet-service",proxy:"skywire-btc-proxy",dir:"skywire-wallet-dir"};
@@ -101,8 +110,8 @@ var isWasm=/[?&]wasm=1/.test(location.search);
 // see WalletCustodyOptions in visorconfig).
 var diskCapable=/[?&]disk=1/.test(location.search);
 if(diskCapable)$("md").style.display="";
-$("proxyreq").textContent=isWasm?"(required)":"(optional)";
-$("proxynote").textContent=isWasm?"The browser can't reach the clearnet itself, so this is required for BTC.":"Empty = this visor does the egress itself (self). Set one to route BTC through another visor for IP privacy.";
+$("proxyreq").textContent=isWasm?[[js:required]]:[[js:optional]];
+$("proxynote").textContent=isWasm?[[js:exit-required-note]]:[[js:exit-optional-note]];
 var mode=ls(K.mode,"browser");
 if(mode==="disk"&&!diskCapable)mode="browser"; // clamp a disk config opened in a non-disk context
 function setMode(m){mode=m;
@@ -116,30 +125,30 @@ $("mb").onclick=function(){setMode("browser");};$("md").onclick=function(){setMo
 function visor(){try{return parent&&parent.skywireVisor;}catch(e){return null;}}
 var plogBuf=[];
 function plog(s){var t="";try{t=new Date().toTimeString().slice(0,8);}catch(e){}plogBuf.push(t+"  "+s);if(plogBuf.length>300)plogBuf.shift();var el=$("plog");if(el){el.classList.add("on");el.textContent=plogBuf.join("\n");el.scrollTop=el.scrollHeight;}}
-try{var LG=parent&&parent.skywireLog;if(LG&&LG.subscribe){LG.subscribe(function(lvl,args){var m=[].map.call(args||[],String).join(" ");if(/\[wallet\]|skysocks|resolve-proxy|electrum|dmsg:\/\//i.test(m))plog(m.slice(0,220));});plog("● attached to visor log");}}catch(e){}
-function fetchProxies(cb){var v=visor();if(!v||!v.fetchDmsg){plog("● no in-tab visor here — open the wallet in the browser-tab (wasm) visor to list servers");return;}
-plog("● fetching skysocks servers from service discovery…");
+try{var LG=parent&&parent.skywireLog;if(LG&&LG.subscribe){LG.subscribe(function(lvl,args){var m=[].map.call(args||[],String).join(" ");if(/\[wallet\]|skysocks|resolve-proxy|electrum|dmsg:\/\//i.test(m))plog(m.slice(0,220));});plog("● "+[[js:log-attached]]);}}catch(e){}
+function fetchProxies(cb){var v=visor();if(!v||!v.fetchDmsg){plog("● "+[[js:log-no-visor]]);return;}
+plog("● "+[[js:log-fetching]]);
 Promise.resolve(v.fetchDmsg("sd.dmsg","GET","/api/services?type=proxy",null)).then(function(r){
 var list=[];try{list=JSON.parse((r&&typeof r.body==="string")?r.body:new TextDecoder().decode(r.body))||[];}catch(e){}
 cb(list.filter(function(s){return /^[0-9a-f]{66}$/i.test(String(s.address||"").split(":")[0]);}));
-}).catch(function(e){plog("● SD fetch failed: "+String((e&&e.message)||e));});}
+}).catch(function(e){plog("● "+[[js:log-fetch-failed]]+" "+String((e&&e.message)||e));});}
 $("psrv").onclick=function(){fetchProxies(function(list){
-var sel=$("psel");sel.innerHTML='<option value="">— '+list.length+' skysocks servers — pick one —</option>';
+var sel=$("psel");sel.innerHTML="";sel.appendChild(new Option("— "+[[js:pick-server]].replace("{{ n }}",list.length)+" —",""));
 list.forEach(function(s){var pk=String(s.address).split(":")[0];var geo=(s.geo&&s.geo.country)?" · "+s.geo.country:"";var o=document.createElement("option");o.value=pk;o.textContent=pk.slice(0,8)+"…"+geo+(s.version?" · "+s.version:"");sel.appendChild(o);});
-$("pselrow").style.display="";plog("● "+list.length+" skysocks server(s) from SD — pick one to set the exit");});};
-$("prun").onclick=function(){var v=visor();if(!v||!v.proxyInstances){plog("● open the wallet in the browser-tab (wasm) visor to list running instances");return;}
+$("pselrow").style.display="";plog("● "+[[js:log-servers]].replace("{{ n }}",list.length));});};
+$("prun").onclick=function(){var v=visor();if(!v||!v.proxyInstances){plog("● "+[[js:log-no-visor-running]]);return;}
 Promise.resolve(v.proxyInstances()).then(function(s){var list=[];try{list=JSON.parse(s)||[];}catch(e){}
 list=list.filter(function(p){return p.exit;});
-if(!list.length){plog("● no running skysocks-client-lite instances yet (auto-select still warming up)");return;}
-var sel=$("psel");sel.innerHTML='<option value="">— '+list.length+' running instance(s) — pick one —</option>';
+if(!list.length){plog("● "+[[js:log-none-running]]);return;}
+var sel=$("psel");sel.innerHTML="";sel.appendChild(new Option("— "+[[js:pick-running]].replace("{{ n }}",list.length)+" —",""));
 list.forEach(function(p){var o=document.createElement("option");o.value=p.exit;o.textContent=(p.label||p.name)+" · "+p.exit.slice(0,8)+"…";sel.appendChild(o);});
-$("pselrow").style.display="";plog("● "+list.length+" running instance(s) — pick one to bind the exit");}).catch(function(e){plog("● proxyInstances failed: "+String((e&&e.message)||e));});};
-$("prnd").onclick=function(){fetchProxies(function(list){if(!list.length){plog("● no skysocks servers found");return;}
+$("pselrow").style.display="";plog("● "+[[js:log-running]].replace("{{ n }}",list.length));}).catch(function(e){plog("● "+[[js:log-running-failed]]+" "+String((e&&e.message)||e));});};
+$("prnd").onclick=function(){fetchProxies(function(list){if(!list.length){plog("● "+[[js:log-no-servers]]);return;}
 var s=list[Math.floor(Math.random()*list.length)];var pk=String(s.address).split(":")[0];
-$("proxy").value=pk;plog("● 🎲 random exit → "+pk.slice(0,8)+"…"+((s.geo&&s.geo.country)?" · "+s.geo.country:"")+" (Apply to save)");});};
-$("psel").onchange=function(){if(this.value){$("proxy").value=this.value;plog("● exit set → "+this.value.slice(0,8)+"… (Apply to save)");}};
+$("proxy").value=pk;plog("● 🎲 "+[[js:log-random]]+" → "+pk.slice(0,8)+"…"+((s.geo&&s.geo.country)?" · "+s.geo.country:"")+" ("+[[js:apply-to-save]]+")");});};
+$("psel").onchange=function(){if(this.value){$("proxy").value=this.value;plog("● "+[[js:log-exit-set]]+" → "+this.value.slice(0,8)+"… ("+[[js:apply-to-save]]+")");}};
 $("apply").onclick=function(){var e=$("err");e.style.display="none";e.textContent="";
-if(mode==="service"){var s=($("svc").value||"").trim();if(!s){e.textContent="Enter the wallet service address.";e.style.display="";return;}
+if(mode==="service"){var s=($("svc").value||"").trim();if(!s){e.textContent=[[js:service-required]];e.style.display="";return;}
 set(K.mode,"service");set(K.svc,s);set(K.prim,s);}
 else if(mode==="disk"){set(K.mode,"disk");set(K.dir,($("dir").value||"").trim());}
 else{set(K.mode,"browser");
@@ -150,3 +159,22 @@ var pxy=($("proxy").value||"").trim();set(K.proxy,pxy);set("skywire-upstream-pro
 try{parent.postMessage({type:"skywire-wallet-config"},"*");}catch(_){}
 };
 })();</script></body></html>`
+
+var walletConfigKeyRE = regexp.MustCompile(`\[\[(?:(html|js):)?([a-z-]+)\]\]`)
+
+// WalletConfigPage is WalletConfigHTML with its text translated by tr, which
+// maps a ui2.wallet-config.<key> translation key to the page language.
+func WalletConfigPage(tr func(key string) string) string {
+	return walletConfigKeyRE.ReplaceAllStringFunc(WalletConfigHTML, func(m string) string {
+		sub := walletConfigKeyRE.FindStringSubmatch(m)
+		s := tr("ui2.wallet-config." + sub[2])
+		switch sub[1] {
+		case "html":
+			return s
+		case "js":
+			b, _ := json.Marshal(s) //nolint:errcheck
+			return string(b)
+		}
+		return html.EscapeString(s)
+	})
+}

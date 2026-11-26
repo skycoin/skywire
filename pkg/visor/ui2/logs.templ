@@ -10,7 +10,13 @@ templ LogsPage(l Logs) {
 				<span class="dim">{ T(ctx, "logs.filter") }</span>
 				<select name="level">
 					for _, lv := range LogLevels {
-						<option value={ strconv.Itoa(int(lv.Level)) } selected?={ lv.Level == l.Filter.MinLevel }>{ lv.Label }</option>
+						<option value={ strconv.Itoa(int(lv.Level)) } selected?={ lv.Level == l.Filter.MinLevel }>
+							if lv.Level == LevelUnknown {
+								{ T(ctx, "logs.all") }
+							} else {
+								{ lv.Label }
+							}
+						</option>
 					}
 				</select>
 			</label>

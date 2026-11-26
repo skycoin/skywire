@@ -100,7 +100,7 @@ templ NetViewBody(v NetView) {
 		@ErrorBox(v.Err)
 		<div class="bar small">
 			<span>{ itoa(v.Total) } { T(ctx, "common.visors") }</span>
-			<span class="ok">{ itoa(v.Online) } online</span>
+			<span class="ok">{ itoa(v.Online) } { T(ctx, "uptime.online") }</span>
 			<span class="error">{ itoa(v.Offline) } { T(ctx, "network-view.legend.offline") }</span>
 			<span class="dim">{ itoa(v.NotInUT) } { T(ctx, "network-view.legend.not-in-ut") }</span>
 			<span class="warn-text">{ T(ctx, "network-view.legend.low-transports") }</span>

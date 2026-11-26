@@ -117,7 +117,7 @@ templ RewardHistoryView(h RewardHistory) {
 			<span class="spacer"></span>
 			<span class="seg">
 				for _, d := range []int{7, 30, 90} {
-					<button class={ "btn sm", templ.KV("primary", h.Days == d) } hx-get={ VisorURL(h.PK, "rewards/history?days="+strconv.Itoa(d)) } hx-target="#reward-history" hx-swap="outerHTML">{ strconv.Itoa(d) }d</button>
+					<button class={ "btn sm", templ.KV("primary", h.Days == d) } hx-get={ VisorURL(h.PK, "rewards/history?days="+strconv.Itoa(d)) } hx-target="#reward-history" hx-swap="outerHTML">{ T(ctx, "ui2.days-short", "n", strconv.Itoa(d)) }</button>
 				}
 			</span>
 		</div>
@@ -126,7 +126,7 @@ templ RewardHistoryView(h RewardHistory) {
 			<p class="dim">{ T(ctx, "ui2.rewards.none") }</p>
 		}
 		if len(h.List) > 0 {
-			<p class="ok"><strong>{ T(ctx, "ui2.rewards.total", "total", fmt.Sprintf("%.2f", h.Total)) }</strong> <span class="dim small">({ strconv.Itoa(h.Days) }d)</span></p>
+			<p class="ok"><strong>{ T(ctx, "ui2.rewards.total", "total", fmt.Sprintf("%.2f", h.Total)) }</strong> <span class="dim small">({ T(ctx, "ui2.days-short", "n", strconv.Itoa(h.Days)) })</span></p>
 			<table class="list">
 				<thead>
 					<tr>

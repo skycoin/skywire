@@ -41,7 +41,7 @@ func (hv *Hypervisor) ui2NetView(body bool) http.HandlerFunc {
 			v.Fetched = resp.FetchedAt.Local().Format(time.TimeOnly)
 		}
 		if err != nil {
-			v.Err = err.Error()
+			v.Err = hv.ui2ErrorText(r, err)
 		}
 		if body {
 			hv.render(w, r, ui2.NetViewBody(v))

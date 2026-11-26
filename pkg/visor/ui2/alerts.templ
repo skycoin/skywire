@@ -104,7 +104,7 @@ templ AlertsPanel(a Alerts) {
 							if r.Err != "" {
 								<span class="error">{ r.Err }</span>
 							} else {
-								<span class="ok">OK</span>
+								<span class="ok">{ T(ctx, "ui2.alerts.result-ok") }</span>
 							}
 						</li>
 					}

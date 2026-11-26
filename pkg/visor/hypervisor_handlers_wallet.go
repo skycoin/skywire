@@ -144,7 +144,15 @@ func (hv *Hypervisor) walletHandler() http.HandlerFunc {
 			}
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Header().Set("Cache-Control", "no-cache")
-			_, _ = w.Write([]byte(browseui.WalletConfigHTML)) //nolint:errcheck
+			ctx := hv.ui2Ctx(r)
+			if lang := r.URL.Query().Get("lang"); lang != "" {
+				// The Angular tab names its language, which has no cookie.
+				p := *ui2.From(ctx)
+				p.Lang = ui2.PickLang(lang, p.Lang)
+				ctx = ui2.With(ctx, p, ui2Catalog())
+			}
+			page := browseui.WalletConfigPage(func(key string) string { return ui2.T(ctx, key) })
+			_, _ = w.Write([]byte(page)) //nolint:errcheck
 		case rest == "coins":
 			// Coin registry → the list skycoin-web's coin.service fetches as
 			// /api/v1/coins. Each coin's nodeUrl is a /coin/<index> prefix proxied

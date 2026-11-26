@@ -134,7 +134,13 @@
       "offline": "Offline",
       "offline-tooltip": "The visor is offline.",
       "stale": "Offline (stale)",
-      "stale-tooltip": "The visor is offline; showing last-known data."
+      "stale-tooltip": "The visor is offline; showing last-known data.",
+      "reconnecting": "Reconnecting",
+      "reconnecting-tooltip": "The link to the visor dropped, but the visor still answers the hypervisor.",
+      "restarting": "Restarting",
+      "restarting-tooltip": "The visor said it is restarting.",
+      "detached": "Detached",
+      "detached-tooltip": "The visor removed this hypervisor. It can be forgotten."
     },
     "overview": {
       "health": "Health",
@@ -722,7 +728,9 @@
         "data-dir-hint": "Daemon data directory. Empty leaves the launcher's default in place.",
         "api-sets": "--enable-gui-api-sets"
       }
-    }
+    },
+    "node": "Node",
+    "node-tooltip": "Configure the coin node this wallet uses (over dmsg)"
   },
   "contacts": {
     "title": "Contacts",
@@ -814,7 +822,8 @@
     "helpers-have": "helpers have it",
     "parked": "parked",
     "parked-for": "Parked on the inbox hosts of:",
-    "save": "Save"
+    "save": "Save",
+    "cc": "Cc"
   },
   "web-proxy": {
     "title": "Resolving Proxy",
@@ -841,7 +850,8 @@
     "resume": "Resume",
     "open-raw": "Open raw logs",
     "view-rest": "View all {{number}} entries in raw format >",
-    "dropped": "Skipped {{count}} older entries that aged out of the visor's runtime buffer."
+    "dropped": "Skipped {{count}} older entries that aged out of the visor's runtime buffer.",
+    "all": "All"
   },
   "bandwidth": {
     "loading": "Reading local transport stats…",
@@ -1970,7 +1980,9 @@
       "no-logs": "No log lines in the last 24 hours."
     },
     "routing": {
-      "count": "Count"
+      "count": "Count",
+      "initiator": "initiator",
+      "responder": "responder"
     },
     "transports": {
       "throughput": "Throughput",
@@ -1978,6 +1990,75 @@
       "remove-all-confirm": "Remove every transport of this visor? Persistent ones may be created again shortly."
     },
     "route-viz": "Route visualizer",
+    "alerts": {
+      "title": "Offline alerts",
+      "help": "This visor tells you when a visor it watches goes offline and when it is back. Saved at once, no restart.",
+      "emails": "Email addresses",
+      "emails-help": "Comma separated. Empty turns mail alerts off.",
+      "delay": "Offline delay",
+      "delay-help": "How long a visor must stay offline before you are told. Longer ignores brief outages.",
+      "webhook": "Webhook",
+      "webhook-help": "Optional URL that gets a JSON POST for each alert.",
+      "from": "Sender address",
+      "from-help": "Optional. Default skywire-alerts at this host, or the relay login.",
+      "relay": "Send through an SMTP relay",
+      "host": "Host",
+      "port": "Port",
+      "username": "Username",
+      "password": "Password",
+      "password-keep": "Leave empty to keep the saved password",
+      "starttls": "Require STARTTLS",
+      "test": "Send test",
+      "saved": "Alert settings saved.",
+      "watched": "{{ n }} visors watched, {{ off }} offline",
+      "push": "Push notifications",
+      "push-help": "Alerts on this phone or computer as system notifications, even with this page closed. No mail setup needed.",
+      "push-add": "Notify this device",
+      "push-again": "Subscribe this device again",
+      "push-busy": "Subscribing…",
+      "push-added": "This device gets push alerts now. Use Send test to try it.",
+      "push-this": "this device",
+      "push-ios": "On iPhone and iPad, first add this page to the Home Screen (Share, then Add to Home Screen), open it from there and press Notify this device again. Needs iOS 16.4 or later.",
+      "push-insecure": "Push needs a secure page, and this one is not. Open the UI at http://localhost (for example through an SSH tunnel) or over https on this device.",
+      "push-unsupported": "This browser does not support push notifications.",
+      "push-blocked": "Notifications are blocked for this page. Allow them in the browser settings and try again.",
+      "push-none": "No device gets push alerts.",
+      "remove": "Remove",
+      "bad-email": "\"{{ v }}\" is not an email address",
+      "bad-webhook": "The webhook must be an http or https URL",
+      "bad-from": "The sender must be an email address",
+      "bad-host": "The relay needs a host",
+      "bad-port": "The relay port must be a number up to 65535",
+      "unavailable": "A visor running in a browser tab cannot watch other visors.",
+      "result-ok": "OK"
+    },
+    "skynet": {
+      "ports-title": "Forwarded ports",
+      "no-ports": "No ports forwarded.",
+      "port": "Port",
+      "local-port": "Local port",
+      "target": "Target (host:port)",
+      "label": "Label",
+      "description": "Description",
+      "skynet": "Skynet",
+      "dmsg": "DMSG",
+      "landing": "Landing",
+      "whitelist": "Whitelist",
+      "whitelist-help": "Public keys allowed to reach this port, separated by commas or spaces. Empty allows every peer.",
+      "everyone": "everyone",
+      "add": "Forward a port",
+      "remove": "Remove",
+      "remove-confirm": "Stop forwarding this port?",
+      "proxy-title": "Reverse proxy",
+      "no-proxies": "No active reverse proxies.",
+      "network": "Network",
+      "remote-pk": "Remote public key",
+      "remote-port": "Remote port",
+      "connect": "Connect",
+      "disconnect": "Disconnect",
+      "bad-port": "Enter a valid port (1-65535).",
+      "bad-pk": "Invalid public key: {{ pk }}"
+    },
     "refresh-rate": "Refresh rate",
     "refresh-help": "How often the visor list updates.",
     "wallet": {
@@ -1998,7 +2079,8 @@
     "dmsg": {
       "role-main": "Main visor",
       "role-route_setup": "Route Setup Node",
-      "role-transport_setup": "Transport Setup Node"
+      "role-transport_setup": "Transport Setup Node",
+      "bad-count": "The count must be 0 or more."
     },
     "rewards": {
       "history": "Reward History",
@@ -2046,7 +2128,74 @@
     "routing-rules-info": "Rules in this visor's routing table. Each route uses a few, at the ends and at every hop it passes.",
     "route-groups": "Route groups",
     "nodes": {
-      "shown": "{{ n }} of {{ total }}"
+      "shown": "{{ n }} of {{ total }}",
+      "dev": "dev"
+    },
+    "days-short": "{{ n }}d",
+    "chat": {
+      "delete": "Delete",
+      "delete-confirm": "Delete this message?",
+      "reply": "Reply",
+      "pending": "pending",
+      "pending-help": "Waiting for an admin to approve your request",
+      "declined": "declined",
+      "declined-help": "An admin declined your request",
+      "public": "public",
+      "private": "private",
+      "owner": "owner",
+      "member": "member"
+    },
+    "errors": {
+      "visor-unavailable": "Visor unavailable.",
+      "visor-timeout": "The visor did not answer in time.",
+      "no-service-discovery": "The service discovery view is not available on this hypervisor."
+    },
+    "wallet-config": {
+      "title": "Wallet storage",
+      "browser": "Browser",
+      "browser-help": "Keys + wallet files stay in this browser. The host never sees them.",
+      "disk": "This host (disk)",
+      "disk-help": "Wallet files on this host's filesystem, served by the visor's skycoin-web backend. The host holds the keys.",
+      "remote": "Remote",
+      "remote-help": "Point at another visor's skycoin-web server over dmsg.",
+      "browser-hint": "Wallets are created + stored in <b>this browser</b>. Each coin's <b>node</b> — including <b>Bitcoin's</b> <span class=\"mono\">ssl://</span> electrum server — is set in the wallet's own <b>Settings → Nodes</b> (per coin: a mesh node <span class=\"mono\">http://&lt;name&gt;.&lt;base32-pk&gt;.dmsg</span> or a clearnet URL). This panel keeps only the <b>skysocks exit</b> the visor routes that clearnet traffic through.",
+      "exit-hint": "<b>Skysocks exit</b> <span id=\"proxyreq\"></span>: the visor PK whose skysocks-server relays the clearnet connection — the BTC electrum egress AND the iframe browser share this exit. <span id=\"proxynote\"></span>",
+      "required": "(required)",
+      "optional": "(optional)",
+      "exit-required-note": "The browser can't reach the clearnet itself, so this is required for BTC.",
+      "exit-optional-note": "Empty = this visor does the egress itself (self). Set one to route BTC through another visor for IP privacy.",
+      "proxy": "proxy",
+      "proxy-placeholder": "skysocks exit PK (66 hex) — blank = auto",
+      "running": "running",
+      "running-help": "pick from skysocks-client-lite instances already running in this visor",
+      "servers": "servers",
+      "servers-help": "list skysocks-server PKs from service discovery",
+      "random": "random",
+      "random-help": "pick a random skysocks server from service discovery",
+      "log-help": "live: resolving proxy (dmsg) + skysocks-lite (clearnet)",
+      "disk-warning": "<b>⚠ This flips the trust model.</b> With disk storage the wallet files live on <b>this host's filesystem</b> and the visor's skycoin-web backend holds your keys — unlike Browser, where keys never leave your browser. Only use disk on a machine you control.",
+      "dir": "dir",
+      "dir-placeholder": "~/.skycoin/wallets (seed-wallet store — one dir, many seed files)",
+      "dir-hint": "A <b>seed-wallet store</b>: one directory holding N seed files, <i>not</i> one dir per coin (a bip44 seed already spans several chains). Empty = the backend default.",
+      "service-hint": "Point at a remote <b>skycoin-web server</b> over dmsg. Wallets live on that server; all wallet + node API route to it.",
+      "service": "service",
+      "service-required": "Enter the wallet service address.",
+      "apply": "Apply",
+      "apply-to-save": "Apply to save",
+      "pick-server": "{{ n }} skysocks servers — pick one",
+      "pick-running": "{{ n }} running instance(s) — pick one",
+      "log-attached": "attached to visor log",
+      "log-no-visor": "no in-tab visor here — open the wallet in the browser-tab (wasm) visor to list servers",
+      "log-no-visor-running": "open the wallet in the browser-tab (wasm) visor to list running instances",
+      "log-fetching": "fetching skysocks servers from service discovery…",
+      "log-fetch-failed": "SD fetch failed:",
+      "log-servers": "{{ n }} skysocks server(s) from SD — pick one to set the exit",
+      "log-none-running": "no running skysocks-client-lite instances yet (auto-select still warming up)",
+      "log-running": "{{ n }} running instance(s) — pick one to bind the exit",
+      "log-running-failed": "listing running instances failed:",
+      "log-no-servers": "no skysocks servers found",
+      "log-random": "random exit",
+      "log-exit-set": "exit set"
     }
   }
 }

@@ -134,7 +134,13 @@
       "offline": "离线",
       "offline-tooltip": "节点离线。",
       "stale": "离线（过期）",
-      "stale-tooltip": "节点离线；显示最后已知的数据。"
+      "stale-tooltip": "节点离线；显示最后已知的数据。",
+      "reconnecting": "重新连接中",
+      "reconnecting-tooltip": "与节点的连接已断开，但节点仍在响应 Hypervisor。",
+      "restarting": "重启中",
+      "restarting-tooltip": "节点表示正在重启。",
+      "detached": "已分离",
+      "detached-tooltip": "节点已移除此 Hypervisor，可以将其忘记。"
     },
     "overview": {
       "health": "健康状况",
@@ -722,7 +728,9 @@
         "data-dir-hint": "守护进程数据目录。留空则保留启动器的默认值。",
         "api-sets": "--enable-gui-api-sets"
       }
-    }
+    },
+    "node": "节点",
+    "node-tooltip": "配置此钱包使用的币节点（通过 dmsg）"
   },
   "contacts": {
     "title": "联系人",
@@ -814,7 +822,8 @@
     "helpers-have": "个协助节点持有",
     "parked": "已寄存",
     "parked-for": "已寄存在以下节点的收件主机上：",
-    "save": "保存"
+    "save": "保存",
+    "cc": "抄送"
   },
   "web-proxy": {
     "title": "解析代理",
@@ -841,7 +850,8 @@
     "resume": "继续",
     "open-raw": "打开原始日志",
     "view-rest": "以原始格式查看全部 {{number}} 条记录 >",
-    "dropped": "已跳过 {{count}} 条较早的记录，它们已超出节点运行缓冲区的保留时间。"
+    "dropped": "已跳过 {{count}} 条较早的记录，它们已超出节点运行缓冲区的保留时间。",
+    "all": "全部"
   },
   "bandwidth": {
     "loading": "正在读取本地传输统计…",
@@ -1970,7 +1980,9 @@
       "no-logs": "过去 24 小时内没有日志。"
     },
     "routing": {
-      "count": "数量"
+      "count": "数量",
+      "initiator": "发起方",
+      "responder": "响应方"
     },
     "transports": {
       "throughput": "吞吐量",
@@ -1978,6 +1990,75 @@
       "remove-all-confirm": "移除此 Visor 的所有传输？持久传输可能很快会被重新创建。"
     },
     "route-viz": "路由可视化",
+    "alerts": {
+      "title": "离线警报",
+      "help": "当本节点监视的节点离线或恢复时通知您。设置立即保存，无需重启。",
+      "emails": "电子邮件地址",
+      "emails-help": "以逗号分隔。留空则关闭邮件警报。",
+      "delay": "离线延迟",
+      "delay-help": "节点需要离线多久才通知您。时间越长，越能忽略短暂的中断。",
+      "webhook": "Webhook",
+      "webhook-help": "可选。每条警报都会向该 URL 发送一个 JSON POST 请求。",
+      "from": "发件人地址",
+      "from-help": "可选。默认为本主机上的 skywire-alerts，或中继的登录名。",
+      "relay": "通过 SMTP 中继发送",
+      "host": "主机",
+      "port": "端口",
+      "username": "用户名",
+      "password": "密码",
+      "password-keep": "留空以保留已保存的密码",
+      "starttls": "要求 STARTTLS",
+      "test": "发送测试",
+      "saved": "警报设置已保存。",
+      "watched": "正在监视 {{ n }} 个节点，{{ off }} 个离线",
+      "push": "推送通知",
+      "push-help": "即使关闭此页面，也会在这台手机或电脑上以系统通知的形式显示警报。无需设置邮件。",
+      "push-add": "通知此设备",
+      "push-again": "重新订阅此设备",
+      "push-busy": "正在订阅…",
+      "push-added": "此设备现在会收到推送警报。点击“发送测试”试一试。",
+      "push-this": "此设备",
+      "push-ios": "在 iPhone 和 iPad 上，请先将此页面添加到主屏幕（点击共享，然后选择“添加到主屏幕”），从主屏幕打开后再次点击“通知此设备”。需要 iOS 16.4 或更高版本。",
+      "push-insecure": "推送需要安全的页面，而此页面不是。请通过 http://localhost（例如经由 SSH 隧道）或在此设备上通过 https 打开界面。",
+      "push-unsupported": "此浏览器不支持推送通知。",
+      "push-blocked": "此页面的通知已被阻止。请在浏览器设置中允许通知后重试。",
+      "push-none": "没有设备接收推送警报。",
+      "remove": "移除",
+      "bad-email": "\"{{ v }}\" 不是有效的电子邮件地址",
+      "bad-webhook": "Webhook 必须是 http 或 https URL",
+      "bad-from": "发件人必须是电子邮件地址",
+      "bad-host": "中继需要填写主机",
+      "bad-port": "中继端口必须是不超过 65535 的数字",
+      "unavailable": "在浏览器标签页中运行的节点无法监视其他节点。",
+      "result-ok": "成功"
+    },
+    "skynet": {
+      "ports-title": "转发的端口",
+      "no-ports": "没有转发的端口。",
+      "port": "端口",
+      "local-port": "本地端口",
+      "target": "目标（主机:端口）",
+      "label": "标签",
+      "description": "描述",
+      "skynet": "Skynet",
+      "dmsg": "DMSG",
+      "landing": "着陆页",
+      "whitelist": "白名单",
+      "whitelist-help": "允许访问此端口的公钥，以逗号或空格分隔。留空则允许所有节点。",
+      "everyone": "所有人",
+      "add": "转发端口",
+      "remove": "移除",
+      "remove-confirm": "停止转发此端口？",
+      "proxy-title": "反向代理",
+      "no-proxies": "没有活动的反向代理。",
+      "network": "网络",
+      "remote-pk": "远程公钥",
+      "remote-port": "远程端口",
+      "connect": "连接",
+      "disconnect": "断开连接",
+      "bad-port": "请输入有效的端口（1-65535）。",
+      "bad-pk": "无效的公钥：{{ pk }}"
+    },
     "refresh-rate": "刷新频率",
     "refresh-help": "节点列表的刷新频率。",
     "wallet": {
@@ -1998,7 +2079,8 @@
     "dmsg": {
       "role-main": "主 Visor",
       "role-route_setup": "路由设置节点",
-      "role-transport_setup": "传输设置节点"
+      "role-transport_setup": "传输设置节点",
+      "bad-count": "数量不能小于 0。"
     },
     "rewards": {
       "history": "奖励历史",
@@ -2046,7 +2128,74 @@
     "routing-rules-info": "此 Visor 路由表中的规则。每条路由在两端及经过的每一跳各使用若干条规则。",
     "route-groups": "路由组",
     "nodes": {
-      "shown": "{{ total }} 中的 {{ n }}"
+      "shown": "{{ total }} 中的 {{ n }}",
+      "dev": "开发版"
+    },
+    "days-short": "{{ n }}天",
+    "chat": {
+      "delete": "删除",
+      "delete-confirm": "删除这条消息？",
+      "reply": "回复",
+      "pending": "待批准",
+      "pending-help": "正在等待管理员批准您的请求",
+      "declined": "已拒绝",
+      "declined-help": "管理员拒绝了您的请求",
+      "public": "公开",
+      "private": "私密",
+      "owner": "所有者",
+      "member": "成员"
+    },
+    "errors": {
+      "visor-unavailable": "节点不可用。",
+      "visor-timeout": "节点未及时响应。",
+      "no-service-discovery": "此 Hypervisor 上无法查看服务发现。"
+    },
+    "wallet-config": {
+      "title": "钱包存储",
+      "browser": "浏览器",
+      "browser-help": "密钥和钱包文件保存在此浏览器中，主机永远看不到它们。",
+      "disk": "本主机（磁盘）",
+      "disk-help": "钱包文件保存在本主机的文件系统上，由节点的 skycoin-web 后端提供。主机持有密钥。",
+      "remote": "远程",
+      "remote-help": "通过 dmsg 指向另一个节点的 skycoin-web 服务器。",
+      "browser-hint": "钱包在<b>此浏览器</b>中创建和保存。每种币的<b>节点</b>（包括<b>比特币</b>的 <span class=\"mono\">ssl://</span> electrum 服务器）都在钱包自身的<b>设置 → 节点</b>中设置（每种币可以是网状网络节点 <span class=\"mono\">http://&lt;name&gt;.&lt;base32-pk&gt;.dmsg</span>，也可以是公网 URL）。此面板只保存节点用于转发公网流量的 <b>skysocks 出口</b>。",
+      "exit-hint": "<b>Skysocks 出口</b> <span id=\"proxyreq\"></span>：由其 skysocks-server 中继公网连接的节点公钥。BTC electrum 出站流量和内嵌浏览器共用此出口。<span id=\"proxynote\"></span>",
+      "required": "（必填）",
+      "optional": "（可选）",
+      "exit-required-note": "浏览器自身无法访问公网，因此 BTC 必须设置此项。",
+      "exit-optional-note": "留空 = 由本节点自己出站（self）。设置后可经由另一个节点转发 BTC 流量，以保护 IP 隐私。",
+      "proxy": "代理",
+      "proxy-placeholder": "skysocks 出口公钥（66 位十六进制）— 留空 = 自动",
+      "running": "运行中",
+      "running-help": "从此节点中已运行的 skysocks-client-lite 实例中选择",
+      "servers": "服务器",
+      "servers-help": "列出服务发现中的 skysocks-server 公钥",
+      "random": "随机",
+      "random-help": "从服务发现中随机选择一个 skysocks 服务器",
+      "log-help": "实时：解析代理（dmsg）+ skysocks-lite（公网）",
+      "disk-warning": "<b>⚠ 这会改变信任模型。</b>使用磁盘存储时，钱包文件位于<b>本主机的文件系统</b>上，并由节点的 skycoin-web 后端持有您的密钥；而使用浏览器存储时，密钥永远不会离开您的浏览器。请只在您自己控制的机器上使用磁盘存储。",
+      "dir": "目录",
+      "dir-placeholder": "~/.skycoin/wallets（种子钱包存储：一个目录，多个种子文件）",
+      "dir-hint": "<b>种子钱包存储</b>：一个目录中保存 N 个种子文件，<i>而不是</i>每种币一个目录（一个 bip44 种子本身就涵盖多条链）。留空 = 后端默认值。",
+      "service-hint": "通过 dmsg 指向远程 <b>skycoin-web 服务器</b>。钱包保存在该服务器上，所有钱包和节点 API 都会转发到它。",
+      "service": "服务",
+      "service-required": "请输入钱包服务地址。",
+      "apply": "应用",
+      "apply-to-save": "点击应用以保存",
+      "pick-server": "{{ n }} 个 skysocks 服务器，请选择一个",
+      "pick-running": "{{ n }} 个运行中的实例，请选择一个",
+      "log-attached": "已连接到节点日志",
+      "log-no-visor": "此处没有标签页内节点。请在浏览器标签页（wasm）节点中打开钱包以列出服务器",
+      "log-no-visor-running": "请在浏览器标签页（wasm）节点中打开钱包以列出运行中的实例",
+      "log-fetching": "正在从服务发现获取 skysocks 服务器…",
+      "log-fetch-failed": "服务发现获取失败：",
+      "log-servers": "从服务发现获取到 {{ n }} 个 skysocks 服务器，请选择一个作为出口",
+      "log-none-running": "尚无运行中的 skysocks-client-lite 实例（自动选择仍在预热）",
+      "log-running": "{{ n }} 个运行中的实例，请选择一个绑定出口",
+      "log-running-failed": "列出运行中的实例失败：",
+      "log-no-servers": "未找到 skysocks 服务器",
+      "log-random": "随机出口",
+      "log-exit-set": "出口已设置"
     }
   }
 }
