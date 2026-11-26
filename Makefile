@@ -749,7 +749,7 @@ dep-github-release:
 build-docker: ## Build docker image (alias for docker-build)
 	bash ./docker/docker_build.sh prod "" $(BUILD_ARCH)
 
-.PHONY: check-ui check-onpush check-scss-imports bundle-wasm check-bundle-wasm
+.PHONY: check-ui check-onpush check-scss-imports check-template-literals check-lang-zh bundle-wasm check-bundle-wasm
 
 # Manager UI
 install-deps-ui:  ## Install the UI dependencies
@@ -816,6 +816,12 @@ check-dead-api-fields: ## Fail if a json-tagged API field is never assigned (alw
 
 check-onpush:  ## Fail if an OnPush component has an unmarked asynchronous callback
 	node ci-scripts/check-onpush-marks.js $(MANAGER_UI_DIR)/src
+
+check-template-literals:  ## Fail if a component template gains English text that skips the translate pipe
+	node ci-scripts/check-template-literals.js $(MANAGER_UI_DIR)/src
+
+check-lang-zh:  ## Fail if the Chinese translation of the manager UI is missing an English key
+	cd $(MANAGER_UI_DIR)/src/assets/i18n && node check.js zh
 
 check-scss-imports:  ## Fail if a stylesheet other than styles.scss uses @import (the build silences that deprecation for Bootstrap 5 there)
 	@bad=$$(grep -rnE '^[[:space:]]*@import' $(MANAGER_UI_DIR)/src --include='*.scss' --exclude-dir=skycoin-wallet | grep -vE '\.css["'\'']|url\(' | grep -v '^$(MANAGER_UI_DIR)/src/styles.scss:'); \

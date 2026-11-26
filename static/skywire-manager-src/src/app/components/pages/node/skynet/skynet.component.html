@@ -2,9 +2,9 @@
 
   <!-- Forwarded Ports -->
   <div class="section">
-    <h4 class="section-title">Forwarded Ports</h4>
+    <h4 class="section-title">{{ 'skynet.ports-title' | translate }}</h4>
     <p class="section-desc">
-      Expose local TCP ports over skynet and/or DMSG.
+      {{ 'skynet.ports-desc' | translate }}
     </p>
 
     @if (portsLoading) {
@@ -18,14 +18,14 @@
         @if (ports.length > 0) {
           <table class="data-table">
             <tr>
-              <th>Port</th>
-              <th>Mode</th>
-              <th>Target</th>
-              <th>Label</th>
-              <th>Skynet</th>
-              <th>DMSG</th>
-              <th>Landing</th>
-              <th>Whitelist</th>
+              <th>{{ 'skynet.port' | translate }}</th>
+              <th>{{ 'skynet.mode' | translate }}</th>
+              <th>{{ 'skynet.target' | translate }}</th>
+              <th>{{ 'skynet.label' | translate }}</th>
+              <th>{{ 'skynet.skynet' | translate }}</th>
+              <th>{{ 'skynet.dmsg' | translate }}</th>
+              <th>{{ 'skynet.landing' | translate }}</th>
+              <th>{{ 'skynet.whitelist' | translate }}</th>
               <th></th>
             </tr>
             @for (fp of ports; track fp) {
@@ -38,13 +38,13 @@
                   share the dmsghttp pipeline; plain forwards open a TCP socket
                   straight to the local target. -->
                   @if (fp.proxy_addr) {
-                    <span class="mode-badge mode-proxy" matTooltip="HTTP reverse proxy via landing-page handler">
-                      proxy
+                    <span class="mode-badge mode-proxy" [matTooltip]="'skynet.mode-proxy-tip' | translate">
+                      {{ 'skynet.mode-proxy' | translate }}
                     </span>
                   }
                   @if (!fp.proxy_addr) {
-                    <span class="mode-badge mode-forward" matTooltip="Plain TCP forward to localhost target">
-                      forward
+                    <span class="mode-badge mode-forward" [matTooltip]="'skynet.mode-forward-tip' | translate">
+                      {{ 'skynet.mode-forward' | translate }}
                     </span>
                   }
                 </td>
@@ -60,26 +60,24 @@
                   <mat-checkbox [checked]="fp.show_on_landing" (change)="toggleLanding(fp)" color="primary"></mat-checkbox>
                 </td>
                 <td>
-                  <button mat-button (click)="startEditWhitelist(fp)" [matTooltip]="(fp.whitelist || []).join(', ') || 'Open to all peers'">
+                  <button mat-button (click)="startEditWhitelist(fp)" [matTooltip]="(fp.whitelist || []).join(', ') || ('skynet.open-tip' | translate)">
                     <!-- Replace the tooltip-only PK display with a persistent
                     "N PKs" badge that's clearly distinct from "open" and
                     hints at the click-to-expand affordance. Tooltip is
                     preserved for the full list. -->
                     @if (!fp.whitelist || fp.whitelist.length === 0) {
-                      <span class="whitelist-badge wl-open">open</span>
+                      <span class="whitelist-badge wl-open">{{ 'skynet.open' | translate }}</span>
                     }
                     @if (fp.whitelist && fp.whitelist.length > 0) {
                       <span class="whitelist-badge wl-restricted">
-                        {{ fp.whitelist.length }} PK@if (fp.whitelist.length !== 1) {
-                        <span>s</span>
-                      }
-                    </span>
-                  }
+                        {{ (fp.whitelist.length === 1 ? 'skynet.pk-count-one' : 'skynet.pk-count') | translate:{ count: fp.whitelist.length } }}
+                      </span>
+                    }
                   <mat-icon class="edit-icon">edit</mat-icon>
                 </button>
               </td>
               <td class="action-col">
-                <button mat-icon-button color="warn" (click)="removePort(fp.port)" matTooltip="Remove">
+                <button mat-icon-button color="warn" (click)="removePort(fp.port)" [matTooltip]="'skynet.remove' | translate">
                   <mat-icon>close</mat-icon>
                 </button>
               </td>
@@ -89,24 +87,24 @@
                 <td colspan="9">
                   <div class="whitelist-edit">
                     <p class="whitelist-help">
-                      Comma- or whitespace-separated public keys. Empty = accessible to all authenticated peers.
+                      {{ 'skynet.whitelist-help' | translate }}
                     </p>
                     <mat-form-field appearance="outline" class="whitelist-input">
-                      <mat-label>Allowed PKs for port {{ fp.port }}</mat-label>
+                      <mat-label>{{ 'skynet.whitelist-label' | translate:{ port: fp.port } }}</mat-label>
                       <textarea matInput rows="3" [(ngModel)]="whitelistInput"
                       placeholder="02abc..., 03def..."></textarea>
                     </mat-form-field>
                     <div class="whitelist-actions">
                       <button mat-raised-button color="primary" (click)="saveWhitelist(fp)">
-                        <mat-icon>save</mat-icon> Save
+                        <mat-icon>save</mat-icon> {{ 'skynet.save' | translate }}
                       </button>
                       @if (fp.whitelist && fp.whitelist.length > 0) {
                         <button mat-stroked-button (click)="clearWhitelist(fp)"
                           >
-                          Clear
+                          {{ 'skynet.clear' | translate }}
                         </button>
                       }
-                      <button mat-button (click)="cancelEditWhitelist()">Cancel</button>
+                      <button mat-button (click)="cancelEditWhitelist()">{{ 'skynet.cancel' | translate }}</button>
                     </div>
                   </div>
                 </td>
@@ -116,46 +114,45 @@
         </table>
       }
       @if (ports.length === 0) {
-        <p class="empty-msg">No ports forwarded.</p>
+        <p class="empty-msg">{{ 'skynet.no-ports' | translate }}</p>
       }
       <!-- Add forward: one compact router-style bar (fill a row, hit +) -->
       <div class="add-bar">
         <mat-form-field appearance="outline" class="f-port">
-          <mat-label>Port</mat-label>
+          <mat-label>{{ 'skynet.port' | translate }}</mat-label>
           <input matInput [(ngModel)]="newPort" placeholder="80" type="number">
         </mat-form-field>
         <mat-form-field appearance="outline" class="f-port">
-          <mat-label>Local</mat-label>
+          <mat-label>{{ 'skynet.local' | translate }}</mat-label>
           <input matInput [(ngModel)]="newLocalPort" placeholder="3000" type="number">
         </mat-form-field>
         <mat-form-field appearance="outline" class="f-target">
-          <mat-label>Target (host:port)</mat-label>
+          <mat-label>{{ 'skynet.target-host-port' | translate }}</mat-label>
           <input matInput [(ngModel)]="newProxyAddr" placeholder="192.168.1.20:5432">
         </mat-form-field>
         <mat-form-field appearance="outline" class="f-text">
-          <mat-label>Label</mat-label>
-          <input matInput [(ngModel)]="newLabel" placeholder="My Service">
+          <mat-label>{{ 'skynet.label' | translate }}</mat-label>
+          <input matInput [(ngModel)]="newLabel" [placeholder]="'skynet.label-placeholder' | translate">
         </mat-form-field>
         <mat-form-field appearance="outline" class="f-text">
-          <mat-label>Description</mat-label>
-          <input matInput [(ngModel)]="newDesc" placeholder="Optional">
+          <mat-label>{{ 'skynet.description' | translate }}</mat-label>
+          <input matInput [(ngModel)]="newDesc" [placeholder]="'skynet.optional' | translate">
         </mat-form-field>
         <mat-form-field appearance="outline" class="f-wl">
-          <mat-label>Whitelist PKs</mat-label>
-          <input matInput [(ngModel)]="newWhitelist" placeholder="empty = open to all">
+          <mat-label>{{ 'skynet.whitelist-pks' | translate }}</mat-label>
+          <input matInput [(ngModel)]="newWhitelist" [placeholder]="'skynet.whitelist-placeholder' | translate">
         </mat-form-field>
         <div class="add-toggles">
-          <mat-checkbox [(ngModel)]="newSkynet" color="primary">Skynet</mat-checkbox>
-          <mat-checkbox [(ngModel)]="newDmsg" color="primary">DMSG</mat-checkbox>
-          <mat-checkbox [(ngModel)]="newShowLanding" color="primary" matTooltip="Show on landing page">Landing</mat-checkbox>
+          <mat-checkbox [(ngModel)]="newSkynet" color="primary">{{ 'skynet.skynet' | translate }}</mat-checkbox>
+          <mat-checkbox [(ngModel)]="newDmsg" color="primary">{{ 'skynet.dmsg' | translate }}</mat-checkbox>
+          <mat-checkbox [(ngModel)]="newShowLanding" color="primary" [matTooltip]="'skynet.landing-tip' | translate">{{ 'skynet.landing' | translate }}</mat-checkbox>
         </div>
         <button mat-raised-button color="primary" class="add-btn" (click)="addPort()">
-          <mat-icon>add</mat-icon> Forward
+          <mat-icon>add</mat-icon> {{ 'skynet.forward' | translate }}
         </button>
       </div>
       <p class="add-hint dim">
-        Target overrides Local Port to forward elsewhere on the LAN. Whitelist takes
-        comma/space-separated 66-char hex PKs; empty = all authenticated peers (editable per-row later).
+        {{ 'skynet.add-hint' | translate }}
       </p>
     </div>
   }
@@ -163,11 +160,9 @@
 
 <!-- Reverse Proxy -->
 <div class="section">
-  <h4 class="section-title">Reverse Proxy</h4>
+  <h4 class="section-title">{{ 'skynet.proxy-title' | translate }}</h4>
   <p class="section-desc">
-    Map a remote visor's port to a local port. The Network selector picks the
-    transport: <code>skynet</code> goes through the routing layer; <code>dmsg</code>
-    opens a direct DMSG stream. A single forward uses one network at a time.
+    {{ 'skynet.proxy-desc' | translate }}
   </p>
 
   @if (forwardsLoading) {
@@ -181,10 +176,10 @@
       @if (forwards.length > 0) {
         <table class="data-table">
           <tr>
-            <th>Network</th>
-            <th>Remote PK</th>
-            <th>Remote Port</th>
-            <th>Local Port</th>
+            <th>{{ 'skynet.network' | translate }}</th>
+            <th>{{ 'skynet.remote-pk' | translate }}</th>
+            <th>{{ 'skynet.remote-port' | translate }}</th>
+            <th>{{ 'skynet.local-port' | translate }}</th>
             <th></th>
           </tr>
           @for (fwd of forwards; track fwd) {
@@ -194,7 +189,7 @@
               <td class="mono">{{ fwd.remotePort }}</td>
               <td class="mono">{{ fwd.localPort }}</td>
               <td class="action-col">
-                <button mat-icon-button color="warn" (click)="disconnect(fwd.id)" matTooltip="Disconnect">
+                <button mat-icon-button color="warn" (click)="disconnect(fwd.id)" [matTooltip]="'skynet.disconnect' | translate">
                   <mat-icon>close</mat-icon>
                 </button>
               </td>
@@ -203,30 +198,30 @@
         </table>
       }
       @if (forwards.length === 0) {
-        <p class="empty-msg">No active reverse proxies.</p>
+        <p class="empty-msg">{{ 'skynet.no-proxies' | translate }}</p>
       }
       <div class="add-bar">
         <mat-form-field appearance="outline" class="f-net">
-          <mat-label>Network</mat-label>
+          <mat-label>{{ 'skynet.network' | translate }}</mat-label>
           <mat-select [(ngModel)]="connectNetwork" panelClass="skynet-select-panel">
             <mat-option value="skynet">skynet</mat-option>
             <mat-option value="dmsg">dmsg</mat-option>
           </mat-select>
         </mat-form-field>
         <mat-form-field appearance="outline" class="f-pk">
-          <mat-label>Remote Public Key</mat-label>
+          <mat-label>{{ 'skynet.remote-public-key' | translate }}</mat-label>
           <input matInput [(ngModel)]="connectPK" placeholder="02abc...">
         </mat-form-field>
         <mat-form-field appearance="outline" class="f-port">
-          <mat-label>Remote</mat-label>
+          <mat-label>{{ 'skynet.remote' | translate }}</mat-label>
           <input matInput [(ngModel)]="connectRemotePort" placeholder="80" type="number">
         </mat-form-field>
         <mat-form-field appearance="outline" class="f-port">
-          <mat-label>Local</mat-label>
+          <mat-label>{{ 'skynet.local' | translate }}</mat-label>
           <input matInput [(ngModel)]="connectLocalPort" placeholder="9090" type="number">
         </mat-form-field>
         <button mat-raised-button color="primary" class="add-btn" (click)="connect()">
-          <mat-icon>link</mat-icon> Connect
+          <mat-icon>link</mat-icon> {{ 'skynet.connect' | translate }}
         </button>
       </div>
     </div>

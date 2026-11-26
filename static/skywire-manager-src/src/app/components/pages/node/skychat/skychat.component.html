@@ -150,17 +150,17 @@
                       <span class="sc-tick" [class.read]="m.status === 'read'" [matTooltip]="tickTitle(m.status)">{{ tickGlyph(m.status) }}</span>
                     }
                     @if (m.id && !m.deleted) {
-                      <button class="sc-reply-btn" (click)="setReplyTo(m)" matTooltip="Reply">↩</button>
+                      <button class="sc-reply-btn" (click)="setReplyTo(m)" [matTooltip]="'skychat.reply' | translate">↩</button>
                     }
                     @if (m.id && m.direction === 'out' && !m.deleted) {
-                      <button class="sc-del-btn" (click)="deleteMsg(m)" matTooltip="Delete for everyone">🗑</button>
+                      <button class="sc-del-btn" (click)="deleteMsg(m)" [matTooltip]="'skychat.delete-for-everyone' | translate">🗑</button>
                     }
                   </div>
                   @if (m.replyTo && !m.deleted) {
                     <div class="sc-reply-quote">↩ {{ replyParentText(m.replyTo) }}</div>
                   }
                   @if (m.deleted) {
-                    <div class="sc-msg-text sc-deleted">🚫 message deleted</div>
+                    <div class="sc-msg-text sc-deleted">🚫 {{ 'skychat.message-deleted' | translate }}</div>
                   } @else {
                     <div class="sc-msg-text">{{ m.text }}</div>
                   }
@@ -186,7 +186,7 @@
           @if (replyTarget) {
             <div class="sc-reply-banner">
               <span class="sc-reply-banner-text">↩ {{ replyTarget.text }}</span>
-              <button class="sc-reply-cancel" (click)="cancelReply()" matTooltip="Cancel reply">✕</button>
+              <button class="sc-reply-cancel" (click)="cancelReply()" [matTooltip]="'skychat.cancel-reply' | translate">✕</button>
             </div>
           }
           <div class="sc-composer">
@@ -269,8 +269,8 @@
             <div class="sc-room-form">
               <input class="sc-inline-input" [(ngModel)]="newGroupName" placeholder="{{ 'skychat.room-name' | translate }}">
               <select class="sc-inline-input" [(ngModel)]="newGroupMode">
-                <option value="public">public</option>
-                <option value="private">private</option>
+                <option value="public">{{ 'skychat.room-public' | translate }}</option>
+                <option value="private">{{ 'skychat.room-private' | translate }}</option>
               </select>
               <button mat-raised-button color="primary" (click)="createGroup()" [disabled]="groupSending || !newGroupName.trim()">
                 {{ 'skychat.create' | translate }}
@@ -296,11 +296,11 @@
               <span class="sc-room-meta mono small">
                 <mat-icon [inline]="true">{{ g.mode === 'private' ? 'lock' : 'public' }}</mat-icon>
                 @if (g.status === 'awaiting_approval') {
-                  <span class="sc-room-badge pending" title="waiting for an admin to approve your request">pending</span>
+                  <span class="sc-room-badge pending" [title]="'skychat.status-pending-tip' | translate">{{ 'skychat.status-pending' | translate }}</span>
                 } @else if (g.status === 'denied') {
-                  <span class="sc-room-badge denied" title="an admin declined your request">declined</span>
+                  <span class="sc-room-badge denied" [title]="'skychat.status-declined-tip' | translate">{{ 'skychat.status-declined' | translate }}</span>
                   <button mat-button class="sc-ask-again" type="button" (click)="askAgain(g, $event)"
-                          [disabled]="groupSending" title="ask again — re-queues your request after the same checks as a first ask">
+                          [disabled]="groupSending" [title]="'skychat.ask-again-tip' | translate">
                     {{ 'skychat.ask-again' | translate }}
                   </button>
                 } @else {

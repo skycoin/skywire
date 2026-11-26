@@ -576,7 +576,7 @@ return {
  return; 
 }
     if (recipient.length !== 66 || !/^[0-9a-fA-F]+$/.test(recipient)) {
-      this.snackbar.showError('Recipient must be a 66-char hex public key');
+      this.snackbar.showError('skychat.bad-recipient');
 
       return;
     }
@@ -943,7 +943,7 @@ return {
     const sv = this.groupSv;
     const after = () => {
       this.refreshGroups();
-      this.snackbar.showDone('Re-requested to join — waiting for an admin');
+      this.snackbar.showDone('skychat.ask-again-sent');
     };
     const p = sv
       ? Promise.resolve(sv.skychatGroupAskAgain(g.id)).then(after)
@@ -1040,7 +1040,7 @@ return {
 }
     const name = this.newGroupName.trim();
     if (!name) {
- this.snackbar.showError('Room name required');
+ this.snackbar.showError('skychat.room-name-required');
 
  return; 
 }
@@ -1051,7 +1051,7 @@ return {
       this.showCreate = false;
       this.inviteLink = invite || '';
       this.refreshGroups();
-      this.snackbar.showDone('Room created');
+      this.snackbar.showDone('skychat.room-created');
     };
     const p = sv
       ? Promise.resolve(sv.skychatGroupCreate(name, this.newGroupMode)).then((r: any) => {
@@ -1076,7 +1076,7 @@ return {
 }
     const invite = this.joinInvite.trim();
     if (!invite) {
- this.snackbar.showError('Invite link required');
+ this.snackbar.showError('skychat.invite-required');
 
  return; 
 }
@@ -1086,7 +1086,7 @@ return {
       this.joinInvite = '';
       this.showJoin = false;
       this.refreshGroups();
-      this.snackbar.showDone('Joined room');
+      this.snackbar.showDone('skychat.room-joined');
     };
     const p = sv
       ? Promise.resolve(sv.skychatGroupJoin(invite)).then(after)
@@ -1133,7 +1133,7 @@ return {
 }
     const pk = this.addMemberPk.trim();
     if (pk.length !== 66 || !/^[0-9a-fA-F]+$/.test(pk)) {
-      this.snackbar.showError('Member must be a 66-char hex public key');
+      this.snackbar.showError('skychat.bad-member');
 
       return;
     }
@@ -1143,7 +1143,7 @@ return {
       ? Promise.resolve(sv.skychatGroupAddMember(id, pk))
       : this.groupApi('/add-member', 'POST', { id: id, pk: pk });
     p.then(() => {
- this.addMemberPk = ''; this.refreshGroups(); this.snackbar.showDone('Member added'); 
+ this.addMemberPk = ''; this.refreshGroups(); this.snackbar.showDone('skychat.member-added'); 
       this.cdr.markForCheck();
     })
       .catch((e: any) => this.snackbar.showError(this.groupErrMsg(e)))
@@ -1160,7 +1160,7 @@ return {
     // wasm exposes invite only at create; re-mint over the bridge is native-only.
     // For wasm we fall back to create-time link (already shown) — nothing to do.
     if (sv) {
-      this.snackbar.showError('Invite is shown when the room is created (wasm visor)');
+      this.snackbar.showError('skychat.invite-wasm');
 
       return;
     }
@@ -1177,7 +1177,7 @@ return {
 }
     try {
       navigator.clipboard.writeText(this.inviteLink);
-      this.snackbar.showDone('Invite copied');
+      this.snackbar.showDone('skychat.invite-copied');
     } catch { /* clipboard blocked — user can select the text */ }
   }
 
@@ -1554,7 +1554,7 @@ return {
 }
     const peer = this.toPK.trim();
     if (peer.length !== 66 || !/^[0-9a-fA-F]+$/.test(peer)) {
-      this.snackbar.showError('Recipient must be a 66-char hex public key');
+      this.snackbar.showError('skychat.bad-recipient');
 
       return;
     }
@@ -1567,7 +1567,7 @@ return {
       ? Promise.resolve(sv.skychatVoiceCall(peer))
       : this.voiceApi('/call', 'POST', { peer: peer });
     p.then(() => {
- this.snackbar.showDone('Call connected'); done(); 
+ this.snackbar.showDone('skychat.voice.connected'); done(); 
       this.cdr.markForCheck();
     })
       .catch((e: any) => {
@@ -1608,7 +1608,7 @@ return {
       ? Promise.resolve(sv.skychatVoiceAnswer(id))
       : this.voiceApi('/answer', 'POST', { call_id: id });
     p.then(() => {
- this.snackbar.showDone('Call answered'); done(); 
+ this.snackbar.showDone('skychat.voice.answered'); done(); 
       this.cdr.markForCheck();
     })
       .catch((e: any) => {

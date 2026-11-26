@@ -560,6 +560,12 @@ jobs:
       - name: Check OnPush change detection marks
         run: make check-onpush
 
+      - name: Check templates send their text through the translate pipe
+        run: make check-template-literals
+
+      - name: Check the Chinese translation has every English key
+        run: make check-lang-zh
+
       - name: Check only styles.scss uses Sass @import
         run: make check-scss-imports
 

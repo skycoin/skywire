@@ -27,6 +27,7 @@ we have written to. vpn says when iptables or the tun driver is missing, a
 config reset keeps the visor's internal apps, and a truncated bbolt file is
 detected before it is opened.
 
+-   deps, hvui: bump skycoin to v0.28.9-0.20261126073145-a45e69c951d6 so the hypervisor wallet and its ui2 pages have Chinese and follow the dashboard language; translate the classic Skynet page and the Skychat tooltips and notices; add `make check-template-literals` and `make check-lang-zh` to the ui job
 -   deps: bump skycoin to v0.28.9-0.20261126061000-58b4f81a66a8 so `skywire skycoin daemon` reports 0.28.8 in `/api/v1/health` instead of 0.28.7
 -   skychat, visor: the Skychat address book is the visor contact book, so a contact added on the hypervisor Contacts page shows in Skychat and one added or removed in Skychat is added or removed there; the list a browser kept moves into the book on first load
 -   visor/ui2, hvui: translate the Skynet, alerts, chat and wallet config pages and the wallet Node button into Chinese, send the remaining ui2 literals through the translation files, and add tests that fail on untranslated ui2 text or keys missing from en or zh

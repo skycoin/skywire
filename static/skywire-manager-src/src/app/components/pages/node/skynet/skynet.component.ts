@@ -108,7 +108,7 @@ this.fwdsSub.unsubscribe();
   addPort() {
     const port = parseInt(this.newPort, 10);
     if (isNaN(port) || port < 1 || port > 65535) {
-      this.snackbarService.showError('Enter a valid port (1-65535)');
+      this.snackbarService.showError('skynet.bad-port');
 
       return;
     }
@@ -120,7 +120,7 @@ this.fwdsSub.unsubscribe();
       whitelist = wlRaw.split(/[\s,]+/).map(s => s.trim()).filter(s => s.length > 0);
       for (const pk of whitelist) {
         if (pk.length !== 66 || !/^[0-9a-fA-F]+$/.test(pk)) {
-          this.snackbarService.showError(`Invalid public key in whitelist: ${pk}`);
+          this.snackbarService.showError('skynet.bad-whitelist-pk', { pk: pk });
 
           return;
         }
@@ -145,12 +145,12 @@ this.fwdsSub.unsubscribe();
         this.newLabel = '';
         this.newDesc = '';
         this.newWhitelist = '';
-        this.snackbarService.showDone(`Port ${port} forwarded`);
+        this.snackbarService.showDone('skynet.port-forwarded', { port: port });
         this.loadPorts();
         this.changeDetectorRef.markForCheck();
       },
       (err: any) => {
- this.snackbarService.showError(err?.error?.error || 'Failed'); 
+ this.snackbarService.showError(err?.error?.error || 'skynet.failed'); 
         this.changeDetectorRef.markForCheck();
       }
     );
@@ -159,11 +159,11 @@ this.fwdsSub.unsubscribe();
   removePort(port: number) {
     this.nodeService.deregisterSkynetPort(this.nodeKey, port).subscribe(
       () => {
- this.snackbarService.showDone(`Port ${port} removed`); this.loadPorts(); 
+ this.snackbarService.showDone('skynet.port-removed', { port: port }); this.loadPorts(); 
         this.changeDetectorRef.markForCheck();
       },
       () => {
- this.snackbarService.showError('Failed to remove port'); 
+ this.snackbarService.showError('skynet.remove-failed'); 
         this.changeDetectorRef.markForCheck();
       }
     );
@@ -176,7 +176,7 @@ this.fwdsSub.unsubscribe();
         this.changeDetectorRef.markForCheck();
       },
       () => {
- this.snackbarService.showError('Failed to update'); this.loadPorts(); 
+ this.snackbarService.showError('skynet.update-failed'); this.loadPorts(); 
         this.changeDetectorRef.markForCheck();
       }
     );
@@ -189,7 +189,7 @@ this.fwdsSub.unsubscribe();
         this.changeDetectorRef.markForCheck();
       },
       () => {
- this.snackbarService.showError('Failed to update'); this.loadPorts(); 
+ this.snackbarService.showError('skynet.update-failed'); this.loadPorts(); 
         this.changeDetectorRef.markForCheck();
       }
     );
@@ -202,7 +202,7 @@ this.fwdsSub.unsubscribe();
         this.changeDetectorRef.markForCheck();
       },
       () => {
- this.snackbarService.showError('Failed to update'); this.loadPorts(); 
+ this.snackbarService.showError('skynet.update-failed'); this.loadPorts(); 
         this.changeDetectorRef.markForCheck();
       }
     );
@@ -225,7 +225,7 @@ this.fwdsSub.unsubscribe();
       pks = raw.split(/[\s,]+/).map(s => s.trim()).filter(s => s.length > 0);
       for (const pk of pks) {
         if (pk.length !== 66 || !/^[0-9a-fA-F]+$/.test(pk)) {
-          this.snackbarService.showError(`Invalid public key: ${pk}`);
+          this.snackbarService.showError('skynet.bad-pk', { pk: pk });
 
           return;
         }
@@ -234,15 +234,14 @@ this.fwdsSub.unsubscribe();
     const updated = { ...fp, whitelist: pks };
     this.nodeService.updateForwardedPort(this.nodeKey, updated).subscribe(
       () => {
-        this.snackbarService.showDone(pks.length === 0
-          ? `Whitelist cleared on port ${fp.port}`
-          : `Whitelist set on port ${fp.port} (${pks.length} PK${pks.length === 1 ? '' : 's'})`);
+        this.snackbarService.showDone(pks.length === 0 ? 'skynet.whitelist-cleared' : 'skynet.whitelist-set',
+          { port: fp.port, count: pks.length });
         this.cancelEditWhitelist();
         this.loadPorts();
         this.changeDetectorRef.markForCheck();
       },
       (err: any) => {
- this.snackbarService.showError(err?.error?.error || 'Failed to update whitelist'); 
+ this.snackbarService.showError(err?.error?.error || 'skynet.whitelist-update-failed'); 
         this.changeDetectorRef.markForCheck();
       }
     );
@@ -252,13 +251,13 @@ this.fwdsSub.unsubscribe();
     const updated = { ...fp, whitelist: [] as any[] };
     this.nodeService.updateForwardedPort(this.nodeKey, updated).subscribe(
       () => {
-        this.snackbarService.showDone(`Whitelist cleared on port ${fp.port}`);
+        this.snackbarService.showDone('skynet.whitelist-cleared', { port: fp.port });
         this.cancelEditWhitelist();
         this.loadPorts();
         this.changeDetectorRef.markForCheck();
       },
       (err: any) => {
- this.snackbarService.showError(err?.error?.error || 'Failed to clear whitelist'); 
+ this.snackbarService.showError(err?.error?.error || 'skynet.whitelist-clear-failed'); 
         this.changeDetectorRef.markForCheck();
       }
     );
@@ -294,34 +293,34 @@ this.fwdsSub.unsubscribe();
     const rPort = parseInt(this.connectRemotePort, 10);
     const lPort = parseInt(this.connectLocalPort, 10);
     if (!this.connectPK || this.connectPK.length !== 66) {
- this.snackbarService.showError('Enter a valid public key');
+ this.snackbarService.showError('skynet.enter-pk');
 
  return; 
 }
     if (isNaN(rPort) || rPort < 1) {
- this.snackbarService.showError('Enter a valid remote port');
+ this.snackbarService.showError('skynet.bad-remote-port');
 
  return; 
 }
     if (isNaN(lPort) || lPort < 1) {
- this.snackbarService.showError('Enter a valid local port');
+ this.snackbarService.showError('skynet.bad-local-port');
 
  return; 
 }
     if (this.connectNetwork !== 'skynet' && this.connectNetwork !== 'dmsg') {
-      this.snackbarService.showError('Network must be skynet or dmsg');
+      this.snackbarService.showError('skynet.bad-network');
 
       return;
     }
     this.nodeService.skynetConnect(this.nodeKey, this.connectNetwork, this.connectPK, rPort, lPort).subscribe(
       () => {
         this.connectPK = ''; this.connectRemotePort = ''; this.connectLocalPort = '';
-        this.snackbarService.showDone(`Connected via ${this.connectNetwork}: remote ${rPort} → localhost:${lPort}`);
+        this.snackbarService.showDone('skynet.connected', { network: this.connectNetwork, remote: rPort, local: lPort });
         this.loadForwards();
         this.changeDetectorRef.markForCheck();
       },
       (err: any) => {
- this.snackbarService.showError(err?.error?.error || 'Failed'); 
+ this.snackbarService.showError(err?.error?.error || 'skynet.failed'); 
         this.changeDetectorRef.markForCheck();
       }
     );
@@ -330,11 +329,11 @@ this.fwdsSub.unsubscribe();
   disconnect(id: string) {
     this.nodeService.skynetDisconnect(this.nodeKey, id).subscribe(
       () => {
- this.snackbarService.showDone('Disconnected'); this.loadForwards(); 
+ this.snackbarService.showDone('skynet.disconnected'); this.loadForwards(); 
         this.changeDetectorRef.markForCheck();
       },
       () => {
- this.snackbarService.showError('Failed'); 
+ this.snackbarService.showError('skynet.failed'); 
         this.changeDetectorRef.markForCheck();
       }
     );
