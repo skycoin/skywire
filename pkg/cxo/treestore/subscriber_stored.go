@@ -39,6 +39,10 @@ func rootHash(r *registry.Root) skycipher.SHA256 {
 	return r.Refs[0].Hash
 }
 
+// storedChunk is how many changes a store-backed subscriber hands its
+// callback at a time.
+const storedChunk = 512
+
 // handleRootFilledStored is handleRootFilled for a store-backed subscriber.
 func (s *Subscriber) handleRootFilledStored(r *registry.Root) {
 	if r == nil || r.Pub != skycipher.PubKey(s.feedPK) {
@@ -58,10 +62,28 @@ func (s *Subscriber) handleRootFilledStored(r *registry.Root) {
 	onChange := s.onChange
 	s.mu.RUnlock()
 
-	var changes []UpdateEvent
+	// Changes go to the callback in chunks as the diff finds them, so a fill
+	// of a whole history never holds all of it in memory at once.
+	var (
+		changes []UpdateEvent
+		changed bool
+	)
+	flush := func() {
+		if len(changes) == 0 {
+			return
+		}
+		changed = true
+		if cb != nil {
+			cb(changes)
+		}
+		changes = nil
+	}
 	collect := func(path string, value []byte) {
 		if pathMatchesAny(path, prefixes) {
 			changes = append(changes, UpdateEvent{Path: path, Value: value})
+			if len(changes) == storedChunk {
+				flush()
+			}
 		}
 	}
 	// A Root older than the one applied carries nothing new, and diffing
@@ -75,7 +97,7 @@ func (s *Subscriber) handleRootFilledStored(r *registry.Root) {
 		// whole new tree, as a fresh subscriber would.
 		s.log.WithError(err).WithField("feed", s.feedPK.Hex()).
 			Warn("treestore-sub: last applied Root is not readable; reporting the whole tree")
-		changes = changes[:0]
+		changes = nil
 		err = diffStored(pack, skycipher.SHA256{}, rootHash(r), "", collect)
 	}
 	if err != nil {
@@ -91,10 +113,8 @@ func (s *Subscriber) handleRootFilledStored(r *registry.Root) {
 	}
 	s.filled, s.fillErr = true, nil
 	s.mu.Unlock()
-	if cb != nil && len(changes) > 0 {
-		cb(changes)
-	}
-	if onChange != nil && len(changes) > 0 {
+	flush()
+	if onChange != nil && changed {
 		onChange()
 	}
 	s.lastUpdateNs.Store(time.Now().UnixNano())
