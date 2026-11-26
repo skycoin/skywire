@@ -425,8 +425,14 @@ name, and a nickname you set locally always wins over a published one.
 ### Address book
 
 The 📇 button in the sidebar header opens your contacts — a centred
-dialog on a desktop, a full-screen list on a phone. Entirely local;
-nothing is sent anywhere.
+dialog on a desktop, a full-screen list on a phone. The list is the
+visor contact book, the same one the hypervisor's Contacts page and
+`skywire cli contacts` edit, so a contact saved in any of them shows in
+all three, and adding or removing one here does it there too. Nothing is
+sent to a peer. A skychat started with no visor (`--standalone`) keeps
+the list in the browser instead. A list saved in the browser by an older
+version moves into the visor book on the first load, without renaming
+anyone the book already holds.
 
 - **+** opens a **New contact** form: paste a key, and if that visor
   publishes a name and picture both are filled in for you to accept or
@@ -435,6 +441,8 @@ nothing is sent anywhere.
 - Saved names live in the same store the chat header, group sender
   labels, reply quotes and notifications already read, so a contact's
   name appears everywhere without those paths knowing contacts exist.
+  A nickname set in Skychat wins over the contact book's name, and the
+  book's name shows where there is no nickname.
 - **Add by address** also offers to save whoever you just pasted, and
   the compose menu's **Select from address book** picks a saved contact
   into that same dialog — a row in a list never starts a conversation

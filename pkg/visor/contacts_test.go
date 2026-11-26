@@ -69,3 +69,27 @@ func TestAppContactNamesOnlySkychat(t *testing.T) {
 	require.Equal(t, map[string]string{pk.Hex(): "Alice"}, v.appContactNames(skyenv.SkychatName))
 	require.Nil(t, v.appContactNames(skyenv.SkysocksClientName))
 }
+
+// TestChatHostContacts checks skychat's address book edits reach the visor's.
+func TestChatHostContacts(t *testing.T) {
+	v := &Visor{conf: &visorconfig.V1{Common: &visorconfig.Common{}}}
+	v.conf.LocalPath = filepath.Join(t.TempDir(), "local")
+	require.Nil(t, v.appChatHost(skyenv.SkysocksClientName), "only skychat edits the book")
+	h := v.appChatHost(skyenv.SkychatName)
+	pk, _ := cipher.GenerateKeyPair()
+	other, _ := cipher.GenerateKeyPair()
+
+	added, err := h.ChatContactSave(pk, "Honor 70")
+	require.NoError(t, err)
+	require.True(t, added)
+	require.Equal(t, map[string]string{pk.Hex(): "Honor 70"}, v.appContactNames(skyenv.SkychatName))
+
+	_, err = v.ContactsPut(contacts.Contact{Name: "Bob", Keys: []cipher.PubKey{other}, Mail: []string{"mail@" + pk.DNSLabel() + ".skynet"}})
+	require.NoError(t, err)
+	require.NoError(t, h.ChatContactForget(pk))
+	list, err := v.ContactsList()
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	require.Equal(t, "Bob", list[0].Name)
+	require.Empty(t, list[0].Mail, "the forgotten key's mailbox goes with it")
+}

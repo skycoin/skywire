@@ -25,6 +25,11 @@ type ChatHost interface {
 	ChatUnpark() ([]ParkedChat, error)
 	// ChatAck removes parked messages the app took.
 	ChatAck(refs []ParkedRef) error
+	// ChatContactSave puts pk in the visor contact book under name, unless a
+	// contact already holds it. added reports whether the book changed.
+	ChatContactSave(pk cipher.PubKey, name string) (added bool, err error)
+	// ChatContactForget takes pk off the visor contact book.
+	ChatContactForget(pk cipher.PubKey) error
 }
 
 // ParkedChat is a message that waited for this visor on an inbox host. From
@@ -35,6 +40,12 @@ type ParkedChat struct {
 	From cipher.PubKey
 	Msg  []byte
 	At   time.Time
+}
+
+// ChatContactSaveReq asks the visor to put PK in its contact book as Name.
+type ChatContactSaveReq struct {
+	PK   cipher.PubKey
+	Name string
 }
 
 // ChatParkReq asks the visor to park Msg for Rcpt.
@@ -126,4 +137,37 @@ func (c *rpcIngressClient) ChatUnpark() ([]ParkedChat, error) {
 // ChatAck asks the visor to remove parked messages.
 func (c *rpcIngressClient) ChatAck(refs []ParkedRef) error {
 	return c.rpc.Call(c.formatMethod("ChatAck"), &refs, &struct{}{})
+}
+
+// ChatContactSave puts a key in the visor contact book.
+func (r *RPCIngressGateway) ChatContactSave(req *ChatContactSaveReq, added *bool) (err error) {
+	defer rpcutil.LogCall(r.log, "ChatContactSave", nil)(nil, &err)
+	h, err := r.chatHost()
+	if err != nil {
+		return err
+	}
+	*added, err = h.ChatContactSave(req.PK, req.Name)
+	return err
+}
+
+// ChatContactForget takes a key off the visor contact book.
+func (r *RPCIngressGateway) ChatContactForget(pk *cipher.PubKey, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "ChatContactForget", nil)(nil, &err)
+	h, err := r.chatHost()
+	if err != nil {
+		return err
+	}
+	return h.ChatContactForget(*pk)
+}
+
+// ChatContactSave asks the visor to put pk in its contact book.
+func (c *rpcIngressClient) ChatContactSave(pk cipher.PubKey, name string) (bool, error) {
+	var added bool
+	err := c.rpc.Call(c.formatMethod("ChatContactSave"), &ChatContactSaveReq{PK: pk, Name: name}, &added)
+	return added, err
+}
+
+// ChatContactForget asks the visor to take pk off its contact book.
+func (c *rpcIngressClient) ChatContactForget(pk cipher.PubKey) error {
+	return c.rpc.Call(c.formatMethod("ChatContactForget"), &pk, &struct{}{})
 }

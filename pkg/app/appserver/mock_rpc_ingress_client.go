@@ -608,3 +608,14 @@ func (_m *MockRPCIngressClient) ChatUnpark() ([]ParkedChat, error) {
 func (_m *MockRPCIngressClient) ChatAck(refs []ParkedRef) error {
 	return _m.Called(refs).Error(0)
 }
+
+// ChatContactSave provides a mock function
+func (_m *MockRPCIngressClient) ChatContactSave(pk cipher.PubKey, name string) (bool, error) {
+	ret := _m.Called(pk, name)
+	return ret.Bool(0), ret.Error(1)
+}
+
+// ChatContactForget provides a mock function
+func (_m *MockRPCIngressClient) ChatContactForget(pk cipher.PubKey) error {
+	return _m.Called(pk).Error(0)
+}

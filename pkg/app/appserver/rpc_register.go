@@ -45,6 +45,26 @@ func registerIngressRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPCIngressG
 			return rpcReply, rpcRcvr.ChatAck(rpcArg, rpcReply)
 		}, nil
 	})
+	rpcSrv.HandleCall(rpcName+".ChatContactForget", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(cipher.PubKey)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.ChatContactForget(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".ChatContactSave", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(ChatContactSaveReq)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(bool)
+			return rpcReply, rpcRcvr.ChatContactSave(rpcArg, rpcReply)
+		}, nil
+	})
 	rpcSrv.HandleCall(rpcName+".ChatPark", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(ChatParkReq)
 		if err := rpcDec.Decode(rpcArg); err != nil {

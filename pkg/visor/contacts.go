@@ -6,8 +6,11 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/contacts"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/skymail"
+	"github.com/skycoin/skywire/pkg/skymailbridge"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -92,4 +95,31 @@ func (v *Visor) appContactNames(appName string) map[string]string {
 		return nil
 	}
 	return contacts.Names(list)
+}
+
+// ChatContactSave lets skychat's address book add a key to the visor's, so a
+// contact saved in either shows in both.
+func (h chatHost) ChatContactSave(pk cipher.PubKey, name string) (bool, error) {
+	s, err := h.v.contactStore()
+	if err != nil {
+		return false, err
+	}
+	return s.KeySave(pk, name)
+}
+
+// ChatContactForget takes a key skychat's address book removed off the
+// visor's, with the mail addresses at that key.
+func (h chatHost) ChatContactForget(pk cipher.PubKey) error {
+	s, err := h.v.contactStore()
+	if err != nil {
+		return err
+	}
+	return s.KeyForget(pk, func(addr string) bool {
+		for _, sfx := range skymail.Suffixes {
+			if got, _, ok, err := skymailbridge.ParseRecipient(addr, sfx, "a"); err == nil && ok && got == pk {
+				return true
+			}
+		}
+		return false
+	})
 }

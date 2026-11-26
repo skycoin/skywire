@@ -50,6 +50,12 @@ alias name. A full hex PK always resolves directly (never shadowed by a
 same-named alias). Alias names must not start with a digit. `alias ls --json`
 prints the raw `{name:pk}` map.
 
+Aliases are a CLI-only file, separate from the visor contact book. The book
+is the address book the Skychat web UI and the hypervisor Contacts page share
+(`skywire cli contacts`). A name that is not an alias is looked up in that
+book, so a contact saved in Skychat can be used with `-t` too, and an alias
+still wins over a contact of the same name.
+
 **send `--via tcp://<pk>@host:port`**: bypasses the local app entirely, the
 CLI dials the remote chat-app's noise-TCP listener directly (survives visor /
 dmsg outages). Identity from `--sk` → `DMSGCURL_SK` → `-c skywire.json`. When
