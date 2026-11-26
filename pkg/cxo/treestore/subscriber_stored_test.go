@@ -130,3 +130,57 @@ func TestSubscriberStoreBacked_DiffsAndSurvivesRestart(t *testing.T) {
 	require.NoError(t, pub.Put("msgs/5", []byte("m5")))
 	waitEvents(t, events, map[string]string{"msgs/5": "m5"})
 }
+
+// A Root with more changes than storedChunk reaches the callback in several
+// calls, each no larger than storedChunk, with nothing lost.
+func TestSubscriberStoreBacked_DeliversInChunks(t *testing.T) {
+	pkA, skA := cipher.GenerateKeyPair()
+	_, skB := cipher.GenerateKeyPair()
+	dir := t.TempDir()
+	pub, err := NewWithTCP("127.0.0.1:0", skA, PubConfig{
+		DataDir: filepath.Join(dir, "a"), BatchWindow: 5 * time.Millisecond, NoSyncCXDS: true, KeepRoots: 4,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = pub.Close() }) //nolint:errcheck
+	host, err := NewWithTCP("127.0.0.1:0", skB, PubConfig{
+		DataDir: filepath.Join(dir, "b"), BatchWindow: 5 * time.Millisecond, NoSyncCXDS: true, KeepRoots: 4,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = host.Close() }) //nolint:errcheck
+
+	sub, err := NewSubscriberOnNode(host.Node(), pkA, SubConfig{StoreBacked: true})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sub.Close() }) //nolint:errcheck
+	var (
+		mu      sync.Mutex
+		total   int
+		calls   int
+		biggest int
+	)
+	sub.OnUpdate(func(events []UpdateEvent) {
+		mu.Lock()
+		defer mu.Unlock()
+		calls++
+		total += len(events)
+		biggest = max(biggest, len(events))
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	require.NoError(t, sub.ConnectTCP(ctx, pub.Node().TCP().Address()))
+
+	const n = 3*storedChunk + 7
+	ops := make([]PutOp, 0, n)
+	for i := range n {
+		ops = append(ops, PutOp{Path: fmt.Sprintf("msgs/%d/%d", i/100, i), Value: []byte("v")})
+	}
+	require.NoError(t, pub.PutBatch(ops))
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return total == n
+	}, 30*time.Second, 20*time.Millisecond)
+	mu.Lock()
+	defer mu.Unlock()
+	require.GreaterOrEqual(t, calls, 4)
+	require.LessOrEqual(t, biggest, storedChunk)
+}
