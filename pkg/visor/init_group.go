@@ -69,6 +69,32 @@ func groupMemoryMessages(sc *visorconfig.Skychat) int {
 	return sc.GroupMemoryMessages
 }
 
+// defaultGroupHistoryMessages is how many messages per group the history
+// store keeps when Skychat.GroupHistoryMessages is unset.
+const defaultGroupHistoryMessages = 5000
+
+// groupHistoryMessages is the history store's per-group cap from
+// Skychat.GroupHistoryMessages, zero meaning no cap.
+func groupHistoryMessages(sc *visorconfig.Skychat) int {
+	switch {
+	case sc == nil || sc.GroupHistoryMessages == 0:
+		return defaultGroupHistoryMessages
+	case sc.GroupHistoryMessages < 0:
+		return 0
+	}
+	return sc.GroupHistoryMessages
+}
+
+// groupHistoryLimits bound each group by its own cap. The 1:1 store's 10 MB
+// file cap refused every group's writes once the file passed it.
+func groupHistoryLimits(sc *visorconfig.Skychat) history.Limits {
+	limits := history.DefaultLimits()
+	limits.PerPeerRatePerMin = 0
+	limits.PerPeerCap = groupHistoryMessages(sc)
+	limits.TotalCapBytes = 0
+	return limits
+}
+
 // initGrouping brings up the per-visor chat-group feed manager. Best
 // effort: a failure here logs and disables group chat for this run
 // rather than failing visor startup. Group RPC handlers return
@@ -145,18 +171,7 @@ func initGrouping(_ context.Context, v *Visor, log *logging.Logger) error {
 		dbPath = v.conf.Skychat.GroupHistoryDB
 	}
 	if dbPath != visorconfig.GroupHistoryOff {
-		// Use the same limits the chat-app's 1:1 store uses by
-		// default. Operators can tune via a future config knob —
-		// for now defaults are a sensible starting point that
-		// guards against disk-fill from a noisy group.
-		limits := history.DefaultLimits()
-		// Group senders are already gated by group membership; the
-		// per-key rate limit defeats burst-fanout (many members
-		// sending to one group at once). Loosen it materially.
-		limits.PerPeerRatePerMin = 0
-		// Group caps want to be larger than 1:1 because of fan-in.
-		// Keep TotalCapBytes from DefaultLimits as the global guard.
-		limits.PerPeerCap = 5000
+		limits := groupHistoryLimits(v.conf.Skychat)
 
 		histPath := dbPath
 		if !filepath.IsAbs(histPath) {

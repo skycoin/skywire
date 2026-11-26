@@ -1268,6 +1268,10 @@ func marshalSkychatNative(w *strings.Builder, s *visorconfig.Skychat, indent int
 		o.field("group_memory_messages")
 		writeIntNative(w, int64(s.GroupMemoryMessages))
 	}
+	if s.GroupHistoryMessages != 0 {
+		o.field("group_history_messages")
+		writeIntNative(w, int64(s.GroupHistoryMessages))
+	}
 	o.close()
 }
 

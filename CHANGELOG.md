@@ -27,6 +27,7 @@ we have written to. vpn says when iptables or the tun driver is missing, a
 config reset keeps the visor's internal apps, and a truncated bbolt file is
 detected before it is opened.
 
+-   visor: bound group history per group (`skychat.group_history_messages`, default 5000) instead of the 10 MB file cap that stopped all group history once reached
 -   skychat/group: keep settled group history in the on-disk CXO store with a bounded window in memory (`skychat.group_memory_messages`, default 1000), file messages under day buckets, and overwrite one heartbeat leaf
 -   cxo/treestore: hand a store-backed subscriber's changes to its callback 512 at a time
 -   cxo/skyobject: decrement a deleted Root's objects in one transaction, and let concurrent batches take turns
