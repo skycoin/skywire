@@ -26,7 +26,7 @@ func (hv *Hypervisor) ui2Services(body bool) http.HandlerFunc {
 		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(httpTimeout + 5*time.Second)) //nolint:errcheck
 		s := ui2.Services{Checked: time.Now().Format(time.TimeOnly)}
 		if hv.visor == nil {
-			s.Err = "visor unavailable"
+			s.Err = hv.ui2T(r, "ui2.errors.visor-unavailable")
 		} else if es, err := hv.visor.ServiceHealth(); err != nil {
 			s.Err = err.Error()
 		} else {

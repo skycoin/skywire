@@ -70,7 +70,7 @@ func (hv *Hypervisor) ui2DmsgSessionsCount() http.HandlerFunc {
 		case err != nil:
 			d.Err = err.Error()
 		case n < 0:
-			d.Err = "count must be >= 0"
+			d.Err = hv.ui2T(r, "ui2.dmsg.bad-count")
 		default:
 			d.Result, err = ctx.API.SetDmsgSessionsCount(n)
 			if err != nil {

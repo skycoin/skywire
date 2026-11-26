@@ -2,6 +2,7 @@
 package ui2
 
 import (
+	"context"
 	"encoding/json"
 	"sort"
 	"time"
@@ -115,3 +116,13 @@ func chatTime(t time.Time) string {
 }
 
 func (c Chat) url(rest string) string { return VisorURL(c.PK, "chat") + rest }
+
+// chatGroupTerm is a group mode or role (public, private, owner, member) in
+// the page language, or v itself when it has no translation.
+func chatGroupTerm(ctx context.Context, v string) string {
+	key := "ui2.chat." + v
+	if s := T(ctx, key); s != key {
+		return s
+	}
+	return v
+}

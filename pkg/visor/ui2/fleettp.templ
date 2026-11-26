@@ -208,9 +208,9 @@ templ FleetTpsBody(f FleetTps) {
 					<summary class="bw-head">
 						<span class="mono small pk-text" title={ v.PK }>{ v.PK }</span>
 						<strong>{ Bytes(v.Sent + v.Recv) }</strong>
-						<span class="small dim">↑ { Bytes(v.Sent) } ↓ { Bytes(v.Recv) } · { itoa(len(v.Tps)) } tp</span>
+						<span class="small dim">↑ { Bytes(v.Sent) } ↓ { Bytes(v.Recv) } · { itoa(len(v.Tps)) } { T(ctx, "bandwidth.transports") }</span>
 						if !f.LiveOnly && v.Offline > 0 {
-							<span class="small warn-text" title={ T(ctx, "network-transports.offline-count-tooltip") }>{ itoa(v.Offline) } offline</span>
+							<span class="small warn-text" title={ T(ctx, "network-transports.offline-count-tooltip") }>{ itoa(v.Offline) } { T(ctx, "uptime.offline") }</span>
 						}
 					</summary>
 					<div class="table-wrap">

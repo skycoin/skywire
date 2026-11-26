@@ -120,7 +120,21 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
     // Built once: NodeComponent.currentNode emits on every polling refresh,
     // and a new SafeResourceUrl would reload the config page each time.
     if (!this.configUrl) {
-      this.configUrl = this.sanitizer.bypassSecurityTrustResourceUrl('wallet/config' + (this.isWasm ? '?wasm=1' : ''));
+      // ?lang= gives the page this UI's language (LanguageService keeps it in
+      // localStorage 'lang'); the server renders its text in that language.
+      const params = new URLSearchParams();
+      if (this.isWasm) {
+        params.set('wasm', '1');
+      }
+      let lang = '';
+      try {
+        lang = localStorage.getItem('lang') || '';
+      } catch (_) { /* storage blocked */ }
+      if (lang) {
+        params.set('lang', lang);
+      }
+      const query = params.toString();
+      this.configUrl = this.sanitizer.bypassSecurityTrustResourceUrl('wallet/config' + (query ? '?' + query : ''));
     }
     this.state = 'running';
   }

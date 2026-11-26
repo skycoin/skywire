@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"io/fs"
 	"net/http"
@@ -194,6 +195,15 @@ func (hv *Hypervisor) renderStatus(w http.ResponseWriter, r *http.Request, code 
 // ui2T translates key for the request's language.
 func (hv *Hypervisor) ui2T(r *http.Request, key string, args ...string) string {
 	return ui2.T(hv.ui2Ctx(r), key, args...)
+}
+
+// ui2ErrorText is err as a page shows it, in the page language when the
+// error is one the ui2 handlers make themselves.
+func (hv *Hypervisor) ui2ErrorText(r *http.Request, err error) string {
+	if errors.Is(err, errVisorTimeout) {
+		return hv.ui2T(r, "ui2.errors.visor-timeout")
+	}
+	return err.Error()
 }
 
 // captureWriter takes a JSON handler's status and body while its headers,

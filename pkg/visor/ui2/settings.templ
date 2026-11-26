@@ -60,8 +60,8 @@ templ settingsForm(s Settings) {
 					if f.Format == "bool" {
 						<select name={ "v." + f.Key }>
 							<option value="" selected?={ f.Draft == "" }>{ f.DefaultLabel() }</option>
-							<option value="true" selected?={ f.Draft == "true" }>on</option>
-							<option value="false" selected?={ f.Draft == "false" }>off</option>
+							<option value="true" selected?={ f.Draft == "true" }>{ T(ctx, "app-flags.on") }</option>
+							<option value="false" selected?={ f.Draft == "false" }>{ T(ctx, "app-flags.off") }</option>
 						</select>
 					} else {
 						<input type={ f.InputType() } name={ "v." + f.Key } value={ f.Draft } placeholder={ f.Placeholder() } spellcheck="false" autocomplete="off" class={ templ.KV("invalid", f.Problem != "") }/>

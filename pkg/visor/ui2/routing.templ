@@ -138,9 +138,9 @@ templ GroupsView(groups []Group, errMsg string) {
 						<tr>
 							<td data-label={ T(ctx, "routing.groups.role") }>
 								if g.Initiator {
-									<span class="badge on">initiator</span>
+									<span class="badge on">{ T(ctx, "ui2.routing.initiator") }</span>
 								} else {
-									<span class="badge">responder</span>
+									<span class="badge">{ T(ctx, "ui2.routing.responder") }</span>
 								}
 							</td>
 							<td class="mono small" data-label={ T(ctx, "routing.groups.remote") }><span class="key" data-copy={ g.Remote }>{ g.Remote }</span></td>

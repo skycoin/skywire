@@ -95,9 +95,9 @@ templ ChatLog(c Chat) {
 				<div class="small dim chat-meta">
 					{ chatTime(m.TS) }
 					if m.ID != "" && !m.Deleted {
-						<button class="icon-btn sm" type="button" data-reply={ m.ID } data-reply-quote={ m.Body() } title="↩" aria-label="↩"><span class="mi">reply</span></button>
+						<button class="icon-btn sm" type="button" data-reply={ m.ID } data-reply-quote={ m.Body() } title={ T(ctx, "ui2.chat.reply") } aria-label={ T(ctx, "ui2.chat.reply") }><span class="mi">reply</span></button>
 						if m.Outgoing {
-							<button class="icon-btn sm" type="button" hx-post={ c.url("/delete") } hx-vals={ jsonVals(map[string]string{"peer": m.Peer, "id": m.ID}) } hx-target="#chat-log" hx-swap="outerHTML" hx-confirm="?" aria-label="delete"><span class="mi">delete</span></button>
+							<button class="icon-btn sm" type="button" hx-post={ c.url("/delete") } hx-vals={ jsonVals(map[string]string{"peer": m.Peer, "id": m.ID}) } hx-target="#chat-log" hx-swap="outerHTML" hx-confirm={ T(ctx, "ui2.chat.delete-confirm") } aria-label={ T(ctx, "ui2.chat.delete") }><span class="mi">delete</span></button>
 						}
 					}
 				</div>
@@ -118,11 +118,11 @@ templ ChatRooms(c Chat, oob bool) {
 				{ g.Name }
 				switch string(g.Status) {
 					case "awaiting_approval":
-						<span class="small badge" title="waiting for an admin to approve your request">pending</span>
+						<span class="small badge" title={ T(ctx, "ui2.chat.pending-help") }>{ T(ctx, "ui2.chat.pending") }</span>
 					case "denied":
-						<span class="small badge off" title="an admin declined your request">declined</span>
+						<span class="small badge off" title={ T(ctx, "ui2.chat.declined-help") }>{ T(ctx, "ui2.chat.declined") }</span>
 					default:
-						<span class="small dim">{ string(g.Mode) } · { itoa(len(g.Members)) } { T(ctx, "skychat.members") } · { string(g.Role) }</span>
+						<span class="small dim">{ chatGroupTerm(ctx, string(g.Mode)) } · { itoa(len(g.Members)) } { T(ctx, "skychat.members") } · { chatGroupTerm(ctx, string(g.Role)) }</span>
 				}
 			</a>
 			if string(g.Status) == "denied" {
@@ -134,8 +134,8 @@ templ ChatRooms(c Chat, oob bool) {
 			<form class="form" hx-post={ c.url("/groups/create") } hx-target="#chat-rooms" hx-swap="outerHTML">
 				<input name="name" required placeholder={ T(ctx, "skychat.room-name") } aria-label={ T(ctx, "skychat.room-name") }/>
 				<select name="mode" aria-label={ T(ctx, "skychat.mode-groups") }>
-					<option value="public">public</option>
-					<option value="private">private</option>
+					<option value="public">{ T(ctx, "ui2.chat.public") }</option>
+					<option value="private">{ T(ctx, "ui2.chat.private") }</option>
 				</select>
 				<button class="btn primary" type="submit">{ T(ctx, "skychat.create") }</button>
 			</form>

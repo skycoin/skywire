@@ -65,7 +65,7 @@ func (hv *Hypervisor) ui2ServiceUptimes() http.HandlerFunc {
 			go func(i int) {
 				defer wg.Done()
 				if hv.visor == nil {
-					rows[i].Err = "visor unavailable"
+					rows[i].Err = hv.ui2T(r, "ui2.errors.visor-unavailable")
 					return
 				}
 				body, err := hv.visor.fetchServiceDataCtx(r.Context(), keys[i], "/uptimes?v=v2&visors="+pk)

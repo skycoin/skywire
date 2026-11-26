@@ -219,7 +219,7 @@ templ mailMessage(m Mail) {
 				<dt>{ T(ctx, "mail.to") }</dt>
 				<dd class="mono">{ msg.To }</dd>
 				if msg.Cc != "" {
-					<dt>Cc</dt>
+					<dt>{ T(ctx, "mail.cc") }</dt>
 					<dd class="mono">{ msg.Cc }</dd>
 				}
 				<dt>{ T(ctx, "mail.date") }</dt>
@@ -291,7 +291,7 @@ templ mailCompose(m Mail) {
 	<form class="form" hx-post={ MailURL(m.PK, "/send") } hx-encoding="multipart/form-data" hx-target="#mail" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]">
 		<input type="hidden" name="in_reply_to" value={ m.Draft.InReplyTo }/>
 		<label>{ T(ctx, "mail.to") }<input class="mono" name="to" value={ m.Draft.To } placeholder="anyone@<pk>.skynet" required/></label>
-		<label>Cc<input class="mono" name="cc" value={ m.Draft.Cc }/></label>
+		<label>{ T(ctx, "mail.cc") }<input class="mono" name="cc" value={ m.Draft.Cc }/></label>
 		<label>{ T(ctx, "mail.subject") }<input name="subject" value={ m.Draft.Subject }/></label>
 		<textarea name="body" rows="12">{ "\n" + m.Draft.Body }</textarea>
 		<label class="small">{ T(ctx, "mail.attachments") }<input type="file" name="files" multiple/></label>

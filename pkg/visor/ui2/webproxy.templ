@@ -83,7 +83,7 @@ templ wpRow(name string, i *visorapi.EmbeddedProxyInfo) {
 				if i.UpstreamSOCKS != "" {
 					{ i.UpstreamSOCKS }
 				} else {
-					direct
+					{ T(ctx, "routing.mux.direct") }
 				}
 			</td>
 		</tr>

@@ -21,7 +21,7 @@ templ BandwidthBody(b Bandwidth) {
 					if d == 1 {
 						{ T(ctx, "bandwidth.window-now") }
 					} else {
-						{ itoa(d) }d
+						{ T(ctx, "ui2.days-short", "n", itoa(d)) }
 					}
 				</button>
 			}

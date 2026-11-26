@@ -34,8 +34,8 @@ func VNetSWJS() []byte { return browseui.VNetSWJS() }
 func ExecWorkerJS() []byte { return browseui.ExecWorkerJS }
 
 // WalletConfigHTML is the single wallet-config page, served at wallet/config by
-// the hypervisor and framed by the dashboard's wallet tab. Re-exported from the
-// browseui leaf like BrowseJS.
+// the hypervisor and framed by the dashboard's wallet tab, before
+// browseui.WalletConfigPage fills in its text. Re-exported like BrowseJS.
 var WalletConfigHTML = browseui.WalletConfigHTML
 
 // AutoUpdateJS is pkg/wasmhv/autoupdate.js — the self-update poller for the

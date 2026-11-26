@@ -104,7 +104,7 @@ func (hv *Hypervisor) ui2Resources(rows bool) http.HandlerFunc {
 				defer wg.Done()
 				st, err := ui2HostStats(api)
 				if err != nil {
-					row.Err = err.Error()
+					row.Err = hv.ui2ErrorText(r, err)
 					return
 				}
 				row.Stats = st

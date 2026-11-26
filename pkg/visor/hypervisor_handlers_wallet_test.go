@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -204,4 +205,31 @@ type recordingApp struct{ got []string }
 func (a *recordingApp) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	a.got = append(a.got, r.URL.Path)
 	w.WriteHeader(http.StatusTeapot)
+}
+
+var walletConfigJSStringRE = regexp.MustCompile(`"((?:[^"\\\n]|\\.)*)"|'((?:[^'\\\n]|\\.)*)'`)
+
+// TestWalletConfigZH renders the wallet config page in Chinese with no
+// English left in its markup or in the strings its script shows.
+func TestWalletConfigZH(t *testing.T) {
+	req := walletReq("config")
+	req.URL.RawQuery = "lang=zh"
+	w := httptest.NewRecorder()
+	(&Hypervisor{}).walletHandler()(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	page := w.Body.String()
+	require.Contains(t, page, "钱包存储")
+	require.NotContains(t, page, "[[")
+	require.NotContains(t, page, "wallet-config.")
+	require.Empty(t, ui2EnglishWords(page, "Skysocks", "skysocks", "server", "electrum", "skycoin", "web",
+		"seed", "bip", "BTC", "base", "dmsg", "name", "mono", "proxyreq", "proxynote", "ssl", "http", "self", "wallets",
+		"lite", "client", "hex", "IP", "URL", "API"))
+	_, script, ok := strings.Cut(page, "<script>")
+	require.True(t, ok)
+	for _, m := range walletConfigJSStringRE.FindAllStringSubmatch(script, -1) {
+		s := m[1] + m[2]
+		if strings.Contains(s, " ") && regexp.MustCompile(`\b(the|to|a|no|pick|open|set|found|failed|from|Enter)\b`).MatchString(s) {
+			t.Errorf("English string in the wallet config script: %q", s)
+		}
+	}
 }

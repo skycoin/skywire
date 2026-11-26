@@ -29,6 +29,7 @@ detected before it is opened.
 
 -   deps: bump skycoin to v0.28.9-0.20261126061000-58b4f81a66a8 so `skywire skycoin daemon` reports 0.28.8 in `/api/v1/health` instead of 0.28.7
 -   skychat, visor: the Skychat address book is the visor contact book, so a contact added on the hypervisor Contacts page shows in Skychat and one added or removed in Skychat is added or removed there; the list a browser kept moves into the book on first load
+-   visor/ui2, hvui: translate the Skynet, alerts, chat and wallet config pages and the wallet Node button into Chinese, send the remaining ui2 literals through the translation files, and add tests that fail on untranslated ui2 text or keys missing from en or zh
 -   skychat/group, visor: a deleted group stays deleted when a roster save or reconnect races the delete, and deleting or leaving a group drops its stored history (also at startup for groups already deleted or left)
 -   visor: bound group history per group (`skychat.group_history_messages`, default 5000) instead of the 10 MB file cap that stopped all group history once reached
 -   skychat/group: keep settled group history in the on-disk CXO store with a bounded window in memory (`skychat.group_memory_messages`, default 1000), file messages under day buckets, and overwrite one heartbeat leaf
