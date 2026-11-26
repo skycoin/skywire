@@ -36,7 +36,7 @@ func leavesOf(root *memNode) map[string]string {
 	walkLeaves(root, "", func(path string, value []byte) bool {
 		out[path] = string(value)
 		return true
-	}, nil)
+	}, nil, nil)
 	return out
 }
 

@@ -107,6 +107,11 @@ type Publisher struct {
 	// Config.DropPublishedLeaves).
 	dropLeaves bool
 
+	// memoryEntries bounds the expanded tree, see Config.MemoryEntries.
+	memoryEntries int
+	// hydratedRoot is the root TreeNode a folded publisher was opened on.
+	hydratedRoot skycipher.SHA256
+
 	// onRecovered receives what a newer Root of this feed brought back. Under mu.
 	onRecovered UpdateCallback
 
@@ -162,6 +167,13 @@ type memNode struct {
 	// evictedFrom, when set, is the published TreeNode that holds the
 	// leaf values this node keeps as nil (see evict.go).
 	evictedFrom skycipher.SHA256
+
+	// folded, when set, means the sub-tree lives only in the store as the
+	// TreeNode pubHash: leaves and subs are nil until expand reads it back.
+	folded bool
+
+	// touched is the treeTouchSeq stamp of the last access, for foldToBudget.
+	touched uint64
 }
 
 // treeMutSeq is the process-wide monotonic source for memNode.mutSeq.
@@ -211,6 +223,12 @@ type Config struct {
 	// and settled, such as one per day.
 	DropPublishedLeaves bool
 
+	// MemoryEntries, when positive, bounds how many entries (leaves and
+	// sub-trees) of published sub-trees stay in memory. Past it the least
+	// recently used published sub-trees fold into their stored hash and are
+	// read back from the store when touched. It implies DropPublishedLeaves.
+	MemoryEntries int
+
 	// KeepRoots is how many of the newest Roots the cleanup sweep keeps,
 	// so a subscriber still filling an older Root can fetch its objects.
 	// Zero or less keeps one.
@@ -255,6 +273,9 @@ type PubConfig struct {
 
 	// DropPublishedLeaves, see Config.DropPublishedLeaves.
 	DropPublishedLeaves bool
+
+	// MemoryEntries, see Config.MemoryEntries.
+	MemoryEntries int
 
 	// KeepRoots, see Config.KeepRoots.
 	KeepRoots int
@@ -325,6 +346,7 @@ func NewWithDMSG(dmsgC *dmsg.Client, sk cipher.SecKey, conf PubConfig) (*Publish
 		sharedAllow:         allow,
 		DropPublishedLeaves: conf.DropPublishedLeaves,
 		KeepRoots:           conf.KeepRoots,
+		MemoryEntries:       conf.MemoryEntries,
 	})
 	if err != nil {
 		_ = cxoNode.Close() //nolint:errcheck
@@ -382,6 +404,7 @@ func NewWithTCP(listenAddr string, sk cipher.SecKey, conf PubConfig) (*Publisher
 		sharedAllow:         allow,
 		DropPublishedLeaves: conf.DropPublishedLeaves,
 		KeepRoots:           conf.KeepRoots,
+		MemoryEntries:       conf.MemoryEntries,
 	})
 	if err != nil {
 		_ = cxoNode.Close() //nolint:errcheck
@@ -439,7 +462,8 @@ func New(cxoNode *node.Node, sk cipher.SecKey, conf Config) (*Publisher, error) 
 		cleanupNudge: make(chan struct{}, 1),
 		cleanupDone:  make(chan struct{}),
 	}
-	p.dropLeaves = conf.DropPublishedLeaves
+	p.memoryEntries = conf.MemoryEntries
+	p.dropLeaves = conf.DropPublishedLeaves || p.memoryEntries > 0
 	p.keepRoots = max(conf.KeepRoots, 1)
 	// Hydrate the in-memory tree from the previously-published Root on
 	// the underlying CXO node, if one exists. Without this, every
@@ -459,7 +483,7 @@ func New(cxoNode *node.Node, sk cipher.SecKey, conf Config) (*Publisher, error) 
 		conf.Logger.WithError(err).
 			Warn("treestore-pub: hydrate from container failed; starting with empty tree (any previously-published leaves will not be in the next published Root)")
 	}
-	if !p.dropLeaves {
+	if !p.dropLeaves || p.memoryEntries > 0 {
 		p.watchOwnFeed()
 	}
 	go p.runLoop()
@@ -491,6 +515,10 @@ func (p *Publisher) hydrateFromContainer() error {
 		return fmt.Errorf("LastRoot: %w", err)
 	}
 	if r == nil || len(r.Refs) == 0 {
+		return nil
+	}
+	if p.memoryEntries > 0 {
+		p.hydrateFolded(r)
 		return nil
 	}
 	hydrated, err := p.treeOf(r)
@@ -796,9 +824,11 @@ func (p *Publisher) Put(path string, value []byte) error {
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.expandPath(segs[:len(segs)-1])
 	if err := putAt(p.root, segs, append([]byte(nil), value...)); err != nil {
 		return err
 	}
+	p.expandPath(segs[:len(segs)-1]) // stamps the nodes putAt created
 	p.markDirty()
 	return nil
 }
@@ -812,6 +842,7 @@ func (p *Publisher) Get(path string) ([]byte, bool) {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.expandPath(segs[:len(segs)-1])
 	v, ok := getAt(p.root, segs)
 	if !ok {
 		return nil, false
@@ -884,6 +915,7 @@ func (p *Publisher) PutBatch(ops []PutOp) error {
 	defer p.mu.Unlock()
 	applied := false
 	for i, pr := range prepared {
+		p.expandPath(pr.segs[:len(pr.segs)-1])
 		if pr.val == nil {
 			if deleteAt(p.root, pr.segs) {
 				applied = true
@@ -896,6 +928,7 @@ func (p *Publisher) PutBatch(ops []PutOp) error {
 			}
 			return fmt.Errorf("treestore: PutBatch[%d] %q: %w", i, ops[i].Path, err)
 		}
+		p.expandPath(pr.segs[:len(pr.segs)-1]) // stamps the nodes putAt created
 		applied = true
 	}
 	if applied {
@@ -918,6 +951,7 @@ func (p *Publisher) Delete(path string) error {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.expandPath(segs[:len(segs)-1])
 	removed := deleteAt(p.root, segs)
 	if removed {
 		p.markDirty()
@@ -940,6 +974,7 @@ func (p *Publisher) PrunePrefix(prefix string) error {
 		p.markDirty()
 		return nil
 	}
+	p.expandPath(segs[:len(segs)-1])
 	if pruneAt(p.root, segs) {
 		p.markDirty()
 	}
@@ -959,6 +994,7 @@ func (p *Publisher) Walk(prefix string, fn func(path string, value []byte) bool)
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	p.expandPath(segs)
 	startNode := p.root
 	for _, seg := range segs {
 		next, ok := startNode.subs[seg]
@@ -967,7 +1003,7 @@ func (p *Publisher) Walk(prefix string, fn func(path string, value []byte) bool)
 		}
 		startNode = next
 	}
-	walkLeaves(startNode, canonical, fn, p.readEvicted)
+	walkLeaves(startNode, canonical, fn, p.readEvicted, p.walkFolded)
 }
 
 // flushTimeout bounds how long Flush waits for the publish loop to
@@ -1302,6 +1338,7 @@ func (p *Publisher) doPublish(force bool) error {
 			evict(n, fs.hash)
 		}
 	}
+	p.foldToBudget()
 	if p.dirtyGen == gen {
 		// No mutation landed during the publish — the live tree now
 		// matches what we just published, so it's clean.
@@ -1364,6 +1401,10 @@ func cloneMemNode(n *memNode) *memNode {
 	if n == nil {
 		return nil
 	}
+	if n.folded {
+		c := *n
+		return &c
+	}
 	out := &memNode{
 		leaves:      make(map[string][]byte, len(n.leaves)),
 		subs:        make(map[string]*memNode, len(n.subs)),
@@ -1371,6 +1412,7 @@ func cloneMemNode(n *memNode) *memNode {
 		cached:      n.cached,
 		mutSeq:      n.mutSeq,
 		evictedFrom: n.evictedFrom,
+		touched:     n.touched,
 	}
 	// share immutable leaf byte slice
 	maps.Copy(out.leaves, n.leaves)
@@ -1554,7 +1596,7 @@ func isMissingObject(err error) bool {
 // disturb the live tree or its cache; the on-success freshSubs
 // promotion in doPublish is unaffected.
 func clearEncodeCache(n *memNode) {
-	if n == nil {
+	if n == nil || n.folded {
 		return
 	}
 	n.cached = false
@@ -1620,7 +1662,7 @@ func encodeNode(up registry.Pack, n *memNode, path []string, freshSubs *[]freshS
 		if leaf, ok := n.leaves[name]; ok {
 			entry.Leaf = append([]byte(nil), leaf...)
 		} else if sub, ok := n.subs[name]; ok {
-			if sub.cached {
+			if sub.cached || sub.folded {
 				// Fast path: subtree unchanged since last publish.
 				entry.Sub = registry.Ref{Hash: sub.pubHash}
 			} else {
@@ -1804,8 +1846,9 @@ func invalidatePath(chain []*memNode) {
 
 // walkLeaves visits every leaf at-or-under the given node, prefixing
 // reported paths with the supplied path string.
-// load, when set, supplies the leaves of an evicted node.
-func walkLeaves(n *memNode, path string, fn func(string, []byte) bool, load func(*memNode) map[string][]byte) bool {
+// load, when set, supplies the leaves of an evicted node, and walkFolded
+// walks a folded sub-tree from the store.
+func walkLeaves(n *memNode, path string, fn func(string, []byte) bool, load func(*memNode) map[string][]byte, walkFolded func(*memNode, string, func(string, []byte) bool) bool) bool {
 	var evicted map[string][]byte
 	if n.evictedFrom != (skycipher.SHA256{}) && load != nil {
 		evicted = load(n)
@@ -1833,7 +1876,13 @@ func walkLeaves(n *memNode, path string, fn func(string, []byte) bool, load func
 			if path != "" {
 				full = path + "/" + name
 			}
-			if !walkLeaves(sub, full, fn, load) {
+			if sub.folded {
+				if walkFolded != nil && !walkFolded(sub, full, fn) {
+					return false
+				}
+				continue
+			}
+			if !walkLeaves(sub, full, fn, load, walkFolded) {
 				return false
 			}
 		}
