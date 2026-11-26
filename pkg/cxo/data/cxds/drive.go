@@ -127,6 +127,12 @@ func NewDriveCXDSWithOptions(fileName string, opts DriveOptions) (ds data.CXDS, 
 	if err != nil {
 		return ds, err
 	}
+	if opts.NoSync {
+		// A refcount change goes through Batch, which waits MaxBatchDelay for
+		// company. Without an fsync to share that wait buys nothing, and a
+		// serial run of changes paid it once per object.
+		b.MaxBatchDelay = 0
+	}
 
 	defer func() {
 
