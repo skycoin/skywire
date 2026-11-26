@@ -17,6 +17,9 @@ import (
 func SystemSurvey() (Survey, error) {
 	var si sysinfo.SysInfo
 	si.GetSysInfo()
+	if si.Node.Hypervisor == "" {
+		si.Node.Hypervisor = vmDetect("/")
+	}
 	disks, err := ghw.Block(ghw.WithDisableWarnings())
 	if err != nil {
 		return Survey{}, err
@@ -40,6 +43,8 @@ func SystemSurvey() (Survey, error) {
 		Product:        product,
 		Memory:         memory,
 		SkywireVersion: Version(),
+		Container:      containerDetect("/"),
+		BootID:         bootIDRead("/"),
 	}
 	return s, nil
 }

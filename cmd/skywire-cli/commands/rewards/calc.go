@@ -133,6 +133,9 @@ type nodeinfo struct {
 	Reason          string  `json:"ineligible_reason"` //Reason why the visor will not be rewarded
 	Bandwidth       uint64  `json:"bandwidth"`         //daily bandwidth in bytes from TPD
 	Country         string  `json:"country"`           //country code from GeoIP lookup
+	// Machine is the PK that stands for every visor found on the same machine.
+	Machine     string   `json:"machine"`
+	MachineKeys []string `json:"-"`
 }
 
 type rewardData struct {
@@ -153,6 +156,15 @@ type surveyData struct {
 			Hypervisor string `json:"hypervisor"`
 			MachineID  string `json:"machineid"`
 		} `json:"node"`
+		Product struct {
+			Name string `json:"name"`
+		} `json:"product"`
+		Memory struct {
+			Size uint `json:"size"`
+		} `json:"memory"`
+		Storage []struct {
+			Size uint `json:"size"`
+		} `json:"storage"`
 		Network []struct {
 			Name       string `json:"name"`
 			MacAddress string `json:"macaddress"`
@@ -162,8 +174,10 @@ type surveyData struct {
 		IfName  string `json:"ifname"`
 		Address string `json:"address"`
 	} `json:"ip_addr"`
-	Services json.RawMessage `json:"services"`
-	IPProof  *dmsg.IPProof   `json:"ip_proof"`
+	Services  json.RawMessage `json:"services"`
+	IPProof   *dmsg.IPProof   `json:"ip_proof"`
+	Container string          `json:"container"`
+	BootID    string          `json:"boot_id"`
 }
 
 // parseSurvey reads and parses a node-info.json file into structured data.
@@ -431,14 +445,66 @@ func surveyIP(s *surveyData, pk string, t time.Time) (string, error) {
 	return "", err
 }
 
-// calcPresenceShare computes a visor's share after IP cap and MAC dedup.
-func calcPresenceShare(ni nodeinfo, ipCounts, macCounts map[string]int) float64 {
+// machineKeys are the values a visor shares with every other visor on its
+// machine: the MAC it is keyed on, the host kernel's boot id (shared by
+// containers on one host), and for Android the device's hardware at its IP,
+// since a cloned or re-signed app gets a new ANDROID_ID.
+func machineKeys(s *surveyData, ip, mac string) []string {
+	keys := []string{"mac:" + mac}
+	if s.BootID != "" {
+		keys = append(keys, "boot:"+s.BootID)
+	}
+	if s.GOOS == "android" {
+		var storage uint
+		for _, d := range s.SysInfo.Storage {
+			storage += d.Size
+		}
+		keys = append(keys, fmt.Sprintf("android-hw:%s|%s|%d|%d", ip, s.SysInfo.Product.Name, s.SysInfo.Memory.Size, storage))
+	}
+	return keys
+}
+
+// machineGroups returns, for each node, the PK of the first node on its
+// machine. Nodes sharing any machine key are on one machine.
+func machineGroups(nodes []nodeinfo) []string {
+	parent := make([]int, len(nodes))
+	for i := range parent {
+		parent[i] = i
+	}
+	find := func(i int) int {
+		for parent[i] != i {
+			parent[i] = parent[parent[i]]
+			i = parent[i]
+		}
+		return i
+	}
+	owner := map[string]int{}
+	for i, n := range nodes {
+		for _, k := range n.MachineKeys {
+			if j, ok := owner[k]; ok {
+				a, b := find(i), find(j)
+				parent[max(a, b)] = min(a, b)
+				continue
+			}
+			owner[k] = i
+		}
+	}
+	ids := make([]string, len(nodes))
+	for i := range nodes {
+		ids[i] = nodes[find(i)].PK
+	}
+	return ids
+}
+
+// calcPresenceShare computes a visor's share after the IP cap and the split
+// between visors on one machine.
+func calcPresenceShare(ni nodeinfo, ipCounts, machineCounts map[string]int) float64 {
 	share := 1.0
 	limit := perIPShareLimit(wDate)
 	if count := ipCounts[ni.IPAddr]; count >= limit {
 		share = float64(limit) / float64(count)
 	}
-	if count := macCounts[ni.MacAddr]; count > 1 {
+	if count := machineCounts[ni.Machine]; count > 1 {
 		share /= float64(count)
 	}
 	return share
@@ -544,9 +610,9 @@ func applyRegionalSaturation(nodes []nodeinfo, exponent float64) {
 }
 
 // computePoolShares computes shares and rewards for a pool of nodes.
-func computePoolShares(nodes []nodeinfo, ipCounts, macCounts map[string]int) {
+func computePoolShares(nodes []nodeinfo, ipCounts, machineCounts map[string]int) {
 	for i, ni := range nodes {
-		nodes[i].Share = calcPresenceShare(ni, ipCounts, macCounts)
+		nodes[i].Share = calcPresenceShare(ni, ipCounts, machineCounts)
 	}
 	applyRegionalSaturation(nodes, saturationExponent)
 }
@@ -854,7 +920,7 @@ type rewardResult struct {
 	eligible            []nodeinfo
 	ineligible          []nodeinfo
 	ipCounts            map[string]int
-	macCounts           map[string]int
+	machineCounts       map[string]int
 	uuidCounts          map[string]int
 	totalPresenceShares float64
 	totalBWShares       float64
@@ -1098,16 +1164,17 @@ func calcRewards(o rewardOpts) *rewardResult {
 		_, archAllowed := allowArchMapAll[arch]
 
 		ni := nodeinfo{
-			IPAddr:     ip,
-			SkyAddr:    sky,
-			PK:         pk,
-			Arch:       arch,
-			Interfaces: ifc,
-			MacAddr:    macs[0],
-			UUID:       uu,
-			SvcConf:    svcconf,
-			HV:         hv,
-			Bandwidth:  visorBW,
+			IPAddr:      ip,
+			SkyAddr:     sky,
+			PK:          pk,
+			Arch:        arch,
+			Interfaces:  ifc,
+			MacAddr:     macs[0],
+			MachineKeys: machineKeys(survey, ip, macs[0]),
+			UUID:        uu,
+			SvcConf:     svcconf,
+			HV:          hv,
+			Bandwidth:   visorBW,
 		}
 
 		baseEligible := archAllowed && ipErr == nil && strings.Count(ip, ".") == 3 && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" && hv == "null" && addrErr == nil && meetsTransportReq
@@ -1197,15 +1264,18 @@ func calcRewards(o rewardOpts) *rewardResult {
 	// Build dedup counts from all eligible visors
 	allEligible := nodesInfos1
 	allIPs := make([]string, 0, len(allEligible))
-	allMACs := make([]string, 0, len(allEligible))
+	for i, id := range machineGroups(allEligible) {
+		allEligible[i].Machine = id
+	}
+	allMachines := make([]string, 0, len(allEligible))
 	allUUIDs := make([]string, 0, len(allEligible))
 	for _, ni := range allEligible {
 		allIPs = append(allIPs, ni.IPAddr)
-		allMACs = append(allMACs, ni.MacAddr)
+		allMachines = append(allMachines, ni.Machine)
 		allUUIDs = append(allUUIDs, ni.UUID)
 	}
 	ipCounts := countFrequency(allIPs)
-	macCounts := countFrequency(allMACs)
+	machineCounts := countFrequency(allMachines)
 	uuidCounts := countFrequency(allUUIDs)
 
 	// ==================== TWO-POOL MODEL ====================
@@ -1223,7 +1293,7 @@ func calcRewards(o rewardOpts) *rewardResult {
 		presenceBudget = 2 * dayReward
 	}
 
-	computePoolShares(nodesInfos1, ipCounts, macCounts)
+	computePoolShares(nodesInfos1, ipCounts, machineCounts)
 	totalPresenceShares := computePoolRewards(nodesInfos1, presenceBudget)
 	// Snapshot pool 1 reward per visor BEFORE pool 2 is added, so the
 	// per-pool CSVs and stats lines can recover the split.
@@ -1294,7 +1364,7 @@ func calcRewards(o rewardOpts) *rewardResult {
 		eligible:            nodesInfos1,
 		ineligible:          grrInfos,
 		ipCounts:            ipCounts,
-		macCounts:           macCounts,
+		machineCounts:       machineCounts,
 		uuidCounts:          uuidCounts,
 		totalPresenceShares: totalPresenceShares,
 		totalBWShares:       totalBWShares,
@@ -1369,7 +1439,7 @@ func writeStats(w io.Writer, r *rewardResult) error {
 			}
 		}
 	}
-	p("\nUnique mac addresses: %d\n", len(r.macCounts))
+	p("\nUnique machines: %d\n", len(r.machineCounts))
 	p("Unique IP Addresses: %d\n", len(r.ipCounts))
 	p("Unique UUIDs: %d\n", len(r.uuidCounts))
 	printSaturationStats(w, r.satExp, r.eligible, r.presenceBudget, r.totalPresenceShares)

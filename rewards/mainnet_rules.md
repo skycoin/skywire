@@ -295,9 +295,9 @@ The data from the dmsg discovery should be considered authoritative or current.
 
 Virtual machines are not eligible for rewards, as there is no way to limit the number of instances of skywire running on the same machine if they are running in virtual machines.
 
-The visor is determined to be running on a virtual machine if a `hypervisor` is listed in it's survey such as `kvm`, `xenhvm`, or `hyperv` - (not to be confused with a skywire hypervisor)
+The visor is determined to be running on a virtual machine if a `hypervisor` is listed in it's survey such as `kvm`, `xenhvm`, or `hyperv` - (not to be confused with a skywire hypervisor). Besides the CPU, the survey checks the DMI strings and the device tree, which also find virtual machines on arm.
 
-Multiple instances of skywire which are otherwise determined to be running on the same machine (via their mac address) will have one reward share divided between all the skycoin reward addresses which are set for those visors.
+Multiple instances of skywire which are otherwise determined to be running on the same machine will have one reward share divided between all the skycoin reward addresses which are set for those visors. Visors are on the same machine when they share a mac address, or the kernel boot id in their survey. Containers on one machine share its kernel, so they share one reward share. Android visors at the same ip address that report the same model, memory and storage are counted as one phone.
 
 ### Per IP Limit
 
