@@ -696,7 +696,10 @@ type Summary struct {
 	DmsgStats            *dmsgtracker.DmsgClientSummary `json:"dmsg_stats"`
 	ConnectedDmsgServers []string                       `json:"connected_dmsg_servers"` // Deprecated: use DMSGServers instead
 	DMSGServers          []DMSGServerInfo               `json:"dmsg_servers"`           // Connected DMSG servers with latencies
-	Online               bool                           `json:"online"`
+	// DmsgRelays is the visors this visor reaches dmsg through as a relay
+	// (skynet carrier sessions). They are not dmsg servers.
+	DmsgRelays []string `json:"dmsg_relays,omitempty"`
+	Online     bool     `json:"online"`
 	// State is one of the alerts.State values for a managed visor, as
 	// HVVisorEntry.State.
 	State string `json:"state,omitempty"`
@@ -968,7 +971,8 @@ type DmsgClientSessionInfo struct {
 // local client used to reach it.
 type DmsgServerSession struct {
 	PK cipher.PubKey `json:"pk"`
-	// Carrier is the raw dmsg carrier: tcp | ws | wt | quic.
+	// Carrier is the raw dmsg carrier: tcp | ws | wt | quic, or skynet for a
+	// relay session to a visor.
 	Carrier string `json:"carrier"`
 	// Protocol is a human-readable label distinguishing ws from wss:
 	// tcp | ws | wss | webtransport | quic.
