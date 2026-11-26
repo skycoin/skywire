@@ -1279,13 +1279,13 @@ func calcRewards(o rewardOpts) *rewardResult {
 	uuidCounts := countFrequency(allUUIDs)
 
 	// ==================== TWO-POOL MODEL ====================
-	// Pool 1: Presence — equal shares with IP/MAC dedup + regional saturation
+	// Pool 1: Presence — equal shares with IP/machine dedup + regional saturation
 	// Pool 2: Bandwidth — proportional to bandwidth bytes
 	//
 	// With --no-bw-pool, pool 2 is skipped and its budget folds
 	// into pool 1: presence is computed once against 2×dayReward.
 	// This is the recovery lever for days where bw-collect data
-	// is missing or corrupt — IP/MAC dedup and regional
+	// is missing or corrupt — IP/machine dedup and regional
 	// saturation still apply to the full 2-pool budget.
 
 	presenceBudget := dayReward
@@ -1405,7 +1405,7 @@ func writeStats(w io.Writer, r *rewardResult) error {
 	} else {
 		p("reward mode: presence + bandwidth\n")
 	}
-	p("\n--- Presence Pool (equal shares, IP/MAC dedup) ---\n")
+	p("\n--- Presence Pool (equal shares, IP/machine dedup) ---\n")
 	p("presence pool budget: %.6f\n", r.presenceBudget)
 	p("Pool 1 Total: %.6f\n", r.pool1Sum)
 	p("qualifying visors: %d\n", len(r.eligible))
