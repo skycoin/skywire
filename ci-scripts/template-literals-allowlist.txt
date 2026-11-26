@@ -1,0 +1,154 @@
+app/components/layout/command-palette/command-palette.component.html	Esc
+app/components/layout/top-bar/top-bar.component.html	-info
+app/components/pages/full-app-host/full-app-host.component.html	menu
+app/components/pages/network-transports/network-transports.component.html	The transport metrics feed is still syncing from the network. This takes a moment after the visor starts; it will appear on its own.
+app/components/pages/network-transports/network-transports.component.html	Showing the highest-bandwidth
+app/components/pages/network-transports/network-transports.component.html	live
+app/components/pages/network-transports/network-transports.component.html	of transports
+app/components/pages/network-transports/network-transports.component.html	( of them live)
+app/components/pages/network-transports/network-transports.component.html	The metrics feed was cut short upstream, so that total is a floor.
+app/components/pages/network-transports/network-transports.component.html	· tp
+app/components/pages/network-transports/network-transports.component.html	offline
+app/components/pages/network-view/network-view.component.html	pk / country / version / service
+app/components/pages/network-view/network-view.component.html	US
+app/components/pages/network-view/network-view.component.html	visors
+app/components/pages/network-view/network-view.component.html	online
+app/components/pages/network-view/network-view.component.html	offline
+app/components/pages/network-view/network-view.component.html	not in UT
+app/components/pages/network-view/network-view.component.html	stcpr
+app/components/pages/network-view/network-view.component.html	sudph
+app/components/pages/network-view/network-view.component.html	dmsg
+app/components/pages/network-view/network-view.component.html	stcp
+app/components/pages/network-view/network-view.component.html	stcpr · sudph · dmsg · stcp ·
+app/components/pages/network-view/network-view.component.html	total
+app/components/pages/node-list/node-list.component.html	incoming
+app/components/pages/node-list/node-list.component.html	outgoing
+app/components/pages/node-list/node-list.component.html	incoming
+app/components/pages/node-list/node-list.component.html	outgoing
+app/components/pages/node-list/node-list.component.html	Total
+app/components/pages/node-list/node-list.component.html	Total: 0
+app/components/pages/node-list/node-list.component.html	Total
+app/components/pages/node/actions/proxy-settings/proxy-settings.component.html	Skynet Settings
+app/components/pages/node/actions/proxy-settings/proxy-settings.component.html	Resolving Proxy
+app/components/pages/node/actions/proxy-settings/proxy-settings.component.html	Browse
+app/components/pages/node/actions/proxy-settings/proxy-settings.component.html	.skynet
+app/components/pages/node/actions/proxy-settings/proxy-settings.component.html	and
+app/components/pages/node/actions/proxy-settings/proxy-settings.component.html	.dmsg
+app/components/pages/node/actions/proxy-settings/proxy-settings.component.html	domains. Set an upstream SOCKS5 proxy to route all other traffic through skysocks.
+app/components/pages/node/actions/proxy-settings/proxy-settings.component.html	Resolver
+app/components/pages/node/actions/proxy-settings/proxy-settings.component.html	Running
+app/components/pages/node/actions/proxy-settings/proxy-settings.component.html	SOCKS
+app/components/pages/node/actions/proxy-settings/proxy-settings.component.html	Upstream
+app/components/pages/node/actions/proxy-settings/proxy-settings.component.html	.dmsg
+app/components/pages/node/actions/proxy-settings/proxy-settings.component.html	.skynet
+app/components/pages/node/actions/proxy-settings/proxy-settings.component.html	Enable resolving proxy (.skynet + .dmsg)
+app/components/pages/node/actions/proxy-settings/proxy-settings.component.html	Upstream SOCKS5 (e.g. 127.0.0.1:1080)
+app/components/pages/node/actions/proxy-settings/proxy-settings.component.html	Set
+app/components/pages/node/actions/proxy-settings/proxy-settings.component.html	Close
+app/components/pages/node/apps/app-flags-form/app-flags-form.component.html	stringList
+app/components/pages/node/apps/app-settings/app-settings.component.html	--addr :1080 --srv 0123abc...
+app/components/pages/node/apps/app-settings/app-settings.component.html	KEY=value
+app/components/pages/node/apps/node-apps-list/node-apps-list.component.html	start-app
+app/components/pages/node/apps/node-apps-list/node-apps-list.component.html	stop-app
+app/components/pages/node/contacts/contacts.component.html	skycoin:2jBbGx...
+app/components/pages/node/mail/mail.component.html	anyone@<pk>.skynet
+app/components/pages/node/mail/mail.component.html	Cc
+app/components/pages/node/mail/mail.component.html	Cc
+app/components/pages/node/node-info/node-info-content/node-info-content.component.html	skynet
+app/components/pages/node/node-info/node-info-content/node-info-content.component.html	dmsg
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	you@example.com
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	https://example.com/hook
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	smtp.example.com
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	Offline alerts
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	This visor runs in a browser tab, which is not always on, so it cannot watch other visors. Set alerts on an always-on native hypervisor instead, in the Settings of that hypervisor's own visor. This page can still be the device that gets its push notifications.
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	Retry
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	This visor alerts you when a visor it watches has been offline for the delay below, and once more when it is back. A visor that returns within the delay sends nothing. It watches the visors its hypervisor manages. Changes apply at once.
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	When every visor behind one public IP goes down together you get one site alert instead of one per visor, and each alert says whether it looks like power, internet or a faulty board.
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	Email addresses
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	Comma separated. Empty turns mail alerts off.
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	Offline delay
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	How long a visor must stay offline before you are told. Longer ignores brief outages.
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	Webhook
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	Optional URL that gets a JSON POST for each alert.
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	Sender address
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	Optional. Default skywire-alerts&#64;this host, or the relay login.
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	Send through an SMTP relay
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	Without one, mail goes straight to the recipient's mail server on port 25, which many home connections block and large providers often refuse.
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	Host
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	Port
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	Username
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	Password
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	Require STARTTLS
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	Push notifications
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	Alerts on this phone or computer as system notifications, even with this page closed. No mail setup needed.
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	this device
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	since
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	Remove
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	Save
+app/components/pages/node/node-settings/node-alerts/node-alerts.component.html	Watching visor(s), offline. Last alert sent . alert(s) waiting to be retried.
+app/components/pages/node/node-settings/node-settings.component.html	Filter
+app/components/pages/node/node-settings/node-settings.component.html	Retry
+app/components/pages/node/node-settings/node-settings.component.html	— does not exist yet; saving creates it. — this visor cannot write it. Review a change to get the
+app/components/pages/node/node-settings/node-settings.component.html	command that makes it.
+app/components/pages/node/node-settings/node-settings.component.html	The visor reads skywire.json, which
+app/components/pages/node/node-settings/node-settings.component.html	regenerates from this file. A change applies once autoconfig runs again and the visor restarts.
+app/components/pages/node/node-settings/node-settings.component.html	Set in the file only
+app/components/pages/node/node-settings/node-settings.component.html	of
+app/components/pages/node/node-settings/node-settings.component.html	to fix
+app/components/pages/node/node-settings/node-settings.component.html	Review changes
+app/components/pages/node/node-settings/node-settings.component.html	default
+app/components/pages/node/node-settings/node-settings.component.html	on
+app/components/pages/node/node-settings/node-settings.component.html	off
+app/components/pages/node/node-settings/node-settings.component.html	Saved to .
+app/components/pages/node/node-settings/node-settings.component.html	The visor runs with its old settings until skywire.json is regenerated and it restarts:
+app/components/pages/node/node-settings/node-settings.component.html	Variable
+app/components/pages/node/node-settings/node-settings.component.html	Now
+app/components/pages/node/node-settings/node-settings.component.html	After
+app/components/pages/node/node-settings/node-settings.component.html	Run this on the visor's host; it edits the file, regenerates skywire.json and restarts the visor:
+app/components/pages/node/node-settings/node-settings.component.html	Back
+app/components/pages/node/node-settings/node-settings.component.html	Save
+app/components/pages/node/node-settings/node-settings.component.html	Back to settings
+app/components/pages/node/resource-monitor/resource-monitor.component.html	· · uptime
+app/components/pages/node/resource-monitor/resource-monitor.component.html	cores · visor %
+app/components/pages/node/resource-monitor/resource-monitor.component.html	/ · visor RSS M
+app/components/pages/node/resource-monitor/resource-monitor.component.html	/ on /
+app/components/pages/node/resource-monitor/resource-monitor.component.html	total
+app/components/pages/node/resource-monitor/resource-monitor.component.html	total
+app/components/pages/node/resource-monitor/resource-monitor.component.html	fds · conns
+app/components/pages/node/resource-monitor/resource-monitor.component.html	heap_sys · sys
+app/components/pages/node/resource-monitor/resource-monitor.component.html	GOMAXPROCS ·
+app/components/pages/node/resource-monitor/resource-monitor.component.html	total GCs · alloc since start
+app/components/pages/node/rewards/node-rewards.component.html	xpub…
+app/components/pages/node/routing/routing.component.html	min
+app/components/pages/node/routing/routing.component.html	max
+app/components/pages/node/routing/routing.component.html	min
+app/components/pages/node/routing/routing.component.html	max
+app/components/pages/node/routing/routing.component.html	count
+app/components/pages/node/routing/routing.component.html	sack
+app/components/pages/node/routing/routing.component.html	pfn
+app/components/pages/node/routing/routing.component.html	fec
+app/components/pages/node/routing/routing.component.html	fec repair ↑ ↓ ·
+app/components/pages/node/routing/transport-list/transport-details/transport-details.component.html	ms -
+app/components/pages/node/routing/transport-list/transport-list.component.html	02abc...
+app/components/pages/node/routing/transport-list/transport-list.component.html	ms
+app/components/pages/node/routing/transport-list/transport-list.component.html	: ms -
+app/components/pages/node/skychat/skychat.component.html	02abc…
+app/components/pages/node/skychat/skychat.component.html	auto
+app/components/pages/node/skychat/skychat.component.html	skynet
+app/components/pages/node/skychat/skychat.component.html	dmsg
+app/components/pages/node/skynet/skynet.component.html	02abc..., 03def...
+app/components/pages/node/skynet/skynet.component.html	02abc...
+app/components/pages/node/skynet/skynet.component.html	skynet
+app/components/pages/node/skynet/skynet.component.html	dmsg
+app/components/pages/node/skysocks-tab/select-proxy-server/select-proxy-server.component.html	ms
+app/components/pages/node/uptime/uptime.component.html	= 50 && d.pct
+app/components/pages/node/wallet/wallet.component.html	local
+app/components/pages/node/wallet/wallet.component.html	local skycoin-web server
+app/components/pages/node/web-proxy/web-proxy.component.html	.dmsg
+app/components/pages/node/web-proxy/web-proxy.component.html	.skynet
+app/components/pages/services-health/services-health.component.html	ms
+app/components/pages/services-health/services-health.component.html	ms
+app/components/pages/services-health/services-health.component.html	ms
+app/components/pages/services-health/services-health.component.html	ms
+app/components/pages/services-health/services-health.component.html	ms
+app/wallet/wallet-page.component.html	menu
