@@ -802,6 +802,9 @@ type GroupHistoryFetcher interface {
 	// a reconnecting subscriber whose disconnect gap is longer than
 	// the in-memory inbox ring can cover.
 	ListGroupSince(groupID string, since time.Time) ([]visorapi.GroupMessage, error)
+	// DeleteGroup erases the stored messages of a group this visor deleted or
+	// left, and reports how many there were.
+	DeleteGroup(groupID string) (int, error)
 }
 
 // GroupHistory returns up to limit most recent persisted messages for
@@ -856,22 +859,56 @@ func (v *Visor) GroupHistoryGroups() ([]string, error) {
 	return hist.Groups()
 }
 
-// GroupDelete tears down an owner-side group and marks it revoked.
+// GroupDelete tears down an owner-side group, marks it revoked and drops its
+// stored history. The revoked record stays so group list still shows it.
 func (v *Visor) GroupDelete(id string) error {
 	mgr := v.groupManager()
 	if mgr == nil {
 		return ErrGroupingDisabled
 	}
-	return mgr.Delete(id)
+	if err := mgr.Delete(id); err != nil {
+		return err
+	}
+	v.groupHistoryPurge(id)
+	return nil
 }
 
-// GroupLeave is the member-side counterpart of Delete.
+// GroupLeave is the member-side counterpart of Delete. The UI hides a left
+// group, and a rejoin backfills from the group, so its history goes too.
 func (v *Visor) GroupLeave(id string) error {
 	mgr := v.groupManager()
 	if mgr == nil {
 		return ErrGroupingDisabled
 	}
-	return mgr.Leave(id)
+	if err := mgr.Leave(id); err != nil {
+		return err
+	}
+	v.groupHistoryPurge(id)
+	return nil
+}
+
+// groupHistoryPurge drops the stored history of a group that has ended.
+func (v *Visor) groupHistoryPurge(id string) {
+	v.initLock.RLock()
+	hist := v.grouping.history
+	mgr := v.grouping.manager
+	v.initLock.RUnlock()
+	if hist == nil || mgr == nil {
+		return
+	}
+	r, ok, err := mgr.Get(id)
+	if err != nil || !ok || !groupHistoryEnded(r.Status) {
+		return
+	}
+	if _, err := hist.DeleteGroup(id); err != nil {
+		v.log.WithError(err).WithField("group", id).Warn("grouping: dropping history of an ended group failed")
+	}
+}
+
+// groupHistoryEnded reports whether a group's stored history should go: the
+// operator deleted or left it.
+func groupHistoryEnded(s skychatgroup.Status) bool {
+	return s == skychatgroup.StatusRevoked || s == skychatgroup.StatusLeft
 }
 
 func (v *Visor) groupManager() *skychatgroup.Manager {

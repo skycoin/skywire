@@ -71,7 +71,7 @@ Mutating: `create -n/--name (req) [-k/--kind public|private|channel] [-m/--mode 
 `invite <id>`, `publish <id> on|off`, `join <invite|addr>`, `ask-again <id>`,
 `add <id> <pk>`, `promote <id> <pk>`, `demote <id> <pk>`,
 `peer-backfill <id> on|off`, `rotate-key <id>`, `send <id> <text…>`,
-`unsend <id> <ts-unixnano>`, `leave <id>`, `delete <id>` (leaves a `revoked`
+`unsend <id> <ts-unixnano>`, `leave <id>`, `delete <id>` (both drop the group's stored history; delete leaves a `revoked`
 tombstone in `group list`).
 
 ### skychat voice (all via visor RPC)

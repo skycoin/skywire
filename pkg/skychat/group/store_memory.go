@@ -152,6 +152,7 @@ func (s *Store) Put(r Record) error {
 		// Watermarks and Kind are not sealed, so the raw JSON is enough here.
 		if err := json.Unmarshal(raw, &prev); err == nil {
 			r.MutationSeen = mergeWatermarks(prev.MutationSeen, r.MutationSeen)
+			r.Status = statusAfterWrite(prev.Status, r.Status)
 			// Same invariant as the bbolt backend — the two must not
 			// disagree about what a group is allowed to become.
 			if err := checkKindStable(r.ID, prev.Kind, r.Kind); err != nil {
@@ -234,6 +235,26 @@ func (s *Store) MarkMessage(id string, ts time.Time) error {
 // SetMembers replaces the Members slice.
 func (s *Store) SetMembers(id string, members []cipher.PubKey) error {
 	return s.update(id, func(r *Record) { r.Members = members })
+}
+
+// SetRoster replaces Members and Admins in one transaction and leaves Status
+// alone, so a roster save racing Leave or Delete cannot undo either.
+func (s *Store) SetRoster(id string, members, admins []cipher.PubKey) error {
+	return s.update(id, func(r *Record) {
+		r.Members = members
+		r.Admins = admins
+		r.EnsureFounderInAdmins()
+	})
+}
+
+// SetStatusUnlessTerminal sets Status only while the group is not over, so a
+// reconnect that finishes after Leave or Delete does not reopen the group.
+func (s *Store) SetStatusUnlessTerminal(id string, status Status) error {
+	return s.update(id, func(r *Record) {
+		if !r.Status.Terminal() {
+			r.Status = status
+		}
+	})
 }
 
 // SetModeration persists a converged moderation snapshot.
@@ -334,7 +355,9 @@ func (s *Store) update(id string, fn func(*Record)) error {
 	if err := s.decodeRecord(raw, &r); err != nil {
 		return err
 	}
+	prev := r.Status
 	fn(&r)
+	r.Status = statusAfterWrite(prev, r.Status)
 	body, err := s.encodeRecord(r)
 	if err != nil {
 		return err

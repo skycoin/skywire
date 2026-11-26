@@ -198,6 +198,10 @@ type Store interface {
 	// Groups returns the set of group IDs that have any stored messages.
 	Groups() ([]string, error)
 
+	// DeleteGroup erases every stored message of the group and reports how
+	// many there were. An unknown group is not an error; an empty one is ErrEmptyPeer.
+	DeleteGroup(groupID string) (int, error)
+
 	// Import merges an archive exported from another device — the only way
 	// chat data moves between a desktop and a phone, since nothing here
 	// syncs. It is deliberately NOT Append in a loop:

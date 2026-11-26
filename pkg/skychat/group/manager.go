@@ -247,14 +247,7 @@ func (m *Manager) SetMessageHandler(h MessageHandler) {
 // already converged regardless. See #3426.
 func (m *Manager) persistRoster(id string) func(members, admins []cipher.PubKey) {
 	return func(members, admins []cipher.PubKey) {
-		r, ok, err := m.store.Get(id)
-		if err != nil || !ok {
-			return
-		}
-		r.Members = members
-		r.Admins = admins
-		r.EnsureFounderInAdmins()
-		if err := m.store.Put(r); err != nil {
+		if err := m.store.SetRoster(id, members, admins); err != nil {
 			m.log.WithError(err).WithField("id", id).Debug("group: persistRoster: store put failed")
 		}
 	}
@@ -777,7 +770,7 @@ func (m *Manager) Resume() error {
 				// Mark pending; runReconnectLoop will re-attempt on
 				// its 30s cadence (with backoff on repeated failures)
 				// until the owner becomes reachable.
-				_ = m.store.SetStatus(r.ID, StatusPending) //nolint:errcheck
+				_ = m.store.SetStatusUnlessTerminal(r.ID, StatusPending) //nolint:errcheck
 			}
 		}
 		m.replaySessionHistory(r.ID)
@@ -1154,7 +1147,7 @@ func (m *Manager) promoteIfRecovered(r Record) {
 	if r.Status != StatusPending {
 		return
 	}
-	if err := m.store.SetStatus(r.ID, StatusActive); err != nil {
+	if err := m.store.SetStatusUnlessTerminal(r.ID, StatusActive); err != nil {
 		m.log.WithError(err).WithField("id", r.ID).
 			Warn("group: reconnect: SetStatus active failed")
 		return
@@ -1184,7 +1177,7 @@ func (m *Manager) tryReconnect(ctx context.Context, sess *Session, id string) {
 		m.reconnectMu.Lock()
 		delete(m.reconnectState, id)
 		m.reconnectMu.Unlock()
-		if sErr := m.store.SetStatus(id, StatusActive); sErr != nil {
+		if sErr := m.store.SetStatusUnlessTerminal(id, StatusActive); sErr != nil {
 			m.log.WithError(sErr).WithField("id", id).
 				Warn("group: reconnect: SetStatus active failed")
 		}
@@ -1259,7 +1252,7 @@ func (m *Manager) tryReconnectPeers(ctx context.Context, sess *Session, id strin
 		m.reconnectMu.Lock()
 		delete(m.reconnectState, id)
 		m.reconnectMu.Unlock()
-		if sErr := m.store.SetStatus(id, StatusActive); sErr != nil {
+		if sErr := m.store.SetStatusUnlessTerminal(id, StatusActive); sErr != nil {
 			m.log.WithError(sErr).WithField("id", id).
 				Warn("group: reconnect: SetStatus active failed")
 		}
@@ -1305,7 +1298,7 @@ func (m *Manager) tryReconnectLegacySub(ctx context.Context, sess *Session, id s
 	m.reconnectMu.Lock()
 	delete(m.reconnectState, id)
 	m.reconnectMu.Unlock()
-	if sErr := m.store.SetStatus(id, StatusActive); sErr != nil {
+	if sErr := m.store.SetStatusUnlessTerminal(id, StatusActive); sErr != nil {
 		m.log.WithError(sErr).WithField("id", id).
 			Warn("group: reconnect: SetStatus active failed")
 	}

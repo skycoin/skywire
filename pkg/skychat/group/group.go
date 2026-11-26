@@ -622,6 +622,15 @@ func checkKindStable(id string, prev, next Kind) error {
 	return fmt.Errorf("%w: %s is %q and cannot become %q", ErrKindImmutable, id, prev, next)
 }
 
+// statusAfterWrite is the status a write of next over prev stores. Revoked
+// stays revoked, so a write built on a read from before Delete cannot undo it.
+func statusAfterWrite(prev, next Status) Status {
+	if prev == StatusRevoked {
+		return StatusRevoked
+	}
+	return next
+}
+
 // Channel reports whether this group is a broadcast channel — open to
 // join, admins-only to post.
 //

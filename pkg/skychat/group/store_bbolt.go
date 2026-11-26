@@ -194,6 +194,7 @@ func (s *Store) Put(r Record) error {
 			// watermarks.
 			if err := json.Unmarshal(raw, &prev); err == nil {
 				r.MutationSeen = mergeWatermarks(prev.MutationSeen, r.MutationSeen)
+				r.Status = statusAfterWrite(prev.Status, r.Status)
 				// Enforced here rather than in each caller because this is
 				// the one chokepoint every write goes through — see
 				// checkKindStable for why a channel must stay one.
@@ -292,6 +293,26 @@ func (s *Store) MarkMessage(id string, ts time.Time) error {
 func (s *Store) SetMembers(id string, members []cipher.PubKey) error {
 	return s.update(id, func(r *Record) {
 		r.Members = members
+	})
+}
+
+// SetRoster replaces Members and Admins in one transaction and leaves Status
+// alone, so a roster save racing Leave or Delete cannot undo either.
+func (s *Store) SetRoster(id string, members, admins []cipher.PubKey) error {
+	return s.update(id, func(r *Record) {
+		r.Members = members
+		r.Admins = admins
+		r.EnsureFounderInAdmins()
+	})
+}
+
+// SetStatusUnlessTerminal sets Status only while the group is not over, so a
+// reconnect that finishes after Leave or Delete does not reopen the group.
+func (s *Store) SetStatusUnlessTerminal(id string, status Status) error {
+	return s.update(id, func(r *Record) {
+		if !r.Status.Terminal() {
+			r.Status = status
+		}
 	})
 }
 
@@ -415,7 +436,9 @@ func (s *Store) update(id string, fn func(*Record)) error {
 		if err := s.decodeRecord(raw, &r); err != nil {
 			return err
 		}
+		prev := r.Status
 		fn(&r)
+		r.Status = statusAfterWrite(prev, r.Status)
 		body, err := s.encodeRecord(r)
 		if err != nil {
 			return err
