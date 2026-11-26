@@ -46,6 +46,10 @@ type Survey struct {
 	SkywireVersion string           `json:"skywire_version,omitempty"`
 	ServicesURLs   Services         `json:"services,omitempty"`
 	DmsgServers    []string         `json:"dmsg_servers,omitempty"`
+	// Container names the container the visor runs in, and BootID is the
+	// host kernel's boot id, which containers on one host share.
+	Container string `json:"container,omitempty"`
+	BootID    string `json:"boot_id,omitempty"`
 }
 
 // RunningAsRoot checks for root permissions.

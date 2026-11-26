@@ -63,7 +63,7 @@ func TestPerIPShareLimit(t *testing.T) {
 
 func TestCalcPresenceShare(t *testing.T) {
 	setCalcDay(t, "2026-11-06") // limit 8
-	ni := nodeinfo{IPAddr: "ip", MacAddr: "mac"}
+	ni := nodeinfo{IPAddr: "ip", Machine: "mac"}
 	for _, c := range []struct {
 		ips, macs int
 		want      float64
@@ -205,12 +205,12 @@ func TestComputePoolSharesEndToEnd(t *testing.T) {
 	var nodes []nodeinfo
 	ips, macs := map[string]int{}, map[string]int{}
 	for i := range 16 {
-		nodes = append(nodes, nodeinfo{IPAddr: "crowded", MacAddr: string(rune('a' + i)), SkyAddr: "farm"})
+		nodes = append(nodes, nodeinfo{IPAddr: "crowded", Machine: string(rune('a' + i)), SkyAddr: "farm"})
 	}
-	nodes = append(nodes, nodeinfo{IPAddr: "alone", MacAddr: "z", SkyAddr: "solo"})
+	nodes = append(nodes, nodeinfo{IPAddr: "alone", Machine: "z", SkyAddr: "solo"})
 	for _, n := range nodes {
 		ips[n.IPAddr]++
-		macs[n.MacAddr]++
+		macs[n.Machine]++
 	}
 
 	computePoolShares(nodes, ips, macs)
