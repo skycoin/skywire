@@ -826,6 +826,11 @@ func (m *Manager) requestJoin(inv Invite, note string, askAgain bool) (Record, e
 	m.stopLeaving(inv.ID)
 	if existing, ok, err := m.store.Get(inv.ID); err == nil && ok && existing.Status == StatusActive {
 		return existing, nil // already in — idempotent
+	} else if err == nil && ok && existing.Status == StatusRevoked {
+		// The store keeps revoked records revoked, so a rejoin drops the tombstone.
+		if err := m.store.Delete(inv.ID); err != nil {
+			return Record{}, fmt.Errorf("group: RequestJoin: clear revoked record: %w", err)
+		}
 	}
 	targets := inv.AdmissionTargets(m.myPK)
 	if len(targets) == 0 {

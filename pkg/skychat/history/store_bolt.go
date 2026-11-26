@@ -548,6 +548,31 @@ func (s *BoltStore) Groups() ([]string, error) {
 	return groups, err
 }
 
+// DeleteGroup implements Store: the group's whole bucket goes, in one
+// transaction.
+func (s *BoltStore) DeleteGroup(groupID string) (int, error) {
+	if groupID == "" {
+		return 0, ErrEmptyPeer
+	}
+	n := 0
+	err := s.db.Update(func(tx *bolt.Tx) error {
+		root := tx.Bucket([]byte(groupsBucket))
+		gBkt := root.Bucket([]byte(groupID))
+		if gBkt == nil {
+			return nil
+		}
+		c := gBkt.Cursor()
+		for k, _ := c.First(); k != nil; k, _ = c.Next() {
+			n++
+		}
+		return root.DeleteBucket([]byte(groupID))
+	})
+	if err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
 // iterateGroupForward mirrors iterateForward's tail-walk-then-reverse
 // pattern but decodes GroupMessage records. The two functions could be
 // merged with generics; kept parallel here for symmetry with the

@@ -185,6 +185,9 @@ func initGrouping(_ context.Context, v *Visor, log *logging.Logger) error {
 			histFetcher = adapter
 			inbox.hist = adapter
 			log.WithField("db", histPath).Info("Grouping: history persistence enabled")
+			if records, err := store.List(); err == nil {
+				groupHistoryPurgeEnded(records, adapter, log)
+			}
 			v.pushCloseStack("grouping.history", func() error {
 				return hStore.Close()
 			})
@@ -313,6 +316,11 @@ func (a *groupHistoryAdapter) Groups() ([]string, error) {
 	return a.store.Groups()
 }
 
+// DeleteGroup implements GroupHistoryFetcher.
+func (a *groupHistoryAdapter) DeleteGroup(groupID string) (int, error) {
+	return a.store.DeleteGroup(groupID)
+}
+
 // ListGroupBefore implements GroupHistoryFetcher (backward page cursor).
 // Same invalid-PK-skip defense as ListByGroup.
 func (a *groupHistoryAdapter) ListGroupBefore(groupID string, before time.Time, limit int) ([]visorapi.GroupMessage, error) {
@@ -380,4 +388,29 @@ func (a *groupHistoryAdapter) ListGroupSince(groupID string, since time.Time) ([
 		})
 	}
 	return out, nil
+}
+
+// groupHistoryPurgeEnded drops the stored history of every group already
+// deleted or left, which builds before this one kept forever.
+func groupHistoryPurgeEnded(records []skychatgroup.Record, hist GroupHistoryFetcher, log *logging.Logger) {
+	stored, err := hist.Groups()
+	if err != nil {
+		log.WithError(err).Warn("grouping: listing stored group history failed")
+		return
+	}
+	ended := make(map[string]bool, len(records))
+	for _, r := range records {
+		ended[r.ID] = groupHistoryEnded(r.Status)
+	}
+	for _, id := range stored {
+		if !ended[id] {
+			continue
+		}
+		n, err := hist.DeleteGroup(id)
+		if err != nil {
+			log.WithError(err).WithField("group", id).Warn("grouping: dropping history of an ended group failed")
+			continue
+		}
+		log.WithField("group", id).WithField("messages", n).Info("grouping: dropped history of an ended group")
+	}
 }
