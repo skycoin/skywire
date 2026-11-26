@@ -37,6 +37,11 @@ func RemoveUnreachable(c *skyobject.Container) (removed, volume int, err error) 
 					return 0, 0, fmt.Errorf("root %s of %s: %w", h.Hex()[:16], pk.Hex(), rerr)
 				}
 				werr := c.Walk(r, func(h cipher.SHA256, _ int) (bool, error) {
+					// Roots of a feed share most of their tree: what is marked
+					// already had everything below it marked on that visit.
+					if _, seen := reach[h]; seen {
+						return false, nil
+					}
 					reach[h] = struct{}{}
 					return true, nil
 				})
