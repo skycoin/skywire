@@ -1127,14 +1127,17 @@ func (ce *Client) ConnectToAllServers(ctx context.Context) (ConnectToAllServersR
 	return result, nil
 }
 
-// ConnectedServers obtains all the servers client is connected to.
+// ConnectedServers obtains the addresses of the dmsg servers the client is
+// connected to, leaving out relay sessions (CarrierSkynet).
 //
 // Deprecated: we can now obtain the remote TCP address of a session from the ClientSession struct directly.
 func (ce *Client) ConnectedServers() []string {
 	sessions := ce.allClientSessions(ce.porter)
-	addrs := make([]string, len(sessions))
-	for i, s := range sessions {
-		addrs[i] = s.RemoteTCPAddr().String()
+	addrs := make([]string, 0, len(sessions))
+	for _, s := range sessions {
+		if s.carrier != CarrierSkynet {
+			addrs = append(addrs, s.RemoteTCPAddr().String())
+		}
 	}
 	return addrs
 }

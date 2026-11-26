@@ -176,12 +176,16 @@ func (a *autoconnector) dialDmsgServers(ctx context.Context, v *Visor) {
 // dmsgServerTransportCount is how many of the visor's dmsg servers it also
 // reaches over a non-dmsg transport, and how many servers there are.
 func (v *Visor) dmsgServerTransportCount() (reached, servers int) {
-	if v.tpM == nil {
+	if v.tpM == nil || v.dmsgC == nil {
 		return 0, 0
 	}
 	have := skynetReached(v.tpM.GetTransportsByLabels(allTransportLabels...))
 	seen := map[cipher.PubKey]bool{}
-	for _, pk := range v.dmsgServerPKs() {
+	for _, pkStr := range v.dmsgC.ConnectedServersPK() {
+		var pk cipher.PubKey
+		if pk.Set(pkStr) != nil {
+			continue
+		}
 		if seen[pk] {
 			continue
 		}

@@ -716,14 +716,28 @@ func (ce *Client) AllVisorEntries(ctx context.Context) (entries []string, err er
 	return entries, err
 }
 
-// ConnectedServersPK return keys of all connected dmsg servers
+// ConnectedServersPK returns the keys of the dmsg servers this client holds a
+// session with. Relay sessions (CarrierSkynet) go to visors, not servers, and
+// are listed by ConnectedRelaysPK instead.
 func (ce *Client) ConnectedServersPK() []string {
 	sessions := ce.allClientSessions(ce.porter)
-	addrs := make([]string, len(sessions))
-	for i, s := range sessions {
-		addrs[i] = s.RemotePK().String()
+	pks := make([]string, 0, len(sessions))
+	for _, s := range sessions {
+		if s.carrier != CarrierSkynet {
+			pks = append(pks, s.RemotePK().String())
+		}
 	}
-	return addrs
+	return pks
+}
+
+// ConnectedRelaysPK returns the keys of the visors this client is attached to
+// as a relay (sessions over CarrierSkynet).
+func (ce *Client) ConnectedRelaysPK() []string {
+	pks := []string{}
+	for _, s := range ce.sortedRelaySessions() {
+		pks = append(pks, s.RemotePK().String())
+	}
+	return pks
 }
 
 // ConnectionsSummary associates connected clients, and the servers that connect such clients.

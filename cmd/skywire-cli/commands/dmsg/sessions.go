@@ -10,6 +10,7 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
@@ -61,7 +62,17 @@ func printDmsgSessions(result *visorapi.DmsgClientSessions) {
 			return
 		}
 		cmdutil.Printf("%s (%s)\n", info.Role, info.PK)
-		cmdutil.Printf("  Connected sessions: %d\n", info.Count)
+		relays := 0
+		for _, s := range info.Sessions {
+			if s.Carrier == dmsg.CarrierSkynet {
+				relays++
+			}
+		}
+		if relays > 0 {
+			cmdutil.Printf("  Connected sessions: %d (%d dmsg servers, %d relays)\n", info.Count, info.Count-relays, relays)
+		} else {
+			cmdutil.Printf("  Connected sessions: %d\n", info.Count)
+		}
 		// Prefer the enriched session list (server PK + the protocol it was
 		// reached over); fall back to bare PKs for older visors.
 		if len(info.Sessions) > 0 {

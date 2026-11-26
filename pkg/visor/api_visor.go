@@ -189,9 +189,11 @@ func (v *Visor) Summary() (*visorapi.Summary, error) {
 	}
 
 	// Get all connected DMSG servers (deprecated, for backward compatibility)
+	var dmsgRelays []string
 	var connectedDmsgServers []string
 	if v.dmsgC != nil {
 		connectedDmsgServers = v.dmsgC.ConnectedServersPK()
+		dmsgRelays = v.dmsgC.ConnectedRelaysPK()
 	}
 
 	// Get DMSG servers with latency info
@@ -237,6 +239,7 @@ func (v *Visor) Summary() (*visorapi.Summary, error) {
 		DmsgStats:              dmsgStatValue,
 		ConnectedDmsgServers:   connectedDmsgServers,
 		DMSGServers:            dmsgServers,
+		DmsgRelays:             dmsgRelays,
 		Hypervisor:             v.HypervisorEnabled(),
 		Load:                   collectLoadStats(),
 	}

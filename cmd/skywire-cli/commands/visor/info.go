@@ -788,6 +788,9 @@ func buildSummaryMessageWithData(rpcClient visorapi.API) (string, *visorapi.Summ
 	}
 
 	msg += fmt.Sprintf("DMSG Servers (%d connected):\n              %s\n", len(summary.DMSGServers), dmsgServersStr)
+	if len(summary.DmsgRelays) > 0 {
+		msg += fmt.Sprintf("DMSG relay sessions: %d\n", len(summary.DmsgRelays))
+	}
 	// Only when it was actually measured. The tracker keys on the visor's own
 	// PK and usually holds no entry for it, leaving the zero value — which
 	// printed as a confident "DMSG Latency: 0s" directly under a list of
