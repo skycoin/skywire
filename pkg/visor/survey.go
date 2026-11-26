@@ -106,10 +106,11 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 		)
 		for attempt := 1; ; attempt++ {
 			ctx, cancel := context.WithTimeout(context.Background(), ipLookupAttemptTimeout)
-			ipAddr, err := v.dmsgC.LookupIP(ctx, nil)
+			ipAddr, proof, err := v.dmsgC.LookupIPProof(ctx, nil)
 			cancel()
 			if err == nil && ipAddr != nil {
 				survey.IPAddr = ipAddr.String()
+				survey.IPProof = &proof
 				break
 			}
 			log.WithError(err).Warnf("Public IP lookup via dmsg failed (attempt %d) — retrying", attempt)

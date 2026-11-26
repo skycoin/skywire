@@ -24,6 +24,10 @@ import (
 // if it has never sent coins. See rewards/mainnet_rules.md, Skycoin Address.
 var SingleAddressCutoff = time.Date(2026, time.November, 15, 0, 0, 0, 0, time.UTC)
 
+// IPProofCutoff is the first reward day that pays a visor only if a deployment
+// dmsg server signed its IP. See rewards/mainnet_rules.md, Per IP Limit.
+var IPProofCutoff = time.Date(2026, time.December, 15, 0, 0, 0, 0, time.UTC)
+
 // spentCheckApplies reports whether a reward day (2006-01-02) is on or after
 // SingleAddressCutoff. A day that does not parse is checked.
 func spentCheckApplies(day string) bool {

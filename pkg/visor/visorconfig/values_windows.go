@@ -17,6 +17,7 @@ import (
 	"golang.org/x/sys/windows/registry"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
@@ -33,13 +34,15 @@ func UserConfig() skyenv.PkgConfig {
 
 // Survey system hardware survey struct
 type Survey struct {
-	Timestamp      time.Time        `json:"timestamp"`
-	PubKey         cipher.PubKey    `json:"public_key,omitempty"`
-	SkycoinAddress string           `json:"skycoin_address,omitempty"`
-	GOOS           string           `json:"go_os,omitempty"`
-	GOARCH         string           `json:"go_arch,omitempty"`
-	SYSINFO        customSysinfo    `json:"zcalusic_sysinfo,omitempty"`
-	IPAddr         string           `json:"ip_address,omitempty"`
+	Timestamp      time.Time     `json:"timestamp"`
+	PubKey         cipher.PubKey `json:"public_key,omitempty"`
+	SkycoinAddress string        `json:"skycoin_address,omitempty"`
+	GOOS           string        `json:"go_os,omitempty"`
+	GOARCH         string        `json:"go_arch,omitempty"`
+	SYSINFO        customSysinfo `json:"zcalusic_sysinfo,omitempty"`
+	IPAddr         string        `json:"ip_address,omitempty"`
+	// IPProof is the dmsg server's signed answer that IPAddr came from.
+	IPProof        *dmsg.IPProof    `json:"ip_proof,omitempty"`
 	Disks          *ghw.BlockInfo   `json:"ghw_blockinfo,omitempty"`
 	Product        *ghw.ProductInfo `json:"ghw_productinfo,omitempty"`
 	Memory         *ghw.MemoryInfo  `json:"ghw_memoryinfo,omitempty"`

@@ -369,9 +369,10 @@ func (ss *ServerSession) serveStream(log logging.FieldLogger, yStr io.ReadWriteC
 		}
 
 		resp := StreamResponse{
-			ReqHash:  req.raw.Hash(),
-			Accepted: true,
-			IP:       ip,
+			ReqHash:   req.raw.Hash(),
+			Accepted:  true,
+			IP:        ip,
+			Timestamp: time.Now().UnixNano(),
 		}
 		// Optional geo enrichment: when the client asked for geo and
 		// the server has a lookup function configured, fill the geo

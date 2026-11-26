@@ -547,8 +547,14 @@ func (ce *Client) LookupIPGeo(ctx context.Context, servers []cipher.PubKey) (Str
 	return StreamResponse{}, ErrCannotConnectToDelegated
 }
 
-// LookupIP dails to dmsg servers for public IP of the client.
-func (ce *Client) LookupIP(ctx context.Context, servers []cipher.PubKey) (myIP net.IP, err error) {
+// LookupIP dials dmsg servers for the public IP of the client.
+func (ce *Client) LookupIP(ctx context.Context, servers []cipher.PubKey) (net.IP, error) {
+	ip, _, err := ce.LookupIPProof(ctx, servers)
+	return ip, err
+}
+
+// LookupIPProof is LookupIP that also returns the server's signed answer.
+func (ce *Client) LookupIPProof(ctx context.Context, servers []cipher.PubKey) (net.IP, IPProof, error) {
 
 	cancellabelCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -556,7 +562,7 @@ func (ce *Client) LookupIP(ctx context.Context, servers []cipher.PubKey) (myIP n
 	if servers == nil {
 		entries, err := ce.discoverServers(cancellabelCtx, true)
 		if err != nil {
-			return nil, err
+			return nil, IPProof{}, err
 		}
 		for _, entry := range entries {
 			servers = append(servers, entry.Static)
@@ -567,7 +573,7 @@ func (ce *Client) LookupIP(ctx context.Context, servers []cipher.PubKey) (myIP n
 	// See if we are already connected to a delegated server.
 	for _, srvPK := range servers {
 		if dSes, ok := ce.clientSession(ce.porter, srvPK); ok {
-			ip, err := dSes.LookupIP(Addr{PK: dSes.RemotePK(), Port: 1})
+			ip, proof, err := dSes.LookupIPProof(Addr{PK: dSes.RemotePK(), Port: 1})
 			if err != nil {
 				ce.log.WithError(err).WithField("server_pk", srvPK).Warn("Failed to dial server for IP.")
 				continue
@@ -575,7 +581,7 @@ func (ce *Client) LookupIP(ctx context.Context, servers []cipher.PubKey) (myIP n
 
 			// If the client is test client then ignore Public IP check
 			if ce.conf.ClientType == "test" {
-				return ip, nil
+				return ip, proof, nil
 			}
 
 			// Check if the IP is public, if not try other servers
@@ -583,7 +589,7 @@ func (ce *Client) LookupIP(ctx context.Context, servers []cipher.PubKey) (myIP n
 				ce.log.WithField("server_pk", srvPK).WithField("ip", ip.String()).Warn("Received non-public IP address from dmsg server, trying other servers.")
 				continue
 			}
-			return ip, nil
+			return ip, proof, nil
 		}
 	}
 
@@ -596,7 +602,7 @@ func (ce *Client) LookupIP(ctx context.Context, servers []cipher.PubKey) (myIP n
 		if err != nil {
 			continue
 		}
-		ip, err := dSes.LookupIP(Addr{PK: dSes.RemotePK(), Port: 1})
+		ip, proof, err := dSes.LookupIPProof(Addr{PK: dSes.RemotePK(), Port: 1})
 		if err != nil {
 			ce.log.WithError(err).WithField("server_pk", srvPK).Warn("Failed to dial server for IP.")
 			ce.closeIfDialed(srvPK, dSes, hadBefore)
@@ -606,7 +612,7 @@ func (ce *Client) LookupIP(ctx context.Context, servers []cipher.PubKey) (myIP n
 
 		// If the client is test client then ignore Public IP check
 		if ce.conf.ClientType == "test" {
-			return ip, nil
+			return ip, proof, nil
 		}
 
 		// Check if the IP is public, if not try other servers
@@ -614,10 +620,10 @@ func (ce *Client) LookupIP(ctx context.Context, servers []cipher.PubKey) (myIP n
 			ce.log.WithField("server_pk", srvPK).WithField("ip", ip.String()).Warn("Received non-public IP address from dmsg server, trying other servers.")
 			continue
 		}
-		return ip, nil
+		return ip, proof, nil
 	}
 
-	return nil, ErrCannotConnectToDelegated
+	return nil, IPProof{}, ErrCannotConnectToDelegated
 }
 
 // LookupIPsByFamily iterates the client's connected dmsg sessions,
