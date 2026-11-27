@@ -42,7 +42,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: cachix/install-nix-action@v31
+      - uses: cachix/install-nix-action@v32
         with:
           # Authenticate Nix's github: flake fetches. Without a token,
           # resolving the unpinned `nixos-unstable` branch to a commit
