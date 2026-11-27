@@ -16,7 +16,7 @@
 // anti-replay (SetCiphers / datagram_crypto.go), the router dispatches
 // DatagramPacket to Handle (router_packet.go handleDatagramPacket), and
 // the datagram sibling is built during route setup from the reliable
-// route's Noise ChannelBinding (datagram_setup.go). Over a QUIC
+// route's Noise session key export (datagram_setup.go). Over a QUIC
 // transport the wire carriage is native unreliable datagrams
 // (RFC 9221); over other transports WriteDatagram falls back to the
 // reliable stream, so datagram *framing* is preserved but delivery is

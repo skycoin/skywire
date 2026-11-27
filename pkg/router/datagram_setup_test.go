@@ -2,7 +2,7 @@
 // for the route-setup-side datagram sibling (#2607 stage-4b). Verifies
 // the receive path end to end WITH crypto: a datagram sealed by an
 // initiator-side cipher (same master key, derived from the shared
-// channel binding) flows through the responder's handleTransportPacket
+// session key export) flows through the responder's handleTransportPacket
 // and is decrypted by the in-cipher that buildDatagramSibling installed.
 package router
 
@@ -20,14 +20,14 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
-// fakeBinderConn is a net.Conn that only implements ChannelBinding —
+// fakeSessionConn is a net.Conn that only implements ExportKey. It
 // stands in for the *noise.Conn that network.EncryptConn returns.
-type fakeBinderConn struct {
+type fakeSessionConn struct {
 	net.Conn
-	cb []byte
+	key [32]byte
 }
 
-func (f fakeBinderConn) ChannelBinding() []byte { return f.cb }
+func (f fakeSessionConn) ExportKey(string) ([32]byte, error) { return f.key, nil }
 
 func TestBuildDatagramSiblingReceivePathWithCrypto(t *testing.T) {
 	r := newDispatchTestRouter()
@@ -44,21 +44,21 @@ func TestBuildDatagramSiblingReceivePathWithCrypto(t *testing.T) {
 
 	// Build the responder's datagram sibling exactly as saveRouteGroupRules
 	// would on the accept side: Initiator=false, keyed off the shared
-	// channel binding via a fake encrypted conn.
-	binding := []byte("a-shared-noise-session-channel-binding")
+	// session key via a fake encrypted conn.
+	session := fakeSessionConn{key: [32]byte{1, 2, 3}}
 	nsConf := noise.Config{LocalPK: respPK, LocalSK: respSK, RemotePK: initPK, Initiator: false}
 	rules := routing.EdgeRules{Desc: desc, Forward: consume, Reverse: consume}
-	r.buildDatagramSibling(rules, nsConf, fakeBinderConn{cb: binding}, nil)
+	r.buildDatagramSibling(rules, nsConf, session, nil)
 
 	dg, ok := r.datagramRouteGroup(desc)
 	require.True(t, ok, "buildDatagramSibling must register a datagram route group")
 	require.NotNil(t, dg)
 
-	// Initiator side: derive the SAME master key from the SAME binding,
+	// Initiator side: derive the SAME master key from the SAME session,
 	// seal a payload with the initiator-direction cipher bound to the
 	// receiver (responder) PK — mirroring what the initiator's
 	// DatagramRouteGroup.WriteTo does.
-	master, err := deriveDatagramMasterKey(binding)
+	master, err := deriveDatagramMasterKey(session)
 	require.NoError(t, err)
 	initOut, err := NewDatagramCipher(master, RoleInitiator, respPK, nil)
 	require.NoError(t, err)
@@ -83,7 +83,7 @@ func TestBuildDatagramSiblingReceivePathWithCrypto(t *testing.T) {
 }
 
 // TestBuildDatagramSiblingSkipsUnencrypted verifies a route whose conn
-// exposes no channel binding (unencrypted/legacy) gets NO sibling —
+// exposes no session key export (unencrypted/legacy) gets NO sibling —
 // the datagram AEAD has no key to derive, so it must skip rather than
 // register a keyless group.
 func TestBuildDatagramSiblingSkipsUnencrypted(t *testing.T) {
@@ -97,15 +97,15 @@ func TestBuildDatagramSiblingSkipsUnencrypted(t *testing.T) {
 	nsConf := noise.Config{LocalPK: respPK, LocalSK: respSK, RemotePK: initPK, Initiator: false}
 	rules := routing.EdgeRules{Desc: desc, Forward: consume, Reverse: consume}
 
-	// A plain net.Conn (no ChannelBinding) — e.g. an unencrypted route.
-	r.buildDatagramSibling(rules, nsConf, fakeNoBinderConn{}, nil)
+	// A plain net.Conn (no ExportKey) — e.g. an unencrypted route.
+	r.buildDatagramSibling(rules, nsConf, fakeNoSessionConn{}, nil)
 
 	_, ok := r.datagramRouteGroup(desc)
 	assert.False(t, ok, "no sibling should be registered for an unencrypted route")
 }
 
-// fakeNoBinderConn is a net.Conn with no ChannelBinding method.
-type fakeNoBinderConn struct{ net.Conn }
+// fakeNoSessionConn is a net.Conn with no ExportKey method.
+type fakeNoSessionConn struct{ net.Conn }
 
 // TestDatagramPortRegistry covers the accept-side intent registry.
 func TestDatagramPortRegistry(t *testing.T) {
@@ -128,14 +128,14 @@ func TestBuildDatagramSiblingAcceptSideOffers(t *testing.T) {
 
 	localPK, localSK := cipher.GenerateKeyPair()
 	remotePK, _ := cipher.GenerateKeyPair()
-	binding := []byte("session-binding-for-accept-offer")
+	session := fakeSessionConn{key: [32]byte{4, 5, 6}}
 
 	// Accept side: dst port 7777 is the local serving port.
 	consume := routing.ConsumeRule(time.Hour, routing.RouteID(3), localPK, remotePK, 1234, 7777)
 	desc := consume.RouteDescriptor()
 	acceptConf := noise.Config{LocalPK: localPK, LocalSK: localSK, RemotePK: remotePK, Initiator: false}
 	rules := routing.EdgeRules{Desc: desc, Forward: consume, Reverse: consume}
-	r.buildDatagramSibling(rules, acceptConf, fakeBinderConn{cb: binding}, nil)
+	r.buildDatagramSibling(rules, acceptConf, session, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -146,7 +146,7 @@ func TestBuildDatagramSiblingAcceptSideOffers(t *testing.T) {
 
 	// Dial side: same shape but Initiator=true must NOT offer.
 	dialConf := noise.Config{LocalPK: localPK, LocalSK: localSK, RemotePK: remotePK, Initiator: true}
-	r.buildDatagramSibling(rules, dialConf, fakeBinderConn{cb: binding}, nil)
+	r.buildDatagramSibling(rules, dialConf, session, nil)
 
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 150*time.Millisecond)
 	defer cancel2()

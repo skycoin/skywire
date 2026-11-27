@@ -7,7 +7,7 @@
 // one-time Noise KK handshake → RouteGroup in rgsNs). When BOTH ends
 // locally intend datagram mode for the route, each additionally builds
 // a DatagramRouteGroup over the *same* forward/reverse rules and
-// transport, keyed off the reliable session's ChannelBinding — no
+// transport, keyed off a secret exported from the reliable session, with no
 // second handshake. DataPackets then flow through the reliable group,
 // DatagramPackets through the sibling, dispatched by packet type
 // (router_packet.go).
@@ -66,14 +66,6 @@ func (r *router) DialRoutesDatagram(ctx context.Context, rPK cipher.PubKey, lPor
 		return nil, nil, fmt.Errorf("datagram: route to %s:%d established but peer registered no datagram sibling (is the remote port in datagram mode?)", rPK, rPort)
 	}
 	return conn, dg, nil
-}
-
-// channelBinder is satisfied by the Noise-encrypted conn returned by
-// network.EncryptConn (concrete *noise.Conn). It exposes the completed
-// handshake's channel binding so the datagram sibling can key off the
-// reliable session without a second handshake.
-type channelBinder interface {
-	ChannelBinding() []byte
 }
 
 // acceptDatagramBuf bounds the accept-side datagram backlog. A datagram
@@ -164,8 +156,8 @@ func (r *router) closeDatagramSibling(desc routing.RouteDescriptor) {
 
 // buildDatagramSibling constructs + registers a DatagramRouteGroup over
 // the same rules/transport as the just-established reliable route,
-// keyed off the reliable session's ChannelBinding. Best-effort: any
-// failure (no channel binding because the route is unencrypted, key
+// keyed off a secret exported from the reliable session. Best-effort:
+// any failure (no session key because the route is unencrypted, key
 // derivation, cipher construction) logs and returns without a sibling —
 // the reliable route is unaffected, and a missing sibling just means
 // datagrams for this route are dropped (faithful-UDP loss tolerance).
@@ -173,7 +165,7 @@ func (r *router) closeDatagramSibling(desc routing.RouteDescriptor) {
 // wrapped is the encrypted conn from network.EncryptConn (nrg.Conn on
 // the encrypt path). tp is the first-hop transport for the route.
 func (r *router) buildDatagramSibling(rules routing.EdgeRules, nsConf noise.Config, wrapped net.Conn, tp *transport.ManagedTransport) {
-	binder, ok := wrapped.(channelBinder)
+	session, ok := wrapped.(sessionKeyExporter)
 	if !ok {
 		// Unencrypted route (legacy/no-noise) — the datagram AEAD has
 		// no key to derive. Modern visors always encrypt, so this is a
@@ -182,7 +174,7 @@ func (r *router) buildDatagramSibling(rules routing.EdgeRules, nsConf noise.Conf
 			Warn("datagram sibling requested but route is not noise-encrypted; skipping")
 		return
 	}
-	master, err := deriveDatagramMasterKey(binder.ChannelBinding())
+	master, err := deriveDatagramMasterKey(session)
 	if err != nil {
 		r.logger.WithError(err).WithField("desc", rules.Desc.String()).
 			Warn("datagram sibling: master-key derivation failed; skipping")

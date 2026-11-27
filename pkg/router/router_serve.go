@@ -583,7 +583,7 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 
 	// Faithful-UDP (#2607): when this end intends datagram mode for the
 	// route, build a DatagramRouteGroup sibling over the same rules +
-	// transport, keyed off the reliable session's Noise ChannelBinding.
+	// transport, keyed off a secret exported from the reliable session.
 	// Best-effort and additive — never affects the reliable route.
 	if datagram {
 		r.buildDatagramSibling(rules, nsConf, nrg.Conn, tp)
