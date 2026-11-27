@@ -390,6 +390,36 @@ func TestCalcDayRefusesAVersionBelowTheMinimum(t *testing.T) {
 	}
 }
 
+// The confirmed transport file applies without --require-tp, and a visor
+// missing from it is not paid.
+func TestCalcDayRefusesAVisorWithoutConfirmedTransports(t *testing.T) {
+	f := newCycleFixture(t)
+	f.o.requireTP = false
+	d := newDayCycle(nil, cycleConfig{})
+	confirmed := transportsConfirmedPath(f.o.histDir, cycleTestDate)
+	other := "03" + strings.Repeat("b", 64)
+
+	if err := os.WriteFile(confirmed, []byte(other+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f.calc(t, d)
+	if strings.Contains(f.txn(t), cycleTestAddr) {
+		t.Fatalf("a visor without confirmed transports was paid:\n%s", f.txn(t))
+	}
+	ineligible, err := os.ReadFile(filepath.Join(f.o.histDir, cycleTestDate+"_ineligible.csv"))
+	if err != nil || !strings.Contains(string(ineligible), "Transports not confirmed by peers") {
+		t.Fatalf("ineligible.csv %v:\n%s", err, ineligible)
+	}
+
+	// Listed in the file, the visor is paid, and the changed file makes the cycle recalculate.
+	if err := os.WriteFile(confirmed, []byte(other+"\n"+cycleTestPK+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if res := f.calc(t, d); res.skipped || !strings.Contains(f.txn(t), cycleTestAddr) {
+		t.Fatalf("confirmed visor: %+v\n%s", res, f.txn(t))
+	}
+}
+
 // A day is calculated again by hand from the surveys on disk, as `rewards
 // run --date <day> --skip-collect` does: nothing is fetched, no survey is
 // removed, and the day's own minimum version decides who is paid.
