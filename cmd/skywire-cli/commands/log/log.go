@@ -29,6 +29,7 @@ import (
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	deprewards "github.com/skycoin/skywire/pkg/deployment/rewards"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgboot"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
@@ -495,44 +496,11 @@ func minVersionFloor(log *logging.Logger) string {
 func fetchMinVersionFromGitHub() string {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/repos/skycoin/skywire/releases?per_page=100", nil)
+	releases, err := deprewards.ReleasesFetch(ctx)
 	if err != nil {
 		return ""
 	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return ""
-	}
-	defer resp.Body.Close() //nolint:errcheck
-	if resp.StatusCode != http.StatusOK {
-		return ""
-	}
-	var releases []struct {
-		TagName     string    `json:"tag_name"`
-		Draft       bool      `json:"draft"`
-		Prerelease  bool      `json:"prerelease"`
-		PublishedAt time.Time `json:"published_at"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
-		return ""
-	}
-	cutoff := time.Now().Add(-14 * 24 * time.Hour)
-	var best *version.Version
-	var bestTag string
-	for _, r := range releases {
-		if r.Draft || r.Prerelease || r.PublishedAt.IsZero() || r.PublishedAt.After(cutoff) {
-			continue
-		}
-		v, err := version.NewVersion(r.TagName)
-		if err != nil {
-			continue
-		}
-		if best == nil || v.GreaterThan(best) {
-			best = v
-			bestTag = r.TagName
-		}
-	}
-	return bestTag
+	return deprewards.MinVersion(releases, time.Now())
 }
 
 // visorURL builds the URL to fetch `path` from visor `pubkey`, per collector mode:

@@ -3,6 +3,7 @@ package clirewards
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -970,6 +971,12 @@ func calcRewards(o rewardOpts) *rewardResult {
 	if err != nil {
 		log.Fatal("Error parsing date:", err)
 	}
+	minVersion := rewardMinVersion(o.histDir, wDate)
+	if minVersion == "" {
+		log.Warnf("No skywire release list: the minimum version is not checked for %s", wdate)
+	} else {
+		log.Infof("Minimum version for %s: %s", wdate, minVersion)
+	}
 	_, err = os.Stat(o.surveyPath)
 	if errors.Is(err, fs.ErrNotExist) {
 		log.Fatal("the path to the surveys does not exist\n", err, "\nfetch the surveys with:\n$ skywire-cli log")
@@ -1207,11 +1214,14 @@ func calcRewards(o rewardOpts) *rewardResult {
 			Bandwidth:   visorBW,
 		}
 
-		baseEligible := archAllowed && ipErr == nil && strings.Count(ip, ".") == 3 && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" && hv == "null" && addrErr == nil && meetsTransportReq
+		versionLow := minVersion != "" && deprewards.VersionBelow(survey.SkywireVersion, minVersion)
+		baseEligible := archAllowed && !versionLow && ipErr == nil && strings.Count(ip, ".") == 3 && uu != "" && ifc != "" && len(macs) > 0 && macs[0] != "" && hv == "null" && addrErr == nil && meetsTransportReq
 
 		if !baseEligible {
 			ni.Reason = func() string {
 				switch {
+				case versionLow:
+					return "Version below " + minVersion
 				case !archAllowed:
 					return arch
 				case ipErr != nil:
@@ -1739,3 +1749,38 @@ func defaultSkycoinNode() string {
 // Those seen so far were all Indonesian IPs newer than the database, and a bucket of
 // their own gave them a much larger regional share than the rest of Indonesia.
 const unknownCountry = "ID"
+
+// releasesFile keeps the last skywire release list read from GitHub, so the
+// version minimum holds when GitHub cannot be reached.
+const releasesFile = "releases.json"
+
+// releasesFetch reads the skywire releases; tests replace it.
+var releasesFetch = deprewards.ReleasesFetch
+
+// rewardMinVersion is the minimum skywire version for reward day day: the
+// release that had been out MinVersionDelay when the day ended. "" when the
+// release list is neither on GitHub nor kept in dir.
+func rewardMinVersion(dir string, day time.Time) string {
+	path := filepath.Join(dir, releasesFile)
+	var releases []deprewards.Release
+	if fi, err := os.Stat(path); err != nil || time.Since(fi.ModTime()) > time.Hour {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		fetched, err := releasesFetch(ctx)
+		cancel()
+		if err == nil && len(fetched) > 0 {
+			releases = fetched
+			if err := writeAtomic(path, 0600, func(w io.Writer) error { return json.NewEncoder(w).Encode(fetched) }); err != nil {
+				log.WithError(err).Warn("Could not keep the release list")
+			}
+		} else {
+			log.WithError(err).Warn("Could not read the skywire releases from GitHub; using the kept list")
+		}
+	}
+	if releases == nil {
+		data, err := os.ReadFile(path) //nolint:gosec // a path of the reward work dir
+		if err != nil || json.Unmarshal(data, &releases) != nil {
+			return ""
+		}
+	}
+	return deprewards.MinVersion(releases, day.Add(24*time.Hour))
+}

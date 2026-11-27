@@ -342,3 +342,50 @@ func TestSurveyChanged(t *testing.T) {
 		}
 	}
 }
+
+// A survey below the day's minimum version is not paid, even when it was
+// pushed after the collector last pruned old surveys, and the kept release
+// list holds the minimum when GitHub cannot be reached.
+func TestCalcDayRefusesAVersionBelowTheMinimum(t *testing.T) {
+	f := newCycleFixture(t)
+	d := newDayCycle(nil, cycleConfig{})
+	dayEnd := time.Date(2026, 11, 11, 0, 0, 0, 0, time.UTC)
+	released := func(tag string, age time.Duration) deprewards.Release {
+		return deprewards.Release{Tag: tag, Published: dayEnd.Add(-age)}
+	}
+	releases := []deprewards.Release{
+		released("v1.3.112", 20*24*time.Hour),
+		released("v1.3.113", 15*24*time.Hour),
+		released("v1.3.114", 2*24*time.Hour),
+		released("mobile-v0.0.13", 30*24*time.Hour),
+	}
+	fetch := releasesFetch
+	t.Cleanup(func() { releasesFetch = fetch })
+	releasesFetch = func(context.Context) ([]deprewards.Release, error) { return releases, nil }
+
+	f.calc(t, d)
+	if strings.Contains(f.txn(t), cycleTestAddr) {
+		t.Fatalf("a v1.3.112 survey was paid under a v1.3.113 minimum:\n%s", f.txn(t))
+	}
+	ineligible, err := os.ReadFile(filepath.Join(f.o.histDir, cycleTestDate+"_ineligible.csv"))
+	if err != nil || !strings.Contains(string(ineligible), "Version below v1.3.113") {
+		t.Fatalf("ineligible.csv %v:\n%s", err, ineligible)
+	}
+
+	// GitHub down, kept list stale: the kept list still sets the minimum.
+	releasesFetch = func(context.Context) ([]deprewards.Release, error) { return nil, errors.New("down") }
+	old := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(filepath.Join(f.o.histDir, releasesFile), old, old); err != nil {
+		t.Fatal(err)
+	}
+	if got := rewardMinVersion(f.o.histDir, dayEnd.AddDate(0, 0, -1)); got != "v1.3.113" {
+		t.Fatalf("minimum from the kept list %q", got)
+	}
+
+	// A lower minimum pays it, and the changed minimum makes the cycle recalculate.
+	releases = releases[:1]
+	releasesFetch = func(context.Context) ([]deprewards.Release, error) { return releases, nil }
+	if res := f.calc(t, d); res.skipped || !strings.Contains(f.txn(t), cycleTestAddr) {
+		t.Fatalf("v1.3.112 minimum: %+v\n%s", res, f.txn(t))
+	}
+}
