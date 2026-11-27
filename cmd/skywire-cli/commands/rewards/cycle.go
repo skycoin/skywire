@@ -347,6 +347,9 @@ func inputsHash(o rewardOpts) (sum string, singles []string, err error) {
 	fmt.Fprintf(h, "%s %s\n", buildinfo.Version(), buildinfo.Commit()) //nolint:errcheck,gosec // a hash never fails a write
 	h.Write(deployment.ServicesJSON)                                   //nolint:errcheck,gosec // a hash never fails a write
 	fmt.Fprintf(h, "\n%+v\n", o)                                       //nolint:errcheck,gosec // a hash never fails a write
+	if day, err := time.Parse("2006-01-02", o.date); err == nil {
+		fmt.Fprintf(h, "min version %s\n", rewardMinVersion(o.histDir, day)) //nolint:errcheck,gosec // a hash never fails a write
+	}
 	for _, p := range []string{
 		o.utfile,
 		filepath.Join(o.histDir, o.date+"_bandwidth.json"),
