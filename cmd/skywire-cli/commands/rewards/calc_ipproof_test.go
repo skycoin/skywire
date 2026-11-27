@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	deprewards "github.com/skycoin/skywire/pkg/deployment/rewards"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 )
 
@@ -47,28 +46,33 @@ func TestSurveyIPUsesTheSignedIP(t *testing.T) {
 	ipProofServerKnown = func(pk cipher.PubKey) bool { return pk == srvPK }
 	t.Cleanup(func() { ipProofServerKnown = known })
 
-	day := deprewards.IPProofCutoff.AddDate(0, 0, 3)
-	before := deprewards.IPProofCutoff.AddDate(0, 0, -1)
+	day := time.Date(2026, time.December, 1, 0, 0, 0, 0, time.UTC)
+	const newVersion = "v1.3.114"
 	pk := visorPK.Hex()
 
 	cases := []struct {
 		name    string
+		version string
 		proof   *dmsg.IPProof
 		day     time.Time
 		wantIP  string
 		wantErr error
 	}{
-		{"signed IP wins over the reported one", ipProofSign(t, visorPK, visorSK, srvPK, srvSK, day), day, "5.6.7.8", nil},
-		{"no proof after the cutoff", nil, day, "", errIPProofMissing},
-		{"no proof before the cutoff keeps the reported IP", nil, before, "1.2.3.4", nil},
-		{"another visor's proof", ipProofSign(t, otherPK, otherSK, srvPK, srvSK, day), day, "", errIPProofOtherKey},
-		{"a server outside the deployment", ipProofSign(t, visorPK, visorSK, strangerPK, strangerSK, day), day, "", errIPProofUnknownServer},
-		{"a proof older than the window", ipProofSign(t, visorPK, visorSK, srvPK, srvSK, day.Add(-ipProofMaxAge-time.Hour)), day, "", errIPProofStale},
-		{"a newer proof for an older day", ipProofSign(t, visorPK, visorSK, srvPK, srvSK, day.AddDate(0, 0, 10)), day, "5.6.7.8", nil},
+		{"signed IP wins over the reported one", newVersion, ipProofSign(t, visorPK, visorSK, srvPK, srvSK, day), day, "5.6.7.8", nil},
+		{"no proof from a version that sends one", newVersion, nil, day, "", errIPProofMissing},
+		{"no proof from a release before proofs keeps the reported IP", "v1.3.113", nil, day, "1.2.3.4", nil},
+		{"a dev build of that release keeps it too", "v1.3.113-26-g327848978", nil, day, "1.2.3.4", nil},
+		{"no proof and no version", "", nil, day, "", errIPProofMissing},
+		{"no proof and a version that does not parse", "latest", nil, day, "", errIPProofMissing},
+		{"a bad proof from an old release keeps the reported IP", "v1.3.112", ipProofSign(t, otherPK, otherSK, srvPK, srvSK, day), day, "1.2.3.4", nil},
+		{"another visor's proof", newVersion, ipProofSign(t, otherPK, otherSK, srvPK, srvSK, day), day, "", errIPProofOtherKey},
+		{"a server outside the deployment", newVersion, ipProofSign(t, visorPK, visorSK, strangerPK, strangerSK, day), day, "", errIPProofUnknownServer},
+		{"a proof older than the window", newVersion, ipProofSign(t, visorPK, visorSK, srvPK, srvSK, day.Add(-ipProofMaxAge-time.Hour)), day, "", errIPProofStale},
+		{"a newer proof for an older day", newVersion, ipProofSign(t, visorPK, visorSK, srvPK, srvSK, day.AddDate(0, 0, 10)), day, "5.6.7.8", nil},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			ip, err := surveyIP(&surveyData{IPAddr: "1.2.3.4", IPProof: c.proof}, pk, c.day)
+			ip, err := surveyIP(&surveyData{IPAddr: "1.2.3.4", IPProof: c.proof, SkywireVersion: c.version}, pk, c.day)
 			if !errors.Is(err, c.wantErr) || ip != c.wantIP {
 				t.Fatalf("got %q, %v; want %q, %v", ip, err, c.wantIP, c.wantErr)
 			}
@@ -83,7 +87,7 @@ func TestSurveyIPRejectsAForgedIP(t *testing.T) {
 	ipProofServerKnown = func(pk cipher.PubKey) bool { return pk == srvPK }
 	t.Cleanup(func() { ipProofServerKnown = known })
 
-	day := deprewards.IPProofCutoff
+	day := time.Date(2026, time.December, 1, 0, 0, 0, 0, time.UTC)
 	proof := ipProofSign(t, visorPK, visorSK, srvPK, srvSK, day)
 	resp, err := proof.Response.ObtainStreamResponse()
 	if err != nil {
@@ -106,7 +110,7 @@ func TestSurveyIPProofSurvivesTheSurveyFile(t *testing.T) {
 	ipProofServerKnown = func(pk cipher.PubKey) bool { return pk == srvPK }
 	t.Cleanup(func() { ipProofServerKnown = known })
 
-	day := deprewards.IPProofCutoff
+	day := time.Date(2026, time.December, 1, 0, 0, 0, 0, time.UTC)
 	body, err := json.MarshalIndent(map[string]any{"ip_address": "1.2.3.4", "ip_proof": ipProofSign(t, visorPK, visorSK, srvPK, srvSK, day)}, "", "\t")
 	if err != nil {
 		t.Fatal(err)

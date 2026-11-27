@@ -307,7 +307,7 @@ For example, if 9 visors at a given ip address meet the minimum uptime requireme
 
 For calc dates in June 2026 only, the cap was temporarily 12 shares.
 
-The ip address is the one a deployment dmsg server saw the visor connect from. The server signs it, and the visor puts the signed answer in its survey as `ip_proof`. From the reward day 2026-12-15, a visor whose survey has no valid `ip_proof` is not eligible. The proof must be for the visor's own key, from a dmsg server in the deployment, and no more than 48 hours older than the reward day. Before that date the ip address in the survey is used when there is no valid proof.
+The ip address is the one a deployment dmsg server saw the visor connect from. The server signs it, and the visor puts the signed answer in its survey as `ip_proof`. A visor running a release after v1.3.113 is not eligible unless its survey has a valid `ip_proof`. The proof must be for the visor's own key, from a dmsg server in the deployment, and no more than 48 hours older than the reward day. For v1.3.113 and earlier, which do not send a proof, the ip address in the survey is used, until the minimum version passes v1.3.113.
 
 ### Regional Saturation Scaling
 
