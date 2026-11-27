@@ -334,9 +334,14 @@ func collectBandwidth(flags *pflag.FlagSet, bwLog *logging.Logger, local tpdMetr
 	hostKeys := hostKeysByPK(bwLog, bwSurveyPath, day)
 	bwLog.Infof("Read host keys for %d visors from %s", len(hostKeys), bwSurveyPath)
 
-	transports, err := fetchTransportBandwidthFromTPD(flags, bwLog, hostKeys, !noCache, bwDays, targetDate, local.reader())
+	transports, confirmed, err := fetchTransportBandwidthFromTPD(flags, bwLog, hostKeys, !noCache, bwDays, targetDate, local.reader())
 	if err != nil {
 		return fmt.Errorf("fetch bandwidth data: %w", err)
+	}
+	if len(confirmed) > 0 {
+		if err := transportsConfirmedWrite(targetDate, confirmed); err != nil {
+			return err
+		}
 	}
 
 	// An empty answer is never a real day: TPD always has transports
@@ -423,6 +428,50 @@ func hostKeysByPK(bwLog *logging.Logger, surveyPath string, day time.Time) map[s
 	return hostKeys
 }
 
+// transportsConfirmedMin is rule 9 of rewards/mainnet_rules.md: at least 2 transports.
+const transportsConfirmedMin = 2
+
+// transportsConfirmedPath is the file listing the visors whose day had
+// transportsConfirmedMin transports that the other edge reported too.
+func transportsConfirmedPath(dir, date string) string {
+	return fmt.Sprintf("%s/%s_transports_confirmed.txt", dir, date)
+}
+
+// transportsConfirmedWrite writes the PKs with enough confirmed transports, sorted.
+func transportsConfirmedWrite(date string, confirmed map[string]int) error {
+	pks := make([]string, 0, len(confirmed))
+	for pk, n := range confirmed {
+		if n >= transportsConfirmedMin {
+			pks = append(pks, pk)
+		}
+	}
+	slices.Sort(pks)
+	path := transportsConfirmedPath(histPath, date)
+	if err := writeAtomic(path, 0600, func(w io.Writer) error {
+		_, err := io.WriteString(w, strings.Join(pks, "\n")+"\n")
+		return err
+	}); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	return nil
+}
+
+// transportsConfirmedRead reads the PKs transportsConfirmedWrite wrote, nil
+// when the file is missing.
+func transportsConfirmedRead(path string) map[string]struct{} {
+	data, err := os.ReadFile(path) //nolint:gosec // a path of the reward work dir
+	if err != nil {
+		return nil
+	}
+	pks := make(map[string]struct{})
+	for line := range strings.SplitSeq(string(data), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			pks[line] = struct{}{}
+		}
+	}
+	return pks
+}
+
 // hostShared returns a key both visors' hosts have, or "" when none.
 func hostShared(a, b []string) string {
 	for _, k := range a {
@@ -444,7 +493,7 @@ func hostShared(a, b []string) string {
 // pool 1 eligibility set at run time (it's recomputed during calc using
 // the day's surveys + uptime). The calculator does that filter after
 // reading this list.
-func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logger, hostKeys map[string][]string, useCache bool, days int, dateFilter string, local tpdMetricsReader) ([]TransportBW, error) {
+func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logger, hostKeys map[string][]string, useCache bool, days int, dateFilter string, local tpdMetricsReader) ([]TransportBW, map[string]int, error) {
 	// Check cache
 	if useCache {
 		if info, err := os.Stat(bwCacheFile); err == nil {
@@ -454,7 +503,7 @@ func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logg
 				if err == nil {
 					var cached []TransportBW
 					if err := json.Unmarshal(data, &cached); err == nil {
-						return cached, nil
+						return cached, nil, nil
 					}
 					bwLog.WithError(err).Debug("Failed to parse cached bandwidth data, fetching fresh")
 				}
@@ -467,6 +516,7 @@ func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logg
 	}
 
 	out := []TransportBW{}
+	confirmed := make(map[string]int)
 	sameLANCount := 0
 	reduce := func(tp *tpdTransport) {
 		if len(tp.Edges) != 2 {
@@ -479,6 +529,7 @@ func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logg
 		// transport only one edge reported. Both edges report on 90 to 97%
 		// of transports now, so the B2 condition that removed the cap holds.
 		var sentA, sentB uint64
+		bothReported := false
 		for _, d := range tp.Daily {
 			if dateFilter != "" && d.Date != dateFilter {
 				continue
@@ -486,16 +537,25 @@ func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logg
 			a, b := tpdstore.SenderBytes(d)
 			sentA += a
 			sentB += b
+			bothReported = bothReported || tpdstore.BothReported(d)
+		}
+
+		edgeA := tp.Edges[0]
+		edgeB := tp.Edges[1]
+		sameHost := hostShared(hostKeys[edgeA], hostKeys[edgeB])
+
+		// A transport counts toward the transport requirement only when the
+		// visor at the other end, on another host, reported it too.
+		if bothReported && tp.Type != "dmsg" && sameHost == "" {
+			confirmed[edgeA]++
+			confirmed[edgeB]++
 		}
 		if sentA == 0 && sentB == 0 {
 			return
 		}
 
-		edgeA := tp.Edges[0]
-		edgeB := tp.Edges[1]
-
 		// Both edges on one IP or one machine earn nothing for the transport.
-		if k := hostShared(hostKeys[edgeA], hostKeys[edgeB]); k != "" {
+		if k := sameHost; k != "" {
 			sameLANCount++
 			bwLog.Debugf("Excluding same-host transport %s: %s and %s share %s (sent_a=%d sent_b=%d)",
 				tp.ID, edgeA, edgeB, k, sentA, sentB)
@@ -527,12 +587,12 @@ func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logg
 		bwLog.Info("Fetching all transport metrics from TPD: ", url)
 		body, err := fetchServiceURL(cmdFlags, url)
 		if err != nil {
-			return nil, fmt.Errorf("TPD fetch failed: %w", err)
+			return nil, nil, fmt.Errorf("TPD fetch failed: %w", err)
 		}
 		// The body holds every transport of the day, so each is decoded and
 		// reduced on its own rather than held as one slice.
 		if fetched, err = eachTPDTransport(body, reduce); err != nil {
-			return nil, fmt.Errorf("failed to parse JSON: %w", err)
+			return nil, nil, fmt.Errorf("failed to parse JSON: %w", err)
 		}
 		bwLog.Infof("Fetched %d transports from TPD", fetched)
 	}
@@ -548,7 +608,7 @@ func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logg
 		bwLog.WithError(err).Warn("Failed to update bandwidth cache file")
 	}
 
-	return out, nil
+	return out, confirmed, nil
 }
 
 // minUint64 is the receiver-side anti-inflation cap previously used in

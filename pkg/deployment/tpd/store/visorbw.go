@@ -50,7 +50,7 @@ const VisorBWVersion = 3
 // Where both edges reported checkpoints of the same conn, it is also capped by
 // the bytes those checkpoints verify.
 func SenderBytes(d DailyEdgeBandwidth) (sentA, sentB uint64) {
-	if !bothReported(d) {
+	if !BothReported(d) {
 		return 0, 0
 	}
 	return checkpointCap(min(d.A.Sent, d.B.Recv), d.A), checkpointCap(min(d.B.Sent, d.A.Recv), d.B)
@@ -70,7 +70,8 @@ func checkpointCap(n uint64, sender *EdgeBandwidth) uint64 {
 	return min(n, sender.Verified+checkpointSlack(n))
 }
 
-func bothReported(d DailyEdgeBandwidth) bool { return reported(d.A) && reported(d.B) }
+// BothReported is whether both edges of a transport reported bytes for the day.
+func BothReported(d DailyEdgeBandwidth) bool { return reported(d.A) && reported(d.B) }
 
 // reported is whether an edge has a record with any bytes in it. An all zero
 // record has not reported yet.

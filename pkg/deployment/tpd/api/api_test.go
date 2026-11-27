@@ -112,6 +112,35 @@ func TestRegisterTransport(t *testing.T) {
 	assert.Equal(t, sEntry.Entry, resp[0].Entry)
 }
 
+// TestRegisterTransportOnlyAsAnEdge checks that a visor cannot register a
+// transport between two other visors through the v2 endpoint.
+func TestRegisterTransportOnlyAsAnEdge(t *testing.T) {
+	mock := newTestStore(t)
+	nonceMock, err := httpauth.NewNonceStore(context.TODO(), storeconfig.Config{Type: storeconfig.Memory}, "")
+	require.NoError(t, err)
+	api := New(nil, mock, nonceMock, false, tpdiscmetrics.NewEmpty(), "", "")
+
+	pk1, _ := cipher.GenerateKeyPair()
+	pk2, _ := cipher.GenerateKeyPair()
+	own := &transport.SignedEntry{Entry: newTestEntry()}
+	others := &transport.SignedEntry{Entry: &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(pk1, pk2), Type: "stcpr"}}
+
+	body := bytes.NewBuffer(nil)
+	require.NoError(t, json.NewEncoder(body).Encode([]*transport.SignedEntry{own, others}))
+	r := httptest.NewRequest("POST", "/transports/", body)
+	r.Header = validHeaders(t, body.Bytes())
+	w := httptest.NewRecorder()
+	api.ServeHTTP(w, r)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+	var resp []*transport.SignedEntry
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Len(t, resp, 1)
+	assert.Equal(t, own.Entry.ID, resp[0].Entry.ID)
+	_, err = mock.GetTransportByID(context.TODO(), others.Entry.ID)
+	require.ErrorIs(t, err, store.ErrTransportNotFound)
+}
+
 func TestGETAllTransportsStats(t *testing.T) {
 	mock := newTestStore(t)
 	ctx := context.Background()

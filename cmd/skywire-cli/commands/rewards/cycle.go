@@ -351,6 +351,7 @@ func inputsHash(o rewardOpts) (sum string, singles []string, err error) {
 		o.utfile,
 		filepath.Join(o.histDir, o.date+"_bandwidth.json"),
 		filepath.Join(o.histDir, o.date+"_transports.txt"),
+		transportsConfirmedPath(o.histDir, o.date),
 	} {
 		if err := hashFile(h, p); err != nil {
 			return "", nil, err
