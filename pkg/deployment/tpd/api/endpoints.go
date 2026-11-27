@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -148,6 +149,15 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 	// The authenticated caller is the registering edge; the store refreshes
 	// only its per-edge index TTL (zero PK falls back to both edges).
 	reporter, _ := r.Context().Value(httpauth.ContextAuthKey).(cipher.PubKey)
+
+	// As in v3, a visor registers only transports it is an edge of.
+	entries = slices.DeleteFunc(entries, func(e *transport.SignedEntry) bool {
+		return e == nil || e.Entry == nil || e.Entry.EdgeIndex(reporter) < 0
+	})
+	if len(entries) == 0 {
+		httputil.WriteJSON(w, r, http.StatusCreated, []*transport.SignedEntry{})
+		return
+	}
 
 	// Register all transports in a single Redis pipeline (batch).
 	// This reduces N separate pipelines to 1, cutting Redis round-trips.

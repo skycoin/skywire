@@ -1040,6 +1040,19 @@ func calcRewards(o rewardOpts) *rewardResult {
 			requireTransports = false
 		}
 	}
+	// Only transports the visor at the other end also reported count, so a
+	// visor cannot meet the requirement by registering transports alone.
+	var confirmedMap map[string]struct{}
+	if requireTransports {
+		confirmedFile := transportsConfirmedPath(o.histDir, wdate)
+		confirmedMap = transportsConfirmedRead(confirmedFile)
+		if len(confirmedMap) == 0 {
+			log.Warnf("Confirmed transport file %s missing or empty: counting transports only one edge reported", confirmedFile)
+			confirmedMap = nil
+		} else {
+			log.Infof("Loaded %d visors with confirmed transports from %s", len(confirmedMap), confirmedFile)
+		}
+	}
 
 	// Load bandwidth data. Prefer v2 (per-transport sender-side
 	// totals) so we can credit each visor only for bytes it actually
@@ -1158,7 +1171,9 @@ func calcRewards(o rewardOpts) *rewardResult {
 		addrErr := rewardAddressError(sky, wDate)
 
 		_, inTransports := transportMap[pk]
-		meetsTransportReq := !requireTransports || inTransports
+		_, transportsConfirmed := confirmedMap[pk]
+		transportsConfirmed = transportsConfirmed || confirmedMap == nil
+		meetsTransportReq := !requireTransports || (inTransports && transportsConfirmed)
 		visorBW := bandwidthMap[pk]
 
 		_, archAllowed := allowArchMapAll[arch]
@@ -1198,8 +1213,10 @@ func calcRewards(o rewardOpts) *rewardResult {
 					return hv
 				case addrErr != nil:
 					return addressReason(addrErr)
-				case !meetsTransportReq:
+				case requireTransports && !inTransports:
 					return "No transports"
+				case !meetsTransportReq:
+					return "Transports not confirmed by peers"
 				default:
 					return "Unknown reason"
 				}

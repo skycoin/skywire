@@ -2,6 +2,7 @@
 package clirewards
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -10,7 +11,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	deprewards "github.com/skycoin/skywire/pkg/deployment/rewards"
+	"github.com/skycoin/skywire/pkg/deployment/tpd/api"
+	tpdmetrics "github.com/skycoin/skywire/pkg/deployment/tpd/metrics"
+	tpdstore "github.com/skycoin/skywire/pkg/deployment/tpd/store"
+	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
@@ -61,4 +67,47 @@ func TestHostKeysFindVisorsOnOneHost(t *testing.T) {
 	require.Empty(t, hostShared(hostKeys[liarA], hostKeys[boxA]))
 	// Past the cutoff a survey with no proof has no IP to share.
 	require.NotContains(t, hostKeys[boxA], "ip:192.0.2.10")
+}
+
+// TestTransportsConfirmedNeedThePeer checks which visors bw-collect lists as
+// having two transports: only transports the other edge reported too, that
+// are not dmsg and not between two visors on one host, count.
+func TestTransportsConfirmedNeedThePeer(t *testing.T) {
+	const date = "2026-11-21"
+	pk := func() string { p, _ := cipher.GenerateKeyPair(); return p.Hex() }
+	x, y, z, w, v, u := pk(), pk(), pk(), pk(), pk(), pk()
+	edge := func(sent, recv uint64) *tpdstore.EdgeBandwidth {
+		return &tpdstore.EdgeBandwidth{Sent: sent, Recv: recv}
+	}
+	both := []tpdstore.DailyEdgeBandwidth{{Date: date, A: edge(50, 40), B: edge(40, 50)}}
+	recs := []tpdstore.TransportMetric{
+		{ID: "x-y", Type: "stcpr", Edges: []string{x, y}, Daily: both},
+		{ID: "x-z", Type: "sudph", Edges: []string{x, z}, Daily: both},
+		{ID: "w-y", Type: "stcpr", Edges: []string{w, y}, Daily: both},
+		{ID: "w-z one edge", Type: "stcpr", Edges: []string{w, z}, Daily: []tpdstore.DailyEdgeBandwidth{{Date: date, A: edge(50, 0)}}},
+		{ID: "w-v dmsg", Type: "dmsg", Edges: []string{w, v}, Daily: both},
+		{ID: "w-u one host", Type: "stcpr", Edges: []string{w, u}, Daily: both},
+		{ID: "w-z other day", Type: "stcpr", Edges: []string{w, z}, Daily: []tpdstore.DailyEdgeBandwidth{{Date: "2026-11-20", A: edge(5, 5), B: edge(5, 5)}}},
+	}
+	nonces, err := httpauth.NewNonceStore(context.Background(), storeconfig.Config{Type: storeconfig.Memory}, "")
+	require.NoError(t, err)
+	tpdAPI := api.New(logging.MustGetLogger("tpd-test"), &metricsRecordStore{recs: recs}, nonces, false, tpdmetrics.NewEmpty(), "", "")
+
+	wd := t.TempDir()
+	surveys := filepath.Join(wd, "log_backups")
+	for _, p := range []string{w, u} {
+		require.NoError(t, os.MkdirAll(filepath.Join(surveys, p), 0o750))
+		require.NoError(t, os.WriteFile(filepath.Join(surveys, p, "node-info.json"), []byte(`{"ip_address":"203.0.113.9"}`), 0o600))
+	}
+	oldCache, oldHist, oldSurveys, oldDate, oldDays, oldNoCache := bwCacheFile, histPath, bwSurveyPath, bwDate, bwDays, noCache
+	t.Cleanup(func() {
+		bwCacheFile, histPath, bwSurveyPath, bwDate, bwDays, noCache = oldCache, oldHist, oldSurveys, oldDate, oldDays, oldNoCache
+	})
+	bwCacheFile, histPath = filepath.Join(wd, "cache.json"), filepath.Join(wd, "hist")
+	bwSurveyPath, bwDate, bwDays, noCache = surveys, date, 2, true
+
+	require.NoError(t, collectBandwidth(nil, logging.MustGetLogger("bw-collect-test"), func() tpdMetricsReader { return tpdLocalAPI{tpdAPI} }))
+	got := transportsConfirmedRead(transportsConfirmedPath(histPath, date))
+	require.Equal(t, map[string]struct{}{x: {}, y: {}}, got)
+	require.Nil(t, transportsConfirmedRead(transportsConfirmedPath(histPath, "2026-11-22")))
 }
