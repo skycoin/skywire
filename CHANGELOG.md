@@ -6,6 +6,55 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.114
+
+Visors now put the IP address a dmsg server signed for them in the reward
+survey. A survey that reports a version newer than v1.3.113 is rewarded only
+with that signed IP. The reward system also finds visors that share one
+machine, checks the minimum version for each reward day, drops bandwidth
+between visors on one host, and transport discovery keeps a transport report
+only from one of its two edges.
+
+Skychat groups keep settled history on disk instead of in memory, a deleted
+group stays deleted, and the Skychat address book is the visor contact book.
+More of the hypervisor and the wallet is translated into Chinese. A late
+failed hypervisor call back no longer crashes the visor.
+
+-   ci: bump ossf/scorecard-action to 2.6.0 and cachix/install-nix-action to 32  [#6346](https://github.com/skycoin/skywire/pull/6346)
+-   rewards: test recalculating a past day from the surveys on disk  [#6343](https://github.com/skycoin/skywire/pull/6343)
+-   rewards: check the minimum version in the reward calculation  [#6342](https://github.com/skycoin/skywire/pull/6342)
+-   rewards: require the signed IP from the release after v1.3.113  [#6341](https://github.com/skycoin/skywire/pull/6341)
+-   tpd, rewards: count only transports the other edge confirms  [#6340](https://github.com/skycoin/skywire/pull/6340)
+-   rewards: drop bandwidth between visors on one host by signed IP and machine  [#6339](https://github.com/skycoin/skywire/pull/6339)
+-   dmsg, visor: count only dmsg servers as dmsg servers  [#6338](https://github.com/skycoin/skywire/pull/6338)
+-   rewards: say machine dedup in the presence pool header  [#6337](https://github.com/skycoin/skywire/pull/6337)
+-   deps, hvui: bump skycoin to v0.28.9-0.20261126073145-a45e69c951d6 so the hypervisor wallet and its ui2 pages have Chinese and follow the dashboard language; translate the classic Skynet page and the Skychat tooltips and notices; add `make check-template-literals` and `make check-lang-zh` to the ui job  [#6336](https://github.com/skycoin/skywire/pull/6336)
+-   visor/ui2, hvui: translate the Skynet, alerts, chat and wallet config pages and the wallet Node button into Chinese, send the remaining ui2 literals through the translation files, and add tests that fail on untranslated ui2 text or keys missing from en or zh  [#6335](https://github.com/skycoin/skywire/pull/6335)
+-   skychat, visor: the Skychat address book is the visor contact book, so a contact added on the hypervisor Contacts page shows in Skychat and one added or removed in Skychat is added or removed there; the list a browser kept moves into the book on first load  [#6334](https://github.com/skycoin/skywire/pull/6334)
+-   deps: bump skycoin to v0.28.9-0.20261126061000-58b4f81a66a8 so `skywire skycoin daemon` reports 0.28.8 in `/api/v1/health` instead of 0.28.7  [#6333](https://github.com/skycoin/skywire/pull/6333)
+-   skychat/group, visor: a deleted group stays deleted when a roster save or reconnect races the delete, and deleting or leaving a group drops its stored history (also at startup for groups already deleted or left)  [#6332](https://github.com/skycoin/skywire/pull/6332)
+-   visor: bound group history per group (`skychat.group_history_messages`, default 5000) instead of the 10 MB file cap that stopped all group history once reached  [#6331](https://github.com/skycoin/skywire/pull/6331)
+-   skychat/group: keep settled group history in the on-disk CXO store with a bounded window in memory (`skychat.group_memory_messages`, default 1000), file messages under day buckets, and overwrite one heartbeat leaf  [#6330](https://github.com/skycoin/skywire/pull/6330)
+-   cxo/treestore: hand a store-backed subscriber's changes to its callback 512 at a time  [#6329](https://github.com/skycoin/skywire/pull/6329)
+-   cxo/skyobject: decrement a deleted Root's objects in one transaction, and let concurrent batches take turns  [#6328](https://github.com/skycoin/skywire/pull/6328)
+-   skychat/group: hold the first dial to a newly added member back 5 s, so it does not collide with the member's own dial after a join  [#6327](https://github.com/skycoin/skywire/pull/6327)
+-   visorconfig, rewards: find VMs on arm and visors sharing one machine  [#6326](https://github.com/skycoin/skywire/pull/6326)
+-   cxo/cxoutils: mark each object once in the startup sweep, so a disk-backed feed opens in a fraction of the time  [#6325](https://github.com/skycoin/skywire/pull/6325)
+-   dmsg, visor, rewards: count a visor at the IP a dmsg server signed  [#6324](https://github.com/skycoin/skywire/pull/6324)
+-   cxo/data/cxds: run a refcount change on a NoSync store at once instead of waiting 10 ms for a batch  [#6323](https://github.com/skycoin/skywire/pull/6323)
+-   cxo/treestore: fold published sub-trees past a memory budget into the store, and add store-backed subscribers that keep no copy of the feed  [#6322](https://github.com/skycoin/skywire/pull/6322)
+-   cxo/skyobject: write the refcounts of evicted cache items in one transaction, so a cache miss no longer waits about 10 ms per item  [#6321](https://github.com/skycoin/skywire/pull/6321)
+-   skychat/group: dial a newly added member after the session lock is released, so an unreachable one blocks no other call  [#6320](https://github.com/skycoin/skywire/pull/6320)
+-   visor, transport, logging: stop a late failed hypervisor call back from crashing the visor, keep goroutine traces in skywire-crash.log  [#6319](https://github.com/skycoin/skywire/pull/6319)
+-   tpd/store: name bw:daily reporter fields by key label so the hashes stay listpack  [#6318](https://github.com/skycoin/skywire/pull/6318)
+-   tpd/store: drop decoded archived bandwidth days after 5 idle minutes  [#6317](https://github.com/skycoin/skywire/pull/6317)
+-   cxo/cxoutils: return gzip bodies without spare capacity  [#6316](https://github.com/skycoin/skywire/pull/6316)
+-   tpd/store: write only today's transport online set  [#6315](https://github.com/skycoin/skywire/pull/6315)
+-   tpd/store: keep settled metrics leaves in redis 2 days, the archive holds the rest  [#6314](https://github.com/skycoin/skywire/pull/6314)
+-   tpd/store: keep a reporter's last bandwidth counters 48 h, not 7 days  [#6313](https://github.com/skycoin/skywire/pull/6313)
+-   skycloud, flags, cli/util: make the help screen cloud a library  [#6312](https://github.com/skycoin/skywire/pull/6312)
+-   cmdutil, dmsg/dmsgboot, cipher: keep cmdutil free of dmsg  [#6311](https://github.com/skycoin/skywire/pull/6311)
+
 ## 1.3.113
 
 Wallets now scan ahead for new addresses, so daily reward payouts to fresh
@@ -27,28 +76,6 @@ we have written to. vpn says when iptables or the tun driver is missing, a
 config reset keeps the visor's internal apps, and a truncated bbolt file is
 detected before it is opened.
 
--   deps, hvui: bump skycoin to v0.28.9-0.20261126073145-a45e69c951d6 so the hypervisor wallet and its ui2 pages have Chinese and follow the dashboard language; translate the classic Skynet page and the Skychat tooltips and notices; add `make check-template-literals` and `make check-lang-zh` to the ui job
--   deps: bump skycoin to v0.28.9-0.20261126061000-58b4f81a66a8 so `skywire skycoin daemon` reports 0.28.8 in `/api/v1/health` instead of 0.28.7
--   skychat, visor: the Skychat address book is the visor contact book, so a contact added on the hypervisor Contacts page shows in Skychat and one added or removed in Skychat is added or removed there; the list a browser kept moves into the book on first load
--   visor/ui2, hvui: translate the Skynet, alerts, chat and wallet config pages and the wallet Node button into Chinese, send the remaining ui2 literals through the translation files, and add tests that fail on untranslated ui2 text or keys missing from en or zh
--   skychat/group, visor: a deleted group stays deleted when a roster save or reconnect races the delete, and deleting or leaving a group drops its stored history (also at startup for groups already deleted or left)
--   visor: bound group history per group (`skychat.group_history_messages`, default 5000) instead of the 10 MB file cap that stopped all group history once reached
--   skychat/group: keep settled group history in the on-disk CXO store with a bounded window in memory (`skychat.group_memory_messages`, default 1000), file messages under day buckets, and overwrite one heartbeat leaf
--   cxo/treestore: hand a store-backed subscriber's changes to its callback 512 at a time
--   cxo/skyobject: decrement a deleted Root's objects in one transaction, and let concurrent batches take turns
--   skychat/group: hold the first dial to a newly added member back 5 s, so it does not collide with the member's own dial after a join
--   cxo/cxoutils: mark each object once in the startup sweep, so a disk-backed feed opens in a fraction of the time
--   cxo/data/cxds: run a refcount change on a NoSync store at once instead of waiting 10 ms for a batch
--   cxo/treestore: fold published sub-trees past a memory budget into the store, and add store-backed subscribers that keep no copy of the feed
--   cxo/skyobject: write the refcounts of evicted cache items in one transaction, so a cache miss no longer waits about 10 ms per item
--   skychat/group: dial a newly added member after the session lock is released, so an unreachable one blocks no other call
--   visor, transport, logging: stop a late failed hypervisor call back from crashing the visor, keep goroutine traces in skywire-crash.log
--   tpd/store: keep a reporter's last bandwidth counters 48 h, not 7 days
--   tpd/store: keep settled metrics leaves in redis 2 days, the archive holds the rest
--   tpd/store: write only today's transport online set
--   cxo/cxoutils: return gzip bodies without spare capacity
--   tpd/store: drop decoded archived bandwidth days after 5 idle minutes
--   tpd/store: name bw:daily reporter fields by key label so the hashes stay listpack
 -   rewards/server: serve the tp-viz Go WebGL assets  [#6309](https://github.com/skycoin/skywire/pull/6309)
 -   deps: bump skycoin to v0.28.8  [#6308](https://github.com/skycoin/skywire/pull/6308)
 -   deps: bump skycoin to develop for the ui2 csrf notice fix  [#6307](https://github.com/skycoin/skywire/pull/6307)
