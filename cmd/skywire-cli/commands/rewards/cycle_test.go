@@ -389,3 +389,54 @@ func TestCalcDayRefusesAVersionBelowTheMinimum(t *testing.T) {
 		t.Fatalf("v1.3.112 minimum: %+v\n%s", res, f.txn(t))
 	}
 }
+
+// A day is calculated again by hand from the surveys on disk, as `rewards
+// run --date <day> --skip-collect` does: nothing is fetched, no survey is
+// removed, and the day's own minimum version decides who is paid.
+func TestRunRecalculatesAPastDayFromTheSurveysOnDisk(t *testing.T) {
+	f := newCycleFixture(t)
+	const oldPK = "02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	oldSurvey := filepath.Join(f.o.surveyPath, oldPK, "node-info.json")
+	if err := os.MkdirAll(filepath.Dir(oldSurvey), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	body := fmt.Sprintf(`{"public_key":%q,"skycoin_address":%q,"go_os":"linux","go_arch":"arm64","uuid":"u-2",`+
+		`"ip_address":"5.6.7.8","ip_addr":[{"ifname":"eth0","address":"aa:bb:cc:dd:ee:00"}],"skywire_version":"v1.3.106"}`, oldPK, cycleTestAlt)
+	if err := os.WriteFile(oldSurvey, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The day's final uptimes and bandwidth, written after the day closed.
+	ut := f.utBody + fmt.Sprintf("%s %s 100\n", oldPK, cycleTestDate)
+	if err := os.WriteFile(f.utTxt, []byte(ut), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(f.o.histDir, cycleTestDate+"_bandwidth.json"), []byte(f.bwBody), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dayEnd := time.Date(2026, 11, 11, 0, 0, 0, 0, time.UTC)
+	fetch := releasesFetch
+	t.Cleanup(func() { releasesFetch = fetch })
+	releasesFetch = func(context.Context) ([]deprewards.Release, error) {
+		return []deprewards.Release{{Tag: "v1.3.110", Published: dayEnd.Add(-20 * 24 * time.Hour)}}, nil
+	}
+
+	res, err := runCycle(newDayCycle(nil, cycleConfig{skipCollect: true}), f.o)
+	if err != nil || res.skipped {
+		t.Fatalf("manual run: %+v %v", res, err)
+	}
+	if f.fetches != 0 || f.closes != 0 {
+		t.Fatalf("a manual run from disk fetched: %d uptime, %d bandwidth", f.fetches, f.closes)
+	}
+	for _, p := range []string{f.surveyPath, oldSurvey} {
+		if _, err := os.Stat(p); err != nil {
+			t.Fatalf("survey removed: %v", err)
+		}
+	}
+	if txn := f.txn(t); !strings.Contains(txn, cycleTestAddr) || strings.Contains(txn, cycleTestAlt) {
+		t.Fatalf("rewardtxn0.csv:\n%s", txn)
+	}
+	ineligible, err := os.ReadFile(filepath.Join(f.o.histDir, cycleTestDate+"_ineligible.csv"))
+	if err != nil || !strings.Contains(string(ineligible), oldPK) || !strings.Contains(string(ineligible), "Version below v1.3.110") {
+		t.Fatalf("ineligible.csv %v:\n%s", err, ineligible)
+	}
+}
