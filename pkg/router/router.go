@@ -332,7 +332,7 @@ type DialOptions struct {
 	// DatagramRouteGroup sibling over the established route (#2607).
 	// The route's reliable RouteGroup is still set up exactly as
 	// usual (and is what carries the one-time Noise handshake whose
-	// ChannelBinding keys the datagram AEAD); the datagram sibling is
+	// exported session key keys the datagram AEAD); the sibling is
 	// built alongside it once the handshake completes. The accept
 	// side opts in independently via RegisterDatagramPort — both ends
 	// must locally intend datagram mode for it to work.

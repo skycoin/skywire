@@ -231,10 +231,10 @@ func (rw *ReadWriter) RemoteStatic() cipher.PubKey {
 	return rw.ns.RemoteStatic()
 }
 
-// ChannelBinding returns the completed handshake's channel binding — see
-// Noise.ChannelBinding. Meaningful only after Handshake has returned.
-func (rw *ReadWriter) ChannelBinding() []byte {
-	return rw.ns.ChannelBinding()
+// ExportKey derives a secret for a sibling channel of this session once
+// Handshake has returned. See Noise.ExportKey.
+func (rw *ReadWriter) ExportKey(label string) ([32]byte, error) {
+	return rw.ns.ExportKey(label)
 }
 
 // InitiatorHandshake performs a noise handshake as an initiator.

@@ -79,11 +79,10 @@ func (c *Conn) Write(b []byte) (int, error) {
 	return c.ns.Write(b)
 }
 
-// ChannelBinding returns the completed handshake's channel binding — see
-// Noise.ChannelBinding. Lets a caller key a sibling channel (e.g. the
-// faithful-UDP datagram route, #2607) off this encrypted route's session.
-func (c *Conn) ChannelBinding() []byte {
-	return c.ns.ChannelBinding()
+// ExportKey derives a secret for a sibling channel of this session, such as
+// the datagram route (#2607). See Noise.ExportKey.
+func (c *Conn) ExportKey(label string) ([32]byte, error) {
+	return c.ns.ExportKey(label)
 }
 
 // LocalAddr returns the local address of the connection.

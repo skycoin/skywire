@@ -3,11 +3,14 @@ package noise
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/flynn/noise"
+	"golang.org/x/crypto/hkdf"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -283,18 +286,33 @@ func (ns *Noise) WriterTurn() bool {
 	return !even
 }
 
-// ChannelBinding returns a value that uniquely identifies the completed
-// handshake session — the Noise handshake hash. Both peers derive an identical
-// value, and it is bound to the full transcript (static keys + ephemerals + any
-// PQ hybrid payload), so it is safe to use as keying material for a sibling
-// channel keyed off the same session. The faithful-UDP path (#2607) HKDFs this
-// into a per-datagram AEAD master key so the datagram sibling of a route shares
-// the reliable route's authenticated session without a second handshake.
-//
-// Only meaningful once HandshakeFinished() is true; before that the binding is
-// still over a partial transcript.
+// ChannelBinding returns the Noise handshake hash of the completed session.
+// It is computed from public handshake bytes only, so it identifies the
+// session but is not secret and must never be used as a key. Use ExportKey.
 func (ns *Noise) ChannelBinding() []byte {
 	return ns.hs.ChannelBinding()
+}
+
+// errExportBeforeHandshake is returned by ExportKey before the handshake ends.
+var errExportBeforeHandshake = errors.New("noise: key export before the handshake finished")
+
+// ExportKey derives a 32 byte secret for a sibling channel of this session.
+// Both peers get the same value for the same label. The input keying material
+// is the two transport keys (hybrid keys when PQ is active) in initiator to
+// responder order, salted with the handshake hash (RFC 5869).
+func (ns *Noise) ExportKey(label string) ([32]byte, error) {
+	var out [32]byte
+	if !ns.HandshakeFinished() || ns.enc == nil || ns.dec == nil {
+		return out, errExportBeforeHandshake
+	}
+	initToResp, respToInit := ns.enc.UnsafeKey(), ns.dec.UnsafeKey()
+	if !ns.init {
+		initToResp, respToInit = respToInit, initToResp
+	}
+	secret := append(initToResp[:], respToInit[:]...)
+	h := hkdf.New(sha256.New, secret, ns.hs.ChannelBinding(), []byte(label))
+	_, err := io.ReadFull(h, out[:])
+	return out, err
 }
 
 // LocalStatic returns the local static public key.
