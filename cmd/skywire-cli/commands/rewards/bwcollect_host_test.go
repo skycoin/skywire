@@ -7,12 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
-	deprewards "github.com/skycoin/skywire/pkg/deployment/rewards"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/api"
 	tpdmetrics "github.com/skycoin/skywire/pkg/deployment/tpd/metrics"
 	tpdstore "github.com/skycoin/skywire/pkg/deployment/tpd/store"
@@ -29,7 +29,7 @@ func TestHostKeysFindVisorsOnOneHost(t *testing.T) {
 	ipProofServerKnown = func(pk cipher.PubKey) bool { return pk == srvPK }
 	t.Cleanup(func() { ipProofServerKnown = known })
 
-	day := deprewards.IPProofCutoff.AddDate(0, 0, 1)
+	day := time.Date(2026, time.December, 1, 0, 0, 0, 0, time.UTC)
 	keys := func() (cipher.PubKey, cipher.SecKey) { return cipher.GenerateKeyPair() }
 	ifc := func(mac string) []map[string]string { return []map[string]string{{"ifname": "eth0", "address": mac}} }
 
@@ -65,7 +65,7 @@ func TestHostKeysFindVisorsOnOneHost(t *testing.T) {
 	require.Equal(t, "boot:4c1f6f0e-0000-4000-8000-000000000001", hostShared(hostKeys[boxA], hostKeys[boxB]))
 	require.Empty(t, hostShared(hostKeys[bareA], hostKeys[bareB]))
 	require.Empty(t, hostShared(hostKeys[liarA], hostKeys[boxA]))
-	// Past the cutoff a survey with no proof has no IP to share.
+	// A survey with no proof and no version has no IP to share.
 	require.NotContains(t, hostKeys[boxA], "ip:192.0.2.10")
 }
 
@@ -97,7 +97,7 @@ func TestTransportsConfirmedNeedThePeer(t *testing.T) {
 	surveys := filepath.Join(wd, "log_backups")
 	for _, p := range []string{w, u} {
 		require.NoError(t, os.MkdirAll(filepath.Join(surveys, p), 0o750))
-		require.NoError(t, os.WriteFile(filepath.Join(surveys, p, "node-info.json"), []byte(`{"ip_address":"203.0.113.9"}`), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(surveys, p, "node-info.json"), []byte(`{"ip_address":"203.0.113.9","skywire_version":"v1.3.112"}`), 0o600))
 	}
 	oldCache, oldHist, oldSurveys, oldDate, oldDays, oldNoCache := bwCacheFile, histPath, bwSurveyPath, bwDate, bwDays, noCache
 	t.Cleanup(func() {

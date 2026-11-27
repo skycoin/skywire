@@ -93,7 +93,7 @@ func TestBandwidthCollectLocalMatchesDmsg(t *testing.T) {
 	surveys := filepath.Join(wd, "log_backups")
 	for _, pk := range pks[:2] {
 		require.NoError(t, os.MkdirAll(filepath.Join(surveys, pk), 0o750))
-		require.NoError(t, os.WriteFile(filepath.Join(surveys, pk, "node-info.json"), []byte(`{"ip_address":"203.0.113.9"}`), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(surveys, pk, "node-info.json"), []byte(`{"ip_address":"203.0.113.9","skywire_version":"v1.3.112"}`), 0o600))
 	}
 
 	oldFetch, oldCache := fetchServiceURL, bwCacheFile

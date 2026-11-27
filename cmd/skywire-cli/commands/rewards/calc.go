@@ -23,6 +23,7 @@ import (
 
 	"github.com/bitfield/script"
 	"github.com/fatih/color"
+	"github.com/hashicorp/go-version"
 	"github.com/oschwald/geoip2-golang/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -174,10 +175,11 @@ type surveyData struct {
 		IfName  string `json:"ifname"`
 		Address string `json:"address"`
 	} `json:"ip_addr"`
-	Services  json.RawMessage `json:"services"`
-	IPProof   *dmsg.IPProof   `json:"ip_proof"`
-	Container string          `json:"container"`
-	BootID    string          `json:"boot_id"`
+	Services       json.RawMessage `json:"services"`
+	IPProof        *dmsg.IPProof   `json:"ip_proof"`
+	SkywireVersion string          `json:"skywire_version"`
+	Container      string          `json:"container"`
+	BootID         string          `json:"boot_id"`
 }
 
 // parseSurvey reads and parses a node-info.json file into structured data.
@@ -433,16 +435,29 @@ func attestedIP(proof *dmsg.IPProof, pk string, t time.Time) (string, error) {
 }
 
 // surveyIP is the IP a visor is counted at for reward day t: the signed one
-// when the proof holds, else from the reward day IPProofCutoff no IP at all.
+// when the proof holds, else the reported one only from versions that do not send a proof.
 func surveyIP(s *surveyData, pk string, t time.Time) (string, error) {
 	ip, err := attestedIP(s.IPProof, pk, t)
 	if err == nil {
 		return ip, nil
 	}
-	if t.Before(deprewards.IPProofCutoff) {
+	if !ipProofRequired(s.SkywireVersion) {
 		return s.IPAddr, nil
 	}
 	return "", err
+}
+
+// ipProofAfter is deprewards.IPProofAfterVersion parsed.
+var ipProofAfter = version.Must(version.NewVersion(deprewards.IPProofAfterVersion))
+
+// ipProofRequired is whether a survey from visor version v must carry a
+// signed IP: a version after IPProofAfterVersion, or one that does not parse.
+func ipProofRequired(v string) bool {
+	if i := strings.IndexAny(v, "-+ "); i > 0 {
+		v = v[:i]
+	}
+	parsed, err := version.NewVersion(v)
+	return err != nil || parsed.GreaterThan(ipProofAfter)
 }
 
 // machineKeys are the values a visor shares with every other visor on its
