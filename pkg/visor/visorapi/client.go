@@ -2067,6 +2067,18 @@ func (rc *rpcClient) VoiceSetBlocked(peers []cipher.PubKey) error {
 	return rc.Call("VoiceSetBlocked", &peers, &struct{}{})
 }
 
+// VoiceSetApproval implements API.
+func (rc *rpcClient) VoiceSetApproval(approval VoiceApproval) error {
+	return rc.Call("VoiceSetApproval", &approval, &struct{}{})
+}
+
+// VoiceRefused implements API.
+func (rc *rpcClient) VoiceRefused() ([]VoiceRefusedInfo, error) {
+	var out []VoiceRefusedInfo
+	err := rc.Call("VoiceRefused", &struct{}{}, &out)
+	return out, err
+}
+
 // VoiceSetRingback implements API.
 func (rc *rpcClient) VoiceSetRingback(tone VoiceRingback) error {
 	return rc.Call("VoiceSetRingback", &tone, &struct{}{})

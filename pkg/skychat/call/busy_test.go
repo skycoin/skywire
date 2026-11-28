@@ -41,23 +41,14 @@ func TestInviteDuringCallGetsBusy(t *testing.T) {
 
 	mgrC := NewManager(Config{LocalPK: pkC, Dial: dialB})
 	callID := mgrC.Dial(pkB, 3*time.Second)
-	deadline := time.After(3 * time.Second)
-	for {
-		dials := mgrC.Dialing()
-		if len(dials) == 1 && dials[0].CallID == callID && dials[0].State.Ended() {
-			if dials[0].State != DialBusy {
-				t.Fatalf("C's call ended %q, want %q", dials[0].State, DialBusy)
-			}
-			break
-		}
-		select {
-		case <-deadline:
-			t.Fatalf("C's call never ended, dialing = %+v", dials)
-		case <-time.After(10 * time.Millisecond):
-		}
+	if got := awaitDialEnd(t, mgrC, callID); got != DialBusy {
+		t.Fatalf("C's call ended %q, want %q", got, DialBusy)
 	}
 	if _, err := mgrC.Call(ctx, pkB); err == nil || !strings.Contains(err.Error(), "busy") {
 		t.Fatalf("C calls B again: err = %v, want busy", err)
+	}
+	if refused := mgrB.Refused(); len(refused) != 2 || refused[0].CallID != callID || refused[0].Peer != pkC || refused[0].Reason != RefusedBusy {
+		t.Fatalf("refused = %+v, want both of C's calls as %s", refused, RefusedBusy)
 	}
 
 	if got := mgrB.Active(); len(got) != 1 || got[0] != sessA.CallID {

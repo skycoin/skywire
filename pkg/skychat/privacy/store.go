@@ -178,6 +178,21 @@ func (s *Store) BlockedList() []string {
 	return out
 }
 
+// AcceptedList returns the keys let in explicitly, sorted.
+func (s *Store) AcceptedList() []string {
+	out := []string{}
+	if s == nil {
+		return out
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for pk := range s.accepted {
+		out = append(out, pk)
+	}
+	slices.Sort(out)
+	return out
+}
+
 func (s *Store) acceptedMap() map[string]bool { return s.accepted }
 func (s *Store) blockedMap() map[string]bool  { return s.blocked }
 

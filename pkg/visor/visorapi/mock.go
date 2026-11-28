@@ -1547,6 +1547,12 @@ func (mc *mockRPCClient) VoiceSetRingback(_ VoiceRingback) error { return nil }
 // VoiceSetBlocked implements API.
 func (mc *mockRPCClient) VoiceSetBlocked(_ []cipher.PubKey) error { return nil }
 
+// VoiceSetApproval implements API.
+func (mc *mockRPCClient) VoiceSetApproval(_ VoiceApproval) error { return nil }
+
+// VoiceRefused implements API.
+func (mc *mockRPCClient) VoiceRefused() ([]VoiceRefusedInfo, error) { return nil, nil }
+
 // VoiceRingback implements API.
 func (mc *mockRPCClient) VoiceRingback() (VoiceRingback, error) { return VoiceRingback{}, nil }
 
