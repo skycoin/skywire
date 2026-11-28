@@ -26,6 +26,7 @@ import (
 	cliskysocksc "github.com/skycoin/skywire/cmd/skywire-cli/commands/proxy"
 	clipty "github.com/skycoin/skywire/cmd/skywire-cli/commands/pty"
 	clipv "github.com/skycoin/skywire/cmd/skywire-cli/commands/pv"
+	clirelease "github.com/skycoin/skywire/cmd/skywire-cli/commands/release"
 	cliresolver "github.com/skycoin/skywire/cmd/skywire-cli/commands/resolver"
 	clireward "github.com/skycoin/skywire/cmd/skywire-cli/commands/reward"
 	clirg "github.com/skycoin/skywire/cmd/skywire-cli/commands/rg"
@@ -114,6 +115,7 @@ func init() {
 	cliutil.RootCmd.GroupID = groupUtil
 	cligot.RootCmd.GroupID = groupUtil
 	cliversion.RootCmd.GroupID = groupUtil
+	clirelease.RootCmd.GroupID = groupUtil
 
 	// Install flag-aware `help` command (supports -r/-t/-d). Covers
 	// the case where `skywire cli` is invoked as a subcommand of the
@@ -155,6 +157,7 @@ func init() {
 		cliutil.RootCmd,
 		cligot.RootCmd,
 		cliversion.RootCmd,
+		clirelease.RootCmd,
 
 		// Top-level shortcuts: high-traffic verbs reachable without
 		// the `visor` middle word. Long forms keep working at

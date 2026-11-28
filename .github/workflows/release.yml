@@ -640,11 +640,30 @@ jobs:
           gh release download "${{ env.RELEASE_TAG }}" --repo ${{ github.repository }} --pattern "*.sha256"
           cat -- *.sha256 > checksums.txt
 
+      - name: Sign checksums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RELEASE_SIGNING_KEY}" ]; then
+            echo "::error::the RELEASE_SIGNING_KEY secret is not set"
+            exit 1
+          fi
+          gh release download "${{ env.RELEASE_TAG }}" --repo ${{ github.repository }} \
+            --pattern "skywire-${{ env.RELEASE_TAG }}-linux-amd64.tar.xz" --dir "${RUNNER_TEMP}"
+          tar -xJf "${RUNNER_TEMP}/skywire-${{ env.RELEASE_TAG }}-linux-amd64.tar.xz" -C "${RUNNER_TEMP}" skywire
+          umask 077
+          printf '%s\n' "${RELEASE_SIGNING_KEY}" > "${RUNNER_TEMP}/release.key"
+          "${RUNNER_TEMP}/skywire" cli release sign -k "${RUNNER_TEMP}/release.key" checksums.txt
+          rm -f "${RUNNER_TEMP}/release.key"
+          "${RUNNER_TEMP}/skywire" cli release verify checksums.txt
+
       - name: Upload combined checksums
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ env.RELEASE_TAG }}" checksums.txt \
+          gh release upload "${{ env.RELEASE_TAG }}" checksums.txt checksums.txt.sig \
             --repo ${{ github.repository }} \
             --clobber
 

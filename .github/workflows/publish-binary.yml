@@ -119,6 +119,23 @@ jobs:
           } >> "$GITHUB_ENV"
           echo "built ${VERSION} for amd64/arm64/arm(v6)/armhf(v7)/386/riscv64:"; ls -la dist
 
+      - name: Sign SHA256SUMS
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RELEASE_SIGNING_KEY}" ]; then
+            echo "::error::the RELEASE_SIGNING_KEY secret is not set"
+            exit 1
+          fi
+          umask 077
+          printf '%s\n' "${RELEASE_SIGNING_KEY}" > "${RUNNER_TEMP}/release.key"
+          zstd -dq -f dist/skywire-linux-amd64.zst -o "${RUNNER_TEMP}/skywire"
+          chmod 700 "${RUNNER_TEMP}/skywire"
+          "${RUNNER_TEMP}/skywire" cli release sign -k "${RUNNER_TEMP}/release.key" dist/SHA256SUMS
+          rm -f "${RUNNER_TEMP}/release.key"
+          "${RUNNER_TEMP}/skywire" cli release verify dist/SHA256SUMS
+
       - name: Replace the rolling <branch>-latest pre-release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -142,11 +159,11 @@ jobs:
               --prerelease \
               --title "${BRANCH} latest (${VERSION})" \
               --notes "${NOTES}"
-            gh release upload "${TAG}" dist/*.zst dist/skywire.wasm.gz dist/skywire.wasm.json dist/SHA256SUMS --clobber
+            gh release upload "${TAG}" dist/*.zst dist/skywire.wasm.gz dist/skywire.wasm.json dist/SHA256SUMS dist/SHA256SUMS.sig --clobber
             # The module used to ship as this zstd asset; nothing builds it now.
             gh release delete-asset "${TAG}" skywire-js-wasm.zst --yes 2>/dev/null || true
           else
-            gh release create "${TAG}" dist/*.zst dist/skywire.wasm.gz dist/skywire.wasm.json dist/SHA256SUMS \
+            gh release create "${TAG}" dist/*.zst dist/skywire.wasm.gz dist/skywire.wasm.json dist/SHA256SUMS dist/SHA256SUMS.sig \
               --target "${GITHUB_SHA}" \
               --prerelease \
               --title "${BRANCH} latest (${VERSION})" \

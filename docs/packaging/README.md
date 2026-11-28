@@ -8,6 +8,8 @@ themselves up to date.
   rebuilds (`skywire-autoupdate` / `skywire-update.service`), and docker image
   auto-pull (`skywire-docker-autopull`). Includes how to tell which one you're
   running and how to enable/disable each.
+- [Release Signatures](release-signing.md) — how checksum files are signed
+  and how to verify a download.
 - [AUR Packages](aur-packages.md) — the Arch Linux packages (`skywire-bin`,
   `skywire`, `skyrepo`) and the variant PKGBUILDs that also produce the
   auto-update packages and the Debian `.deb`s.
