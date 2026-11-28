@@ -283,6 +283,12 @@ func (m *Manager) handleInvite(inv Sig, conn net.Conn) {
 		m.ringUnseen(inv, conn)
 		return
 	}
+	if m.busyWithOtherPeer(inv.FromPK) {
+		m.log.WithField("from", inv.FromPK.Hex()).WithField("call", inv.CallID).Info("voice: already on a call, answering busy")
+		_ = writeSig(conn, Sig{Type: SigBusy, CallID: inv.CallID, FromPK: m.cfg.LocalPK, Reason: "busy"}) //nolint:errcheck
+		_ = conn.Close()                                                                                  //nolint:errcheck
+		return
+	}
 	if m.cfg.ManualAnswer {
 		// Watched, so that a caller hanging up mid-ring stops the ring here
 		// and now instead of leaving it to run out the timeout. Everything
@@ -326,6 +332,30 @@ func (m *Manager) handleInvite(inv Sig, conn net.Conn) {
 		return
 	}
 	m.accept(inv, conn)
+}
+
+// busyWithOtherPeer reports whether a call with anyone but peer is answered,
+// ringing or being dialed. The same peer is let through, since its new invite
+// is a redial of the call it is already on (or glare) and busy would refuse it.
+func (m *Manager) busyWithOtherPeer(peer cipher.PubKey) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, sess := range m.calls {
+		if sess.Peer() != peer {
+			return true
+		}
+	}
+	for _, rc := range m.ringing {
+		if rc.inv.FromPK != peer {
+			return true
+		}
+	}
+	for _, d := range m.dialing {
+		if !d.state.Ended() && d.peer != peer {
+			return true
+		}
+	}
+	return false
 }
 
 // SetBlocked replaces the callers whose calls never ring here. The owner of
