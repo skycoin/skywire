@@ -412,7 +412,7 @@ In the officially supported linux packages, systemd will restart the visor if it
 
 ### Transports
 
-To be useful for routing traffic, a visor must have a minimum of 2 transports, observed at some point during which the uptime is being considered. Two of the visor's transports must also be confirmed that day: not dmsg transports, with the visor at the other end on a different IP or machine, and with both ends reporting the transport's bandwidth to the transport discovery. A transport only one end reports does not count.
+To be useful for routing traffic, a visor must have a minimum of 2 transports, observed at some point during which the uptime is being considered. Two of the visor's transports must also be confirmed that day: not dmsg transports, with the visor at the other end on a different IP or machine, and with that visor reporting traffic on the transport to the transport discovery. A transport only the visor itself reports does not count.
 
 Note that this requirement depends on at least 2 public visors being online on the network at all times, and that your visor is running with public autoconnect logic enabled (which is the default).
 

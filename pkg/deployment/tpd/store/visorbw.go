@@ -71,11 +71,11 @@ func checkpointCap(n uint64, sender *EdgeBandwidth) uint64 {
 }
 
 // BothReported is whether both edges of a transport reported bytes for the day.
-func BothReported(d DailyEdgeBandwidth) bool { return reported(d.A) && reported(d.B) }
+func BothReported(d DailyEdgeBandwidth) bool { return Reported(d.A) && Reported(d.B) }
 
-// reported is whether an edge has a record with any bytes in it. An all zero
+// Reported is whether an edge has a record with any bytes in it. An all zero
 // record has not reported yet.
-func reported(e *EdgeBandwidth) bool { return e != nil && (e.Sent > 0 || e.Recv > 0) }
+func Reported(e *EdgeBandwidth) bool { return e != nil && (e.Sent > 0 || e.Recv > 0) }
 
 // ComputeVisorBW reduces one day's per-transport records to per-visor sent
 // bytes by type, leaving out transports marked same-network that day and,
@@ -107,7 +107,7 @@ func ComputeVisorBW(records []TransportMetric, date string, samePublicIP func(a,
 			sentA += a
 			sentB += b
 			sameNetwork = sameNetwork || d.SameNetwork
-			oneSided = oneSided || reported(d.A) != reported(d.B)
+			oneSided = oneSided || Reported(d.A) != Reported(d.B)
 		}
 		if sentA == 0 && sentB == 0 {
 			if oneSided && !sameNetwork {

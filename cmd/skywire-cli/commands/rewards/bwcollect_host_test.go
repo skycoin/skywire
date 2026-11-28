@@ -70,12 +70,12 @@ func TestHostKeysFindVisorsOnOneHost(t *testing.T) {
 }
 
 // TestTransportsConfirmedNeedThePeer checks which visors bw-collect lists as
-// having two transports: only transports the other edge reported too, that
-// are not dmsg and not between two visors on one host, count.
+// having two transports: only transports the other edge reported, that are
+// not dmsg and not between two visors on one host, count.
 func TestTransportsConfirmedNeedThePeer(t *testing.T) {
 	const date = "2026-11-21"
 	pk := func() string { p, _ := cipher.GenerateKeyPair(); return p.Hex() }
-	x, y, z, w, v, u := pk(), pk(), pk(), pk(), pk(), pk()
+	x, y, z, w, v, u, s := pk(), pk(), pk(), pk(), pk(), pk(), pk()
 	edge := func(sent, recv uint64) *tpdstore.EdgeBandwidth {
 		return &tpdstore.EdgeBandwidth{Sent: sent, Recv: recv}
 	}
@@ -84,7 +84,11 @@ func TestTransportsConfirmedNeedThePeer(t *testing.T) {
 		{ID: "x-y", Type: "stcpr", Edges: []string{x, y}, Daily: both},
 		{ID: "x-z", Type: "sudph", Edges: []string{x, z}, Daily: both},
 		{ID: "w-y", Type: "stcpr", Edges: []string{w, y}, Daily: both},
+		// Only w reported: it counts for z, not for w.
 		{ID: "w-z one edge", Type: "stcpr", Edges: []string{w, z}, Daily: []tpdstore.DailyEdgeBandwidth{{Date: date, A: edge(50, 0)}}},
+		// s never reports its own side, but both its peers do.
+		{ID: "s-v peer only", Type: "stcpr", Edges: []string{s, v}, Daily: []tpdstore.DailyEdgeBandwidth{{Date: date, B: edge(40, 50)}}},
+		{ID: "u-s peer only", Type: "webrtc", Edges: []string{u, s}, Daily: []tpdstore.DailyEdgeBandwidth{{Date: date, A: edge(40, 50)}}},
 		{ID: "w-v dmsg", Type: "dmsg", Edges: []string{w, v}, Daily: both},
 		{ID: "w-u one host", Type: "stcpr", Edges: []string{w, u}, Daily: both},
 		{ID: "w-z other day", Type: "stcpr", Edges: []string{w, z}, Daily: []tpdstore.DailyEdgeBandwidth{{Date: "2026-11-20", A: edge(5, 5), B: edge(5, 5)}}},
@@ -108,6 +112,6 @@ func TestTransportsConfirmedNeedThePeer(t *testing.T) {
 
 	require.NoError(t, collectBandwidth(nil, logging.MustGetLogger("bw-collect-test"), func() tpdMetricsReader { return tpdLocalAPI{tpdAPI} }))
 	got := transportsConfirmedRead(transportsConfirmedPath(histPath, date))
-	require.Equal(t, map[string]struct{}{x: {}, y: {}}, got)
+	require.Equal(t, map[string]struct{}{x: {}, y: {}, z: {}, s: {}}, got)
 	require.Nil(t, transportsConfirmedRead(transportsConfirmedPath(histPath, "2026-11-22")))
 }
