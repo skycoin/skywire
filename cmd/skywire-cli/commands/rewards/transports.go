@@ -529,7 +529,7 @@ func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logg
 		// transport only one edge reported. Both edges report on 90 to 97%
 		// of transports now, so the B2 condition that removed the cap holds.
 		var sentA, sentB uint64
-		bothReported := false
+		reportedA, reportedB := false, false
 		for _, d := range tp.Daily {
 			if dateFilter != "" && d.Date != dateFilter {
 				continue
@@ -537,18 +537,23 @@ func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logg
 			a, b := tpdstore.SenderBytes(d)
 			sentA += a
 			sentB += b
-			bothReported = bothReported || tpdstore.BothReported(d)
+			reportedA = reportedA || tpdstore.Reported(d.A)
+			reportedB = reportedB || tpdstore.Reported(d.B)
 		}
 
 		edgeA := tp.Edges[0]
 		edgeB := tp.Edges[1]
 		sameHost := hostShared(hostKeys[edgeA], hostKeys[edgeB])
 
-		// A transport counts toward the transport requirement only when the
-		// visor at the other end, on another host, reported it too.
-		if bothReported && tp.Type != "dmsg" && sameHost == "" {
-			confirmed[edgeA]++
-			confirmed[edgeB]++
+		// A transport counts for a visor when the visor at the other end, on
+		// another host, reported traffic on it. The visor's own report adds nothing.
+		if tp.Type != "dmsg" && sameHost == "" {
+			if reportedB {
+				confirmed[edgeA]++
+			}
+			if reportedA {
+				confirmed[edgeB]++
+			}
 		}
 		if sentA == 0 && sentB == 0 {
 			return
