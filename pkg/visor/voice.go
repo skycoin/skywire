@@ -101,6 +101,28 @@ func (v *Visor) VoiceSetBlocked(peers []cipher.PubKey) error {
 	return nil
 }
 
+// VoiceSetApproval hands over skychat's message approval: with it on, a
+// caller not accepted is declined without ringing. See call.Manager.SetApproval.
+func (v *Visor) VoiceSetApproval(approval visorapi.VoiceApproval) error {
+	if v.voice == nil {
+		return ErrVoiceDisabled
+	}
+	v.voice.SetApproval(approval.On, approval.Accepted)
+	return nil
+}
+
+// VoiceRefused returns the calls turned away without ringing in the last minute.
+func (v *Visor) VoiceRefused() ([]visorapi.VoiceRefusedInfo, error) {
+	if v.voice == nil {
+		return nil, ErrVoiceDisabled
+	}
+	out := make([]visorapi.VoiceRefusedInfo, 0)
+	for _, r := range v.voice.Refused() {
+		out = append(out, visorapi.VoiceRefusedInfo{CallID: r.CallID, Peer: r.Peer.Hex(), Reason: r.Reason, At: r.At})
+	}
+	return out, nil
+}
+
 // VoiceIncoming returns the ringing inbound calls awaiting an answer, each
 // formatted as "<call-id> from <peer-pk>".
 func (v *Visor) VoiceIncoming() ([]string, error) {

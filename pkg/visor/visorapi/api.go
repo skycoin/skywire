@@ -265,6 +265,12 @@ type Chat interface {
 	// VoiceSetBlocked replaces the callers whose calls never ring here. Skychat
 	// owns the block list and hands it over.
 	VoiceSetBlocked(peers []cipher.PubKey) error
+	// VoiceSetApproval hands over skychat's message approval, so a caller
+	// it has not let in is declined without ringing.
+	VoiceSetApproval(approval VoiceApproval) error
+	// VoiceRefused lists the calls turned away without ringing in the last
+	// minute, busy or not accepted, so skychat can log who tried.
+	VoiceRefused() ([]VoiceRefusedInfo, error)
 	// VoiceDialRingback returns the ringback tone the peer of an outbound
 	// call plays, once it has arrived (VoiceDialingInfo.Ringback).
 	VoiceDialRingback(callID string) (VoiceRingback, error)

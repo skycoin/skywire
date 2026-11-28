@@ -199,8 +199,83 @@ func watchMissedCalls(ctx context.Context) {
 			dialing = stillDialing(seen)
 		}
 		pushBlockedCallers(time.Now())
+		pushCallApproval(time.Now())
 		resolveCalls(seen, declineBlockedCalls(incoming), active, dialing, time.Now(), recordCall)
+		var refused []visorapi.VoiceRefusedInfo
+		if err := pairRPCCall("VoiceRefused", func(c visorapi.API) error {
+			out, e := c.VoiceRefused()
+			refused = out
+			return e
+		}); err == nil {
+			recordRefusedCalls(refusedSeen, refused, recordCall)
+		}
 	}
+}
+
+// refusedSeen holds the refused call ids already logged, so each is logged once.
+var refusedSeen = make(map[string]bool)
+
+// recordRefusedCalls logs each call the visor turned away without ringing
+// (busy, or a caller approval has not let in) as a missed call.
+func recordRefusedCalls(logged map[string]bool, refused []visorapi.VoiceRefusedInfo, record func(peer, outcome string, duration time.Duration)) {
+	listed := make(map[string]bool, len(refused))
+	for _, r := range refused {
+		listed[r.CallID] = true
+		if r.CallID == "" || r.Peer == "" || logged[r.CallID] {
+			continue
+		}
+		logged[r.CallID] = true
+		record(r.Peer, callMissed, 0)
+	}
+	for id := range logged {
+		if !listed[id] {
+			delete(logged, id)
+		}
+	}
+}
+
+// approvalPush is what the visor was last sent for call approval, and when.
+var approvalPush struct {
+	on   bool
+	list []string
+	at   time.Time
+}
+
+// pushCallApproval hands message approval to the visor, so a caller whose
+// message would wait under Requests is declined there without ringing.
+func pushCallApproval(now time.Time) {
+	on := privacyStore.Approval()
+	var list []string
+	if on {
+		list = callersLetIn()
+	}
+	if on == approvalPush.on && slices.Equal(list, approvalPush.list) && now.Sub(approvalPush.at) < blockedPushEvery {
+		return
+	}
+	approvalPush.on, approvalPush.list, approvalPush.at = on, list, now
+	approval := visorapi.VoiceApproval{On: on}
+	for _, h := range list {
+		var pk cipher.PubKey
+		if pk.Set(h) == nil {
+			approval.Accepted = append(approval.Accepted, pk)
+		}
+	}
+	if err := pairRPCCall("VoiceSetApproval", func(c visorapi.API) error { return c.VoiceSetApproval(approval) }); err != nil && chatLog != nil {
+		chatLog.Debugf("voice: could not hand message approval to the visor: %v", err)
+	}
+}
+
+// callersLetIn is everyone inboundVerdict lets in with approval on: the
+// accepted (which includes anyone written to) and the named.
+func callersLetIn() []string {
+	list := privacyStore.AcceptedList()
+	if contactStore != nil {
+		for pk := range contactStore.All() {
+			list = append(list, pk)
+		}
+	}
+	slices.Sort(list)
+	return slices.Compact(list)
 }
 
 // blockedPushEvery re-sends an unchanged block list, for a visor that restarted
@@ -375,6 +450,9 @@ func callRecordText(outcome string, duration time.Duration) string {
 func recordCall(peer, outcome string, duration time.Duration) {
 	id := newEventID()
 	text := callRecordText(outcome, duration)
+	// From a caller approval has not let in, the record is a request, the
+	// same as a message from them would be.
+	request := !isOutgoingOutcome(outcome) && inboundVerdict(peer) == privacy.Request
 
 	persistMessage(history.Message{
 		Peer:      peer,
@@ -393,12 +471,17 @@ func recordCall(peer, outcome string, duration time.Duration) {
 			From:      peer,
 			Text:      text,
 			Len:       len(text),
+			Request:   request,
 		})
 	}
 	// Only a missed call is worth interrupting for. The other two are records
 	// of something the user was already part of — and a miss the user watched
 	// ring out in the open chat is no interruption either.
-	if outcome == callMissed {
+	switch {
+	case outcome != callMissed:
+	case request:
+		notifyOSInboundThread(peer, peer, "Message request", displayName(peer)+": "+text)
+	default:
 		notifyOSInboundThread(peer, peer, displayName(peer), text)
 	}
 	appLog("Voice: %s with %s logged", strings.ToLower(outcome), shortHexPK(peer))

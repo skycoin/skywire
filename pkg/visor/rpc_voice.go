@@ -103,6 +103,26 @@ func (r *RPC) VoiceSetBlocked(peers *[]cipher.PubKey, _ *struct{}) (err error) {
 	return r.visor.VoiceSetBlocked(*peers)
 }
 
+// VoiceSetApproval hands over skychat's message approval for calls.
+func (r *RPC) VoiceSetApproval(in *visorapi.VoiceApproval, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "VoiceSetApproval", nil)(nil, &err)
+	if in == nil {
+		return fmt.Errorf("nil request")
+	}
+	return r.visor.VoiceSetApproval(*in)
+}
+
+// VoiceRefused replies with the calls turned away without ringing.
+func (r *RPC) VoiceRefused(_ *struct{}, out *[]visorapi.VoiceRefusedInfo) (err error) {
+	defer rpcutil.LogCall(r.log, "VoiceRefused", nil)(out, &err)
+	calls, err := r.visor.VoiceRefused()
+	if err != nil {
+		return err
+	}
+	*out = calls
+	return nil
+}
+
 // VoiceSetRingback sets (or, with no data, clears) this visor's ringback tone.
 // The tone is not logged: it is up to a megabyte of audio.
 func (r *RPC) VoiceSetRingback(in *visorapi.VoiceRingback, _ *struct{}) (err error) {

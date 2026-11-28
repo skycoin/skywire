@@ -100,7 +100,35 @@ type Manager struct {
 	tones   map[cipher.PubKey]*tone
 	// blocked are the callers whose calls ring out unseen, see SetBlocked.
 	blocked map[cipher.PubKey]bool
+	// approval, when on, keeps every caller not in accepted from ringing,
+	// see SetApproval.
+	approval bool
+	accepted map[cipher.PubKey]bool
+	// refused are the recent calls turned away without ringing, see Refused.
+	refused []Refused
 }
+
+// Refused is an incoming call turned away without ringing.
+type Refused struct {
+	CallID string
+	Peer   cipher.PubKey
+	// Reason is RefusedBusy or RefusedNotAccepted.
+	Reason string
+	At     time.Time
+}
+
+const (
+	// RefusedBusy is a call that came while another was in progress.
+	RefusedBusy = "busy"
+	// RefusedNotAccepted is a call from a caller approval has not let in.
+	RefusedNotAccepted = "not_accepted"
+)
+
+// refusedLinger is how long a refused call stays listed for a poller to see.
+const refusedLinger = time.Minute
+
+// refusedMax bounds the refused list against a caller redialing in a loop.
+const refusedMax = 64
 
 // dialingCall is an outbound invite in flight, or — for DialOutcomeLinger
 // after it ended unanswered — the outcome of one.
@@ -283,8 +311,16 @@ func (m *Manager) handleInvite(inv Sig, conn net.Conn) {
 		m.ringUnseen(inv, conn)
 		return
 	}
+	if !m.callerAccepted(inv.FromPK) {
+		m.log.WithField("from", inv.FromPK.Hex()).WithField("call", inv.CallID).Info("voice: call from a caller not accepted yet, not ringing")
+		m.noteRefused(inv, RefusedNotAccepted)
+		_ = writeSig(conn, Sig{Type: SigDecline, CallID: inv.CallID, FromPK: m.cfg.LocalPK, Reason: "declined"}) //nolint:errcheck
+		_ = conn.Close()                                                                                         //nolint:errcheck
+		return
+	}
 	if m.busyWithOtherPeer(inv.FromPK) {
 		m.log.WithField("from", inv.FromPK.Hex()).WithField("call", inv.CallID).Info("voice: already on a call, answering busy")
+		m.noteRefused(inv, RefusedBusy)
 		_ = writeSig(conn, Sig{Type: SigBusy, CallID: inv.CallID, FromPK: m.cfg.LocalPK, Reason: "busy"}) //nolint:errcheck
 		_ = conn.Close()                                                                                  //nolint:errcheck
 		return
@@ -356,6 +392,54 @@ func (m *Manager) busyWithOtherPeer(peer cipher.PubKey) bool {
 		}
 	}
 	return false
+}
+
+// SetApproval turns approval on or off and replaces the callers it lets in.
+// With it on, any other caller is declined without ringing. Skychat owns the
+// setting (its message approval) and hands it over.
+func (m *Manager) SetApproval(on bool, accepted []cipher.PubKey) {
+	set := make(map[cipher.PubKey]bool, len(accepted))
+	for _, pk := range accepted {
+		set[pk] = true
+	}
+	m.mu.Lock()
+	m.approval, m.accepted = on, set
+	m.mu.Unlock()
+}
+
+func (m *Manager) callerAccepted(pk cipher.PubKey) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return !m.approval || m.accepted[pk]
+}
+
+func (m *Manager) noteRefused(inv Sig, reason string) {
+	now := time.Now()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.refused = append(m.pruneRefusedLocked(now), Refused{CallID: inv.CallID, Peer: inv.FromPK, Reason: reason, At: now})
+	if len(m.refused) > refusedMax {
+		m.refused = m.refused[len(m.refused)-refusedMax:]
+	}
+}
+
+func (m *Manager) pruneRefusedLocked(now time.Time) []Refused {
+	kept := m.refused[:0]
+	for _, r := range m.refused {
+		if now.Sub(r.At) < refusedLinger {
+			kept = append(kept, r)
+		}
+	}
+	return kept
+}
+
+// Refused returns the calls turned away without ringing in the last
+// minute, oldest first, so a call log can record who tried.
+func (m *Manager) Refused() []Refused {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.refused = m.pruneRefusedLocked(time.Now())
+	return append([]Refused(nil), m.refused...)
 }
 
 // SetBlocked replaces the callers whose calls never ring here. The owner of

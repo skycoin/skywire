@@ -1,6 +1,12 @@
 // Package visorapi pkg/visor/visorapi/voice.go c3-vis-core
 package visorapi
 
+import (
+	"time"
+
+	"github.com/skycoin/skywire/pkg/cipher"
+)
+
 // VoiceDialingInfo is one call this visor is placing, before it is answered.
 type VoiceDialingInfo struct {
 	CallID string `json:"call_id"`
@@ -45,4 +51,20 @@ type VoiceDevices struct {
 	Speaker    bool   `json:"speaker"`
 	MicErr     string `json:"mic_err,omitempty"`
 	SpeakerErr string `json:"speaker_err,omitempty"`
+}
+
+// VoiceApproval is skychat's message approval handed to the voice manager.
+// With On set, only the Accepted callers ring.
+type VoiceApproval struct {
+	On       bool            `json:"on"`
+	Accepted []cipher.PubKey `json:"accepted,omitempty"`
+}
+
+// VoiceRefusedInfo is an incoming call turned away without ringing.
+type VoiceRefusedInfo struct {
+	CallID string `json:"call_id"`
+	Peer   string `json:"peer"`
+	// Reason is "busy" or "not_accepted".
+	Reason string    `json:"reason"`
+	At     time.Time `json:"at"`
 }
